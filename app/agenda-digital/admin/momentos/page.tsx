@@ -28,7 +28,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 export default function ADAdminMomentos() {
   const { momentosFeed: feed, setMomentosFeed: setFeed, setMomentosFeedLocally, adAlert, adConfirm, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
   const { turmas = [] } = useData()
-  const [alunos = []] = useSupabaseArray<any>('alunos/lightweight', [])
+  const [alunos = []] = useSupabaseArray<any>('alunos/lightweight?limit=2000', [])
   const { currentUser } = useApp()
   const [filterTurma, setFilterTurma] = useState('all')
   const [page, setPage] = useState(1)

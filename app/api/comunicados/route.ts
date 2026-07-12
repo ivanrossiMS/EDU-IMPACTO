@@ -288,7 +288,7 @@ export async function GET(request: Request) {
            if (filteredStus.length === 0) return null;
            
            const { data: stuReads } = await supabaseServer.from('agenda_notification_reads')
-             .select('content_id, usuario_id, read_at')
+             .select('content_id, usuario_id, read_at, aluno_id')
              .in('content_id', filteredStus.map((s: any) => s.id));
              
            return { colabId: colab.id, reads: stuReads || [] };
@@ -305,7 +305,8 @@ export async function GET(request: Request) {
            allReads.push({
              content_id: res.colabId,
              usuario_id: r.usuario_id,
-             read_at: r.read_at
+             read_at: r.read_at,
+             aluno_id: r.aluno_id
            });
          }
        }
@@ -318,13 +319,15 @@ export async function GET(request: Request) {
      // Merge das novas tabelas sobre o que eventualmente já estava no JSON (fallback para históricos)
      const itemReads = allReads.filter(r => r.content_id === String(row.id));
      itemReads.forEach(r => {
-        const key = r.aluno_id ? `${r.usuario_id}_${r.aluno_id}` : r.usuario_id;
+        const cleanUsuarioId = r.usuario_id ? r.usuario_id.split('#')[0] : r.usuario_id;
+        const key = r.aluno_id ? `${cleanUsuarioId}_${r.aluno_id}` : cleanUsuarioId;
         merged.leituras[key] = r.read_at;
      });
 
      const itemCiencias = allCiencias.filter(c => c.content_id === String(row.id));
      itemCiencias.forEach(c => {
-        const key = c.aluno_id ? `${c.usuario_id}_${c.aluno_id}` : c.usuario_id;
+        const cleanUsuarioId = c.usuario_id ? c.usuario_id.split('#')[0] : c.usuario_id;
+        const key = c.aluno_id ? `${cleanUsuarioId}_${c.aluno_id}` : cleanUsuarioId;
         merged.ciencias[key] = c.ciente_em;
      });
 

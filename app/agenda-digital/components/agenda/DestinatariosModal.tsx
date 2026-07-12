@@ -67,7 +67,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     return allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || [])
   }, [data?.turmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
   const [gruposManuais = [], _setG, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
-  const [alunos, _setA, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight')
+  const [alunos, _setA, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [colaboradores, _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
 
   const isLoadingData = loadingGrupos || loadingAlunos || loadingColabs

@@ -22,7 +22,7 @@ export default function ADAdminDashboard() {
 
   const { comunicados, chatsList = [], momentosFeed = [] } = useAgendaDigital()
   const { currentUser } = useApp()
-  const [alunos] = useSupabaseArray<any>('alunos/lightweight')
+  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [titulos] = useSupabaseArray<any>('titulos')
   const { ocorrencias = [] } = useData()
 

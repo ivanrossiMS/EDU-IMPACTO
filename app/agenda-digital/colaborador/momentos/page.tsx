@@ -75,7 +75,8 @@ export default function ADMomentosPage() {
   }, [currentUser, espelharColabId, searchParams])
 
   
-  const { turmas = [], cfgCalendarioLetivo = [], alunos = [] } = useData()
+  const { turmas = [], cfgCalendarioLetivo = [] } = useData()
+  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   
   
   

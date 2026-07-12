@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase'
 export default function EspelharAgendaPage() {
   const router = useRouter()
   const [turmasData, , { loading: loadingT }] = useSupabaseArray<any>('turmas')
-  const [alunosData, , { loading: loadingA }] = useSupabaseArray<any>('alunos/lightweight')
+  const [alunosData, , { loading: loadingA }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [colaboradoresData, , { loading: loadingC }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
 
   const loading = loadingA || loadingC || loadingT

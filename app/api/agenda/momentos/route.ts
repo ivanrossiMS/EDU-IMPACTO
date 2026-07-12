@@ -175,7 +175,8 @@ export async function GET(request: Request) {
       merged.leituras = merged.leituras && typeof merged.leituras === 'object' && !Array.isArray(merged.leituras) ? merged.leituras : {}
       const itemReads = allReads.filter(r => r.content_id === String(row.id));
       itemReads.forEach(r => {
-         const key = r.aluno_id ? `${r.usuario_id}_${r.aluno_id}` : r.usuario_id;
+         const cleanUsuarioId = r.usuario_id ? r.usuario_id.split('#')[0] : r.usuario_id;
+         const key = r.aluno_id ? `${cleanUsuarioId}_${r.aluno_id}` : cleanUsuarioId;
          merged.leituras[key] = r.read_at;
       });
 

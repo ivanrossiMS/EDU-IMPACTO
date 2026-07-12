@@ -72,7 +72,7 @@ const SUGESTOES_EQUIPES = [
 // ─── Componente Principal ─────────────────────────────────────────────────────
 export default function ADAdminTurmas() {
   const { turmas = [], cfgCalendarioLetivo = [] } = useData();
-  const [alunos] = useSupabaseArray<any>('alunos/lightweight');
+  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
   const [grupos, setGrupos] = useSupabaseArray<GrupoDigital>('agenda/grupos');
   const [equipes, setEquipes] = useSupabaseArray<EquipeGrupo>('agenda/equipes');
   const [funcionarios] = useSupabaseArray<any>('configuracoes/usuarios');

@@ -14,11 +14,20 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { tipo, ids, alunoId } = body
 
-    let isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável'
+    let isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável' || !!user.user_metadata?.responsavel_id || !!user.user_metadata?.aluno_id;
     if (!isFamily) {
       const { data: dbUser } = await supabase.from('system_users').select('perfil, cargo').eq('id', user.id).maybeSingle();
       if (dbUser) {
         isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
+      } else {
+        // Fallback to check if it's in responsaveis or alunos directly
+        const { data: respUser } = await supabase.from('responsaveis').select('id').eq('id', user.id).maybeSingle();
+        if (respUser) {
+          isFamily = true;
+        } else {
+          const { data: alunoUser } = await supabase.from('alunos').select('id').eq('id', user.id).maybeSingle();
+          if (alunoUser) isFamily = true;
+        }
       }
     }
     let readerId = user.id
@@ -53,7 +62,7 @@ export async function POST(request: Request) {
     
     try {
       const readRecords = ids.map((id: string) => ({
-        usuario_id: readerId, 
+        usuario_id: isFamily && alunoId ? `${readerId}#${alunoId}` : readerId, 
         perfil: isFamily ? 'aluno' : 'admin', 
         content_type: tipo,
         content_id: id,

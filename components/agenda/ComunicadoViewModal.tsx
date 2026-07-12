@@ -79,6 +79,7 @@ interface ComunicadoViewModalProps {
   turmas?: any[]
   onEdit?: (comunicado: any) => void
   onDelete?: (id: string) => void
+  onForward?: (comunicado: any) => void
 }
 
 export function ComunicadoViewModal({
@@ -100,7 +101,8 @@ export function ComunicadoViewModal({
   colaboradores = [],
   turmas = [],
   onEdit,
-  onDelete
+  onDelete,
+  onForward
 }: ComunicadoViewModalProps) {
   const [comunicado, setComunicado] = useState<any>(initialComunicado)
   const [isLoadingFull, setIsLoadingFull] = useState(!initialComunicado.conteudo && !initialComunicado.texto)
@@ -1214,41 +1216,100 @@ export function ComunicadoViewModal({
           )}
 
           {/* ACTIONS FOOTER */}
-          {(onEdit || onDelete) && (
+          {(onEdit || onDelete || onForward) && (
             <div style={{
-              background: '#ffffff',
-              borderTop: '1px solid #e2e8f0',
-              padding: '16px 24px',
-              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+              background: 'rgba(255, 255, 255, 0.85)',
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+              borderTop: '1px solid rgba(226, 232, 240, 0.7)',
+              padding: '20px 32px',
+              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
               position: 'sticky',
               bottom: 0,
               zIndex: 20,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 16
+              gap: 16,
+              boxShadow: '0 -10px 40px -10px rgba(0,0,0,0.06)'
             }}>
+              {onForward && (
+                <motion.button 
+                  whileHover={{ scale: 1.03, y: -2 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={(e: any) => { e.stopPropagation(); onForward(comunicado); }} 
+                  style={{ 
+                    flex: 1, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: 10, 
+                    padding: '16px 24px', 
+                    borderRadius: 20, 
+                    border: '1px solid rgba(99, 102, 241, 0.2)', 
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
+                    color: '#ffffff', 
+                    fontSize: 16, 
+                    fontWeight: 700, 
+                    cursor: 'pointer',
+                    boxShadow: '0 10px 25px -8px rgba(79, 70, 229, 0.6)',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  <Send size={20} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }} />
+                  Encaminhar
+                </motion.button>
+              )}
               {onEdit && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); onEdit(comunicado); }} 
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#f1f5f9', color: '#475569', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#e2e8f0'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                <motion.button 
+                  whileHover={{ scale: 1.03, y: -2, background: '#f8fafc' }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={(e: any) => { e.stopPropagation(); onEdit(comunicado); }} 
+                  style={{ 
+                    flex: 1, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: 10, 
+                    padding: '16px 24px', 
+                    borderRadius: 20, 
+                    border: '1px solid #e2e8f0', 
+                    background: '#ffffff', 
+                    color: '#475569', 
+                    fontSize: 16, 
+                    fontWeight: 700, 
+                    cursor: 'pointer',
+                    boxShadow: '0 6px 16px -4px rgba(0,0,0,0.05)'
+                  }}
                 >
                   <Edit2 size={20} />
                   Editar
-                </button>
+                </motion.button>
               )}
               {onDelete && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); onDelete(comunicado.id); }} 
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyItems: 'center', justifyContent: 'center', gap: 8, padding: '14px 20px', borderRadius: 16, border: 'none', background: '#fee2e2', color: '#ef4444', fontSize: 16, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#fca5a5'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = '#fee2e2'}
+                <motion.button 
+                  whileHover={{ scale: 1.03, y: -2, background: '#fef2f2', borderColor: '#fecaca' }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={(e: any) => { e.stopPropagation(); onDelete(comunicado.id); }} 
+                  style={{ 
+                    flex: 1, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: 10, 
+                    padding: '16px 24px', 
+                    borderRadius: 20, 
+                    border: '1px solid transparent', 
+                    background: 'rgba(239, 68, 68, 0.08)', 
+                    color: '#ef4444', 
+                    fontSize: 16, 
+                    fontWeight: 700, 
+                    cursor: 'pointer'
+                  }}
                 >
                   <Trash2 size={20} />
                   Excluir
-                </button>
+                </motion.button>
               )}
             </div>
           )}

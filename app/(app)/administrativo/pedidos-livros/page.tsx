@@ -97,7 +97,7 @@ export default function PedidosLivrosPage() {
   const { currentUser } = useApp();
 
   const [titulos, setTitulos, { loading: isTitulosLoading }] = useSupabaseArray<any>('titulos');
-  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos/lightweight');
+  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
   const [pedidos, setPedidos, { loading: isPedidosLoading }] = useSupabaseArray<PedidoMeta>('administrativo/pedidos-livros', [])
   const [pedidosManuais, setPedidosManuais, { loading: isPedidosManuaisLoading }] = useSupabaseArray<ParcelaUnificada>('administrativo/pedidos-livros-manuais', [])
 

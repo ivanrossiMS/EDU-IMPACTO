@@ -1,16 +1,24 @@
-require('dotenv').config({ path: '.env.local' });
 const { createClient } = require('@supabase/supabase-js');
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const fs = require('fs');
 
-async function check() {
-  const readRecords = [{
-    usuario_id: 'test_user_id',
-    perfil: 'aluno',
-    content_type: 'comunicado',
-    content_id: 'test_com_id',
-    read_at: new Date().toISOString()
-  }];
-  const { error } = await supabase.from('agenda_notification_reads').insert(readRecords);
-  console.log("Insert error:", error);
+const env = fs.readFileSync('.env.local', 'utf8').split('\n').reduce((acc, line) => {
+  const [key, val] = line.split('=');
+  if (key && val) acc[key.trim()] = val.trim();
+  return acc;
+}, {});
+
+async function main() {
+  const response = await fetch('http://localhost:3000/api/agenda/notificacoes/marcar-lido', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tipo: 'comunicado',
+      ids: ['AD-COM-REL-STU-1783786196236'], // just a random ID
+      alunoId: '4978'
+    })
+  });
+  console.log(response.status);
+  const text = await response.text();
+  console.log(text);
 }
-check();
+main();

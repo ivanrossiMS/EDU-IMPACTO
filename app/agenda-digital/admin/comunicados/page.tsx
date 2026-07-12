@@ -68,8 +68,9 @@ const MediaLabel = ({ name, url, initialSize }: { name: string, url: string, ini
 
 export default function ADAdminComunicados() {
   const { currentUser } = useApp()
-  const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados } = useAgendaDigital()
-  const { turmas = [], alunos = [] } = useData();
+  const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados, chatGroups } = useAgendaDigital()
+  const { turmas = [] } = useData();
+  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
   const { forms, setDisparos } = useFormularios()
   const { templates: relatoriosTemplates } = useRelatorios()
   
@@ -117,13 +118,14 @@ export default function ADAdminComunicados() {
   const [tab, setTab] = useState<'enviados' | 'agendados' | 'rascunhos'>('enviados')
   const [search, setSearch] = useState('')
   const [selectedCom, setSelectedCom] = useState<ADComunicado | null>(null)
-  const [showComposer, setShowComposer] = useState(false)
+  const [editComId, setEditComId] = useState<string | null>(null)
+  const [forwardComData, setForwardComData] = useState<any>(null)
   const [selectedDest, setSelectedDest] = useState<{id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[]>([])
   const [showDestModal, setShowDestModal] = useState(false)
-      const [anexos, setAnexos] = useState<string[]>([])
+  const [anexos, setAnexos] = useState<string[]>([])
   const [dataAgendamento, setDataAgendamento] = useState('')
-      const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-      const EMOJIS = ['😊', '😂', '👍', '🙏', '😍', '👏', '😉', '✅', '❌', '❤️']
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const EMOJIS = ['😊', '😂', '👍', '🙏', '😍', '👏', '😉', '✅', '❌', '❤️']
   
   const [showCobrancaModal, setShowCobrancaModal] = useState(false)
   const [cobrancaForm, setCobrancaForm] = useState({ motivo: '', valor: '', vencimento: '', tipo: 'pix' })
@@ -132,7 +134,7 @@ export default function ADAdminComunicados() {
   const [showFormsModal, setShowFormsModal] = useState(false)
   const [showRelsModal, setShowRelsModal] = useState(false)
 
-  const [editComId, setEditComId] = useState<string | null>(null)
+  const [showComposer, setShowComposer] = useState(false)
   const [viewingCom, setViewingCom] = useState<ADComunicado | null>(null)
   const [viewingReportPayload, setViewingReportPayload] = useState<any>(null)
   const [activePreviewStudent, setActivePreviewStudent] = useState<any>(null)
@@ -318,11 +320,7 @@ export default function ADAdminComunicados() {
 
   const openEdit = (c: ADComunicado) => {
     setEditComId(c.id)
-    
-
-    
-    
-    
+    setForwardComData(null)
     
     const mappedDest: {id: string, name: string, type: 'turma' | 'aluno'}[] = []
     c.turmas.forEach((t, i) => mappedDest.push({id: `t${c.id}${i}`, name: t, type: 'turma'}))
@@ -338,9 +336,13 @@ export default function ADAdminComunicados() {
 
   const handleReenviar = (c: ADComunicado) => {
     setEditComId(null)
-
+    setForwardComData({
+      titulo: c.titulo.startsWith('ENC:') ? c.titulo : `ENC: ${c.titulo}`,
+      conteudo: c.conteudo || (c as any).texto || '',
+      anexos: c.anexos || [],
+      cobranca: null
+    })
     setSelectedDest([]) // Permite selecionar novos destinatários
-    
     
     setShowComposer(true)
   }
@@ -522,11 +524,42 @@ export default function ADAdminComunicados() {
              const isGlobal = c.destino === 'todos';
              let targetCount = 0;
              if (isGlobal) {
-               targetCount = alunosAtivos.length;
+               targetCount = alunosAtivos.length + (colaboradores?.length || 0);
              } else {
-               const alTargets = alunosAtivos.filter(a => c.turmas?.includes(a.turma) || c.alunosIds?.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === a.id.replace(/^_*(ALU)?/, '')));
-               targetCount = alTargets.length + (c.funcionariosIds?.length || 0);
-               // Grupos already expanded into alunos/funcionarios at creation, so no need to add them here
+               const targetTurmas = c.turmas || ((c as any).dados?.turmas) || [];
+               const targetAlunosIds = c.alunosIds || ((c as any).dados?.alunosIds) || [];
+               const targetGrupos = c.grupos || ((c as any).dados?.grupos) || [];
+               const targetFuncsIds = c.funcionariosIds || ((c as any).dados?.funcionariosIds) || [];
+
+               const targetTurmasIds = turmas.filter(t => targetTurmas.includes(t.nome) || targetTurmas.includes((t as any).name) || targetTurmas.includes(String(t.id))).map(t => String(t.id));
+
+               const alTargets = alunosAtivos.filter(a => targetTurmasIds.includes(String(a.turma)) || targetTurmas.includes(a.turma) || targetAlunosIds.some((idRaw: any) => String(idRaw).replace(/^_*(ALU)?/, '') === String(a.id).replace(/^_*(ALU)?/, '')));
+               
+               let grupoAlunosIds = new Set<string>();
+               let grupoFuncsIds = new Set<string>();
+               if (targetGrupos.length > 0 && chatGroups) {
+                 const matchedGroups = chatGroups.filter((g: any) => targetGrupos.some((gName: string) => String(gName).toLowerCase().trim() === String(g.nome).toLowerCase().trim()));
+                 matchedGroups.forEach((g: any) => {
+                   let aIds = g.alunosIds || [];
+                   if (typeof aIds === 'string') { try { aIds = JSON.parse(aIds); } catch(e) { aIds = []; } }
+                   if (Array.isArray(aIds)) aIds.forEach((id: any) => grupoAlunosIds.add(String(id)));
+                   
+                   let cIds = g.colaboradoresIds || [];
+                   if (typeof cIds === 'string') { try { cIds = JSON.parse(cIds); } catch(e) { cIds = []; } }
+                   if (Array.isArray(cIds)) cIds.forEach((id: any) => grupoFuncsIds.add(String(id).replace(/^f_?/, '')));
+                 });
+               }
+               
+               const additionalAlunosFromGrupos = alunosAtivos.filter(a => !alTargets.includes(a) && grupoAlunosIds.has(String(a.id)));
+               const totalAlunosCount = alTargets.length + additionalAlunosFromGrupos.length;
+               
+               const allFuncsIds = new Set([
+                 ...targetFuncsIds.map((id: any) => String(id).replace(/^f_?/, '')),
+                 ...Array.from(grupoFuncsIds)
+               ]);
+               const totalFuncsCount = allFuncsIds.size;
+               
+               targetCount = totalAlunosCount + totalFuncsCount;
              }
              
              const lidas = Object.keys(c.leituras || {}).length
@@ -727,6 +760,8 @@ export default function ADAdminComunicados() {
             selectedCom={selectedCom}
             alunosAtivos={alunosAtivos}
             turmas={turmas}
+            chatGroups={chatGroups}
+            colaboradores={colaboradores}
             onClose={() => setSelectedCom(null)}
             setViewingReportPayload={setViewingReportPayload}
             renderConteudo={renderConteudo}
@@ -737,8 +772,8 @@ export default function ADAdminComunicados() {
       {/* Modal Composer */}
       <NovoComunicadoModal
         isOpen={showComposer}
-        onClose={() => { setShowComposer(false); setSelectedDest([]); }}
-        initialData={editComId ? comunicados.find(c => c.id === editComId) : null}
+        onClose={() => { setShowComposer(false); setSelectedDest([]); setForwardComData(null); }}
+        initialData={editComId ? comunicados.find(c => c.id === editComId) : forwardComData}
         currentUser={currentUser}
         selectedDest={selectedDest}
         onClickSelectDest={() => setShowDestModal(true)}

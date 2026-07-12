@@ -10,11 +10,11 @@ const env = fs.readFileSync('.env.local', 'utf8').split('\n').reduce((acc, line)
 const supabaseServer = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function main() {
-  const { data: reads } = await supabaseServer.from('agenda_notification_reads')
-    .select('*')
-    .eq('usuario_id', '12321321')
-    .order('created_at', { ascending: false })
-    .limit(5);
-  console.log(JSON.stringify(reads, null, 2));
+  const { data, error } = await supabaseServer.rpc('test_constraint', { query: `
+    SELECT constraint_name, pg_get_constraintdef(oid) 
+    FROM pg_constraint 
+    WHERE conrelid = 'agenda_notification_reads'::regclass
+  ` });
+  console.log(data || error);
 }
 main();

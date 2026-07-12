@@ -29,6 +29,8 @@ interface ComunicadoReportModalProps {
   selectedCom: ADComunicado
   alunosAtivos: any[]
   turmas: any[]
+  chatGroups?: any[]
+  colaboradores?: any[]
   onClose: () => void
   setViewingReportPayload: (payload: any) => void
   renderConteudo: (text: string) => React.ReactNode
@@ -56,30 +58,66 @@ const parseAnexo = (anexoData: any) => {
   }
 };
 
-export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, onClose, setViewingReportPayload, renderConteudo }: ComunicadoReportModalProps) {
+export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatGroups, colaboradores, onClose, setViewingReportPayload, renderConteudo }: ComunicadoReportModalProps) {
   const [loading, setLoading] = useState(true)
   const [targets, setTargets] = useState<TargetStudent[]>([])
   const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({})
+  const [readFilter, setReadFilter] = useState<'todos' | 'lido' | 'nao-lido'>('todos')
 
   useEffect(() => {
     async function loadFamilies() {
       setLoading(true)
       
-      const isGlobal = !selectedCom.turmas?.length && !selectedCom.alunosIds?.length
+      const isGlobal = selectedCom.destino === 'todos'
+  
+      const targetTurmas = selectedCom.turmas || ((selectedCom as any).dados?.turmas) || [];
+      const targetAlunosIds = selectedCom.alunosIds || ((selectedCom as any).dados?.alunosIds) || [];
+      const targetGrupos = selectedCom.grupos || ((selectedCom as any).dados?.grupos) || [];
+      const targetFuncsIds = selectedCom.funcionariosIds || ((selectedCom as any).dados?.funcionariosIds) || [];
+      const explicitTurmasIds = selectedCom.turmasIds || ((selectedCom as any).dados?.turmasIds) || [];
+
+      let grupoAlunosIds = new Set<string>();
+      let grupoFuncsIds = new Set<string>();
+      if (targetGrupos.length > 0 && chatGroups) {
+        const matchedGroups = chatGroups.filter((g: any) => targetGrupos.some((gName: string) => String(gName).toLowerCase().trim() === String(g.nome).toLowerCase().trim()));
+        matchedGroups.forEach((g: any) => {
+          let aIds = g.alunosIds || [];
+          if (typeof aIds === 'string') { try { aIds = JSON.parse(aIds); } catch(e) { aIds = []; } }
+          if (Array.isArray(aIds)) aIds.forEach((id: any) => grupoAlunosIds.add(String(id)));
+          
+          let cIds = g.colaboradoresIds || [];
+          if (typeof cIds === 'string') { try { cIds = JSON.parse(cIds); } catch(e) { cIds = []; } }
+          if (Array.isArray(cIds)) cIds.forEach((id: any) => grupoFuncsIds.add(String(id).replace(/^f_?/, '')));
+        });
+      }
+
+      const targetTurmasIds = turmas.filter(t => targetTurmas.includes(t.nome) || targetTurmas.includes(t.name) || targetTurmas.includes(String(t.id)) || explicitTurmasIds.includes(String(t.id))).map(t => String(t.id));
+      const mergedTurmasIds = Array.from(new Set([...targetTurmasIds, ...explicitTurmasIds.map(String)]));
+
       const baseTargets = alunosAtivos.filter(a => {
         if (isGlobal) return true;
-        if (selectedCom.turmas?.includes(a.turma)) return true;
-        const aIdPlain = a.id.replace(/^_*(ALU)?/, '')
-        return selectedCom.alunosIds?.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === aIdPlain)
+        if (mergedTurmasIds.includes(String(a.turma)) || targetTurmas.includes(a.turma)) return true;
+        const aIdPlain = String(a.id || '').replace(/^_*(ALU)?_?/, '')
+        if (targetAlunosIds.some((idRaw: any) => String(idRaw).replace(/^_*(ALU)?_?/, '') === aIdPlain)) return true;
+        if (grupoAlunosIds.has(String(a.id))) return true;
+        return false;
       })
 
-      if (baseTargets.length === 0) {
+      const baseFuncTargets = (colaboradores || []).filter(c => {
+        if (isGlobal) return true;
+        const cIdPlain = String(c.id || '').replace(/^f_?/, '');
+        if (targetFuncsIds.some((idRaw: any) => String(idRaw).replace(/^f_?/, '') === cIdPlain)) return true;
+        if (grupoFuncsIds.has(cIdPlain)) return true;
+        return false;
+      })
+
+      if (baseTargets.length === 0 && baseFuncTargets.length === 0) {
         setTargets([])
         setLoading(false)
         return
       }
 
-      const studentIds = baseTargets.map(a => a.id.replace(/^_*(ALU)?_?/, ''))
+      const studentIds = baseTargets.map(a => String(a.id || '').replace(/^_*(ALU)?_?/, ''))
       
       const getTurmaName = (tid: string) => {
         if (!turmas || !Array.isArray(turmas)) return tid
@@ -103,13 +141,16 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, onClo
       }
 
       const families: TargetStudent[] = baseTargets.map(a => {
-        const plainId = a.id.replace(/^_*(ALU)?_?/, '')
+        const plainId = String(a.id || '').replace(/^_*(ALU)?_?/, '')
         const studentLeuAt = selectedCom.leituras?.[a.id] || selectedCom.leituras?.[plainId]
         
         const parentList = responsaveisMap[plainId] || responsaveisMap[a.id] || []
         
         const responsaveis: TargetParent[] = parentList.map((resp: any) => {
-          const respLeuAt = selectedCom.leituras?.[resp.id]
+          const readKeys = Object.keys(selectedCom.leituras || {})
+          const exactKey = `${resp.id}_${plainId}`
+          const specificReadKey = readKeys.find(k => k === exactKey || k === resp.id || k === resp.cpf)
+          const respLeuAt = specificReadKey ? selectedCom.leituras[specificReadKey] : undefined
           
           return {
             id: resp.id,
@@ -123,33 +164,51 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, onClo
           }
         }).filter(Boolean) as TargetParent[]
 
+        const anyRespLeuAt = responsaveis.find(r => r.leu)?.leuEm;
+
         return {
           id: a.id,
           nome: a.nome,
           turma: getTurmaName(a.turma),
           avatarUrl: a.foto_url || a.foto || a.dados?.avatarUrl || null,
-          leu: !!studentLeuAt,
-          leuEm: studentLeuAt ? new Date(studentLeuAt).toLocaleString('pt-BR') : undefined,
+          leu: !!studentLeuAt || !!anyRespLeuAt,
+          leuEm: studentLeuAt ? new Date(studentLeuAt).toLocaleString('pt-BR') : (anyRespLeuAt || undefined),
           responsaveis
         }
       })
+
+      const funcFamilies: TargetStudent[] = baseFuncTargets.map(c => {
+        const plainId = String(c.id || '').replace(/^f_?/, '');
+        const leuAt = selectedCom.leituras?.[c.id] || selectedCom.leituras?.[plainId] || selectedCom.leituras?.[`f_${plainId}`]
+        return {
+          id: c.id,
+          nome: c.nome,
+          turma: 'Colaborador',
+          avatarUrl: c.foto_url || c.foto || null,
+          leu: !!leuAt,
+          leuEm: leuAt ? new Date(leuAt).toLocaleString('pt-BR') : undefined,
+          responsaveis: []
+        }
+      })
+      
+      const allFamilies = [...families, ...funcFamilies];
       
       // Sort: those with unread responsibles first
-      families.sort((a, b) => {
-        const aHasUnread = a.responsaveis.some(r => !r.leu) || !a.leu
-        const bHasUnread = b.responsaveis.some(r => !r.leu) || !b.leu
+      allFamilies.sort((a, b) => {
+        const aHasUnread = (a.responsaveis.length > 0 ? a.responsaveis.some(r => !r.leu) : !a.leu)
+        const bHasUnread = (b.responsaveis.length > 0 ? b.responsaveis.some(r => !r.leu) : !b.leu)
         if (aHasUnread && !bHasUnread) return -1
         if (!aHasUnread && bHasUnread) return 1
         return a.nome.localeCompare(b.nome)
       })
 
-      setTargets(families)
+      setTargets(allFamilies)
       
       // Expand all by default if there are few, otherwise collapse
-      const expandAll = families.length <= 10;
+      const expandAll = allFamilies.length <= 10;
       const initialExpanded: Record<string, boolean> = {}
       if (expandAll) {
-        families.forEach(f => initialExpanded[f.id] = true)
+        allFamilies.forEach(f => initialExpanded[f.id] = true)
       }
       setExpandedStudents(initialExpanded)
       
@@ -284,23 +343,58 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, onClo
         {/* Status de Leitura */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, marginTop: 32 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Status de Leitura (Famílias)</div>
-          <button onClick={toggleExpandAll} style={{ fontSize: 12, color: '#3b82f6', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
-            {Object.values(expandedStudents).filter(Boolean).length === targets.length ? 'Recolher todos' : 'Expandir todos'}
-          </button>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <select
+              value={readFilter}
+              onChange={(e) => setReadFilter(e.target.value as any)}
+              style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, background: '#fff', color: '#475569', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="todos">Todos</option>
+              <option value="lido">Apenas Lido</option>
+              <option value="nao-lido">Apenas Não Lido</option>
+            </select>
+            <button onClick={toggleExpandAll} style={{ fontSize: 12, color: '#3b82f6', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+              {Object.values(expandedStudents).filter(Boolean).length === targets.length ? 'Recolher todos' : 'Expandir todos'}
+            </button>
+          </div>
         </div>
 
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 40 }}>
-            <Loader2 size={32} color="#3b82f6" className="animate-spin" />
-          </div>
-        ) : targets.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 32, background: '#fff', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
-            <Users size={32} color="#94a3b8" style={{ margin: '0 auto 12px auto' }} />
-            <p style={{ color: '#64748b', fontSize: 14, margin: 0 }}>Nenhum alvo encontrado para este comunicado.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {targets.map(fam => {
+        {(() => {
+          const filteredTargets = targets.filter(fam => {
+            if (readFilter === 'todos') return true;
+            if (readFilter === 'lido') return fam.leu || fam.responsaveis.some(r => r.leu);
+            if (readFilter === 'nao-lido') return !(fam.leu || fam.responsaveis.some(r => r.leu));
+            return true;
+          });
+
+          if (loading) {
+            return (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+                <Loader2 size={32} color="#3b82f6" className="animate-spin" />
+              </div>
+            );
+          }
+
+          if (targets.length === 0) {
+            return (
+              <div style={{ textAlign: 'center', padding: 32, background: '#fff', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
+                <Users size={32} color="#94a3b8" style={{ margin: '0 auto 12px auto' }} />
+                <p style={{ color: '#64748b', fontSize: 14, margin: 0 }}>Nenhum alvo encontrado para este comunicado.</p>
+              </div>
+            );
+          }
+
+          if (filteredTargets.length === 0) {
+            return (
+              <div style={{ textAlign: 'center', padding: 32, background: '#fff', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
+                <p style={{ color: '#64748b', fontSize: 14, margin: 0 }}>Nenhum aluno corresponde ao filtro selecionado.</p>
+              </div>
+            );
+          }
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {filteredTargets.map(fam => {
               const isExpanded = !!expandedStudents[fam.id]
               const hasReportAnexo = selectedCom.anexos?.find((anx: string) => typeof anx === 'string' && anx.startsWith('Relatório:'))
               
@@ -395,8 +489,9 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, onClo
                 </div>
               )
             })}
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
       </div>
     </motion.div>

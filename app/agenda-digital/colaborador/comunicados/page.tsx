@@ -110,6 +110,7 @@ function ColaboradorComunicadosContent() {
 
   // Modal Composer States
   const [editComId, setEditComId] = useState<string | null>(null)
+  const [forwardComData, setForwardComData] = useState<any>(null)
   const [selectedDest, setSelectedDest] = useState<{id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}[]>([])
   const [showDestModal, setShowDestModal] = useState(false)
   const [anexos, setAnexos] = useState<string[]>([])
@@ -153,7 +154,7 @@ function ColaboradorComunicadosContent() {
     setIsClient(true)
   }, [])
   
-  const [alunos] = useSupabaseArray<any>('alunos/lightweight')
+  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
 
   const effectiveColabId = useMemo(() => {
@@ -382,6 +383,7 @@ function ColaboradorComunicadosContent() {
 
   const handleEditComunicado = (c: any) => {
     setEditComId(c.id)
+    setForwardComData(null)
     
     const dests: any[] = []
     if (c.turmas) c.turmas.forEach((t: string) => dests.push({ type: 'turma', id: `t_${t}`, name: t }))
@@ -395,6 +397,18 @@ function ColaboradorComunicadosContent() {
        if (col) dests.push({ type: 'funcionario', id: col.id, name: col.nome })
     })
     setSelectedDest(dests)
+    setShowComposer(true)
+  }
+
+  const handleForwardComunicado = (c: any) => {
+    setEditComId(null)
+    setForwardComData({
+      titulo: c.titulo.startsWith('ENC:') ? c.titulo : `ENC: ${c.titulo}`,
+      conteudo: c.conteudo,
+      anexos: c.anexos || [],
+      cobranca: null // Não copiamos cobrança
+    })
+    setSelectedDest([]) // Força a selecionar novos destinatários
     setShowComposer(true)
   }
 
@@ -1222,6 +1236,10 @@ function ColaboradorComunicadosContent() {
                setSelectedComunicado(null);
                handleDeleteComunicado(id);
             } : undefined}
+            onForward={(c) => {
+               setSelectedComunicado(null);
+               handleForwardComunicado(c);
+            }}
           />
         )}
       </AnimatePresence>
@@ -1441,8 +1459,8 @@ function ColaboradorComunicadosContent() {
       {/* Modal Composer */}
       <NovoComunicadoModal
         isOpen={showComposer}
-        onClose={() => { setShowComposer(false); setSelectedDest([]); }}
-        initialData={editComId ? comunicados.find(c => c.id === editComId) : null}
+        onClose={() => { setShowComposer(false); setSelectedDest([]); setForwardComData(null); }}
+        initialData={editComId ? comunicados.find(c => c.id === editComId) : forwardComData}
         currentUser={effectiveUser}
         selectedDest={selectedDest}
         onClickSelectDest={() => setShowDestModal(true)}
