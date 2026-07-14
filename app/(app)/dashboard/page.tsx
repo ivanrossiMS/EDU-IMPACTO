@@ -115,7 +115,7 @@ export default function DashboardPage() {
   
   const usuariosAtivos = useMemo(() => {
     if (!usuariosData) return []
-    return usuariosData.filter(u => u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou')
+    return usuariosData.filter((u: any) => u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou')
   }, [usuariosData])
 
   const statsUsuarios = useMemo(() => {
@@ -124,7 +124,7 @@ export default function DashboardPage() {
     let alunos = 0, alunosTotal = 0
     let resps = 0, respsTotal = 0
 
-    usuariosData.forEach(u => {
+    usuariosData.forEach((u: any) => {
       const isAtivo = u.ultimoAcesso && u.ultimoAcesso !== 'Nunca acessou'
       if (u.cargo === 'Alunos') {
         alunosTotal++
@@ -156,7 +156,7 @@ export default function DashboardPage() {
   const selectedDate = new Date(hoje);
   selectedDate.setDate(hoje.getDate() + diaSelecionadoOffset);
   const selectedDateStr = selectedDate.toISOString().slice(0, 10);
-  const eventosExibidos = eventosAgenda.filter(e => e.data === selectedDateStr);
+  const eventosExibidos = eventosAgenda.filter((e: any) => e.data === selectedDateStr);
 
   const kpiCards = [
     { label: 'Total de Alunos', value: formatNumber(totalAlunos), icon: <Users size={18} />, color: '#3b82f6', bgIcon: 'rgba(59, 130, 246, 0.1)', sub: 'Matriculados ativos', path: PATHS.blue },
@@ -225,8 +225,8 @@ export default function DashboardPage() {
     }
 
     const parcelasDeTitulos: any[] = (titulos || [])
-      .filter(t => isEventoLivro(resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao })))
-      .map(t => {
+      .filter((t: any) => isEventoLivro(resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao })))
+      .map((t: any) => {
         const matchingAluno = (alunos || []).find((a: any) => a.nome === t.aluno)
         let turmaNome = 'S/T'
         if (matchingAluno) {
@@ -247,8 +247,8 @@ export default function DashboardPage() {
         }
       })
 
-    const alunosComParcDiretas = new Set(parcelasDeAlunos.map(p => p.aluno))
-    const titulosFiltrados = parcelasDeTitulos.filter(p => !alunosComParcDiretas.has(p.aluno))
+    const alunosComParcDiretas = new Set(parcelasDeAlunos.map((p: any) => p.aluno))
+    const titulosFiltrados = parcelasDeTitulos.filter((p: any) => !alunosComParcDiretas.has(p.aluno))
     const todasParcelas = [...parcelasDeAlunos, ...titulosFiltrados, ...(Array.isArray(pedidosManuais) ? pedidosManuais : [])]
 
     const map = new Map<string, any>()
@@ -291,7 +291,7 @@ export default function DashboardPage() {
     }
 
     const uniqueOrders = Array.from(map.values())
-    uniqueOrders.forEach(o => {
+    uniqueOrders.forEach((o: any) => {
       if (o.entregue) entregueCount++
       else if (o.feito) preparadoCount++
       else pendenteCount++
@@ -510,7 +510,7 @@ export default function DashboardPage() {
               </>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
-                {tarefasExibidas.slice(0, 5).map(t => {
+                {tarefasExibidas.slice(0, 5).map((t: any) => {
                   const isConcluida = t.status === 'concluida';
                   return (
                     <div key={t.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: '12px', borderLeft: `4px solid ${isConcluida ? '#10b981' : '#f59e0b'}`, width: '100%', textAlign: 'left' }}>
@@ -585,7 +585,7 @@ export default function DashboardPage() {
               </>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
-                {eventosExibidos.slice(0, 5).map(e => (
+                {eventosExibidos.slice(0, 5).map((e: any) => (
                   <div key={e.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: '12px', borderLeft: `4px solid ${e.cor || '#8b5cf6'}`, width: '100%', textAlign: 'left' }}>
                     <span style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{e.titulo}</span>
                     {e.horaInicio && <span style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', marginTop: 4, fontWeight: 600 }}>{e.horaInicio} {e.horaFim ? `às ${e.horaFim}` : ''}</span>}
