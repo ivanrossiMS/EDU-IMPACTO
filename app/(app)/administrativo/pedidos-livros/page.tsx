@@ -29,7 +29,7 @@ interface PedidoMeta {
   obs?: string
 }
 
-const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv']
+const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv', 'itinerário', 'itinerario']
 
 function isEventoLivro(descricao?: string): boolean {
   if (!descricao) return false
@@ -66,6 +66,8 @@ const EVENTO_CORES: Record<string, { bg: string; color: string }> = {
   'apostila em':    { bg: 'rgba(139,92,246,0.12)',  color: '#a78bfa' },
   'apostilas fund2':{ bg: 'rgba(236,72,153,0.12)',  color: '#f472b6' },
   'apostila fund2': { bg: 'rgba(236,72,153,0.12)',  color: '#f472b6' },
+  'itinerário':     { bg: 'rgba(16,185,129,0.12)',  color: '#34d399' },
+  'itinerario':     { bg: 'rgba(16,185,129,0.12)',  color: '#34d399' },
 }
 function getEventoCor(desc?: string) {
   if (!desc) return { bg: 'rgba(100,116,139,0.12)', color: '#94a3b8' }
@@ -1350,6 +1352,7 @@ export default function PedidosLivrosPage() {
                     <option value="Apostilas FUND2">Apostilas FUND2</option>
                     <option value="Apostilas Ens. Médio">Apostilas Ens. Médio</option>
                     <option value="LIV">LIV</option>
+                    <option value="Itinerário">Itinerário</option>
                   </select>
                 </div>
                 {novoPedidoForm.alunoId && (
@@ -1449,6 +1452,7 @@ export default function PedidosLivrosPage() {
                     <option value="Apostilas FUND2">Apostilas FUND2</option>
                     <option value="Apostilas Ens. Médio">Apostilas Ens. Médio</option>
                     <option value="LIV">LIV</option>
+                    <option value="Itinerário">Itinerário</option>
                   </select>
                 </div>
               </div>

@@ -566,9 +566,19 @@ export default function UploadProvasGerenciamentoPage() {
                         <Users size={24} color="#fff" />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{serie}</span>
                           <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>{items.length} provas</span>
+                          {(() => {
+                            const bimsOfGroup = Array.from(new Set(items.map((i: any) => i.id_bimestre))).map((id: any) => bimestres.find((b: any) => b.id === id)?.nome).filter(Boolean);
+                            if (bimsOfGroup.length === 0) return null;
+                            const bimLabel = bimsOfGroup.length > 2 ? `${bimsOfGroup.length} bimestres` : bimsOfGroup.join(', ');
+                            return (
+                              <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(236,72,153,0.1)', color: '#ec4899', whiteSpace: 'nowrap' }}>
+                                {bimLabel}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>Acompanhe as provas aplicadas e programadas para esta turma.</span>
                       </div>
@@ -640,9 +650,9 @@ export default function UploadProvasGerenciamentoPage() {
                               </div>
                             )}
                           </div>
-                          <div className="responsive-card-info" style={{ display: 'flex', flexWrap: 'wrap', gap: 24, color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 600 }}>
+                          <div className="responsive-card-info" style={{ display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center', color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 600 }}>
                             {prova.id_bimestre && (
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 100, background: 'linear-gradient(135deg, rgba(236,72,153,0.1) 0%, rgba(236,72,153,0.05) 100%)', color: '#db2777', fontSize: 12, fontWeight: 800, border: '1px solid rgba(236,72,153,0.2)', boxShadow: '0 2px 8px rgba(236,72,153,0.05)' }}>
                                 <BookOpen size={14} /> {bimestres.find(b => b.id === prova.id_bimestre)?.nome || 'Bimestre'}
                               </span>
                             )}

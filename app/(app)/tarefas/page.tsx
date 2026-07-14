@@ -47,13 +47,13 @@ export default function TarefasPage() {
   const [searchUser, setSearchUser] = useState('')
 
   const [filtroStatus, setFiltroStatus] = useState<Status | 'todas'>('todas')
-  const [apenasMinhas, setApenasMinhas] = useState(false)
+  const [apenasMinhas, setApenasMinhas] = useState(true)
   const [showNew, setShowNew] = useState(false)
   const [form, setForm] = useState<Omit<Tarefa, 'id'>>(BLANK)
 
   const visibleTarefas = tarefas.filter(t => !apenasMinhas || t.responsavel === currentUser.nome)
 
-  const filtered = visibleTarefas.filter(t => filtroStatus === 'todas' || t.status === filtroStatus)
+  const filtered = visibleTarefas.filter(t => filtroStatus === 'todas' || t.status === filtroStatus).reverse()
   const pendentes = visibleTarefas.filter(t => t.status === 'pendente').length
   const andamento = visibleTarefas.filter(t => t.status === 'em-andamento').length
   const concluidas = visibleTarefas.filter(t => t.status === 'concluida').length

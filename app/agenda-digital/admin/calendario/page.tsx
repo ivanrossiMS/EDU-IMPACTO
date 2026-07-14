@@ -177,7 +177,7 @@ export default function CalendarioPage() {
 
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayStr())
   const [showModal, setShowModal] = useState(false)
   const [showSelectionModal, setShowSelectionModal] = useState<{ open: boolean, type: 'turmas' | 'usuario' }>({ open: false, type: 'turmas' })
   const [searchTermSelection, setSearchTermSelection] = useState('')

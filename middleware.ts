@@ -89,10 +89,19 @@ export async function middleware(request: NextRequest) {
 
   // O getUser() real e seguro continua sendo chamado nas rotas de API via requireAuth()
   // Utilizando getUser() aqui também para evitar o aviso de segurança do Supabase
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user }, error } = await supabase.auth.getUser()
 
   // ── Sem sessão → redireciona para login ───────────────────────────────────
   if (!user) {
+    // PROTEÇÃO RACE CONDITION: Se o token de refresh não for encontrado,
+    // significa que outra requisição concorrente já consumiu o token e o atualizou.
+    // Neste caso, não devemos destruir a experiência do usuário com um redirecionamento imediato.
+    // Deixamos a requisição passar, pois o client ou a próxima requisição já terá o cookie atualizado.
+    if (error && error.message?.includes('Refresh Token Not Found')) {
+      console.warn('[Middleware] Race condition no refresh token detectado. Ignorando redirect para não quebrar a sessão.');
+      return response;
+    }
+
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
         { error: 'Não autorizado. Faça login para continuar.' },

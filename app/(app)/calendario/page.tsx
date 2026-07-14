@@ -4,7 +4,7 @@ import { useData, EventoAgenda, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useState, useMemo, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar, Trash, PieChart, Clock, Activity, FileText, GraduationCap, MapPin, Info, Bus, Sun } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { TurmaDropdown } from '@/app/agenda-digital/colaborador/components/TurmaDropdown'
 
@@ -172,7 +172,7 @@ export default function CalendarioPage() {
 
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayStr())
   const [showModal, setShowModal] = useState(false)
   const [showSelectionModal, setShowSelectionModal] = useState<{ open: boolean, type: 'turmas' | 'usuario' }>({ open: false, type: 'turmas' })
   const [searchTermSelection, setSearchTermSelection] = useState('')
@@ -331,6 +331,29 @@ export default function CalendarioPage() {
     .sort((a, b) => (a.data + a.horaInicio) < (b.data + b.horaInicio) ? -1 : 1)
     .slice(0, 5)
 
+  const eventosMesAtual = useMemo(() => {
+    return eventosAgenda.filter(e => {
+      if (!e.data) return false;
+      const [y, m] = e.data.split('-');
+      return parseInt(y) === year && parseInt(m) === month + 1;
+    })
+  }, [eventosAgenda, year, month])
+
+  const resumoMes = useMemo(() => {
+    const total = eventosMesAtual.length;
+    const letivos = eventosMesAtual.filter(e => e.tipo === 'aula').length;
+    const avaliacoes = eventosMesAtual.filter(e => e.tipo === 'prova').length;
+    const reunioes = eventosMesAtual.filter(e => e.tipo === 'reuniao').length;
+    const outros = total - letivos - avaliacoes - reunioes;
+    
+    const pctLetivos = total > 0 ? Math.round((letivos / total) * 100) : 0;
+    const pctReunioes = total > 0 ? Math.round((reunioes / total) * 100) : 0;
+    const pctAvaliacoes = total > 0 ? Math.round((avaliacoes / total) * 100) : 0;
+    const pctOutros = total > 0 ? 100 - pctLetivos - pctReunioes - pctAvaliacoes : 0;
+
+    return { total, letivos, avaliacoes, reunioes, outros, pctLetivos, pctReunioes, pctAvaliacoes, pctOutros };
+  }, [eventosMesAtual]);
+
   const [aniversariantes, setAniversariantes] = useState<any[]>([])
   const [loadingNivers, setLoadingNivers] = useState(false)
 
@@ -382,6 +405,37 @@ export default function CalendarioPage() {
 
   const renderEventCard = (ev: EventoAgenda, idx: number) => {
     const evColor = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
+    
+    // Mapeamento de ícones do lado esquerdo
+    const getLeftIcon = () => {
+      switch(ev.tipo) {
+        case 'evento': return <Sun size={24} color={evColor} />;
+        case 'excursao': return <MapPin size={24} color={evColor} />;
+        case 'reuniao': return <Users size={24} color={evColor} />;
+        case 'prova': return <FileText size={24} color={evColor} />;
+        case 'aula': return <GraduationCap size={24} color={evColor} />;
+        default: return <Calendar size={24} color={evColor} />;
+      }
+    };
+
+    // Mapeamento de ícones da tag direita
+    const getRightIcon = () => {
+      switch(ev.tipo) {
+        case 'evento': return <Calendar size={13} color={evColor} />;
+        case 'excursao': return <Bus size={13} color={evColor} />;
+        case 'reuniao': return <Users size={13} color={evColor} />;
+        case 'prova': return <FileText size={13} color={evColor} />;
+        case 'aula': return <GraduationCap size={13} color={evColor} />;
+        default: return <Calendar size={13} color={evColor} />;
+      }
+    };
+
+    const formatTurmas = (turmas: string[]) => {
+      if (!turmas || turmas.length === 0) return 'Turmas: Todas';
+      if (turmas[0].startsWith('TODOS')) return 'Turmas: Todas';
+      return `Turma: ${turmas.join(', ')}`;
+    };
+
     return (
       <motion.div 
         initial={{ opacity: 0, y: 8 }} 
@@ -389,89 +443,126 @@ export default function CalendarioPage() {
         transition={{ delay: idx * 0.04 }}
         key={ev.id} 
         style={{ 
-          padding: '12px 0 12px 12px', 
-          background: 'transparent', 
-          borderBottom: '1px solid #f1f5f9',
-          borderLeft: `3px solid ${evColor}`,
+          background: '#ffffff',
+          borderRadius: '16px',
           display: 'flex',
-          flexDirection: 'column',
-          gap: 6,
           position: 'relative',
           transition: 'all 0.2s ease',
-          cursor: 'pointer'
+          cursor: 'pointer',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.02), 0 10px 25px rgba(0,0,0,0.04)',
+          border: '1px solid #f1f5f9',
+          overflow: 'hidden'
         }}
-        onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.02)'
-          e.currentTarget.style.paddingLeft = '16px'
+        onMouseEnter={e => { 
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.06), 0 16px 32px rgba(0,0,0,0.04)';
         }}
-        onMouseLeave={e => {
-          e.currentTarget.style.backgroundColor = 'transparent'
-          e.currentTarget.style.paddingLeft = '12px'
+        onMouseLeave={e => { 
+          e.currentTarget.style.transform = 'none';
+          e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.02), 0 10px 25px rgba(0,0,0,0.04)';
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-          <span style={{ 
-            fontSize: '10px', 
-            fontWeight: 800, 
-            color: evColor, 
-            background: `${evColor}08`, 
-            padding: '2px 6px', 
-            borderRadius: '4px' 
-          }}>
-            {(ev as any).diaTodo ? '☀️ Dia Todo' : `${ev.horaInicio || '00:00'}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
-          </span>
-          <span style={{ 
-            fontSize: '9px', 
-            fontWeight: 900, 
-            color: '#94a3b8', 
-            textTransform: 'uppercase', 
-            letterSpacing: '0.05em' 
-          }}>
-            {TIPO_LABELS[ev.tipo]}
-          </span>
-        </div>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        {/* Borda Esquerda */}
+        <div style={{ width: '6px', background: evColor, flexShrink: 0 }}></div>
+
+        {/* Área do Ícone */}
+        <div style={{ 
+          width: '80px', 
+          background: `linear-gradient(135deg, ${evColor}08 0%, ${evColor}15 100%)`, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          position: 'relative',
+          overflow: 'hidden',
+          flexShrink: 0
+        }}>
+          {/* Fundo com bolinhas imitando pattern */}
+          <div style={{
+             position: 'absolute',
+             top: 0, left: 0, right: 0, bottom: 0,
+             background: `radial-gradient(circle at 50% 50%, ${evColor}10 2px, transparent 2px)`,
+             backgroundSize: '16px 16px',
+             opacity: 0.8
+          }}></div>
+          
           <div style={{ 
-            fontSize: '13px', 
-            fontWeight: 800, 
-            color: '#1e293b', 
-            lineHeight: 1.3,
-            flex: 1,
-            fontFamily: 'Outfit, sans-serif'
+            width: '42px', 
+            height: '42px', 
+            background: '#ffffff', 
+            borderRadius: '50%', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+            zIndex: 1
           }}>
-            {ev.titulo}
-          </div>
-          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleEdit(ev); }}
-              style={{ width: 24, height: 24, borderRadius: 6, background: '#f1f5f9', border: 'none', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
-            >
-              <Edit2 size={10} />
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleDelete(ev.id); }}
-              style={{ width: 24, height: 24, borderRadius: 6, background: '#fff1f2', border: 'none', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
-            >
-              <X size={10} />
-            </button>
+            {getLeftIcon()}
           </div>
         </div>
 
-        {(ev.descricao || ev.local) && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {ev.descricao && (
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {ev.descricao}
-              </div>
-            )}
-            {ev.local && (
-              <div style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 600 }}>
-                📍 {ev.local}
-              </div>
-            )}
+        {/* Conteúdo Direito */}
+        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          
+          {/* Tags Superiores */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ 
+              fontSize: '11px', fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '4px 10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: 4 
+            }}>
+              <span style={{ color: '#d97706' }}>☀️</span> {(ev as any).diaTodo ? 'Dia todo' : `${ev.horaInicio || '00:00'}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
+            </div>
+            <div style={{ 
+              fontSize: '11px', fontWeight: 800, color: evColor, background: `${evColor}15`, padding: '4px 10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: 4
+            }}>
+              {getRightIcon()} {TIPO_LABELS[ev.tipo]}
+            </div>
           </div>
-        )}
+          
+          {/* Título */}
+          <div style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', fontFamily: 'Outfit, sans-serif', marginTop: '2px' }}>
+            {ev.titulo}
+          </div>
+
+          {/* Data/Hora */}
+          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginTop: '2px' }}>
+             <Calendar size={14} style={{ color: '#94a3b8' }} /> {(ev as any).diaTodo ? 'Todo o dia • Sem horário definido' : `${ev.horaInicio || ''}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
+          </div>
+
+          {/* Local, Turma, Descricao e Botões */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {(ev.local || (ev.turmas && ev.turmas.length > 0)) && (
+                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {ev.local && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <MapPin size={13} /> {ev.local}
+                    </span>
+                  )}
+                  {(ev.turmas && ev.turmas.length > 0) && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Users size={13} /> {formatTurmas(ev.turmas)}
+                    </span>
+                  )}
+                </div>
+              )}
+              {ev.descricao && (
+                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Info size={13} /> {ev.descricao}
+                </div>
+              )}
+            </div>
+
+            {/* Ações */}
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button onClick={(e) => { e.stopPropagation(); handleEdit(ev); }} style={{ width: 32, height: 32, borderRadius: '10px', background: '#ffffff', border: '1px solid #e2e8f0', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#cbd5e1'} onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
+                <Edit2 size={14} />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(ev.id); }} style={{ width: 32, height: 32, borderRadius: '10px', background: '#fff1f2', border: '1px solid #fecdd3', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#ffe4e6'} onMouseLeave={e => e.currentTarget.style.background = '#fff1f2'}>
+                <Trash size={14} />
+              </button>
+            </div>
+          </div>
+
+        </div>
       </motion.div>
     )
   }
@@ -479,19 +570,14 @@ export default function CalendarioPage() {
   return (
     <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container">
       <style dangerouslySetInnerHTML={{__html: `
+        .ad-calendar-grid-columns { display: grid; grid-template-columns: 320px 1fr 320px 320px; gap: 24px; align-items: start; }
+        @media (max-width: 1200px) {
+           .ad-calendar-grid-columns { grid-template-columns: 1fr 1fr; }
+        }
         @media (max-width: 768px) {
            .ad-calendar-mobile-container .page-header { align-items: center !important; text-align: center !important; }
            .ad-calendar-filter-bar { flex-direction: column !important; align-items: stretch !important; padding: 16px !important; }
            .ad-calendar-grid-columns { grid-template-columns: 1fr !important; }
-        }
-        .commitments-columns-row {
-          display: flex;
-          gap: 24px;
-          position: relative;
-        }
-        @media (max-width: 900px) {
-           .commitments-columns-row { flex-direction: column !important; gap: 16px !important; }
-           .commitments-columns-row .column-separator { display: none !important; }
         }
       `}} />
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -523,212 +609,240 @@ export default function CalendarioPage() {
         </select>
       </div>
 
-      <div className="ad-calendar-grid-columns" style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, alignItems: 'start' }}>
-        <div className="card" style={{ padding: '16px', borderRadius: 20, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <button className="btn btn-ghost btn-icon" onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={16} /></button>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{MESES[month]} {year}</div>
-            <button className="btn btn-ghost btn-icon" onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={16} /></button>
+      {/* 
+        GRID NOVA (4 Colunas) 
+      */}
+      <div className="ad-calendar-grid-columns">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* === CARD 1: Calendário === */}
+        <div className="card" style={{ padding: '24px', borderRadius: 24, background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: 'none', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>Calendário</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 10 }}>
-            {DIAS_SEMANA.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 800, color: '#94a3b8' }}>{d}</div>)}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setViewDate(new Date(year, month - 1, 1))} style={{ padding: 4, height: 28, width: 28 }}><ChevronLeft size={16} /></button>
+               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setViewDate(new Date(year - 1, month, 1))} style={{ padding: 4, height: 28, width: 28, opacity: 0.5 }}><ChevronLeft size={16} /></button>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>{MESES[month]} {year}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setViewDate(new Date(year + 1, month, 1))} style={{ padding: 4, height: 28, width: 28, opacity: 0.5 }}><ChevronRight size={16} /></button>
+               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setViewDate(new Date(year, month + 1, 1))} style={{ padding: 4, height: 28, width: 28 }}><ChevronRight size={16} /></button>
+            </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-            {Array.from({ length: firstDay }).map((_, i) => <div key={`e-${i}`} />)}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
+            {DIAS_SEMANA.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{d}</div>)}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, rowGap: 8 }}>
+            {Array.from({ length: firstDay }).map((_, i) => <div key={`e-${i}`} style={{ color: '#cbd5e1', fontSize: 13, textAlign: 'center', alignSelf: 'center', fontWeight: 500 }}>{getDaysInMonth(year, month-1) - firstDay + i + 1}</div>)}
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const d = i + 1; const dateStr = getDateStr(d); const events = eventosPorDia(dateStr); const isToday = dateStr === today; const isSelected = dateStr === selectedDay;
               return (
-                <button key={d} onClick={() => setSelectedDay(isSelected ? null : dateStr)} onDoubleClick={() => openNewEventoForDay(dateStr)} style={{ height: 42, borderRadius: 12, background: isSelected ? '#6366f1' : 'transparent', border: `1px solid ${isSelected ? '#6366f1' : isToday ? '#e2e8f0' : 'transparent'}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ fontSize: 13, fontWeight: isSelected || isToday ? 800 : 500, color: isSelected ? '#fff' : isToday ? '#6366f1' : '#334155' }}>{d}</div>
-                  <div style={{ display: 'flex', gap: 2 }}>{isSelected ? <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#fff' }} /> : events.slice(0, 3).map(ev => <div key={ev.id} style={{ width: 4, height: 4, borderRadius: '50%', background: ev.cor ?? TIPO_CORES[ev.tipo] }} />)}</div>
+                <button key={d} onClick={() => setSelectedDay(isSelected ? null : dateStr)} onDoubleClick={() => openNewEventoForDay(dateStr)} 
+                  style={{ 
+                    height: 36, width: 36, margin: '0 auto', borderRadius: 12, 
+                    background: isSelected ? '#6366f1' : 'transparent', 
+                    border: 'none',
+                    cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.2s'
+                  }}>
+                  <div style={{ fontSize: 13, fontWeight: isSelected || isToday ? 800 : 600, color: isSelected ? '#fff' : isToday ? '#6366f1' : '#334155' }}>{d}</div>
+                  <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>{isSelected ? <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#fff' }} /> : events.slice(0, 1).map(ev => <div key={ev.id} style={{ width: 4, height: 4, borderRadius: '50%', background: '#f59e0b' }} />)}</div>
                 </button>
               )
             })}
           </div>
-        </div>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4, scrollbarWidth: 'none' }}>
-          
-          {/* 📍 Eventos do Dia Selecionado - CARD PRINCIPAL */}
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            className="card" 
-            style={{ 
-              padding: '28px', borderRadius: 28, border: '1px solid rgba(255,255,255,0.8)',
-              background: 'linear-gradient(135deg, #ffffff 0%, #f8faff 100%)',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.04)',
-              position: 'relative', overflow: 'hidden'
-            }}
-          >
-            <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, background: 'rgba(99, 102, 241, 0.03)', borderRadius: '50%' }} />
-            
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 8px 16px rgba(99, 102, 241, 0.2)' }}>
-                   <Calendar size={20} />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 900, fontSize: 17, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>
-                    {selectedDay ? `${parseInt(selectedDay.split('-')[2])} de ${MESES[parseInt(selectedDay.split('-')[1]) - 1]}` : 'Agenda do Dia'}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{selectedEvents.length} compromisso(s)</div>
-                </div>
-              </div>
+          <div style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1' }}></span>
+               <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>Eventos no dia</span>
             </div>
-
-            {selectedEvents.length === 0 ? (
-              <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                <div style={{ fontSize: 40, marginBottom: 10 }}>☁️</div>
-                <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>{selectedDay ? 'Nenhum evento para este dia' : 'Selecione um dia no calendário'}</div>
-              </div>
-            ) : (() => {
-              const col1 = selectedEvents.filter((_, i) => i % 3 === 0)
-              const col2 = selectedEvents.filter((_, i) => i % 3 === 1)
-              const col3 = selectedEvents.filter((_, i) => i % 3 === 2)
-              
-              return (
-                <div className="commitments-columns-row">
-                  {/* Coluna 1 */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {col1.map((ev, idx) => renderEventCard(ev, idx))}
-                  </div>
-
-                  {/* Linha Separadora 1 */}
-                  {(col2.length > 0 || col3.length > 0) && (
-                    <div className="column-separator" style={{ width: '1px', background: 'rgba(99, 102, 241, 0.08)', alignSelf: 'stretch', margin: '0 12px' }} />
-                  )}
-
-                  {/* Coluna 2 */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {col2.map((ev, idx) => renderEventCard(ev, idx))}
-                  </div>
-
-                  {/* Linha Separadora 2 */}
-                  {col3.length > 0 && (
-                    <div className="column-separator" style={{ width: '1px', background: 'rgba(99, 102, 241, 0.08)', alignSelf: 'stretch', margin: '0 12px' }} />
-                  )}
-
-                  {/* Coluna 3 */}
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {col3.map((ev, idx) => renderEventCard(ev, idx))}
-                  </div>
-                </div>
-              )
-            })()}
-          </motion.div>
-
-          {/* 🚀 Seção Lado a Lado: Aniversariantes & Próximos */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            
-            {/* 🎉 Aniversariantes */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
-              className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                  <Sparkles size={16} />
-                </div>
-                <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b' }}>Aniversários no Mês</span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-                {loadingNivers ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
-                ) : aniversariantes.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Ninguém este mês 🎈</div>
-                ) : (
-                  aniversariantes.map((p, idx) => (
-                    <motion.div 
-                      whileHover={{ x: 5 }}
-                      key={p.id || idx}
-                      style={{ 
-                        display: 'flex', gap: 14, alignItems: 'center', padding: '12px 16px', 
-                        borderRadius: 22, background: p.isProximo ? 'rgba(236, 72, 153, 0.04)' : '#f8fafc',
-                        border: p.isProximo ? '1.5px solid rgba(236, 72, 153, 0.15)' : '1.5px solid transparent',
-                        boxShadow: p.isProximo ? '0 8px 20px rgba(236, 72, 153, 0.05)' : 'none'
-                      }}
-                    >
-                      <div style={{ 
-                        width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
-                        background: p.foto ? `url(${p.foto}) center/cover` : '#fff',
-                        border: p.isProximo ? '2.5px solid #ec4899' : '2.5px solid #e2e8f0',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#64748b',
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
-                      }}>
-                        {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
-                      </div>
-                      
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'Outfit, sans-serif' }}>{p.nome}</div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>{p.tipo}</div>
-                      </div>
-
-                      <div style={{ 
-                        width: 54, height: 54, borderRadius: 18, flexShrink: 0,
-                        background: p.isProximo ? '#ec4899' : '#fff',
-                        border: p.isProximo ? 'none' : '1.5px solid #e2e8f0',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: p.isProximo ? '0 10px 20px rgba(236, 72, 153, 0.25)' : '0 4px 10px rgba(0,0,0,0.03)'
-                      }}>
-                        <span style={{ fontSize: 9, fontWeight: 900, color: p.isProximo ? 'rgba(255,255,255,0.8)' : '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>Dia</span>
-                        <span style={{ fontSize: 18, fontWeight: 900, color: p.isProximo ? '#fff' : '#1e293b', lineHeight: 1 }}>{p.dia}</span>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-
-            {/* 📅 Próximos Eventos */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
-              className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                  <Calendar size={16} />
-                </div>
-                <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b' }}>Próximos Compromissos</span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-                {proximosEventos.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Sem eventos futuros</div>
-                ) : (
-                  proximosEventos.map((ev, idx) => {
-                    const [y, m, d] = ev.data.split('-')
-                    return (
-                      <motion.div 
-                        whileHover={{ x: 5 }}
-                        key={ev.id} 
-                        style={{ 
-                          display: 'flex', gap: 14, alignItems: 'center', padding: '12px 16px', 
-                          borderRadius: 22, background: '#f8fafc', border: '1px solid transparent'
-                        }}
-                      >
-                        <div style={{ 
-                          width: 52, height: 52, borderRadius: 18, flexShrink: 0,
-                          background: (ev.cor ?? TIPO_CORES[ev.tipo]) + '15',
-                          color: ev.cor ?? TIPO_CORES[ev.tipo],
-                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
-                          fontSize: 15, fontWeight: 900, lineHeight: 1.1
-                        }}>
-                          <span>{d}</span>
-                          <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{MESES[parseInt(m)-1].slice(0,3)}</span>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 15, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'Outfit, sans-serif' }}>{ev.titulo}</div>
-                          <div style={{ fontSize: 12, color: '#64748b', fontWeight: 700, marginTop: 2 }}>{TIPO_LABELS[ev.tipo]}</div>
-                        </div>
-                      </motion.div>
-                    )
-                  })
-                )}
-              </div>
-            </motion.div>
-
+            <button style={{ 
+              padding: '8px 12px', borderRadius: 10, background: '#e0e7ff', color: '#6366f1', 
+              border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 
+            }} onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}>
+              Ver calendário completo &rarr;
+            </button>
           </div>
+        </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* === CARD 2: Dia Selecionado === */}
+        <div className="card" style={{ padding: '24px', borderRadius: 24, background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: 'none', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#6366f1', fontWeight: 800, fontSize: 13 }}>
+              <Calendar size={16} /> Dia Selecionado
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+               <span style={{ fontSize: 32, fontWeight: 900, color: '#6366f1', lineHeight: 1 }}>{selectedDay ? parseInt(selectedDay.split('-')[2]) : '--'}</span>
+               <div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>
+                    {selectedDay ? `de ${MESES[parseInt(selectedDay.split('-')[1]) - 1]}` : ''}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+                    {selectedDay ? DIAS_SEMANA[new Date(selectedDay + 'T12:00:00').getDay()] + 'ado' : ''}
+                  </div>
+               </div>
+            </div>
+            <button style={{ padding: '8px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              Ver dia inteiro ↗
+            </button>
+          </div>
+
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+              {selectedEvents.length} evento(s) neste dia
+            </div>
+            {selectedEvents.length === 0 ? (
+              <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500, textAlign: 'center', padding: '40px 0' }}>Nenhum evento para este dia.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {selectedEvents.map((ev, idx) => renderEventCard(ev, idx))}
+              </div>
+            )}
+          </div>
+
+          {/* Citação Educacional */}
+          <div style={{ padding: '20px 24px', background: '#f8fafc', borderRadius: 16, position: 'relative', marginTop: 'auto' }}>
+            <div style={{ position: 'absolute', top: 12, left: 12, color: 'rgba(99, 102, 241, 0.2)', fontSize: 24, lineHeight: 1, fontFamily: 'serif' }}>“</div>
+            <div style={{ position: 'absolute', bottom: 12, right: 12, color: 'rgba(99, 102, 241, 0.2)', fontSize: 24, lineHeight: 1, fontFamily: 'serif' }}>”</div>
+            <p style={{ textAlign: 'center', color: '#64748b', fontSize: 13, fontWeight: 600, fontStyle: 'italic', margin: 0, padding: '0 20px', lineHeight: 1.5 }}>
+              A educação transforma sonhos em conquistas.
+            </p>
+          </div>
+        </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* === CARD 3: Próximos Compromissos === */}
+        <div className="card" style={{ padding: '24px', borderRadius: 24, background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: 'none', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#6366f1', fontWeight: 800, fontSize: 14 }}>
+              <Calendar size={18} /> Próximos Compromissos
+            </div>
+            <button style={{ background: 'transparent', color: '#6366f1', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+              Ver todos
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, justifyContent: proximosEventos.length === 0 ? 'center' : 'flex-start' }}>
+            {proximosEventos.length === 0 ? (
+              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                 <div style={{ width: 120, height: 120, borderRadius: '50%', background: 'linear-gradient(135deg, #f8faff 0%, #e0e7ff 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Calendar size={48} style={{ color: '#a5b4fc' }} />
+                 </div>
+                 <div>
+                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1e293b' }}>Sem compromissos futuros</h4>
+                    <p style={{ margin: '8px 0 0', fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>Não há eventos agendados para os próximos dias.</p>
+                 </div>
+              </div>
+            ) : (
+              proximosEventos.map((ev) => {
+                const [y, m, d] = ev.data.split('-')
+                const badgeColor = TIPO_CORES[ev.tipo] || '#cbd5e1'
+                return (
+                  <div key={ev.id} style={{ display: 'flex', gap: 16, alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ width: 44, textAlign: 'center' }}>
+                      <div style={{ fontSize: 20, fontWeight: 900, color: '#6366f1', lineHeight: 1 }}>{d}</div>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase' }}>{MESES[parseInt(m)-1].slice(0,3)}</div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {ev.titulo}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'transparent', border: '1.5px solid #cbd5e1' }}></span>
+                        {DIAS_SEMANA[new Date(ev.data + 'T12:00:00').getDay()]} - {ev.horaInicio || 'Dia todo'}
+                      </div>
+                    </div>
+                    <div style={{ padding: '4px 10px', borderRadius: 8, background: `${badgeColor}15`, color: badgeColor, fontSize: 10, fontWeight: 700 }}>
+                      {TIPO_LABELS[ev.tipo]}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+          <button style={{ 
+            marginTop: 16, width: '100%', padding: '14px', borderRadius: 16, 
+            background: 'transparent', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)', 
+            fontSize: 13, fontWeight: 800, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 
+          }}>
+            <Calendar size={16} /> Ver todos os eventos
+          </button>
+        </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  {/* === CARD 4: Aniversariantes do Mês === */}
+        <div className="card" style={{ padding: '24px', borderRadius: 24, background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: 'none', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#ec4899', fontWeight: 800, fontSize: 14 }}>
+              🎂 Aniversariantes do Mês
+            </div>
+            <button style={{ background: 'transparent', color: '#6366f1', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+              Ver todos
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1, overflowY: 'auto', maxHeight: 350, paddingRight: 8 }}>
+            {loadingNivers ? (
+               <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
+            ) : aniversariantes.length === 0 ? (
+               <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Ninguém este mês 🎈</div>
+            ) : (
+              aniversariantes.map((p, idx) => {
+                const isHoje = p.dia === hoje.getDate() && month === hoje.getMonth() && year === hoje.getFullYear();
+                return (
+                <div key={p.id || idx} style={{ 
+                  display: 'flex', gap: 12, alignItems: 'center', 
+                  padding: isHoje ? '12px' : '0 0 16px 0',
+                  background: isHoje ? 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)' : 'transparent',
+                  borderRadius: isHoje ? '16px' : '0',
+                  borderTop: isHoje ? '1px solid #fbcfe8' : 'none',
+                  borderRight: isHoje ? '1px solid #fbcfe8' : 'none',
+                  borderLeft: isHoje ? '1px solid #fbcfe8' : 'none',
+                  borderBottom: isHoje ? '1px solid #fbcfe8' : (!isHoje && idx !== aniversariantes.length - 1 ? '1px solid #f1f5f9' : 'none'),
+                  marginBottom: isHoje ? '8px' : '0'
+                }}>
+                  <div style={{ 
+                    width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
+                    background: p.foto ? `url(${p.foto}) center/cover` : isHoje ? '#fce7f3' : '#f1f5f9',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: isHoje ? '#ec4899' : '#1e293b'
+                  }}>
+                    {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: isHoje ? '#db2777' : '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
+                    <div style={{ fontSize: 12, color: isHoje ? '#ec4899' : '#64748b', fontWeight: 500 }}>
+                      {p.tipo === 'Aluno' 
+                        ? (Array.isArray(p.turma) 
+                            ? p.turma.map(id => turmas.find((t:any) => t.id === id || String(t.id) === String(id))?.nome || id).join(', ') 
+                            : (turmas.find((t:any) => t.id === p.turma || String(t.id) === String(p.turma))?.nome || p.turma)) || 'Sem Turma' 
+                        : p.tipo}
+                    </div>
+                  </div>
+                  <div style={{ 
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <span style={{ fontSize: 9, fontWeight: 800, color: isHoje ? '#f472b6' : '#94a3b8', textTransform: 'uppercase' }}>Dia</span>
+                    <span style={{ fontSize: 16, fontWeight: 900, color: isHoje ? '#db2777' : '#1e293b', lineHeight: 1 }}>{p.dia}</span>
+                  </div>
+                </div>
+              )})
+            )}
+          </div>
+          
+          <div style={{ 
+            marginTop: 'auto', padding: '16px', borderRadius: 16, background: '#e0e7ff', 
+            color: '#6366f1', fontSize: 13, fontWeight: 800, textAlign: 'center',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+          }}>
+            <Users size={16} /> {aniversariantes.length} aniversariantes neste mês 🎉
+          </div>
+        </div>
         </div>
       </div>
 

@@ -289,7 +289,7 @@ export default function ADCalendarioPage() {
   
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string | null>(todayStr())
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
   const [showModal, setShowModal] = useState(false)
   const [showSelectionModal, setShowSelectionModal] = useState<{ open: boolean, type: 'turmas' | 'usuario' }>({ open: false, type: 'turmas' })

@@ -569,6 +569,16 @@ export default function UploadSimuladosGerenciamentoPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{serie}</span>
                           <span style={{ padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', whiteSpace: 'nowrap' }}>{items.length} {items.length === 1 ? 'simulado' : 'simulados'}</span>
+                          {(() => {
+                            const bimsOfGroup = Array.from(new Set(items.map((i: any) => i.id_bimestre))).map((id: any) => bimestres.find((b: any) => b.id === id)?.nome).filter(Boolean);
+                            if (bimsOfGroup.length === 0) return null;
+                            const bimLabel = bimsOfGroup.length > 2 ? `${bimsOfGroup.length} bimestres` : bimsOfGroup.join(', ');
+                            return (
+                              <span style={{ padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 800, background: 'rgba(236,72,153,0.1)', color: '#ec4899', whiteSpace: 'nowrap' }}>
+                                {bimLabel}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <span style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', marginTop: 4, display: 'block', lineHeight: 1.4 }}>Acompanhe os simulados aplicados e programados para esta turma.</span>
                       </div>

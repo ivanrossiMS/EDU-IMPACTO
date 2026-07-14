@@ -635,10 +635,8 @@ export function ComunicadoViewModal({
         <motion.div 
           className="cvm-modal-container"
           style={{ 
-            boxSizing: 'border-box',
-            paddingBottom: (isInputFocused && typeof window !== 'undefined' && window.innerWidth < 768) ? '45vh' : 0, 
-            transition: 'padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1)' 
-          }}
+            boxSizing: 'border-box'
+          }} 
           initial={{scale: 0.95, y: 20}} 
           animate={{scale: 1, y: 0}} 
           exit={{scale: 0.95, y: 20}} 

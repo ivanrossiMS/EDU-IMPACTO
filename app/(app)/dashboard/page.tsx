@@ -66,22 +66,26 @@ export default function DashboardPage() {
   const [refreshKey] = useState(0)
 
   // ── Context Data (Calendar & Tasks)
-  const { tarefas = [], eventosAgenda = [], turmas = [], cfgCalendarioLetivo = [] } = useData()
+  const { tarefas = [], eventosAgenda = [], turmas = [], cfgCalendarioLetivo = [], loading: loadContext = false } = useData() as any
 
   // ── Modais
   const [modalAnivOpen, setModalAnivOpen] = useState(false)
   const [anivFiltroAno, setAnivFiltroAno] = useState('Todos')
   const [anivFiltroTurma, setAnivFiltroTurma] = useState('Todas')
+  
+  // ── Filtros Dashboard
+  const [filtroTarefas, setFiltroTarefas] = useState<'todas' | 'pendentes' | 'concluidas'>('todas')
+  const [diaSelecionadoOffset, setDiaSelecionadoOffset] = useState<number>(0)
 
   // ── Data for Stats
-  const { data: aniversariantesList } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes')
+  const { data: aniversariantesList, isLoading: loadAniv } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes')
   const [alunos, , { loading: loadAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [titulos, , { loading: loadTitulos }] = useSupabaseArray<any>('titulos')
   const [pedidos, , { loading: loadPedidosMeta }] = useSupabaseArray<any>('administrativo/pedidos-livros')
   const [pedidosManuais, , { loading: loadPedidosManuais }] = useSupabaseArray<any>('administrativo/pedidos-livros-manuais')
 
   // ── Ocorrências
-  const { data: ocorrData } = useApiQuery<any>(
+  const { data: ocorrData, isLoading: loadOcorr } = useApiQuery<any>(
     ['dash-ocorr'],
     `/api/ocorrencias`,
     {},
@@ -140,8 +144,19 @@ export default function DashboardPage() {
 
   // ── Derived Data
   const todayStr = hoje.toISOString().slice(0, 10)
-  const tarefasPendentes = tarefas.filter(t => t.status !== 'concluida')
-  const eventosHoje = eventosAgenda.filter(e => e.data === todayStr)
+  
+  const tarefasPendentesList = tarefas.filter(t => t.status !== 'concluida')
+  const tarefasConcluidasList = tarefas.filter(t => t.status === 'concluida')
+  const tarefasExibidas = filtroTarefas === 'todas' 
+    ? tarefas 
+    : filtroTarefas === 'pendentes' 
+      ? tarefasPendentesList 
+      : tarefasConcluidasList
+
+  const selectedDate = new Date(hoje);
+  selectedDate.setDate(hoje.getDate() + diaSelecionadoOffset);
+  const selectedDateStr = selectedDate.toISOString().slice(0, 10);
+  const eventosExibidos = eventosAgenda.filter(e => e.data === selectedDateStr);
 
   const kpiCards = [
     { label: 'Total de Alunos', value: formatNumber(totalAlunos), icon: <Users size={18} />, color: '#3b82f6', bgIcon: 'rgba(59, 130, 246, 0.1)', sub: 'Matriculados ativos', path: PATHS.blue },
@@ -175,7 +190,7 @@ export default function DashboardPage() {
   }, [aniversariantesList, turmas])
 
   const ordersSummary = useMemo(() => {
-    const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv']
+    const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv', 'itinerário', 'itinerario']
     function isEventoLivro(descricao?: string): boolean {
       if (!descricao) return false
       return EVENTOS_LIVROS.some(e => descricao.toLowerCase().includes(e))
@@ -294,10 +309,6 @@ export default function DashboardPage() {
     }
   }, [alunos, titulos, pedidos, pedidosManuais, turmas])
 
-  if (loadKpis) {
-    return <ImpactoLoader />
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
 
@@ -324,7 +335,7 @@ export default function DashboardPage() {
                   {kpi.label}
                 </span>
                 <div style={{ fontSize: '38px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>
-                  {kpi.value}
+                  {loadKpis ? <Loader2 className="animate-spin" size={32} color={kpi.color} style={{ margin: '3px 0' }} /> : kpi.value}
                 </div>
                 <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, marginTop: '10px' }}>
                   {kpi.sub}
@@ -362,6 +373,12 @@ export default function DashboardPage() {
             <Link href="/administrativo/pedidos-livros" style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', fontWeight: 800 }}>Ver todos</Link>
           </div>
 
+          {(loadAlunos || loadTitulos || loadPedidosMeta || loadPedidosManuais) ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+              <Loader2 className="animate-spin" size={32} color="#3b82f6" />
+            </div>
+          ) : (
+            <>
           <div className="dashboard-books-grid">
             <div style={{ background: 'hsl(var(--bg-elevated))', padding: '16px', borderRadius: '16px' }}>
               <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
@@ -428,6 +445,8 @@ export default function DashboardPage() {
               })
             )}
           </div>
+            </>
+          )}
         </div>
 
         {/* ── Coluna Central: Tarefas e Agenda ──────────────────────────── */}
@@ -444,34 +463,67 @@ export default function DashboardPage() {
             <Link href="/tarefas" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
           </div>
 
+          {loadContext ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+              <Loader2 className="animate-spin" size={32} color="#10b981" />
+            </div>
+          ) : (
+            <>
           <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(139, 92, 246, 0.1)', padding: '6px 14px', borderRadius: '20px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: '#7c3aed' }}>Todas</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: 'hsl(var(--bg-surface))', background: '#8b5cf6', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>0</span>
+            <div 
+              onClick={() => setFiltroTarefas('todas')}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'todas' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'todas' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
+            >
+              <span style={{ fontSize: '12px', fontWeight: 800, color: filtroTarefas === 'todas' ? '#7c3aed' : 'hsl(var(--text-muted))' }}>Todas</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: filtroTarefas === 'todas' ? 'hsl(var(--bg-surface))' : 'hsl(var(--text-muted))', background: filtroTarefas === 'todas' ? '#8b5cf6' : 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tarefas.length}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: 'hsl(var(--text-muted))' }}>Pendentes</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: 'hsl(var(--text-muted))', background: 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>0</span>
+            <div 
+              onClick={() => setFiltroTarefas('pendentes')}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'pendentes' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'pendentes' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
+            >
+              <span style={{ fontSize: '12px', fontWeight: 800, color: filtroTarefas === 'pendentes' ? '#7c3aed' : 'hsl(var(--text-muted))' }}>Pendentes</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: filtroTarefas === 'pendentes' ? 'hsl(var(--bg-surface))' : 'hsl(var(--text-muted))', background: filtroTarefas === 'pendentes' ? '#8b5cf6' : 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tarefasPendentesList.length}</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: '12px', fontWeight: 800, color: 'hsl(var(--text-muted))' }}>Concluídas</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: 'hsl(var(--text-muted))', background: 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>0</span>
+            <div 
+              onClick={() => setFiltroTarefas('concluidas')}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'concluidas' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'concluidas' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
+            >
+              <span style={{ fontSize: '12px', fontWeight: 800, color: filtroTarefas === 'concluidas' ? '#7c3aed' : 'hsl(var(--text-muted))' }}>Concluídas</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: filtroTarefas === 'concluidas' ? 'hsl(var(--bg-surface))' : 'hsl(var(--text-muted))', background: filtroTarefas === 'concluidas' ? '#8b5cf6' : 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tarefasConcluidasList.length}</span>
             </div>
           </div>
           
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '10px 0' }}>
-            <div style={{ marginBottom: 20 }}>
-              <svg width="60" height="70" viewBox="0 0 60 70" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="5" y="15" width="50" height="55" rx="10" fill="#e0e7ff" />
-                <rect x="20" y="5" width="20" height="15" rx="5" fill="hsl(var(--bg-surface))" stroke="#a5b4fc" strokeWidth="4" />
-                <path d="M 22 32 L 27 37 L 38 26" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M 22 46 L 27 51 L 38 40" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M 22 60 L 27 65 L 38 54" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <div style={{ fontSize: '16px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif', marginBottom: 4 }}>Nenhuma tarefa pendente</div>
-            <div style={{ fontSize: '13px', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Tudo em dia por aqui! 🎉</div>
+            {tarefasExibidas.length === 0 ? (
+              <>
+                <div style={{ marginBottom: 20 }}>
+                  <svg width="60" height="70" viewBox="0 0 60 70" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="5" y="15" width="50" height="55" rx="10" fill="#e0e7ff" />
+                    <rect x="20" y="5" width="20" height="15" rx="5" fill="hsl(var(--bg-surface))" stroke="#a5b4fc" strokeWidth="4" />
+                    <path d="M 22 32 L 27 37 L 38 26" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M 22 46 L 27 51 L 38 40" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M 22 60 L 27 65 L 38 54" stroke="#818cf8" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif', marginBottom: 4 }}>Nenhuma tarefa {filtroTarefas === 'pendentes' ? 'pendente' : filtroTarefas === 'concluidas' ? 'concluída' : 'encontrada'}</div>
+                <div style={{ fontSize: '13px', color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Tudo em dia por aqui! 🎉</div>
+              </>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
+                {tarefasExibidas.slice(0, 5).map(t => {
+                  const isConcluida = t.status === 'concluida';
+                  return (
+                    <div key={t.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: '12px', borderLeft: `4px solid ${isConcluida ? '#10b981' : '#f59e0b'}`, width: '100%', textAlign: 'left' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-primary))', textDecoration: isConcluida ? 'line-through' : 'none', opacity: isConcluida ? 0.7 : 1 }}>{t.titulo}</span>
+                      {t.prazo && <span style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', marginTop: 4, fontWeight: 600 }}>Prazo: {t.prazo.split('-').reverse().join('/')}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
+            </>
+          )}
         </div>
 
         {/* ── Coluna 3: Agenda ──────────────────────────── */}
@@ -486,42 +538,64 @@ export default function DashboardPage() {
             <Link href="/calendario" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todos</Link>
           </div>
 
+          {loadContext ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+              <Loader2 className="animate-spin" size={32} color="#8b5cf6" />
+            </div>
+          ) : (
+            <>
           {/* Week View */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))', overflowX: 'auto', gap: 12 }} className="no-scrollbar">
-            <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#8b5cf6', padding: '10px 14px', borderRadius: '20px', color: 'hsl(var(--bg-surface))', gap: 4, boxShadow: '0 4px 14px rgba(139, 92, 246, 0.3)' }}>
-              <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: 'rgba(255,255,255,0.8)' }}>Hoje</span>
-              <span style={{ fontSize: '16px', fontWeight: 900 }}>{hoje.getDate().toString().padStart(2, '0')}</span>
-            </div>
-            {[1, 2, 3, 4, 5, 6].map((offset) => {
+            {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
               const d = new Date(hoje);
               d.setDate(hoje.getDate() + offset);
-              const dayName = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase();
+              const isSelected = diaSelecionadoOffset === offset;
+              const isToday = offset === 0;
+              const dayName = isToday ? 'Hoje' : new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase();
+              
               return (
-                <div key={offset} style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 0' }}>
-                  <span style={{ fontSize: '10px', fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase' }}>{dayName}</span>
-                  <div style={{ color: 'hsl(var(--text-primary))', fontSize: '16px', fontWeight: 900 }}>{d.getDate().toString().padStart(2, '0')}</div>
+                <div 
+                  key={offset} 
+                  onClick={() => setDiaSelecionadoOffset(offset)}
+                  style={{ 
+                    flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', 
+                    background: isSelected ? '#8b5cf6' : 'transparent', 
+                    padding: isSelected ? '10px 14px' : '10px 0', 
+                    borderRadius: '20px', 
+                    color: isSelected ? 'hsl(var(--bg-surface))' : 'inherit', 
+                    gap: 4, 
+                    boxShadow: isSelected ? '0 4px 14px rgba(139, 92, 246, 0.3)' : 'none',
+                    cursor: 'pointer',
+                    minWidth: isSelected ? 'auto' : '40px',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: isSelected ? 'rgba(255,255,255,0.8)' : 'hsl(var(--text-muted))' }}>{dayName}</span>
+                  <div style={{ color: isSelected ? '#fff' : 'hsl(var(--text-primary))', fontSize: '16px', fontWeight: 900 }}>{d.getDate().toString().padStart(2, '0')}</div>
                 </div>
               )
             })}
           </div>
           
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '10px 0' }}>
-            {eventosHoje.length === 0 ? (
+            {eventosExibidos.length === 0 ? (
               <>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: 'hsl(var(--text-secondary))', fontFamily: 'Outfit, sans-serif', marginBottom: 8 }}>Nenhum evento para hoje</div>
+                <div style={{ fontSize: '16px', fontWeight: 900, color: 'hsl(var(--text-secondary))', fontFamily: 'Outfit, sans-serif', marginBottom: 8 }}>Nenhum evento {diaSelecionadoOffset === 0 ? 'para hoje' : 'neste dia'}</div>
                 <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Aproveite para planejar! 📅</div>
               </>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start' }}>
-                {eventosHoje.slice(0, 4).map(e => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', alignItems: 'flex-start', overflowY: 'auto', maxHeight: '250px', paddingRight: '4px' }}>
+                {eventosExibidos.slice(0, 5).map(e => (
                   <div key={e.id} style={{ display: 'flex', flexDirection: 'column', padding: '12px', background: 'hsl(var(--bg-elevated))', borderRadius: '12px', borderLeft: `4px solid ${e.cor || '#8b5cf6'}`, width: '100%', textAlign: 'left' }}>
                     <span style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{e.titulo}</span>
-                    {e.horaInicio && <span style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', marginTop: 4, fontWeight: 600 }}>{e.horaInicio}</span>}
+                    {e.horaInicio && <span style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', marginTop: 4, fontWeight: 600 }}>{e.horaInicio} {e.horaFim ? `às ${e.horaFim}` : ''}</span>}
                   </div>
                 ))}
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
         {/* Fim da Coluna Central */}
         </div>
@@ -548,6 +622,12 @@ export default function DashboardPage() {
               </button>
             </div>
 
+            {loadAniv ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                <Loader2 className="animate-spin" size={32} color="#ec4899" />
+              </div>
+            ) : (
+              <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {aniversariantes.length === 0 ? (
                 <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhum neste mês.</div>
@@ -577,6 +657,8 @@ export default function DashboardPage() {
                 Ver todos os aniversariantes
               </button>
             </div>
+              </>
+            )}
           </div>
 
           {/* Ocorrências Recentes */}
@@ -591,6 +673,12 @@ export default function DashboardPage() {
               <Link href="/academico/ocorrencias" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
             </div>
 
+            {loadOcorr ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                <Loader2 className="animate-spin" size={32} color="#f59e0b" />
+              </div>
+            ) : (
+              <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {ocorrencias.length === 0 ? (
                 <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhuma registrada.</div>
@@ -634,6 +722,8 @@ export default function DashboardPage() {
                 })
               )}
             </div>
+              </>
+            )}
           </div>
 
         </div>
@@ -642,6 +732,12 @@ export default function DashboardPage() {
 
       {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
       <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', flexWrap: 'wrap', gap: 24 }}>
+        {loadUsuarios ? (
+          <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 0' }}>
+            <Loader2 className="animate-spin" size={32} color="#6d28d9" />
+          </div>
+        ) : (
+          <>
         <div style={{ display: 'flex', alignItems: 'center', gap: 32, flex: 1 }}>
           
           {/* Circular Progress */}
@@ -715,6 +811,8 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+          </>
+        )}
       </div>
 
       

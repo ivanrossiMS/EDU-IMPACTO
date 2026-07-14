@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Calendar, ChevronDown } from 'lucide-react'
-import { useData } from '@/lib/dataContext'
+import { Calendar, ChevronDown, Loader2 } from 'lucide-react'
+import { useConfigDb } from '@/lib/useConfigDb'
 
 interface AnoLetivoModalProps {
   onSelect: (ano: string) => void
 }
 
 export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
-  const { cfgCalendarioLetivo = [] } = useData()
+  const { data: cfgCalendarioLetivo, loading } = useConfigDb<any>('cfgCalendarioLetivo')
   const [isOpen, setIsOpen] = useState(true)
   
   // Ordena para que o mais recente (maior ano) seja o primeiro
@@ -77,7 +77,12 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
           </div>
           
           <div style={{ padding: '0 32px 32px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {cfgCalendarioLetivo.length > 0 ? (
+            {loading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+                <Loader2 size={24} className="animate-spin" style={{ color: '#3b82f6' }} />
+                <div style={{ color: 'hsl(var(--text-secondary))', fontSize: 14 }}>Carregando anos letivos...</div>
+              </div>
+            ) : cfgCalendarioLetivo.length > 0 ? (
               <>
                 <div style={{ position: 'relative' }}>
                   <select

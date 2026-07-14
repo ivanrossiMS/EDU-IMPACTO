@@ -183,9 +183,8 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           .ad-banner-global {
             width: 100%;
             position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
+            display: block;
+            flex-shrink: 0;
           }
 
           .ad-content-inner.ad-has-banner {
@@ -209,11 +208,13 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               background: transparent;
               margin: 0 !important;
               padding: 0 !important;
+              display: block !important;
             }
             .ad-banner-global img {
               display: block !important;
               width: 100% !important;
               height: auto !important;
+              min-height: 120px !important;
               max-height: 400px !important;
               object-fit: cover !important;
               margin: 0 !important;
@@ -243,7 +244,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
               <img 
                 src={bannerUrl} 
                 alt="Cover Banner" 
-                style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'contain' }} 
+                style={{ width: '100%', height: 'auto', minHeight: '120px', display: 'block', objectFit: 'cover' }} 
               />
             </div>
           )}

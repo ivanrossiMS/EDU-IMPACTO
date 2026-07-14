@@ -171,8 +171,8 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
           nome: a.nome,
           turma: getTurmaName(a.turma),
           avatarUrl: a.foto_url || a.foto || a.dados?.avatarUrl || null,
-          leu: !!studentLeuAt || !!anyRespLeuAt,
-          leuEm: studentLeuAt ? new Date(studentLeuAt).toLocaleString('pt-BR') : (anyRespLeuAt || undefined),
+          leu: !!studentLeuAt,
+          leuEm: studentLeuAt ? new Date(studentLeuAt).toLocaleString('pt-BR') : undefined,
           responsaveis
         }
       })

@@ -532,9 +532,19 @@ export default function UploadRedaçõesGerenciamentoPage() {
                         <Users size={24} color="#fff" />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{serie}</span>
                           <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>{items.length} redações</span>
+                          {(() => {
+                            const bimsOfGroup = Array.from(new Set(items.map((i: any) => i.id_bimestre))).map((id: any) => bimestres.find((b: any) => b.id === id)?.nome).filter(Boolean);
+                            if (bimsOfGroup.length === 0) return null;
+                            const bimLabel = bimsOfGroup.length > 2 ? `${bimsOfGroup.length} bimestres` : bimsOfGroup.join(', ');
+                            return (
+                              <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(236,72,153,0.1)', color: '#ec4899', whiteSpace: 'nowrap' }}>
+                                {bimLabel}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>Acompanhe as redações aplicadas e programadas para esta turma.</span>
                       </div>
