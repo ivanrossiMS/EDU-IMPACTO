@@ -145,8 +145,8 @@ export default function DashboardPage() {
   // ── Derived Data
   const todayStr = hoje.toISOString().slice(0, 10)
   
-  const tarefasPendentesList = tarefas.filter(t => t.status !== 'concluida')
-  const tarefasConcluidasList = tarefas.filter(t => t.status === 'concluida')
+  const tarefasPendentesList = tarefas.filter((t: any) => t.status !== 'concluida')
+  const tarefasConcluidasList = tarefas.filter((t: any) => t.status === 'concluida')
   const tarefasExibidas = filtroTarefas === 'todas' 
     ? tarefas 
     : filtroTarefas === 'pendentes' 
