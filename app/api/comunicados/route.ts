@@ -357,7 +357,13 @@ export async function GET(request: Request) {
   //   });
   // }
 
-  return NextResponse.json(filtered)
+  return NextResponse.json(filtered, {
+    headers: {
+      // Cache privado de 30s — seguro pois é autenticado (private).
+      // Reduz o impacto de recarregamentos rápidos da página (comunicados mudam raramente em segundos)
+      'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+    },
+  })
 }
 
 export async function POST(request: Request) {

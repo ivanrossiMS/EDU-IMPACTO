@@ -50,7 +50,7 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       const numericId = parseInt(studentId.replace(/\D/g, ''), 10)
       if (isNaN(numericId)) return
 
-      for (const dev of devices) {
+      await Promise.allSettled(devices.map(async (dev) => {
         try {
           const client = new ControliDClient({
             ip: dev.ip,
@@ -64,7 +64,7 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
         } catch (err: any) {
           console.error(`❌ [Portaria Sync] Erro ao remover do leitor "${dev.nome}":`, err.message)
         }
-      }
+      }))
       return
     }
 
@@ -103,7 +103,7 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       return
     }
 
-    for (const dev of devices) {
+    await Promise.allSettled(devices.map(async (dev) => {
       try {
         const client = new ControliDClient({
           ip: dev.ip,
@@ -128,7 +128,7 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       } catch (err: any) {
         console.error(`❌ [Portaria Sync] Falha ao sincronizar com "${dev.nome}":`, err.message)
       }
-    }
+    }))
   } catch (err: any) {
     console.error('❌ [Portaria Sync General Error]', err.message)
   }

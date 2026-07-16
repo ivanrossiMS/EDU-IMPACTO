@@ -57,6 +57,7 @@ export default function AlunosPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   
   // Advanced Filters State
   const [isFiltrosAvancadosModalOpen, setIsFiltrosAvancadosModalOpen] = useState(false)
@@ -896,7 +897,9 @@ export default function AlunosPage() {
     const method = editingAlunoId ? 'PUT' : 'POST'
     const url = editingAlunoId ? `/api/alunos?id=${editingAlunoId}` : '/api/alunos'
 
+    setIsSubmitting(true)
     try {
+      await new Promise(r => setTimeout(r, 1200)) // Artificial delay for animation
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -921,6 +924,8 @@ export default function AlunosPage() {
       }
     } catch (e: any) {
       alert(`Erro na requisição: ${e.message}`)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -2625,8 +2630,37 @@ export default function AlunosPage() {
                     Próximo Passo
                   </button>
                 ) : (
-                  <button onClick={handleSave} className="neo-btn neo-btn-primary" style={{ padding: '10px 24px', fontSize: 13, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)' }}>
-                    <Check size={16} /> Finalizar Cadastro
+                  <button 
+                    onClick={handleSave} 
+                    className="neo-btn neo-btn-primary" 
+                    disabled={isSubmitting}
+                    style={{ 
+                      padding: '10px 24px', 
+                      fontSize: 13, 
+                      background: isSubmitting ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                      boxShadow: isSubmitting ? '0 0 15px rgba(16, 185, 129, 0.6)' : '0 4px 12px rgba(16, 185, 129, 0.25)',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      pointerEvents: isSubmitting ? 'none' : 'auto',
+                      transition: 'all 0.3s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8
+                    }}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                        <span>Concluindo...</span>
+                        <style>{`
+                          @keyframes spin { 100% { transform: rotate(360deg); } }
+                        `}</style>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={16} /> Finalizar Cadastro
+                      </>
+                    )}
                   </button>
                 )}
               </div>

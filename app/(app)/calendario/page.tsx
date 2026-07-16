@@ -4,7 +4,7 @@ import { useData, EventoAgenda, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useState, useMemo, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar, Trash, PieChart, Clock, Activity, FileText, GraduationCap, MapPin, Info, Bus, Sun } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar, Trash, PieChart, Clock, Activity, FileText, GraduationCap, MapPin, Info, Bus, Sun, Download, List, Grid, ArrowRight, ArrowDown, Upload } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { TurmaDropdown } from '@/app/agenda-digital/colaborador/components/TurmaDropdown'
 
@@ -187,6 +187,8 @@ export default function CalendarioPage() {
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
   const [filtroUsuario, setFiltroUsuario] = useState('todos')
   const [filtroAnoLetivoPrincipal, setFiltroAnoLetivoPrincipal] = useState<string>('todos')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [viewMode, setViewMode] = useState<'mes' | 'semana' | 'dia'>('mes')
 
   const turmasFiltroBar = useMemo(() => {
     if (filtroAnoLetivoPrincipal === 'todos') return turmasNomes
@@ -228,8 +230,14 @@ export default function CalendarioPage() {
     
     const matchTipo = filtroTipo === 'todos' || e.tipo === filtroTipo
     const matchUsuario = filtroUsuario === 'todos' || (e as any).visibilidadeUsuario === filtroUsuario || (e as any).visibilidadeUsuario === undefined
-    return matchTurma && matchTipo && matchUsuario
-  }), [eventosAgenda, filtroTurma, filtroTipo, filtroUsuario, turmas])
+    
+    const matchSearch = !searchQuery || 
+       e.titulo.toLowerCase().includes(searchQuery.toLowerCase()) || 
+       (e.local && e.local.toLowerCase().includes(searchQuery.toLowerCase())) || 
+       (e.descricao && e.descricao.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    return matchTurma && matchTipo && matchUsuario && matchSearch
+  }), [eventosAgenda, filtroTurma, filtroTipo, filtroUsuario, turmas, searchQuery])
 
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
   const selectedEvents = selectedDay ? eventosPorDia(selectedDay) : []
@@ -354,6 +362,14 @@ export default function CalendarioPage() {
     return { total, letivos, avaliacoes, reunioes, outros, pctLetivos, pctReunioes, pctAvaliacoes, pctOutros };
   }, [eventosMesAtual]);
 
+  const eventosProximos7DiasCount = useMemo(() => {
+    const start = new Date(today + 'T12:00:00');
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    const endStr = end.toISOString().split('T')[0];
+    return eventosAgenda.filter(e => e.data >= today && e.data <= endStr).length;
+  }, [eventosAgenda, today]);
+
   const [aniversariantes, setAniversariantes] = useState<any[]>([])
   const [loadingNivers, setLoadingNivers] = useState(false)
 
@@ -406,7 +422,6 @@ export default function CalendarioPage() {
   const renderEventCard = (ev: EventoAgenda, idx: number) => {
     const evColor = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
     
-    // Mapeamento de ícones do lado esquerdo
     const getLeftIcon = () => {
       switch(ev.tipo) {
         case 'evento': return <Sun size={24} color={evColor} />;
@@ -418,22 +433,10 @@ export default function CalendarioPage() {
       }
     };
 
-    // Mapeamento de ícones da tag direita
-    const getRightIcon = () => {
-      switch(ev.tipo) {
-        case 'evento': return <Calendar size={13} color={evColor} />;
-        case 'excursao': return <Bus size={13} color={evColor} />;
-        case 'reuniao': return <Users size={13} color={evColor} />;
-        case 'prova': return <FileText size={13} color={evColor} />;
-        case 'aula': return <GraduationCap size={13} color={evColor} />;
-        default: return <Calendar size={13} color={evColor} />;
-      }
-    };
-
     const formatTurmas = (turmas: string[]) => {
       if (!turmas || turmas.length === 0) return 'Turmas: Todas';
       if (turmas[0].startsWith('TODOS')) return 'Turmas: Todas';
-      return `Turma: ${turmas.join(', ')}`;
+      return `Turmas: ${turmas.join(', ')}`;
     };
 
     return (
@@ -446,119 +449,70 @@ export default function CalendarioPage() {
           background: '#ffffff',
           borderRadius: '16px',
           display: 'flex',
+          alignItems: 'center',
+          gap: '20px',
+          padding: '24px',
           position: 'relative',
           transition: 'all 0.2s ease',
-          cursor: 'pointer',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.02), 0 10px 25px rgba(0,0,0,0.04)',
-          border: '1px solid #f1f5f9',
-          overflow: 'hidden'
-        }}
-        onMouseEnter={e => { 
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.06), 0 16px 32px rgba(0,0,0,0.04)';
-        }}
-        onMouseLeave={e => { 
-          e.currentTarget.style.transform = 'none';
-          e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.02), 0 10px 25px rgba(0,0,0,0.04)';
+          boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
+          border: '1px solid #f1f5f9'
         }}
       >
-        {/* Borda Esquerda */}
-        <div style={{ width: '6px', background: evColor, flexShrink: 0 }}></div>
-
-        {/* Área do Ícone */}
+        {/* Left Icon Area */}
         <div style={{ 
-          width: '80px', 
-          background: `linear-gradient(135deg, ${evColor}08 0%, ${evColor}15 100%)`, 
+          width: '64px', 
+          height: '64px',
+          borderRadius: '16px',
+          background: `${evColor}15`, 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'center',
-          position: 'relative',
-          overflow: 'hidden',
           flexShrink: 0
         }}>
-          {/* Fundo com bolinhas imitando pattern */}
-          <div style={{
-             position: 'absolute',
-             top: 0, left: 0, right: 0, bottom: 0,
-             background: `radial-gradient(circle at 50% 50%, ${evColor}10 2px, transparent 2px)`,
-             backgroundSize: '16px 16px',
-             opacity: 0.8
-          }}></div>
-          
-          <div style={{ 
-            width: '42px', 
-            height: '42px', 
-            background: '#ffffff', 
-            borderRadius: '50%', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-            zIndex: 1
-          }}>
-            {getLeftIcon()}
-          </div>
+          {getLeftIcon()}
         </div>
 
-        {/* Conteúdo Direito */}
-        <div style={{ flex: 1, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {/* Center Content Area */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           
-          {/* Tags Superiores */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ 
-              fontSize: '11px', fontWeight: 800, color: '#d97706', background: '#fef3c7', padding: '4px 10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: 4 
-            }}>
-              <span style={{ color: '#d97706' }}>☀️</span> {(ev as any).diaTodo ? 'Dia todo' : `${ev.horaInicio || '00:00'}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
+          {/* Header Row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+              {ev.titulo}
             </div>
-            <div style={{ 
-              fontSize: '11px', fontWeight: 800, color: evColor, background: `${evColor}15`, padding: '4px 10px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: 4
-            }}>
-              {getRightIcon()} {TIPO_LABELS[ev.tipo]}
-            </div>
-          </div>
-          
-          {/* Título */}
-          <div style={{ fontSize: '18px', fontWeight: 900, color: '#1e293b', fontFamily: 'Outfit, sans-serif', marginTop: '2px' }}>
-            {ev.titulo}
-          </div>
-
-          {/* Data/Hora */}
-          <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, marginTop: '2px' }}>
-             <Calendar size={14} style={{ color: '#94a3b8' }} /> {(ev as any).diaTodo ? 'Todo o dia • Sem horário definido' : `${ev.horaInicio || ''}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
-          </div>
-
-          {/* Local, Turma, Descricao e Botões */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '4px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {(ev.local || (ev.turmas && ev.turmas.length > 0)) && (
-                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  {ev.local && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <MapPin size={13} /> {ev.local}
-                    </span>
-                  )}
-                  {(ev.turmas && ev.turmas.length > 0) && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Users size={13} /> {formatTurmas(ev.turmas)}
-                    </span>
-                  )}
+            {/* Tags on top right */}
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(ev as any).diaTodo && (
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#6366f1', background: '#e0e7ff', padding: '6px 12px', borderRadius: '10px' }}>
+                  Dia todo
                 </div>
               )}
-              {ev.descricao && (
-                <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Info size={13} /> {ev.descricao}
-                </div>
-              )}
+              <div style={{ fontSize: '11px', fontWeight: 800, color: evColor, background: `${evColor}15`, padding: '6px 12px', borderRadius: '10px' }}>
+                {TIPO_LABELS[ev.tipo]}
+              </div>
             </div>
-
-            {/* Ações */}
-            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-              <button onClick={(e) => { e.stopPropagation(); handleEdit(ev); }} style={{ width: 32, height: 32, borderRadius: '10px', background: '#ffffff', border: '1px solid #e2e8f0', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#cbd5e1'} onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}>
-                <Edit2 size={14} />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); handleDelete(ev.id); }} style={{ width: 32, height: 32, borderRadius: '10px', background: '#fff1f2', border: '1px solid #fecdd3', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#ffe4e6'} onMouseLeave={e => e.currentTarget.style.background = '#fff1f2'}>
-                <Trash size={14} />
-              </button>
+          </div>
+          
+          {/* Details Row */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+               <Clock size={14} style={{ color: '#94a3b8' }} /> {(ev as any).diaTodo ? 'Todo o dia • Sem horário definido' : `${ev.horaInicio || ''}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4 }}>
+              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                 <Users size={14} style={{ color: '#94a3b8' }} /> {formatTurmas(ev.turmas)}
+              </div>
+              
+              {/* Bottom Right Actions */}
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button onClick={(e) => { e.stopPropagation(); handleEdit(ev); }} style={{ width: 36, height: 36, borderRadius: '10px', background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}>
+                  <Edit2 size={16} />
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); handleDelete(ev.id); }} style={{ width: 36, height: 36, borderRadius: '10px', background: '#fff1f2', border: '1.5px solid #ffe4e6', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.background = '#ffe4e6'} onMouseLeave={e => e.currentTarget.style.background = '#fff1f2'}>
+                  <Trash size={16} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -568,280 +522,335 @@ export default function CalendarioPage() {
   }
 
   return (
-    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container">
+    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ background: '#F6F7FB', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
       <style dangerouslySetInnerHTML={{__html: `
-        .ad-calendar-grid-columns { display: grid; grid-template-columns: 320px 1fr 320px 320px; gap: 24px; align-items: start; }
-        @media (max-width: 1200px) {
-           .ad-calendar-grid-columns { grid-template-columns: 1fr 1fr; }
+        .ad-calendar-grid-new { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(420px, 1.15fr) minmax(300px, 0.9fr); gap: 24px; align-items: start; }
+        @media (max-width: 1280px) {
+           .ad-calendar-grid-new { grid-template-columns: 1fr 1fr; }
         }
-        @media (max-width: 768px) {
-           .ad-calendar-mobile-container .page-header { align-items: center !important; text-align: center !important; }
-           .ad-calendar-filter-bar { flex-direction: column !important; align-items: stretch !important; padding: 16px !important; }
-           .ad-calendar-grid-columns { grid-template-columns: 1fr !important; }
+        @media (max-width: 1024px) {
+           .ad-calendar-grid-new { grid-template-columns: 1fr; }
+           .ad-calendar-summary-cards { grid-template-columns: 1fr 1fr !important; }
         }
+        @media (max-width: 640px) {
+           .ad-calendar-summary-cards { grid-template-columns: 1fr !important; }
+           .ad-calendar-toolbar { flex-direction: column !important; align-items: stretch !important; }
+        }
+        .calendar-card {
+           background: #ffffff;
+           border-radius: 24px;
+           box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+           border: 1px solid rgba(226, 232, 240, 0.6);
+           padding: 24px;
+        }
+        /* Custom scrollbar for timeline and lists */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
       `}} />
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+
+      {/* 1. Header Interno */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <h1 className="page-title">Calendário Escolar</h1>
-          <p className="page-subtitle">{eventosAgenda.length} evento(s) cadastrado(s) • {year}</p>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', fontFamily: 'Outfit, sans-serif' }}>Calendário Escolar</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 14, color: '#64748b', fontWeight: 500 }}>Gerencie os eventos, aulas e compromissos da instituição.</p>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}>
-          <Plus size={13} />Novo Evento
+        <button 
+          className="btn btn-primary" 
+          onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}
+          style={{ background: '#4f46e5', border: 'none', borderRadius: 12, padding: '0 24px', height: 44, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)' }}
+        >
+          <Plus size={16} /> Novo Evento
         </button>
       </div>
 
-      <div className="ad-calendar-filter-bar" style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', padding: '12px 16px', background: 'hsl(var(--bg-elevated))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
-        <Filter size={13} style={{ color: 'hsl(var(--text-muted))' }} />
-        
-        <TurmaDropdown 
-          turmaOptions={turmaDropdownOptions} 
-          selectedTurmaId={filtroTurma === 'todas' ? 'all' : filtroTurma} 
-          setSelectedTurmaId={id => setFiltroTurma(id === 'all' ? 'todas' : id)} 
-          selectedTurmaName={filtroTurma === 'todas' ? 'Todos os grupos' : filtroTurma}
-          anosLetivos={anosLetivos}
-          selectedAno={filtroAnoLetivoPrincipal}
-          setSelectedAno={ano => { setFiltroAnoLetivoPrincipal(ano); setFiltroTurma('todas'); }}
-        />
-
-        <select className="form-input" style={{ width: 'auto', fontSize: 12, minWidth: 160 }} value={filtroTipo} onChange={e => setFiltroTipo(e.target.value as any)}>
-          <option value="todos">Todos os tipos</option>
-          {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+      {/* 2. Resumo em Cards */}
+      <div className="ad-calendar-summary-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 24 }}>
+        {[
+          { label: 'Eventos do mês', value: resumoMes.total, icon: Calendar, color: '#3b82f6', bg: '#eff6ff' },
+          { label: 'Hoje', value: eventosPorDia(today).length, icon: Sparkles, color: '#f59e0b', bg: '#fef3c7' },
+          { label: 'Próximos 7 dias', value: eventosProximos7DiasCount, icon: Clock, color: '#10b981', bg: '#ecfdf5' },
+          { label: 'Aniversários do mês', value: aniversariantes.length, icon: Users, color: '#ec4899', bg: '#fdf2f8' }
+        ].map((c, i) => (
+          <div key={i} className="calendar-card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px' }}>
+            <div style={{ width: 48, height: 48, borderRadius: 14, background: c.bg, color: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <c.icon size={24} />
+            </div>
+            <div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#1e293b', lineHeight: 1 }}>{c.value}</div>
+              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{c.label}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* 
-        GRID NOVA (4 Colunas) 
-      */}
-      <div className="ad-calendar-grid-columns">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {/* === CARD 1: Calendário === */}
-        <div className="card" style={{ padding: '24px', borderRadius: 24, background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: 'none', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>Calendário</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setViewDate(new Date(year, month - 1, 1))} style={{ padding: 4, height: 28, width: 28 }}><ChevronLeft size={16} /></button>
-               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setViewDate(new Date(year - 1, month, 1))} style={{ padding: 4, height: 28, width: 28, opacity: 0.5 }}><ChevronLeft size={16} /></button>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>{MESES[month]} {year}</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setViewDate(new Date(year + 1, month, 1))} style={{ padding: 4, height: 28, width: 28, opacity: 0.5 }}><ChevronRight size={16} /></button>
-               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setViewDate(new Date(year, month + 1, 1))} style={{ padding: 4, height: 28, width: 28 }}><ChevronRight size={16} /></button>
-            </div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 8 }}>
-            {DIAS_SEMANA.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{d}</div>)}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, rowGap: 8 }}>
-            {Array.from({ length: firstDay }).map((_, i) => <div key={`e-${i}`} style={{ color: '#cbd5e1', fontSize: 13, textAlign: 'center', alignSelf: 'center', fontWeight: 500 }}>{getDaysInMonth(year, month-1) - firstDay + i + 1}</div>)}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const d = i + 1; const dateStr = getDateStr(d); const events = eventosPorDia(dateStr); const isToday = dateStr === today; const isSelected = dateStr === selectedDay;
-              return (
-                <button key={d} onClick={() => setSelectedDay(isSelected ? null : dateStr)} onDoubleClick={() => openNewEventoForDay(dateStr)} 
-                  style={{ 
-                    height: 36, width: 36, margin: '0 auto', borderRadius: 12, 
-                    background: isSelected ? '#6366f1' : 'transparent', 
-                    border: 'none',
-                    cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.2s'
-                  }}>
-                  <div style={{ fontSize: 13, fontWeight: isSelected || isToday ? 800 : 600, color: isSelected ? '#fff' : isToday ? '#6366f1' : '#334155' }}>{d}</div>
-                  <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>{isSelected ? <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#fff' }} /> : events.slice(0, 1).map(ev => <div key={ev.id} style={{ width: 4, height: 4, borderRadius: '50%', background: '#f59e0b' }} />)}</div>
-                </button>
-              )
-            })}
-          </div>
-          <div style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-               <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366f1' }}></span>
-               <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>Eventos no dia</span>
-            </div>
-            <button style={{ 
-              padding: '8px 12px', borderRadius: 10, background: '#e0e7ff', color: '#6366f1', 
-              border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 
-            }} onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: '' }); setEditingId(null); setShowModal(true) }}>
-              Ver calendário completo &rarr;
-            </button>
-          </div>
-        </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {/* === CARD 2: Dia Selecionado === */}
-        <div className="card" style={{ padding: '24px', borderRadius: 24, background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: 'none', display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#6366f1', fontWeight: 800, fontSize: 13 }}>
-              <Calendar size={16} /> Dia Selecionado
-            </div>
+      {/* 3. Barra de Filtros e Controles (Toolbar) */}
+      <div className="calendar-card ad-calendar-toolbar" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+        
+        {/* Esquerda: Filtros e Busca */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          
+          <TurmaDropdown 
+            turmaOptions={turmaDropdownOptions} 
+            selectedTurmaId={filtroTurma === 'todas' ? 'all' : filtroTurma} 
+            setSelectedTurmaId={id => setFiltroTurma(id === 'all' ? 'todas' : id)} 
+            selectedTurmaName={filtroTurma === 'todas' ? 'Todos os grupos' : filtroTurma}
+            anosLetivos={anosLetivos}
+            selectedAno={filtroAnoLetivoPrincipal}
+            setSelectedAno={ano => { setFiltroAnoLetivoPrincipal(ano); setFiltroTurma('todas'); }}
+          />
+
+          <select 
+            style={{ height: 40, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0 32px 0 16px', fontSize: 13, fontWeight: 600, color: '#334155', cursor: 'pointer', outline: 'none' }} 
+            value={filtroTipo} 
+            onChange={e => setFiltroTipo(e.target.value as any)}
+          >
+            <option value="todos">Todos os tipos</option>
+            {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+
+          <div style={{ position: 'relative', width: 200 }}>
+            <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
+            <input 
+              type="text" 
+              placeholder="Buscar evento..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{ width: '100%', height: 40, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, paddingLeft: 36, paddingRight: 12, fontSize: 13, fontWeight: 500, outline: 'none' }}
+            />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-               <span style={{ fontSize: 32, fontWeight: 900, color: '#6366f1', lineHeight: 1 }}>{selectedDay ? parseInt(selectedDay.split('-')[2]) : '--'}</span>
-               <div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>
-                    {selectedDay ? `de ${MESES[parseInt(selectedDay.split('-')[1]) - 1]}` : ''}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
-                    {selectedDay ? DIAS_SEMANA[new Date(selectedDay + 'T12:00:00').getDay()] + 'ado' : ''}
-                  </div>
-               </div>
+        </div>
+
+        {/* Direita: Controles de Data e View */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          
+          {/* Navegação do Mês */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '4px' }}>
+            <button onClick={() => setViewDate(new Date(year, month - 1, 1))} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', borderRadius: 6 }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}><ChevronLeft size={16} /></button>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', width: 140, textAlign: 'center' }}>
+              {MESES[month]} {year}
             </div>
-            <button style={{ padding: '8px 16px', borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              Ver dia inteiro ↗
-            </button>
+            <button onClick={() => setViewDate(new Date(year, month + 1, 1))} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', borderRadius: 6 }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}><ChevronRight size={16} /></button>
           </div>
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
-              {selectedEvents.length} evento(s) neste dia
-            </div>
-            {selectedEvents.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500, textAlign: 'center', padding: '40px 0' }}>Nenhum evento para este dia.</div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {selectedEvents.map((ev, idx) => renderEventCard(ev, idx))}
+          {/* Toggle Mês/Semana/Dia */}
+          <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
+            {[
+              { id: 'mes', label: 'Mês', icon: Grid },
+              { id: 'semana', label: 'Semana', icon: List },
+              { id: 'dia', label: 'Dia', icon: Clock }
+            ].map(v => (
+               <button 
+                 key={v.id} 
+                 onClick={() => setViewMode(v.id as any)}
+                 style={{ 
+                   display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', 
+                   borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                   background: viewMode === v.id ? '#ffffff' : 'transparent',
+                   color: viewMode === v.id ? '#1e293b' : '#64748b',
+                   boxShadow: viewMode === v.id ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+                   transition: 'all 0.2s'
+                 }}
+               >
+                 <v.icon size={14} /> <span className="ad-hide-mobile">{v.label}</span>
+               </button>
+            ))}
+          </div>
+
+          <button style={{ height: 40, padding: '0 16px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}>
+            <Download size={16} style={{ color: '#64748b' }} /> Exportar
+          </button>
+          
+        </div>
+      </div>
+
+      {/* 4. Grade de Conteúdo (3 Colunas) */}
+      <div className="ad-calendar-grid-new">
+        
+        {/* COLUNA 1: Calendário e Banner */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div className="calendar-card" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Calendar size={18} style={{ color: '#4f46e5' }} /> Calendário Mensal
               </div>
-            )}
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 12 }}>
+              {DIAS_SEMANA.map((d, i) => <div key={d} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: (i===0 || i===6) ? '#94a3b8' : '#64748b', textTransform: 'uppercase' }}>{d}</div>)}
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px 4px' }}>
+              {Array.from({ length: firstDay }).map((_, i) => <div key={`e-${i}`} style={{ height: 40, color: '#cbd5e1', fontSize: 13, textAlign: 'center', alignSelf: 'center', fontWeight: 500 }}>{getDaysInMonth(year, month-1) - firstDay + i + 1}</div>)}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const d = i + 1; const dateStr = getDateStr(d); const events = eventosPorDia(dateStr); const isToday = dateStr === today; const isSelected = dateStr === selectedDay;
+                return (
+                  <button key={d} onClick={() => setSelectedDay(isSelected ? null : dateStr)} onDoubleClick={() => openNewEventoForDay(dateStr)} 
+                    style={{ 
+                      height: 44, width: '100%', margin: '0', borderRadius: 12, 
+                      background: isSelected ? '#4f46e5' : isToday ? '#eff6ff' : 'transparent', 
+                      border: isToday && !isSelected ? '1px solid #bfdbfe' : '1px solid transparent',
+                      cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.2s', position: 'relative'
+                    }}
+                    onMouseEnter={e => { if(!isSelected) e.currentTarget.style.background = '#f8fafc' }}
+                    onMouseLeave={e => { if(!isSelected) e.currentTarget.style.background = isToday ? '#eff6ff' : 'transparent' }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: isSelected || isToday ? 800 : 600, color: isSelected ? '#ffffff' : isToday ? '#3b82f6' : '#334155' }}>{d}</div>
+                    
+                    {events.length > 0 && (
+                      <div style={{ display: 'flex', gap: 3, marginTop: 4, position: 'absolute', bottom: 6 }}>
+                        {events.slice(0, 3).map(ev => (
+                           <div key={ev.id} style={{ width: 5, height: 5, borderRadius: '50%', background: isSelected ? '#ffffff' : (ev.cor ?? TIPO_CORES[ev.tipo] ?? '#f59e0b') }} />
+                        ))}
+                        {events.length > 3 && <div style={{ width: 5, height: 5, borderRadius: '50%', background: isSelected ? '#ffffff' : '#94a3b8' }} />}
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #f1f5f9', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} /><span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Aulas</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} /><span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Eventos</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} /><span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Provas</span></div>
+            </div>
           </div>
 
-          {/* Citação Educacional */}
-          <div style={{ padding: '20px 24px', background: '#f8fafc', borderRadius: 16, position: 'relative', marginTop: 'auto' }}>
-            <div style={{ position: 'absolute', top: 12, left: 12, color: 'rgba(99, 102, 241, 0.2)', fontSize: 24, lineHeight: 1, fontFamily: 'serif' }}>“</div>
-            <div style={{ position: 'absolute', bottom: 12, right: 12, color: 'rgba(99, 102, 241, 0.2)', fontSize: 24, lineHeight: 1, fontFamily: 'serif' }}>”</div>
-            <p style={{ textAlign: 'center', color: '#64748b', fontSize: 13, fontWeight: 600, fontStyle: 'italic', margin: 0, padding: '0 20px', lineHeight: 1.5 }}>
-              A educação transforma sonhos em conquistas.
+          <div style={{ borderRadius: 24, padding: 24, background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 25px rgba(79, 70, 229, 0.2)' }}>
+            <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }}></div>
+            <Sparkles size={24} style={{ marginBottom: 12, opacity: 0.9 }} />
+            <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 800 }}>Novo Semestre!</h3>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>
+              Prepare-se para o novo ciclo acadêmico. Cadastre suas aulas e provas com antecedência.
             </p>
           </div>
         </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {/* === CARD 3: Próximos Compromissos === */}
-        <div className="card" style={{ padding: '24px', borderRadius: 24, background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: 'none', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#6366f1', fontWeight: 800, fontSize: 14 }}>
-              <Calendar size={18} /> Próximos Compromissos
+
+        {/* COLUNA 2: Dia Selecionado */}
+        <div className="calendar-card" style={{ padding: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative' }}>
+          
+          {/* Gradiente superior sutil */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '150px', background: 'radial-gradient(ellipse at top center, rgba(99,102,241,0.08) 0%, transparent 70%)', pointerEvents: 'none' }}></div>
+
+          <div style={{ padding: '32px 32px 16px 32px', position: 'relative', zIndex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
+              {selectedDay ? ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'][new Date(selectedDay + 'T12:00:00').getDay()] : 'Nenhum dia'}
             </div>
-            <button style={{ background: 'transparent', color: '#6366f1', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
-              Ver todos
-            </button>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', fontFamily: 'Outfit, sans-serif' }}>
+              {selectedDay ? `${parseInt(selectedDay.split('-')[2])} de ${MESES[parseInt(selectedDay.split('-')[1]) - 1]} de ${selectedDay.split('-')[0]}` : 'Selecione um dia'}
+            </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, justifyContent: proximosEventos.length === 0 ? 'center' : 'flex-start' }}>
-            {proximosEventos.length === 0 ? (
-              <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                 <div style={{ width: 120, height: 120, borderRadius: '50%', background: 'linear-gradient(135deg, #f8faff 0%, #e0e7ff 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Calendar size={48} style={{ color: '#a5b4fc' }} />
-                 </div>
-                 <div>
-                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#1e293b' }}>Sem compromissos futuros</h4>
-                    <p style={{ margin: '8px 0 0', fontSize: 12, color: '#94a3b8', fontWeight: 500 }}>Não há eventos agendados para os próximos dias.</p>
-                 </div>
-              </div>
+          <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 32px 100px 32px', display: 'flex', flexDirection: 'column', gap: 16, position: 'relative', zIndex: 1 }}>
+            {selectedEvents.length === 0 ? (
+               <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
+                 <Calendar size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                 <p style={{ fontSize: 14, fontWeight: 600 }}>Você tem o dia livre!</p>
+                 <p style={{ fontSize: 13, marginTop: 4 }}>Nenhum compromisso agendado para esta data.</p>
+               </div>
             ) : (
-              proximosEventos.map((ev) => {
-                const [y, m, d] = ev.data.split('-')
-                const badgeColor = TIPO_CORES[ev.tipo] || '#cbd5e1'
-                return (
-                  <div key={ev.id} style={{ display: 'flex', gap: 16, alignItems: 'center', paddingBottom: 12, borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ width: 44, textAlign: 'center' }}>
-                      <div style={{ fontSize: 20, fontWeight: 900, color: '#6366f1', lineHeight: 1 }}>{d}</div>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase' }}>{MESES[parseInt(m)-1].slice(0,3)}</div>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {ev.titulo}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'transparent', border: '1.5px solid #cbd5e1' }}></span>
-                        {DIAS_SEMANA[new Date(ev.data + 'T12:00:00').getDay()]} - {ev.horaInicio || 'Dia todo'}
-                      </div>
-                    </div>
-                    <div style={{ padding: '4px 10px', borderRadius: 8, background: `${badgeColor}15`, color: badgeColor, fontSize: 10, fontWeight: 700 }}>
-                      {TIPO_LABELS[ev.tipo]}
-                    </div>
-                  </div>
-                )
-              })
+              selectedEvents.map((ev, idx) => renderEventCard(ev, idx))
             )}
           </div>
-          <button style={{ 
-            marginTop: 16, width: '100%', padding: '14px', borderRadius: 16, 
-            background: 'transparent', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)', 
-            fontSize: 13, fontWeight: 800, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 
-          }}>
-            <Calendar size={16} /> Ver todos os eventos
-          </button>
+          
+          {/* Bottom Fade & Actions */}
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 120, background: 'linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 100%)', pointerEvents: 'none', zIndex: 2 }}></div>
+          <div style={{ position: 'absolute', bottom: 24, left: 32, right: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 3 }}>
+             <button style={{ padding: '0 24px', height: 44, borderRadius: 22, background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(12px)', color: '#fff', fontSize: 14, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+               Editar
+             </button>
+             <div style={{ display: 'flex', gap: 12 }}>
+               <button style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffffff', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', color: '#1e293b', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                 <ArrowDown size={20} />
+               </button>
+               <button style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(12px)', color: '#fff', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                 <Upload size={18} />
+               </button>
+             </div>
+          </div>
         </div>
-        </div>
+
+        {/* COLUNA 3: Próximos e Aniversários */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  {/* === CARD 4: Aniversariantes do Mês === */}
-        <div className="card" style={{ padding: '24px', borderRadius: 24, background: '#fff', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: 'none', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#1e293b', fontWeight: 900, fontSize: 16 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 10, background: '#ec4899', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-                <Sparkles size={16} />
+          
+          <div className="calendar-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Clock size={18} style={{ color: '#10b981' }} /> Próximos Eventos
               </div>
-              Aniversários no Mês
             </div>
+            
+            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+              {proximosEventos.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: '20px 0' }}>Nenhum evento agendado.</div>
+              ) : (
+                proximosEventos.map((ev) => {
+                  const [y, m, d] = ev.data.split('-')
+                  const badgeColor = TIPO_CORES[ev.tipo] || '#cbd5e1'
+                  return (
+                    <div key={ev.id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: 14, border: '1px solid transparent', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.borderColor = '#e2e8f0'} onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent'} onClick={() => handleEdit(ev)}>
+                      <div style={{ width: 40, height: 44, background: '#ffffff', borderRadius: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0', flexShrink: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 900, color: '#1e293b', lineHeight: 1 }}>{d}</div>
+                        <div style={{ fontSize: 9, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginTop: 2 }}>{MESES[parseInt(m)-1].slice(0,3)}</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.titulo}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{ev.horaInicio || 'Dia todo'} • {TIPO_LABELS[ev.tipo]}</div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            {proximosEventos.length > 0 && (
+              <button style={{ marginTop: 16, width: '100%', padding: '10px', background: 'transparent', border: '1px solid #e2e8f0', borderRadius: 10, color: '#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                Ver agenda completa
+              </button>
+            )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, overflowY: 'auto', maxHeight: 350, paddingRight: 4 }}>
-            {loadingNivers ? (
-               <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
-            ) : aniversariantes.length === 0 ? (
-               <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Ninguém este mês 🎈</div>
-            ) : (
-              aniversariantes.map((p, idx) => {
-                return (
-                <div key={p.id || idx} style={{ 
-                  display: 'flex', gap: 16, alignItems: 'center', 
-                  padding: '12px 16px',
-                  background: 'linear-gradient(to right, #ffffff, #fffcfd)',
-                  borderRadius: '32px',
-                  border: '1px solid #fce7f3',
-                  boxShadow: '0 2px 10px rgba(236, 72, 153, 0.02)'
-                }}>
-                  <div style={{ 
-                    width: 48, height: 48, borderRadius: '50%', flexShrink: 0,
-                    border: '2px solid #ec4899', padding: 2,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}>
-                    <div style={{
-                      width: '100%', height: '100%', borderRadius: '50%',
-                      background: p.foto ? `url(${p.foto}) center/cover` : '#f1f5f9',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                      fontSize: 16, fontWeight: 800, color: '#1e293b'
-                    }}>
+          <div className="calendar-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Sparkles size={18} style={{ color: '#ec4899' }} /> Aniversariantes
+              </div>
+              <div style={{ background: '#fdf2f8', color: '#db2777', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 10 }}>{MESES[month]}</div>
+            </div>
+            
+            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+              {loadingNivers ? (
+                 <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
+              ) : aniversariantes.length === 0 ? (
+                 <div style={{ textAlign: 'center', padding: '20px', fontSize: 13, color: '#94a3b8' }}>Ninguém faz aniversário este mês.</div>
+              ) : (
+                aniversariantes.map((p, idx) => {
+                  const isHoje = p.dia == hoje.getDate() && month === hoje.getMonth();
+                  return (
+                  <div key={p.id || idx} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: p.foto ? `url(${p.foto}) center/cover` : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#1e293b', border: '1px solid #e2e8f0', flexShrink: 0 }}>
                       {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
                     </div>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
-                    <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
-                      {(p.tipo || 'Aluno') === 'Aluno' 
-                        ? (Array.isArray(p.turma) 
-                            ? p.turma.map((id: any) => turmas.find((t:any) => t.id === id || String(t.id) === String(id))?.nome || id).join(', ') 
-                            : (turmas.find((t:any) => t.id === p.turma || String(t.id) === String(p.turma))?.nome || p.turma)) || 'Sem Turma' 
-                        : p.tipo}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{p.tipo}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: isHoje ? '#ec4899' : '#f1f5f9', borderRadius: 10, padding: '4px 8px', color: isHoje ? 'white' : '#64748b', minWidth: 36 }}>
+                      <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', marginBottom: -2 }}>Dia</span>
+                      <span style={{ fontSize: 14, fontWeight: 900, lineHeight: 1 }}>{p.dia}</span>
                     </div>
                   </div>
-                  <div style={{ 
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    background: '#ec4899', borderRadius: '16px', padding: '6px 14px', minWidth: 50
-                  }}>
-                    <span style={{ fontSize: 9, fontWeight: 900, color: '#fbcfe8', textTransform: 'uppercase', marginBottom: -2 }}>DIA</span>
-                    <span style={{ fontSize: 18, fontWeight: 900, color: 'white', lineHeight: 1 }}>{p.dia}</span>
-                  </div>
-                </div>
-              )})
-            )}
+                )})
+              )}
+            </div>
           </div>
-        </div>
+          
         </div>
       </div>
 
+      {/* MODALS INTACTS (Preserved) */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showModal && (

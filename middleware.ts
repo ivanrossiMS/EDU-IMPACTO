@@ -76,9 +76,11 @@ export async function middleware(request: NextRequest) {
           response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) => {
             const sessionOptions = { ...options };
+            // SEGURANÇA: 7 dias (604800s) — padrão da indústria.
+            // Antes estava 315360000s = 10 anos, um risco grave se o token for vazado.
             const expires = new Date();
-            expires.setFullYear(expires.getFullYear() + 1);
-            sessionOptions.maxAge = 315360000;
+            expires.setDate(expires.getDate() + 7);
+            sessionOptions.maxAge = 604800;
             sessionOptions.expires = expires;
             response.cookies.set(name, value, sessionOptions)
           })
@@ -169,10 +171,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Com sessão → adiciona headers de segurança extras ────────────────────
-  // Previne clickjacking nas páginas protegidas
-  response.headers.set('X-Content-Type-Options', 'nosniff')
-  response.headers.set('X-Frame-Options', 'SAMEORIGIN')
+  // ── Com sessão: headers de segurança já estão em next.config.ts (securityHeaders)
+  // Não duplicar aqui — evita conflito entre X-Frame-Options: SAMEORIGIN (middleware)
+  // e frame-ancestors 'none' (CSP no next.config.ts). O next.config.ts é a fonte da verdade.
 
   return response
 }

@@ -14,16 +14,38 @@ export async function GET(request: Request) {
     const DIAS_LABEL = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab']
     const todayK = DIAS_LABEL[new Date().getDay()]
 
-    // 1. Fetch Restritos from 'responsaveis'
-    const { data: responsaveis, error: rError } = await supabase
-      .from('responsaveis')
-      .select('id, nome, proibido, dias_acesso')
-      .or('proibido.eq.true,dias_acesso.neq.{}')
-      
-    if (rError) throw rError
+    // ── Executa as 2 queries principais em paralelo (reduz latência total) ─────
+    const [responsaveisResult, alunosResult] = await Promise.all([
+      // 1. Fetch responsáveis restritos — apenas os campos necessários
+      supabase
+        .from('responsaveis')
+        .select('id, nome, proibido, dias_acesso')
+        .or('proibido.eq.true,dias_acesso.neq.{}'),
 
-    const restritosMap = new Map()
-    ;(responsaveis || []).forEach(r => {
+      // 2. Fetch alunos com projeção JSONB cirúrgica:
+      //    Antes: select('dados') → potencialmente 100KB+ por aluno
+      //    Depois: apenas os 2 subcampos de dados que este endpoint realmente usa
+      supabase
+        .from('alunos')
+        .select(
+          'id, nome, turma,' +
+          'autorizados:dados->saude->autorizados,' +
+          'responsaveisJson:dados->responsaveis'
+        )
+        .or('status.eq.ativo,status.eq.matriculado,status.is.null'),
+    ])
+
+    if (responsaveisResult.error) throw responsaveisResult.error
+    if (alunosResult.error) throw alunosResult.error
+
+    // Cast para any[] pois o TypeScript do Supabase não consegue inferir tipos
+    // quando usamos alias com arrow notation (->). Os acessos são feitos via (aluno as any) abaixo.
+    const responsaveis: any[] = responsaveisResult.data || []
+    const alunos: any[] = alunosResult.data || []
+
+    // ── Monta mapa de responsáveis restritos ──────────────────────────────────
+    const restritosMap = new Map<string, { id: string; nome: string; motivo: string }>()
+    for (const r of responsaveis) {
       let isRestrito = false
       let motivo = ''
       if (r.proibido === true) {
@@ -38,51 +60,50 @@ export async function GET(request: Request) {
       if (isRestrito) {
         restritosMap.set(r.id, { id: r.id, nome: r.nome, motivo })
       }
-    })
+    }
 
-    // 2. Fetch all active students (lightweight) to check JSON 'autorizados'
-    const { data: alunos, error: aError } = await supabase
-      .from('alunos')
-      .select('id, nome, turma, foto, dados')
-      .or('status.eq.ativo,status.eq.matriculado,status.is.null')
-
-    if (aError) throw aError
-
-    // 3. Fetch links for the restritos responsaveis
+    // ── Fetch links apenas para os responsáveis restritos encontrados ─────────
     const restritosIds = Array.from(restritosMap.keys())
-    let links: any[] = []
+    let links: { aluno_id: string; responsavel_id: string; parentesco: string | null }[] = []
     if (restritosIds.length > 0) {
       const { data: lData, error: lError } = await supabase
         .from('aluno_responsavel')
         .select('aluno_id, responsavel_id, parentesco')
         .in('responsavel_id', restritosIds)
-      
       if (lError) throw lError
       links = lData || []
     }
 
+    // ── Pré-indexa links por aluno_id para O(1) lookup (evita .filter() em loop) ──
+    const linksByAluno = new Map<string, typeof links>()
+    for (const link of links) {
+      const arr = linksByAluno.get(link.aluno_id) || []
+      arr.push(link)
+      linksByAluno.set(link.aluno_id, arr)
+    }
+
+    // ── Combina dados ─────────────────────────────────────────────────────────
     const studentsResult: any[] = []
 
-    // 4. Combine data
-    for (const aluno of alunos || []) {
-      const restritosDoAluno: any[] = []
+    for (const aluno of alunos) {
+      const restritosDoAluno: { nome: string; parentesco: string; motivo: string }[] = []
 
-      // Check linked responsaveis
-      const alunoLinks = links.filter(l => l.aluno_id === aluno.id)
-      alunoLinks.forEach(l => {
+      // Check linked responsaveis (tabela aluno_responsavel)
+      const alunoLinks = linksByAluno.get(String(aluno.id)) || []
+      for (const l of alunoLinks) {
         const rData = restritosMap.get(l.responsavel_id)
         if (rData) {
           restritosDoAluno.push({
             nome: rData.nome,
             parentesco: l.parentesco || 'Responsável',
-            motivo: rData.motivo
+            motivo: rData.motivo,
           })
         }
-      })
+      }
 
-      // Check JSON autorizados
-      const autorizados = aluno.dados?.saude?.autorizados || []
-      autorizados.forEach((aut: any) => {
+      // Check JSON autorizados (dados->saude->autorizados) — agora projetado diretamente
+      const autorizados: any[] = (aluno as any).autorizados || []
+      for (const aut of autorizados) {
         let isRestrito = false
         let motivo = ''
         if (aut.proibido === true) {
@@ -94,19 +115,18 @@ export async function GET(request: Request) {
             motivo = 'Dia Restrito'
           }
         }
-
         if (isRestrito) {
           restritosDoAluno.push({
             nome: aut.nome,
             parentesco: aut.parentesco || 'Autorizado',
-            motivo
+            motivo,
           })
         }
-      })
+      }
 
-      // Check JSON responsaveis (legacy/fallback)
-      const resps = aluno.dados?.responsaveis || []
-      resps.forEach((r: any) => {
+      // Check JSON responsaveis (dados->responsaveis) — legacy/fallback — projetado diretamente
+      const resps: any[] = (aluno as any).responsaveisJson || []
+      for (const r of resps) {
         let isRestrito = false
         let motivo = ''
         if (r.proibido === true) {
@@ -122,28 +142,55 @@ export async function GET(request: Request) {
           restritosDoAluno.push({
             nome: r.nome,
             parentesco: r.parentesco || 'Responsável',
-            motivo
+            motivo,
           })
         }
-      })
+      }
 
       if (restritosDoAluno.length > 0) {
-        // deduplicate by name
-        const uniqueRestritos = restritosDoAluno.filter((v, i, a) => a.findIndex(t => (t.nome === v.nome)) === i)
+        // Deduplica por nome usando Set (mais eficiente que findIndex)
+        const seen = new Set<string>()
+        const uniqueRestritos = restritosDoAluno.filter(v => {
+          if (seen.has(v.nome)) return false
+          seen.add(v.nome)
+          return true
+        })
 
         studentsResult.push({
           id: aluno.id,
           nome: aluno.nome,
           turma: aluno.turma,
           foto: aluno.foto,
-          restritos: uniqueRestritos
+          restritos: uniqueRestritos,
         })
       }
     }
 
-    return NextResponse.json({ data: studentsResult })
+    if (studentsResult.length > 0) {
+      const studentIds = studentsResult.map(s => s.id)
+      const { data: photosData } = await supabase
+        .from('alunos')
+        .select('id, foto')
+        .in('id', studentIds)
+      
+      const photoMap = new Map(photosData?.map(p => [p.id, p.foto]) || [])
+      for (const s of studentsResult) {
+        s.foto = photoMap.get(s.id) || null
+      }
+    }
 
+    return NextResponse.json(
+      { data: studentsResult },
+      {
+        headers: {
+          // Cache de 5 minutos — dados de restrição mudam com baixa frequência
+          // stale-while-revalidate de 10 min garante resposta instantânea em refetches
+          'Cache-Control': 'private, max-age=300, stale-while-revalidate=600',
+        },
+      }
+    )
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 })
+    console.error('[API portaria/restritos-hoje] Erro:', err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

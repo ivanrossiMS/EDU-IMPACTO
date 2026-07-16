@@ -553,6 +553,9 @@ export default function DashboardPage() {
               const isToday = offset === 0;
               const dayName = isToday ? 'Hoje' : new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(d).replace('.', '').toUpperCase();
               
+              const dStr = d.toISOString().slice(0, 10);
+              const qtdEventos = eventosAgenda.filter((e: any) => e.data === dStr).length;
+              
               return (
                 <div 
                   key={offset} 
@@ -567,9 +570,15 @@ export default function DashboardPage() {
                     boxShadow: isSelected ? '0 4px 14px rgba(139, 92, 246, 0.3)' : 'none',
                     cursor: 'pointer',
                     minWidth: isSelected ? 'auto' : '40px',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s',
+                    position: 'relative'
                   }}
                 >
+                  {qtdEventos > 0 && (
+                    <div style={{ position: 'absolute', top: -2, right: isSelected ? 2 : -4, background: '#ef4444', color: '#fff', fontSize: '9px', fontWeight: 900, width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', boxShadow: '0 0 0 2px hsl(var(--bg-surface))', zIndex: 2 }}>
+                      {qtdEventos}
+                    </div>
+                  )}
                   <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: isSelected ? 'rgba(255,255,255,0.8)' : 'hsl(var(--text-muted))' }}>{dayName}</span>
                   <div style={{ color: isSelected ? '#fff' : 'hsl(var(--text-primary))', fontSize: '16px', fontWeight: 900 }}>{d.getDate().toString().padStart(2, '0')}</div>
                 </div>

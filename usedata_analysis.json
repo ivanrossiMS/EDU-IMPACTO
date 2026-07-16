@@ -1,0 +1,255 @@
+{
+  "app/gestao-pessoas/layout.tsx": [
+    "perfis",
+    "perfisLoading"
+  ],
+  "app/(app)/academico/alunos/page.tsx": [
+    "cfgNiveisEnsino",
+    "cfgCalendarioLetivo",
+    "logSystemAction"
+  ],
+  "app/(app)/academico/responsaveis/page.tsx": [
+    "logSystemAction"
+  ],
+  "app/(app)/academico/turmas/page.tsx": [
+    "cfgNiveisEnsino",
+    "cfgTurnos",
+    "cfgCalendarioLetivo",
+    "logSystemAction"
+  ],
+  "app/(app)/academico/conteudos/page.tsx": [
+    "turmas",
+    "cfgCalendarioLetivo",
+    "cfgNiveisEnsino",
+    "logSystemAction"
+  ],
+  "app/(app)/academico/frequencia/page.tsx": [
+    "turmas",
+    "setFrequencias",
+    "cfgCalendarioLetivo",
+    "cfgNiveisEnsino"
+  ],
+  "app/(app)/academico/notas/page.tsx": [
+    "turmas",
+    "cfgCalendarioLetivo",
+    "cfgNiveisEnsino",
+    "logSystemAction"
+  ],
+  "app/(app)/academico/ocorrencias/page.tsx": [
+    "cfgCalendarioLetivo",
+    "cfgNiveisEnsino"
+  ],
+  "app/(app)/calendario/page.tsx": [
+    "eventosAgenda",
+    "setEventosAgenda",
+    "cfgCalendarioLetivo"
+  ],
+  "app/(app)/administrativo/manutencao/page.tsx": [
+    "setTarefas"
+  ],
+  "app/(app)/administrativo/pedidos-livros/page.tsx": [
+    "cfgEventos",
+    "turmas"
+  ],
+  "app/(app)/simulados/provas-upload/page.tsx": [
+    "cfgCalendarioLetivo"
+  ],
+  "app/(app)/simulados/cadastros/bimestres/page.tsx": [
+    "cfgCalendarioLetivo"
+  ],
+  "app/(app)/simulados/redacao-upload/page.tsx": [
+    "cfgCalendarioLetivo"
+  ],
+  "app/(app)/simulados/layout.tsx": [
+    "perfis",
+    "perfisLoading"
+  ],
+  "app/(app)/simulados/simulados-upload/page.tsx": [
+    "cfgCalendarioLetivo"
+  ],
+  "app/(app)/secretaria/documentos/page.tsx": [
+    "logSystemAction"
+  ],
+  "app/(app)/rh/funcionarios/page.tsx": [
+    "mantenedores",
+    "logSystemAction",
+    "perfis"
+  ],
+  "app/(app)/rh/adiantamentos/novo/page.tsx": [
+    "logSystemAction"
+  ],
+  "app/(app)/dashboard/page.tsx": [
+    "tarefas",
+    "eventosAgenda",
+    "turmas",
+    "cfgCalendarioLetivo",
+    "loading"
+  ],
+  "app/(app)/financeiro/receber/page.tsx": [
+    "cfgEventos",
+    "cfgMetodosPagamento",
+    "setMovimentacoesManuais",
+    "logSystemAction"
+  ],
+  "app/(app)/financeiro/renegociacao/page.tsx": [
+    "logSystemAction"
+  ],
+  "app/(app)/tarefas/page.tsx": [
+    "tarefas",
+    "setTarefas"
+  ],
+  "app/(app)/configuracoes/unidades/page.tsx": [
+    "mantenedores",
+    "setMantenedores"
+  ],
+  "app/(app)/configuracoes/pedagogico/ano-letivo/page.tsx": [
+    "cfgCalendarioLetivo",
+    "setCfgCalendarioLetivo"
+  ],
+  "app/(app)/configuracoes/pedagogico/documentos/page.tsx": [
+    "turmas"
+  ],
+  "app/(app)/configuracoes/pedagogico/grupo-alunos/page.tsx": [
+    "cfgGruposAlunos",
+    "setCfgGruposAlunos"
+  ],
+  "app/(app)/configuracoes/pedagogico/situacao-aluno/page.tsx": [
+    "cfgSituacaoAluno",
+    "setCfgSituacaoAluno"
+  ],
+  "app/(app)/configuracoes/pedagogico/tipo-ocorrencias/page.tsx": [
+    "cfgTiposOcorrencia",
+    "setCfgTiposOcorrencia"
+  ],
+  "app/(app)/configuracoes/usuarios/page.tsx": [
+    "logSystemAction",
+    "perfis",
+    "setPerfis",
+    "perfisLoading"
+  ],
+  "app/(app)/configuracoes/financeiro/grupo-desconto/page.tsx": [
+    "cfgEventos"
+  ],
+  "app/(app)/configuracoes/financeiro/metodos-pagamento/page.tsx": [
+    "cfgMetodosPagamento",
+    "setCfgMetodosPagamento"
+  ],
+  "app/agenda-digital/admin/momentos/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/admin/calendario/page.tsx": [
+    "eventosAgenda",
+    "setEventosAgenda",
+    "setLocalEventosAgenda"
+  ],
+  "app/agenda-digital/admin/comunicados/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/admin/turmas/[id]/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/admin/turmas/page.tsx": [
+    "turmas",
+    "cfgCalendarioLetivo"
+  ],
+  "app/agenda-digital/admin/pessoas/[id]/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/admin/pessoas/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/admin/page.tsx": [
+    "ocorrencias"
+  ],
+  "app/agenda-digital/selecionar-aluno/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/components/AgendaRealtimeProvider.tsx": [
+    "UNKNOWN_SYNTAX"
+  ],
+  "app/agenda-digital/components/agenda/DestinatariosModal.tsx": [
+    "UNKNOWN_SYNTAX"
+  ],
+  "app/agenda-digital/layout.tsx": [
+    "perfis",
+    "perfisLoading"
+  ],
+  "app/agenda-digital/colaborador/momentos/page.tsx": [
+    "turmas",
+    "cfgCalendarioLetivo"
+  ],
+  "app/agenda-digital/colaborador/calendario/page.tsx": [
+    "cfgCalendarioLetivo"
+  ],
+  "app/agenda-digital/colaborador/comunicados/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/[slug]/momentos/page.tsx": [
+    "UNKNOWN_SYNTAX"
+  ],
+  "app/agenda-digital/[slug]/comunicados/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/[slug]/layout.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/[slug]/notas/page.tsx": [
+    "turmas"
+  ],
+  "app/agenda-digital/[slug]/ocorrencias/page.tsx": [
+    "turmas"
+  ],
+  "components/alunos/CadastroAlunoModal.tsx": [
+    "turmas",
+    "cfgPadroesPagamento"
+  ],
+  "components/turmas/TurmaModal.tsx": [
+    "turmas",
+    "setTurmas",
+    "cfgDisciplinas",
+    "cfgPadroesPagamento",
+    "mantenedores",
+    "cfgNiveisEnsino",
+    "cfgSeries",
+    "cfgTurnos",
+    "logSystemAction"
+  ],
+  "components/layout/NotificationPopover.tsx": [
+    "tarefas",
+    "eventosAgenda",
+    "ocorrencias"
+  ],
+  "components/layout/Sidebar.tsx": [
+    "cfgCalendarioLetivo",
+    "perfis"
+  ],
+  "components/layout/RouteGuard.tsx": [
+    "perfis",
+    "perfisLoading"
+  ],
+  "components/DynamicReports/ReportPayloadView.tsx": [
+    "turmas",
+    "alunos"
+  ],
+  "components/usuarios/AuthResponsaveisTab.tsx": [
+    "logSystemAction"
+  ],
+  "components/usuarios/AuthAlunosTab.tsx": [
+    "logSystemAction"
+  ],
+  "components/financeiro/ExtratoModal.tsx": [
+    "mantenedores"
+  ],
+  "components/financeiro/ReceiptModal.tsx": [
+    "mantenedores"
+  ],
+  "components/agenda/DestinatariosModal.tsx": [
+    "UNKNOWN_SYNTAX"
+  ],
+  "components/agenda/ReportFillerModal.tsx": [
+    "turmas"
+  ],
+  "components/configuracoes/TestDataSection.tsx": [
+    "UNKNOWN_SYNTAX"
+  ]
+}

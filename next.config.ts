@@ -1,8 +1,8 @@
 import type { NextConfig } from 'next'; 
 
 const securityHeaders = [
-  // Prevent clickjacking
-  { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+  // Prevent clickjacking — DENY consistente com frame-ancestors 'none' no CSP abaixo
+  { key: 'X-Frame-Options', value: 'DENY' },
   // Prevent MIME-type sniffing
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   // Force HTTPS for 1 year (production only)
@@ -11,8 +11,8 @@ const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   // Referrer policy
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  // Permissions policy — restrict dangerous APIs
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  // Permissions policy — restrict dangerous APIs + desabilita FLoC (interest-cohort)
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
   // Content-Security-Policy — restrict to known sources
   {
     key: 'Content-Security-Policy',

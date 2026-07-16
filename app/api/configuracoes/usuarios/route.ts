@@ -105,7 +105,12 @@ export async function GET(req: Request) {
         }))
         const result = { data: mappedDropdown, total: count || 0, page: 1, limit }
         if (!search) setCachedColaboradores(cacheKey, result)
-        return NextResponse.json(result)
+        return NextResponse.json(result, {
+          headers: {
+            // Cache privado de 60s — evita múltiplas chamadas no mesmo carregamento de página
+            'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
+          },
+        })
       }
 
       // Modo administração (limit <= 20): enriquecer com dados do Supabase Auth
@@ -274,7 +279,12 @@ export async function GET(req: Request) {
       })
     }
 
-    return NextResponse.json([...mappedSys, ...mappedAlunos, ...mappedResps])
+    return NextResponse.json([...mappedSys, ...mappedAlunos, ...mappedResps], {
+      headers: {
+        // Cache curto de 30s — dados de usuários mudam raramente durante a sessão
+        'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+      },
+    })
   } catch (err: any) {
     console.error('[API GET configuracoes/usuarios]', err)
     return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 })

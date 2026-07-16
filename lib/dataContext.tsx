@@ -12,6 +12,9 @@ const DATA_VERSION = '17'
 let systemLogQueue: any[] = [];
 let isFlushingLogs = false;
 
+// ─── Boot flag — true durante os primeiros segundos após mount ─────
+let isDataContextBooting = true;
+
 const flushSystemLogs = async () => {
   if (systemLogQueue.length === 0 || isFlushingLogs) return;
   isFlushingLogs = true;
@@ -1190,6 +1193,63 @@ export const DEFAULT_PERFIS: Perfil[] = [
 ]
 
 const NOOP = () => {}
+
+export interface GlobalDataState {
+  perfis: Perfil[]; setPerfis: Setter<Perfil[]>
+  perfisLoading: boolean
+  loading?: boolean
+  logSystemAction: (modulo: string, acao: string, descricao: string, payload?: any) => void
+  wipeAll: () => void
+}
+
+export interface PedagogicoDataState {
+  turmas: Turma[]; setTurmas: Setter<Turma[]>
+  cfgTurnos: ConfigTurno[]; setCfgTurnos: Setter<ConfigTurno[]>
+  cfgSituacaoAluno: ConfigSituacaoAluno[]; setCfgSituacaoAluno: Setter<ConfigSituacaoAluno[]>
+  cfgGruposAlunos: ConfigGrupoAluno[]; setCfgGruposAlunos: Setter<ConfigGrupoAluno[]>
+  cfgDisciplinas: ConfigDisciplina[]; setCfgDisciplinas: Setter<ConfigDisciplina[]>
+  cfgNiveisEnsino: ConfigNivelEnsino[]; setCfgNiveisEnsino: Setter<ConfigNivelEnsino[]>
+  cfgSeries: ConfigSerie[]; setCfgSeries: Setter<ConfigSerie[]>
+  cfgTiposOcorrencia: ConfigTipoOcorrencia[]; setCfgTiposOcorrencia: Setter<ConfigTipoOcorrencia[]>
+  cfgGruposAvaliacao: ConfigGrupoAvaliacao[]; setCfgGruposAvaliacao: Setter<ConfigGrupoAvaliacao[]>
+  cfgArredondamentos: ConfigArredondamento[]; setCfgArredondamentos: Setter<ConfigArredondamento[]>
+  cfgEsquemasAvaliacao: ConfigEsquemaAvaliacao[]; setCfgEsquemasAvaliacao: Setter<ConfigEsquemaAvaliacao[]>
+  esquemaNota: EsquemaNota[]; setEsquemaNota: Setter<EsquemaNota[]>
+  cfgFormulasNotas: FormulaNotas[]; setCfgFormulasNotas: Setter<FormulaNotas[]>
+  cfgCalendarioLetivo: ConfigCalendarioLetivo[]; setCfgCalendarioLetivo: Setter<ConfigCalendarioLetivo[]>
+}
+
+export interface FinanceiroDataState {
+  mantenedores: Mantenedor[]; setMantenedores: Setter<Mantenedor[]>
+  cfgMetodosPagamento: MetodoPagamento[]; setCfgMetodosPagamento: Setter<MetodoPagamento[]>
+  cfgCartoes: ConfigCartao[]; setCfgCartoes: Setter<ConfigCartao[]>
+  cfgEventos: ConfigEvento[]; setCfgEventos: Setter<ConfigEvento[]>
+  cfgGruposDesconto: ConfigGrupoDesconto[]; setCfgGruposDesconto: Setter<ConfigGrupoDesconto[]>
+  cfgPadroesPagamento: ConfigPadraoPagamento[]; setCfgPadroesPagamento: Setter<ConfigPadraoPagamento[]>
+  cfgPlanoContas: ConfigPlanoContas[]; setCfgPlanoContas: Setter<ConfigPlanoContas[]>
+  cfgTiposDocumento: ConfigTipoDocumento[]; setCfgTiposDocumento: Setter<ConfigTipoDocumento[]>
+  cfgConvenios: ConfigConvenio[]; setCfgConvenios: Setter<ConfigConvenio[]>
+  movimentacoesManuais: MovimentacaoManual[]; setMovimentacoesManuais: Setter<MovimentacaoManual[]>
+}
+
+export interface OperacionalDataState {
+  eventosAgenda: EventoAgenda[]; setEventosAgenda: Setter<EventoAgenda[]>; setLocalEventosAgenda?: Setter<EventoAgenda[]>
+  ocorrencias: Ocorrencia[]; setOcorrencias: Setter<Ocorrencia[]>
+  transferencias: Transferencia[]; setTransferencias: Setter<Transferencia[]>
+  frequencias: RegistroFrequencia[]; setFrequencias: Setter<RegistroFrequencia[]>
+  lancamentosNota: LancamentoNota[]; setLancamentosNota: Setter<LancamentoNota[]>
+  tarefas: Tarefa[]; setTarefas: Setter<Tarefa[]>
+  advertencias: Advertencia[]; setAdvertencias: Setter<Advertencia[]>
+  adiantamentos: Adiantamento[]; setAdiantamentos: Setter<Adiantamento[]>
+  leads: Lead[]; setLeads: Setter<Lead[]>
+  comunicados: Comunicado[]; setComunicados: Setter<Comunicado[]>
+}
+
+export const GlobalContext = createContext<GlobalDataState>({} as GlobalDataState)
+export const PedagogicoContext = createContext<PedagogicoDataState>({} as PedagogicoDataState)
+export const FinanceiroContext = createContext<FinanceiroDataState>({} as FinanceiroDataState)
+export const OperacionalContext = createContext<OperacionalDataState>({} as OperacionalDataState)
+
 const DataContext = createContext<DataState>({
   // Arrays  — safe empty defaults to prevent .filter()/.map() crashes during initial render
   alunos: [], setAlunos: NOOP,
@@ -1259,6 +1319,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ── Boot guard: desliga flag após carregamento inicial ─────────────────────
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      isDataContextBooting = false
+    }, 8000)
+    return () => clearTimeout(timer)
   }, [])
 
 
@@ -1420,6 +1488,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return (newVal: T[] | ((prev: T[]) => T[])) => {
       rawSetter(prevArray => {
         const nextArray = typeof newVal === 'function' ? (newVal as any)(prevArray) : newVal
+        // Pula logging durante o boot inicial
+        if (isDataContextBooting) return nextArray
+
         // Skip expensive logging if arrays are same reference (optimistic update)
         if (prevArray === nextArray) return nextArray
 
@@ -1546,91 +1617,99 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [])
 
+  // ─── CONTEXT SPLITTING ───────────────────────────────────────────────
+  const globalValue = useMemo(() => {
+    const resolvedPerfis = (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS
+    return {
+      perfis: resolvedPerfis,
+      setPerfis: (val: any) => {
+        const next = typeof val === 'function' ? val(resolvedPerfis) : val
+        setPerfisRaw(next)
+      },
+      perfisLoading, wipeAll, logSystemAction, loading: false
+    }
+  }, [perfis, perfisLoading, wipeAll, logSystemAction]);
+
+  const pedagogicoValue = useMemo(() => ({
+    turmas, setTurmas: trackedSetters.setTurmas,
+    cfgTurnos, setCfgTurnos: trackedSetters.setCfgTurnos,
+    cfgSituacaoAluno, setCfgSituacaoAluno: trackedSetters.setCfgSituacaoAluno,
+    cfgGruposAlunos, setCfgGruposAlunos: trackedSetters.setCfgGruposAlunos,
+    cfgDisciplinas, setCfgDisciplinas: trackedSetters.setCfgDisciplinas,
+    cfgNiveisEnsino, setCfgNiveisEnsino: trackedSetters.setCfgNiveisEnsino,
+    cfgSeries, setCfgSeries: trackedSetters.setCfgSeries,
+    cfgTiposOcorrencia, setCfgTiposOcorrencia: trackedSetters.setCfgTiposOcorrencia,
+    cfgGruposAvaliacao, setCfgGruposAvaliacao: trackedSetters.setCfgGruposAvaliacao,
+    cfgArredondamentos, setCfgArredondamentos: trackedSetters.setCfgArredondamentos,
+    cfgEsquemasAvaliacao, setCfgEsquemasAvaliacao: trackedSetters.setCfgEsquemasAvaliacao,
+    esquemaNota, setEsquemaNota: trackedSetters.setEsquemaNota,
+    cfgFormulasNotas, setCfgFormulasNotas: trackedSetters.setCfgFormulasNotas,
+    cfgCalendarioLetivo, setCfgCalendarioLetivo: trackedSetters.setCfgCalendarioLetivo,
+  }), [turmas, cfgTurnos, cfgSituacaoAluno, cfgGruposAlunos, cfgDisciplinas, cfgNiveisEnsino, cfgSeries, cfgTiposOcorrencia, cfgGruposAvaliacao, cfgArredondamentos, cfgEsquemasAvaliacao, esquemaNota, cfgFormulasNotas, cfgCalendarioLetivo, trackedSetters]);
+
+  const financeiroValue = useMemo(() => ({
+    mantenedores, setMantenedores: trackedSetters.setMantenedores,
+    cfgMetodosPagamento, setCfgMetodosPagamento: trackedSetters.setCfgMetodosPagamento,
+    cfgCartoes, setCfgCartoes: trackedSetters.setCfgCartoes,
+    cfgEventos, setCfgEventos: trackedSetters.setCfgEventos,
+    cfgGruposDesconto, setCfgGruposDesconto: trackedSetters.setCfgGruposDesconto,
+    cfgPadroesPagamento, setCfgPadroesPagamento: trackedSetters.setCfgPadroesPagamento,
+    cfgPlanoContas, setCfgPlanoContas: trackedSetters.setCfgPlanoContas,
+    cfgTiposDocumento, setCfgTiposDocumento: trackedSetters.setCfgTiposDocumento,
+    cfgConvenios, setCfgConvenios: trackedSetters.setCfgConvenios,
+    movimentacoesManuais, setMovimentacoesManuais: trackedSetters.setMovimentacoesManuais,
+  }), [mantenedores, cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto, cfgPadroesPagamento, cfgPlanoContas, cfgTiposDocumento, cfgConvenios, movimentacoesManuais, trackedSetters]);
+
+  const operacionalValue = useMemo(() => ({
+    eventosAgenda, setEventosAgenda: trackedSetters.setEventosAgenda, setLocalEventosAgenda,
+    ocorrencias, setOcorrencias: trackedSetters.setOcorrencias,
+    transferencias, setTransferencias: trackedSetters.setTransferencias,
+    frequencias, setFrequencias: trackedSetters.setFrequencias,
+    lancamentosNota, setLancamentosNota: trackedSetters.setLancamentosNota,
+    tarefas, setTarefas: trackedSetters.setTarefas,
+    advertencias, setAdvertencias: trackedSetters.setAdvertencias,
+    adiantamentos, setAdiantamentos: trackedSetters.setAdiantamentos,
+    leads, setLeads: trackedSetters.setLeads,
+    comunicados, setComunicados: trackedSetters.setComunicados,
+  }), [eventosAgenda, ocorrencias, transferencias, frequencias, lancamentosNota, tarefas, advertencias, adiantamentos, leads, comunicados, trackedSetters, setLocalEventosAgenda]);
+
   // Memoize the full context value — only re-creates when actual data changes
   const contextValue = useMemo(() => ({
+    ...globalValue,
+    ...pedagogicoValue,
+    ...financeiroValue,
+    ...operacionalValue,
+
     // Legacy stubs para não quebrar interface TypeScript TS2740 (Arrays Decoupled para SWR)
     alunos: [] as any[], setAlunos: NOOP,
     funcionarios: [] as any[], setFuncionarios: NOOP,
     titulos: [] as any[], setTitulos: NOOP,
     contasPagar: [] as any[], setContasPagar: NOOP,
     caixasAbertos: [] as any[], setCaixasAbertos: NOOP,
-
-    turmas, ...{ setTurmas: trackedSetters.setTurmas },
-    leads, ...{ setLeads: trackedSetters.setLeads },
-    
-    comunicados, ...{ setComunicados: trackedSetters.setComunicados },
-    tarefas, ...{ setTarefas: trackedSetters.setTarefas },
-    mantenedores, ...{ setMantenedores: trackedSetters.setMantenedores },
-    eventosAgenda, ...{ setEventosAgenda: trackedSetters.setEventosAgenda }, setLocalEventosAgenda,
-
-    ocorrencias, ...{ setOcorrencias: trackedSetters.setOcorrencias },
-    transferencias, ...{ setTransferencias: trackedSetters.setTransferencias },
-    frequencias, ...{ setFrequencias: trackedSetters.setFrequencias },
-    lancamentosNota, ...{ setLancamentosNota: trackedSetters.setLancamentosNota },
-    cfgTurnos, ...{ setCfgTurnos: trackedSetters.setCfgTurnos },
-    cfgSituacaoAluno, ...{ setCfgSituacaoAluno: trackedSetters.setCfgSituacaoAluno },
-    cfgGruposAlunos, ...{ setCfgGruposAlunos: trackedSetters.setCfgGruposAlunos },
-    cfgDisciplinas, ...{ setCfgDisciplinas: trackedSetters.setCfgDisciplinas },
-    cfgNiveisEnsino, ...{ setCfgNiveisEnsino: trackedSetters.setCfgNiveisEnsino },
-    cfgSeries, ...{ setCfgSeries: trackedSetters.setCfgSeries },
-    cfgTiposOcorrencia, ...{ setCfgTiposOcorrencia: trackedSetters.setCfgTiposOcorrencia },
-    cfgGruposAvaliacao, ...{ setCfgGruposAvaliacao: trackedSetters.setCfgGruposAvaliacao },
-    cfgArredondamentos, ...{ setCfgArredondamentos: trackedSetters.setCfgArredondamentos },
-    cfgEsquemasAvaliacao, ...{ setCfgEsquemasAvaliacao: trackedSetters.setCfgEsquemasAvaliacao },
-    esquemaNota, ...{ setEsquemaNota: trackedSetters.setEsquemaNota },
-    cfgFormulasNotas, ...{ setCfgFormulasNotas: trackedSetters.setCfgFormulasNotas },
-    cfgMetodosPagamento, ...{ setCfgMetodosPagamento: trackedSetters.setCfgMetodosPagamento },
-    cfgCartoes, ...{ setCfgCartoes: trackedSetters.setCfgCartoes },
-    cfgEventos, ...{ setCfgEventos: trackedSetters.setCfgEventos },
-    cfgGruposDesconto, ...{ setCfgGruposDesconto: trackedSetters.setCfgGruposDesconto },
-    cfgPadroesPagamento, ...{ setCfgPadroesPagamento: trackedSetters.setCfgPadroesPagamento },
-    cfgPlanoContas, ...{ setCfgPlanoContas: trackedSetters.setCfgPlanoContas },
-    cfgTiposDocumento, ...{ setCfgTiposDocumento: trackedSetters.setCfgTiposDocumento },
-    cfgConvenios, ...{ setCfgConvenios: trackedSetters.setCfgConvenios },
-    cfgCalendarioLetivo, ...{ setCfgCalendarioLetivo: trackedSetters.setCfgCalendarioLetivo },
-
-    movimentacoesManuais, ...{ setMovimentacoesManuais: trackedSetters.setMovimentacoesManuais },
-    
-     setUnidadesFiscais,
-    notasFiscais, setNotasFiscais,
-    advertencias, ...{ setAdvertencias: trackedSetters.setAdvertencias },
-    adiantamentos, ...{ setAdiantamentos: trackedSetters.setAdiantamentos },
-      logSystemAction,
-    wipeAll,
-    // Censo removido
-    perfisLoading,
-    perfis: (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS,
-    setPerfis: (val: any) => {
-      const resolved = (perfis && perfis.length > 0) ? perfis : DEFAULT_PERFIS
-      const next = typeof val === 'function' ? (val as (p: typeof resolved) => typeof resolved)(resolved) : val
-      setPerfisRaw(next)
-    },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [
-    turmas, leads, comunicados, tarefas, mantenedores,
-    eventosAgenda,    
-    ocorrencias, transferencias, frequencias, lancamentosNota,
-    cfgTurnos, cfgSituacaoAluno, cfgGruposAlunos, cfgDisciplinas,
-    cfgNiveisEnsino, cfgSeries, cfgTiposOcorrencia, cfgEsquemasAvaliacao, cfgGruposAvaliacao, cfgArredondamentos, esquemaNota, cfgFormulasNotas,
-    cfgMetodosPagamento, cfgCartoes, cfgEventos, cfgGruposDesconto,
-    cfgPadroesPagamento, cfgPlanoContas, cfgTiposDocumento, cfgConvenios,
-    cfgCalendarioLetivo, movimentacoesManuais,
-     notasFiscais, advertencias, adiantamentos,
-     logSystemAction, wipeAll,
-
-       perfis,
-    perfisLoading,
-    trackedSetters,
-  ])
+    notasFiscais: [] as any[], setNotasFiscais: NOOP,
+    setUnidadesFiscais: NOOP,
+  }), [globalValue, pedagogicoValue, financeiroValue, operacionalValue]);
 
   return (
-    <DataContext.Provider value={contextValue}>
-      {children}
-    </DataContext.Provider>
+    <GlobalContext.Provider value={globalValue}>
+      <PedagogicoContext.Provider value={pedagogicoValue}>
+        <FinanceiroContext.Provider value={financeiroValue}>
+          <OperacionalContext.Provider value={operacionalValue}>
+            <DataContext.Provider value={contextValue}>
+              {children}
+            </DataContext.Provider>
+          </OperacionalContext.Provider>
+        </FinanceiroContext.Provider>
+      </PedagogicoContext.Provider>
+    </GlobalContext.Provider>
   )
 }
 
 export function useData() { return useContext(DataContext) }
+export function useGlobalData() { return useContext(GlobalContext) }
+export function usePedagogicoData() { return useContext(PedagogicoContext) }
+export function useFinanceiroData() { return useContext(FinanceiroContext) }
+export function useOperacionalData() { return useContext(OperacionalContext) }
 
 export function newId(prefix = 'ID'): string {
   return `${prefix}${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 10).toUpperCase()}`

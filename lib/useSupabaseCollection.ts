@@ -363,7 +363,7 @@ export function useSupabaseArray<T>(
   const safeInitial = initialValue !== undefined && initialValue !== null ? initialValue : [];
   return useSupabaseCollection<T[]>(endpoint, safeInitial, {
     ...options,
-    fetcher: () => {
+    fetcher: useCallback(() => {
       const noCache = options?.noCache ?? false;
       const url = noCache ? `/api/${endpoint}${endpoint.includes('?') ? '&' : '?'}_t=${Date.now()}` : `/api/${endpoint}`;
       
@@ -419,8 +419,8 @@ export function useSupabaseArray<T>(
             console.warn(`[useSupabaseArray] Fetch failed for /${endpoint}:`, err)
             throw err
         })
-    },
-    persister: async (arr) => {
+    }, [endpoint, options?.noCache]),
+    persister: useCallback(async (arr: T[]) => {
       const res = await fetch(`/api/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -437,6 +437,6 @@ export function useSupabaseArray<T>(
         console.error(`[useSupabaseArray] API POST failed for /api/${endpoint}:`, res.status, body)
         throw new Error(body?.error || `Erro ${res.status} ao salvar em ${endpoint}`)
       }
-    },
+    }, [endpoint]),
   })
 }

@@ -6,7 +6,7 @@ import { useApp } from '@/lib/context'
 import {
   X, ChevronLeft, ChevronRight, Check, Plus, Trash2, Edit2,
   User, Users, GraduationCap, FileText, DollarSign, AlertCircle,
-  RefreshCw, Eye, EyeOff, Download, CalendarDays
+  RefreshCw, Eye, EyeOff, Download, CalendarDays, Loader2
 } from 'lucide-react'
 import { CepAddressFields } from '@/components/ui/CepInput'
 
@@ -275,6 +275,7 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
   const [titulos, setTitulos] = useSupabaseArray<any>('titulos');
 
   const [step, setStep] = useState(1)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // ── PASSO 1: Dados do aluno ──────────────────────────────────────
   const seq0 = proximoSeqAluno(alunos)
@@ -381,7 +382,8 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
     return true
   }
 
-  const handleFinalizar = () => {
+  const handleFinalizar = async () => {
+    setIsSubmitting(true)
     const respPrincipal = [mae, pai, ...(temOutro ? [outro] : [])].find(r => r.respPedagogico)
     const respFin = [mae, pai, ...(temOutro ? [outro] : [])].find(r => r.respFinanceiro)
     const matAtual = matriculas[0]
@@ -454,14 +456,21 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
     }
     setAlunos((prev: any[]) => [...prev, novoAluno as any])
     
-    // Dispara POST para banco de dados oficial (Supabase)
-    fetch('/api/alunos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(novoAluno)
-    }).catch(console.error)
-
-    onClose()
+    try {
+      // Pequeno delay artificial para exibir a animacao ultra moderna
+      await new Promise(r => setTimeout(r, 1200))
+      // Dispara POST para banco de dados oficial (Supabase)
+      await fetch('/api/alunos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(novoAluno)
+      })
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setIsSubmitting(false)
+      onClose()
+    }
   }
 
   if (!open) return null
@@ -791,8 +800,35 @@ export default function CadastroAlunoModal({ open, onClose, editingId }: Props) 
                 Proximo<ChevronRight size={14} />
               </button>
             ) : (
-              <button className="btn btn-primary" onClick={handleFinalizar} style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
-                <Check size={14} />Finalizar Cadastro
+              <button 
+                className="btn btn-primary" 
+                onClick={handleFinalizar} 
+                disabled={isSubmitting}
+                style={{ 
+                  background: isSubmitting ? 'linear-gradient(135deg, #059669, #047857)' : 'linear-gradient(135deg,#10b981,#059669)', 
+                  position: 'relative',
+                  overflow: 'hidden',
+                  pointerEvents: isSubmitting ? 'none' : 'auto',
+                  transition: 'all 0.3s ease',
+                  boxShadow: isSubmitting ? '0 0 15px rgba(16,185,129,0.6)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Concluindo...</span>
+                    <style>{`
+                      @keyframes spin { 100% { transform: rotate(360deg); } }
+                    `}</style>
+                  </>
+                ) : (
+                  <>
+                    <Check size={14} />Finalizar Cadastro
+                  </>
+                )}
               </button>
             )}
           </div>
