@@ -185,7 +185,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   const selectedEvents = selectedDay ? eventosPorDia(selectedDay) : []
 
   const proximosEventos = eventosFiltrados
-    .filter(e => e.data >= today)
+    .filter(e => e.data > today)
     .sort((a, b) => (a.data + a.horaInicio) < (b.data + b.horaInicio) ? -1 : 1)
     .slice(0, 5)
 

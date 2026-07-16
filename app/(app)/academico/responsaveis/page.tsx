@@ -15,7 +15,7 @@ export default function ResponsaveisPage() {
   
   const [search, setSearch] = useState('')
   const [paginaAtual, setPaginaAtual] = useState(1)
-  const [itensPorPagina, setItensPorPagina] = useState(10)
+  const [itensPorPagina, setItensPorPagina] = useState(5)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingResponsavel, setEditingResponsavel] = useState<any | null>(null)

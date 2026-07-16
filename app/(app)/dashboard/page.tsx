@@ -5,6 +5,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 import { useData, Tarefa } from '@/lib/dataContext'
+import { useApp } from '@/lib/context'
 import { 
   Users, AlertTriangle, GraduationCap, UserPlus,
   Calendar as CalendarIcon, ClipboardCheck, BookMarked,
@@ -59,6 +60,7 @@ const PATHS = {
 }
 
 export default function DashboardPage() {
+  const { currentUser } = useApp()
   const hoje = new Date()
   const mesStr  = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
   const mesPrev = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
@@ -76,6 +78,7 @@ export default function DashboardPage() {
   // ── Filtros Dashboard
   const [filtroTarefas, setFiltroTarefas] = useState<'todas' | 'pendentes' | 'concluidas'>('todas')
   const [diaSelecionadoOffset, setDiaSelecionadoOffset] = useState<number>(0)
+  const [apenasMinhasTarefas, setApenasMinhasTarefas] = useState(true)
 
   // ── Data for Stats
   const { data: aniversariantesList, isLoading: loadAniv } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes')
@@ -145,10 +148,16 @@ export default function DashboardPage() {
   // ── Derived Data
   const todayStr = hoje.toISOString().slice(0, 10)
   
-  const tarefasPendentesList = tarefas.filter((t: any) => t.status !== 'concluida')
-  const tarefasConcluidasList = tarefas.filter((t: any) => t.status === 'concluida')
+  const tarefasFiltradas = useMemo(() => {
+    if (!apenasMinhasTarefas) return tarefas
+    if (!currentUser?.nome) return tarefas
+    return tarefas.filter((t: any) => t.responsavel === currentUser.nome)
+  }, [tarefas, currentUser, apenasMinhasTarefas])
+
+  const tarefasPendentesList = tarefasFiltradas.filter((t: any) => t.status !== 'concluida')
+  const tarefasConcluidasList = tarefasFiltradas.filter((t: any) => t.status === 'concluida')
   const tarefasExibidas = filtroTarefas === 'todas' 
-    ? tarefas 
+    ? tarefasFiltradas 
     : filtroTarefas === 'pendentes' 
       ? tarefasPendentesList 
       : tarefasConcluidasList
@@ -460,7 +469,18 @@ export default function DashboardPage() {
               </div>
               <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Tarefas</span>
             </div>
-            <Link href="/tarefas" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', fontWeight: 800, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase' }}>Minhas</span>
+                <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '32px', height: '18px' }}>
+                  <input type="checkbox" checked={apenasMinhasTarefas} onChange={e => setApenasMinhasTarefas(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                  <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: apenasMinhasTarefas ? '#10b981' : 'hsl(var(--border-subtle))', transition: '.4s', borderRadius: '18px' }}>
+                    <span style={{ position: 'absolute', content: '""', height: '14px', width: '14px', left: apenasMinhasTarefas ? '16px' : '2px', bottom: '2px', background: 'white', transition: '.4s', borderRadius: '50%', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}></span>
+                  </span>
+                </label>
+              </div>
+              <Link href="/tarefas" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
+            </div>
           </div>
 
           {loadContext ? (
@@ -475,7 +495,7 @@ export default function DashboardPage() {
               style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'todas' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'todas' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
             >
               <span style={{ fontSize: '12px', fontWeight: 800, color: filtroTarefas === 'todas' ? '#7c3aed' : 'hsl(var(--text-muted))' }}>Todas</span>
-              <span style={{ fontSize: '10px', fontWeight: 900, color: filtroTarefas === 'todas' ? 'hsl(var(--bg-surface))' : 'hsl(var(--text-muted))', background: filtroTarefas === 'todas' ? '#8b5cf6' : 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tarefas.length}</span>
+              <span style={{ fontSize: '10px', fontWeight: 900, color: filtroTarefas === 'todas' ? 'hsl(var(--bg-surface))' : 'hsl(var(--text-muted))', background: filtroTarefas === 'todas' ? '#8b5cf6' : 'hsl(var(--bg-hover))', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{tarefasFiltradas.length}</span>
             </div>
             <div 
               onClick={() => setFiltroTarefas('pendentes')}

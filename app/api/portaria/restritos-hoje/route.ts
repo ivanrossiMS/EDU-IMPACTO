@@ -15,33 +15,43 @@ export async function GET(request: Request) {
     const todayK = DIAS_LABEL[new Date().getDay()]
 
     // ── Executa as 2 queries principais em paralelo (reduz latência total) ─────
-    const [responsaveisResult, alunosResult] = await Promise.all([
+    // Função auxiliar para buscar todos os registros burlando o limite de 1000 do PostgREST
+    const fetchAll = async (queryBuilder: any) => {
+      let allData: any[] = []
+      let from = 0
+      const limit = 1000
+      while (true) {
+        const { data, error } = await queryBuilder.range(from, from + limit - 1)
+        if (error) throw error
+        if (!data || data.length === 0) break
+        allData = allData.concat(data)
+        if (data.length < limit) break
+        from += limit
+      }
+      return allData
+    }
+
+    const [responsaveis, alunos] = await Promise.all([
       // 1. Fetch responsáveis restritos — apenas os campos necessários
-      supabase
-        .from('responsaveis')
-        .select('id, nome, proibido, dias_acesso')
-        .or('proibido.eq.true,dias_acesso.neq.{}'),
+      fetchAll(
+        supabase
+          .from('responsaveis')
+          .select('id, nome, proibido, dias_acesso')
+          .or('proibido.eq.true,dias_acesso.neq.{}')
+      ),
 
-      // 2. Fetch alunos com projeção JSONB cirúrgica:
-      //    Antes: select('dados') → potencialmente 100KB+ por aluno
-      //    Depois: apenas os 2 subcampos de dados que este endpoint realmente usa
-      supabase
-        .from('alunos')
-        .select(
-          'id, nome, turma,' +
-          'autorizados:dados->saude->autorizados,' +
-          'responsaveisJson:dados->responsaveis'
-        )
-        .or('status.eq.ativo,status.eq.matriculado,status.is.null'),
+      // 2. Fetch alunos com projeção JSONB cirúrgica
+      fetchAll(
+        supabase
+          .from('alunos')
+          .select(
+            'id, nome, turma,' +
+            'autorizados:dados->saude->autorizados,' +
+            'responsaveisJson:dados->responsaveis'
+          )
+          .or('status.eq.ativo,status.eq.matriculado,status.is.null')
+      ),
     ])
-
-    if (responsaveisResult.error) throw responsaveisResult.error
-    if (alunosResult.error) throw alunosResult.error
-
-    // Cast para any[] pois o TypeScript do Supabase não consegue inferir tipos
-    // quando usamos alias com arrow notation (->). Os acessos são feitos via (aluno as any) abaixo.
-    const responsaveis: any[] = responsaveisResult.data || []
-    const alunos: any[] = alunosResult.data || []
 
     // ── Monta mapa de responsáveis restritos ──────────────────────────────────
     const restritosMap = new Map<string, { id: string; nome: string; motivo: string }>()
@@ -64,14 +74,22 @@ export async function GET(request: Request) {
 
     // ── Fetch links apenas para os responsáveis restritos encontrados ─────────
     const restritosIds = Array.from(restritosMap.keys())
-    let links: { aluno_id: string; responsavel_id: string; parentesco: string | null }[] = []
+    let links: any[] = []
     if (restritosIds.length > 0) {
-      const { data: lData, error: lError } = await supabase
-        .from('aluno_responsavel')
-        .select('aluno_id, responsavel_id, parentesco')
-        .in('responsavel_id', restritosIds)
-      if (lError) throw lError
-      links = lData || []
+      // Dividir em chunks de 200 para evitar limite de URL muito grande no PostgREST
+      const chunkSize = 200
+      for (let i = 0; i < restritosIds.length; i += chunkSize) {
+        const chunk = restritosIds.slice(i, i + chunkSize)
+        const { data: lData } = await supabase
+          .from('aluno_responsavel')
+          .select('aluno_id, responsavel_id, parentesco')
+          .in('responsavel_id', chunk)
+          .limit(20000)
+        
+        if (lData) {
+          links.push(...lData)
+        }
+      }
     }
 
     // ── Pré-indexa links por aluno_id para O(1) lookup (evita .filter() em loop) ──

@@ -1276,9 +1276,32 @@ function ProibidosRetiradaCard() {
                   {aluno.nome}
                 </div>
                 {aluno.restritos.map((r: any, idx: number) => (
-                  <div key={idx} style={{ fontSize: 10, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                    <span style={{ fontWeight: 700 }}>{r.nome}</span>
-                    <span style={{ opacity: 0.7, fontSize: 9 }}>({r.motivo})</span>
+                  <div key={idx} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <span style={{ 
+                      fontSize: 8, 
+                      fontWeight: 700, 
+                      padding: '2px 6px', 
+                      borderRadius: 4, 
+                      textTransform: 'uppercase',
+                      backgroundColor: 'rgba(156, 163, 175, 0.15)',
+                      color: '#6b7280',
+                      border: '1px solid rgba(156, 163, 175, 0.3)'
+                    }}>
+                      {r.parentesco ? r.parentesco : 'Resp.'}
+                    </span>
+                    <span style={{ fontWeight: 700, color: '#ef4444' }}>{r.nome}</span>
+                    <span style={{ 
+                      fontSize: 8, 
+                      fontWeight: 800, 
+                      padding: '2px 6px', 
+                      borderRadius: 4, 
+                      textTransform: 'uppercase',
+                      backgroundColor: r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(249, 115, 22, 0.1)',
+                      color: r.motivo === 'Proibido' ? '#ef4444' : '#f97316',
+                      border: `1px solid ${r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(249, 115, 22, 0.2)'}`
+                    }}>
+                      {r.motivo}
+                    </span>
                   </div>
                 ))}
               </div>

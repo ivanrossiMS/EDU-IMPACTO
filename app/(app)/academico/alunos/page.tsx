@@ -52,7 +52,7 @@ export default function AlunosPage() {
   const [editingAlunoId, setEditingAlunoId] = useState<string | null>(null)
   const [mostrarFormResponsavel, setMostrarFormResponsavel] = useState(false)
   const [statusFiltro, setStatusFiltro] = useState('todos')
-  const [itensPorPagina, setItensPorPagina] = useState(10)
+  const [itensPorPagina, setItensPorPagina] = useState(5)
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
@@ -67,7 +67,8 @@ export default function AlunosPage() {
     inadimplente: 'todos',
     riscoEvasao: 'todos',
     turno: 'todos',
-    autorizadoSairSozinho: 'todos'
+    autorizadoSairSozinho: 'todos',
+    foto: 'todos'
   })
   
   // Sorting State
@@ -166,6 +167,7 @@ export default function AlunosPage() {
       if (filtrosAvancados.riscoEvasao !== 'todos') activeFilters.riscoEvasao = filtrosAvancados.riscoEvasao
       if (filtrosAvancados.turno !== 'todos') activeFilters.turno = filtrosAvancados.turno
       if (filtrosAvancados.autorizadoSairSozinho !== 'todos') activeFilters.autorizadoSairSozinho = filtrosAvancados.autorizadoSairSozinho
+      if (filtrosAvancados.foto !== 'todos') activeFilters.foto = filtrosAvancados.foto
 
       const params = new URLSearchParams(activeFilters)
       
@@ -682,7 +684,8 @@ export default function AlunosPage() {
       ...(filtrosAvancados.inadimplente !== 'todos' ? { inadimplente: filtrosAvancados.inadimplente } : {}),
       ...(filtrosAvancados.riscoEvasao !== 'todos' ? { riscoEvasao: filtrosAvancados.riscoEvasao } : {}),
       ...(filtrosAvancados.turno !== 'todos' ? { turno: filtrosAvancados.turno } : {}),
-      ...(filtrosAvancados.autorizadoSairSozinho !== 'todos' ? { autorizadoSairSozinho: filtrosAvancados.autorizadoSairSozinho } : {})
+      ...(filtrosAvancados.autorizadoSairSozinho !== 'todos' ? { autorizadoSairSozinho: filtrosAvancados.autorizadoSairSozinho } : {}),
+      ...(filtrosAvancados.foto !== 'todos' ? { foto: filtrosAvancados.foto } : {})
     }
   )
 
@@ -3088,13 +3091,38 @@ export default function AlunosPage() {
                   })}
                 </div>
               </div>
+              
+              {/* Foto do Aluno (Ocupa largura total) */}
+              <div className="filterCard-fa filterCardFull-fa">
+                <h4 className="text-[13px] font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2 mb-4">
+                  <Camera size={16} className="text-pink-500" /> Foto do Aluno
+                </h4>
+                <div className="optionGroup-fa">
+                  {[
+                    { val: 'todos', label: 'Todos' },
+                    { val: 'com_foto', label: 'Com Foto' },
+                    { val: 'sem_foto', label: 'Sem Foto' },
+                  ].map(item => {
+                    const isActive = filtrosAvancados.foto === item.val;
+                    return (
+                      <button
+                        key={item.val}
+                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, foto: item.val }))}
+                        className={`optionButton-fa ${isActive ? 'active' : ''}`}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
             <div className="modalFooter-fa">
               <button 
                 onClick={() => setFiltrosAvancados({
-                  dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos'
+                  dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos', foto: 'todos'
                 })}
                 className="flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[12px] text-[14px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 transition-colors"
               >

@@ -38,6 +38,7 @@ export async function GET(request: Request) {
     const riscoEvasao = url.searchParams.get('riscoEvasao') || ''
     const turno = url.searchParams.get('turno') || ''
     const autorizadoSairSozinho = url.searchParams.get('autorizadoSairSozinho') // 'true' | 'false' | null
+    const foto = url.searchParams.get('foto') || 'todos'
 
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -133,6 +134,12 @@ export async function GET(request: Request) {
     } else if (autorizadoSairSozinho === 'false') {
       // Filtrar quando for explicitamente falso, nulo ou ausente
       query = query.or('dados->autorizadoSairSozinho.eq.false,dados->autorizadoSairSozinho.is.null')
+    }
+
+    if (foto === 'com_foto') {
+      query = query.not('foto', 'is', null).neq('foto', '')
+    } else if (foto === 'sem_foto') {
+      query = query.or('foto.is.null,foto.eq.""')
     }
 
     // Determine ordering column

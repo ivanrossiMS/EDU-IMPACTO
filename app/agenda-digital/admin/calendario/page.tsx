@@ -296,7 +296,7 @@ export default function CalendarioPage() {
   }
 
   const proximosEventos = eventosAgenda
-    .filter(e => e.data >= today)
+    .filter(e => e.data > today)
     .sort((a, b) => (a.data + a.horaInicio) < (b.data + b.horaInicio) ? -1 : 1)
     .slice(0, 5)
 
