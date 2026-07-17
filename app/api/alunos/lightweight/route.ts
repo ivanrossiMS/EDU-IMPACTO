@@ -78,7 +78,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const formatted = (data || []).map(aluno => ({
+    const formatted = (data as Record<string, unknown>[] || []).map((aluno: Record<string, unknown>) => ({
       id: String(aluno.id),
       nome: String(aluno.nome || ''),
       matricula: aluno.matricula || '',
