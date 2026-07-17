@@ -52,6 +52,24 @@ const DEST_MODAL_STYLES = `
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
   }
+  @keyframes dest-spin {
+    to { transform: rotate(360deg); }
+  }
+  @keyframes dest-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @keyframes dest-pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+  .dest-spinner-ring {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 4px solid rgba(99,102,241,0.15);
+    border-top-color: #6366f1;
+    animation: dest-spin 0.9s linear infinite;
+  }
 `;
 
 const GlobalDestStyles = React.memo(function GlobalDestStyles() {
@@ -643,19 +661,24 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
                           <span style={{ background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>{activeItems.length}</span>
                         </div>
                         
-                        <div style={{ display: 'flex', flex: 1, margin: '0 16px', position: 'relative' }}>
+                        <div style={{ display: 'flex', flex: 1, margin: '0 16px', position: 'relative', opacity: isLoadingData ? 0.4 : 1, pointerEvents: isLoadingData ? 'none' : 'auto' }}>
                           <Search size={18} color="#94A3B8" style={{ position: 'absolute', left: 12, top: 11 }} />
                           <input
                             placeholder="Buscar por nome..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
+                            disabled={isLoadingData}
                             style={{
                               width: '100%', height: 40, borderRadius: 12, border: '1px solid #E2E8F0',
                               padding: '0 16px 0 38px', fontSize: 14, outline: 'none'
                             }}
                           />
                         </div>
-                        <button onClick={toggleAll} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 600, color: '#4F46E5', background: 'none', border: 'none', cursor: 'pointer' }}>
+                        <button
+                          onClick={toggleAll}
+                          disabled={isLoadingData}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 600, color: isLoadingData ? '#CBD5E1' : '#4F46E5', background: 'none', border: 'none', cursor: isLoadingData ? 'default' : 'pointer', opacity: isLoadingData ? 0.5 : 1 }}
+                        >
                           Selecionar tudo
                           <div style={{ width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', background: isAllActiveSelected ? '#6D5DF6' : 'transparent', border: isAllActiveSelected ? '2px solid #6D5DF6' : '2px solid #CBD5E1' }}>
                              {isAllActiveSelected && <Check size={16} color="#fff" strokeWidth={3} />}
@@ -665,15 +688,48 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {isLoadingData ? (
-                          Array.from({ length: 4 }).map((_, i) => (
-                            <div key={`skel-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px', borderRadius: 20, background: '#f8fafc', border: '2px solid #e2e8f0' }}>
-                              <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#e2e8f0', animation: 'pulse 1.5s infinite' }} />
-                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <div style={{ height: 16, width: '50%', background: '#e2e8f0', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-                                <div style={{ height: 12, width: '30%', background: '#e2e8f0', borderRadius: 4, animation: 'pulse 1.5s infinite' }} />
-                              </div>
+                          <div style={{
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                            padding: '64px 24px', gap: 20
+                          }}>
+                            {/* Spinner ring */}
+                            <div className="dest-spinner-ring" />
+
+                            {/* Texto + dots animados */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 15, fontWeight: 600, color: '#4F46E5' }}>
+                                Carregando destinatários
+                                <span style={{ display: 'inline-flex', gap: 3, marginLeft: 4, verticalAlign: 'middle' }}>
+                                  {[0, 1, 2].map(i => (
+                                    <span key={i} style={{
+                                      display: 'inline-block', width: 4, height: 4, borderRadius: '50%',
+                                      background: '#6366f1',
+                                      animation: `dest-pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`
+                                    }} />
+                                  ))}
+                                </span>
+                              </span>
+                              <span style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', maxWidth: 260, lineHeight: 1.5 }}>
+                                Buscando turmas, alunos e colaboradores. Aguarde um momento.
+                              </span>
                             </div>
-                          ))
+
+                            {/* Skeleton shimmer cards */}
+                            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                              {[70, 50, 65, 45].map((w, i) => (
+                                <div key={i} style={{
+                                  display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
+                                  borderRadius: 16, background: '#f8fafc', border: '1px solid #e2e8f0'
+                                }}>
+                                  <div style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 12, background: 'linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%)', backgroundSize: '400% 100%', animation: `dest-shimmer 1.6s ease-in-out ${i * 0.1}s infinite` }} />
+                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ height: 14, width: `${w}%`, background: 'linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%)', backgroundSize: '400% 100%', borderRadius: 6, animation: `dest-shimmer 1.6s ease-in-out ${i * 0.15}s infinite` }} />
+                                    <div style={{ height: 10, width: `${w - 20}%`, background: 'linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%)', backgroundSize: '400% 100%', borderRadius: 6, animation: `dest-shimmer 1.6s ease-in-out ${i * 0.2}s infinite` }} />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         ) : searchQuery.trim() !== '' ? (
                            flatPeopleList.length === 0 ? (
                              <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748B' }}>

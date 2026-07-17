@@ -15,6 +15,11 @@
 export interface PushPayload {
   title: string
   body: string
+  /**
+   * IDs dos usuários no banco de dados.
+   * Devem corresponder ao que foi passado em OneSignal.login(userId) no frontend.
+   * O OneSignal busca por external_id — funciona para responsáveis, alunos e colaboradores.
+   */
   targetUserIds?: string[]
   url?: string
   data?: Record<string, any>
@@ -160,10 +165,15 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
   // ── Construção do Payload ─────────────────────────────────────────────────
   const payload: Record<string, any> = {
     app_id: ONESIGNAL_APP_ID,
+    // Usa APENAS external_id — é o alias que OneSignal.login(userId) registra no frontend.
+    // Responsáveis, alunos e colaboradores todos fazem login com seu próprio UUID,
+    // que vira o external_id no OneSignal. Cada aparelho logado recebe o push individualmente.
+    //
+    // ⚠️ NÃO usar múltiplos aliases com o mesmo array de IDs:
+    //   include_aliases: { external_id: [...], responsavel_id: [...], aluno_id: [...] }
+    // Isso faz o OneSignal encontrar o mesmo dispositivo 2-3x e entregar duplicatas.
     include_aliases: {
       external_id: params.targetUserIds,
-      responsavel_id: params.targetUserIds,
-      aluno_id: params.targetUserIds
     },
     target_channel: 'push',
     headings: { en: params.title, pt: params.title },

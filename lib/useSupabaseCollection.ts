@@ -379,46 +379,68 @@ export function useSupabaseArray<T>(
         fetchOpts.cache = 'default';
       }
 
-      return fetch(url, fetchOpts)
-            .then(async r => {
-              const contentType = r.headers.get('content-type')
-              if (r.ok && contentType && contentType.includes('text/html')) {
-                r.text().then(html => console.error(`[useSupabaseArray] HTML returned from /${endpoint}:`, html.substring(0, 300)));
-                throw new Error(`Auth Redirect`)
+      return (() => {
+        // AbortController com timeout de 30s — evita fetch pendente por minutos no cliente
+        const ctrl = new AbortController()
+        const tid = setTimeout(() => ctrl.abort(), 30_000)
+
+        return fetch(url, { ...fetchOpts, signal: ctrl.signal })
+              .then(async r => {
+                clearTimeout(tid)
+                const contentType = r.headers.get('content-type')
+                if (r.ok && contentType && contentType.includes('text/html')) {
+                  r.text().then(html => console.error(`[useSupabaseArray] HTML returned from /${endpoint}:`, html.substring(0, 300)));
+                  throw new Error(`Auth Redirect`)
+                }
+                if (!r.ok) {
+                if (r.status === 404) {
+                  console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
+                  return [];
+                }
+                if (r.status === 504) {
+                  // Timeout da rota — tentar novamente em 3s
+                  console.warn(`[useSupabaseArray] Timeout (504) em /${endpoint}. Retentando em 3s...`)
+                  await new Promise(res => setTimeout(res, 3000))
+                  throw new Error('Retry after 504')
+                }
+                if (r.status === 500) {
+                  console.warn(`[useSupabaseArray] Endpoint /${endpoint} retornou erro 500. Returning [].`);
+                  return [];
+                }
+                if (r.status === 401 || r.status === 403) {
+                  console.warn(`[useSupabaseArray] Access Denied for /${endpoint} (HTTP ${r.status}). Returning [].`);
+                  return [];
+                }
+                let errText = '';
+                try { errText = await r.text(); } catch(e) {}
+                console.error(`[useSupabaseArray] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`);
+                throw new Error(`HTTP ${r.status} - ${errText}`);
               }
-              if (!r.ok) {
-              if (r.status === 404 || r.status === 500) {
-                console.warn(`[useSupabaseArray] Endpoint /${endpoint} is not implemented yet or table is missing (HTTP ${r.status}). Returning [].`);
-                return [];
+              const text = await r.text();
+              if (!text) return [];
+              try {
+                const payload = JSON.parse(text);
+                // Always return an array — never return an object or null
+                if (Array.isArray(payload)) return payload
+                if (Array.isArray(payload?.data)) return payload.data
+                // API returned error object or unexpected shape — return empty array
+                console.warn(`[useSupabaseArray] Unexpected response shape for /${endpoint}:`, payload)
+                return []
+              } catch (err) {
+                console.warn(`[useSupabaseArray] JSON parse failed for /${endpoint}:`, err)
+                return []
               }
-              if (r.status === 401 || r.status === 403) {
-                console.warn(`[useSupabaseArray] Access Denied for /${endpoint} (HTTP ${r.status}). Returning [].`);
-                return [];
+          })
+          .catch(err => {
+              clearTimeout(tid)
+              if (err?.name === 'AbortError') {
+                console.warn(`[useSupabaseArray] Fetch abortado por timeout (30s) em /${endpoint}`)
+                throw new Error('Fetch timeout')
               }
-              let errText = '';
-              try { errText = await r.text(); } catch(e) {}
-              console.error(`[useSupabaseArray] API Error for /${endpoint}: HTTP ${r.status} - ${errText}`);
-              throw new Error(`HTTP ${r.status} - ${errText}`);
-            }
-            const text = await r.text();
-            if (!text) return [];
-            try {
-              const payload = JSON.parse(text);
-              // Always return an array — never return an object or null
-              if (Array.isArray(payload)) return payload
-              if (Array.isArray(payload?.data)) return payload.data
-              // API returned error object or unexpected shape — return empty array
-              console.warn(`[useSupabaseArray] Unexpected response shape for /${endpoint}:`, payload)
-              return []
-            } catch (err) {
-              console.warn(`[useSupabaseArray] JSON parse failed for /${endpoint}:`, err)
-              return []
-            }
-        })
-        .catch(err => {
-            console.warn(`[useSupabaseArray] Fetch failed for /${endpoint}:`, err)
-            throw err
-        })
+              console.warn(`[useSupabaseArray] Fetch failed for /${endpoint}:`, err)
+              throw err
+          })
+      })()
     }, [endpoint, options?.noCache]),
     persister: useCallback(async (arr: T[]) => {
       const res = await fetch(`/api/${endpoint}`, {

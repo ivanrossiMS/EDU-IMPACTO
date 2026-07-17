@@ -3,6 +3,8 @@ import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { requireAuth } from '@/lib/server/authGuard'
 
 export const dynamic = 'force-dynamic'
+// Limita o tempo total da rota a 30 segundos (evita o hang de 66min)
+export const maxDuration = 30
 
 const CACHE_TTL_MS = 1000 * 60 * 5; // 5 minutos
 const inMemoryCache = new Map<string, { data: any; ts: number }>();
@@ -32,6 +34,10 @@ export async function GET(req: Request) {
       }
     }
 
+    // AbortController com timeout de 25s — evita hang indefinido na query
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 25_000)
+
     // Seleção mínima — apenas campos usados em listas e seletores
     let query = supabase
       .from('alunos')
@@ -46,12 +52,26 @@ export async function GET(req: Request) {
       .or('status.neq.inativo,status.is.null')
       .order('nome')
       .range(from, to)
+      .abortSignal(controller.signal)
 
     if (search) {
       query = query.ilike('nome', `%${search}%`)
     }
 
-    const { data, error, count } = await query
+    let data: any, error: any, count: number | null
+    try {
+      ;({ data, error, count } = await query)
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    if (controller.signal.aborted) {
+      console.error('[API alunos/lightweight] Query abortada por timeout (>25s)')
+      return NextResponse.json(
+        { error: 'Query timeout — tente novamente em instantes.' },
+        { status: 504 }
+      )
+    }
 
     if (error) {
       console.error('[API alunos/lightweight] erro:', error)
