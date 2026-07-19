@@ -5,6 +5,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 // ── Cache em memória para lista de colaboradores (TTL = 2 minutos) ──────────
 // Evita N chamadas ao Supabase Auth por cada page mount nos 16+ locais do app.

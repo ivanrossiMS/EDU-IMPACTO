@@ -1056,24 +1056,20 @@ export function ComunicadoViewModal({
                         return aIdStr === rIdStr || aIdStr === `a_${rIdStr}` || aIdStr.replace(/^_*(ALU)?/, '') === rIdStr.replace(/^_*(ALU)?/, '');
                       });
                       
-                      // Check if it's from responsavel. If we don't have alunoObj (maybe the array wasn't passed properly), we can fallback to checking if isAdminMode is false and this message's remetente_nome is different from the first message's remetente_nome, or just assume if it's not the student.
-                      // Wait, we have currentUserName passed down.
-                      let isFromResponsavel = alunoObj && msg.remetente_nome && msg.remetente_nome.trim().toLowerCase() !== alunoObj.nome.trim().toLowerCase();
+                      // Check if it's from responsavel.
+                      let isFromResponsavel = !msg.is_admin && alunoObj && msg.remetente_nome && msg.remetente_nome.trim().toLowerCase() !== alunoObj.nome.trim().toLowerCase();
                       
-                      // Fallback: If we couldn't find alunoObj, but we know the student's name from the parent component (in parent app, currentUserName is passed but actually we want student's name. Wait, the modal title is `Conversa com ${adminThreads.find(t => t.studentId === selectedThreadId)?.studentName}`).
+                      // Fallback
                       const threadStudent = isAdminMode ? adminThreads.find(t => t.studentId === selectedThreadId) : null;
                       const threadStudentName = threadStudent?.studentName || null;
                       const threadStudentFoto = threadStudent?.studentFoto || null;
 
-                      if (!alunoObj && msg.remetente_nome) {
+                      if (!msg.is_admin && !alunoObj && msg.remetente_nome) {
                          if (threadStudentName && msg.remetente_nome.trim().toLowerCase() !== threadStudentName.trim().toLowerCase()) {
                             isFromResponsavel = true;
                             alunoObj = { id: selectedThreadId, nome: threadStudentName, foto: threadStudentFoto };
                          } else if (threadStudentName) {
                             alunoObj = { id: selectedThreadId, nome: threadStudentName, foto: threadStudentFoto };
-                         } else if (!isAdminMode) {
-                            // in parent app, if we still don't have alunoObj, let's look at the first message in the thread to get the student's name, or just use the fact that if it's me, and msg.remetente_nome != adminThreads... wait, in parent app adminThreads is not used for title.
-                            // The easiest is just rely on the fixed find().
                          }
                       }
 
@@ -1082,10 +1078,13 @@ export function ComunicadoViewModal({
                         if (alunoObj?.foto) {
                           avatarToUse = alunoObj.foto;
                         }
-                        // Se for uma mensagem de familiar/aluno e não tiver foto do aluno, não usar a foto do responsável.
-                        // Vai cair no fallback de usar a primeira letra do nome.
-                      } else if (isMe && currentUserAvatar) {
-                        avatarToUse = currentUserAvatar;
+                      } else {
+                        if (isMe && currentUserAvatar) {
+                          avatarToUse = currentUserAvatar;
+                        }
+                        if (!avatarToUse && msg.remetente_nome === comunicado.autorNome && comunicado.autorAvatar) {
+                          avatarToUse = comunicado.autorAvatar;
+                        }
                       }
                       
                       const msgDate = new Date(msg.created_at);
@@ -1094,14 +1093,16 @@ export function ComunicadoViewModal({
                       return (
                         <div key={`${msg.id}-${idx}`} style={{ display: 'flex', gap: 12 }}>
                           <UserAvatar
-                            userId={msg.is_admin ? msg.remetente_id : (alunoObj?.id || msg.remetente_id)}
-                            name={alunoObj?.nome || msg.remetente_nome}
+                            userId={msg.is_admin ? (currentUserSlug || msg.remetente_id) : (alunoObj?.id || msg.remetente_id)}
+                            name={msg.is_admin ? msg.remetente_nome : (alunoObj?.nome || msg.remetente_nome)}
                             fotoUrl={avatarToUse}
                             size={36}
                           />
                           <div>
                             <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 6 }}>
-                              <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{isFromResponsavel && alunoObj ? alunoObj.nome : msg.remetente_nome}</span>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+                                {msg.is_admin ? msg.remetente_nome : (isFromResponsavel && alunoObj ? alunoObj.nome : msg.remetente_nome)}
+                              </span>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                                 {isFromResponsavel && (
                                   <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
@@ -1166,6 +1167,7 @@ export function ComunicadoViewModal({
                   type="text" 
                   placeholder="Escreva um comentário" 
                   value={newMessage}
+                  disabled={isSending}
                   onChange={e => setNewMessage(e.target.value)}
                   onFocus={(e) => {
                     setIsInputFocused(true);
@@ -1177,7 +1179,7 @@ export function ComunicadoViewModal({
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault()
-                      handleSend()
+                      if (!isSending) handleSend()
                     }
                   }}
                 />
@@ -1191,13 +1193,15 @@ export function ComunicadoViewModal({
                   width: 44, height: 44, borderRadius: '50%', 
                   background: (!newMessage.trim() && pendingAnexos.length === 0) ? '#e2e8f0' : 'linear-gradient(135deg, #4f46e5 0%, #312e81 100%)', 
                   color: (!newMessage.trim() && pendingAnexos.length === 0) ? '#94a3b8' : '#ffffff', 
-                  border: 'none', cursor: (!newMessage.trim() && pendingAnexos.length === 0) ? 'default' : 'pointer',
+                  border: 'none', 
+                  cursor: (isSending || (!newMessage.trim() && pendingAnexos.length === 0)) ? 'not-allowed' : 'pointer',
                   boxShadow: (!newMessage.trim() && pendingAnexos.length === 0) ? 'none' : '0 4px 14px rgba(79,70,229,0.4)',
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  transform: (!newMessage.trim() && pendingAnexos.length === 0) ? 'scale(1)' : 'scale(1.05)'
+                  transform: (!newMessage.trim() && pendingAnexos.length === 0) ? 'scale(1)' : 'scale(1.05)',
+                  opacity: isSending ? 0.7 : 1
                 }}
               >
-                <Send size={18} style={{ marginLeft: 2, transform: isSending ? 'translateX(2px)' : 'none', transition: 'transform 0.2s' }} />
+                {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={18} style={{ marginLeft: 2, transform: 'none' }} />}
               </button>
             </div>
           )}

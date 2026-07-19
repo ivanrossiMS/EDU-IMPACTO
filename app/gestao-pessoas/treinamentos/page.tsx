@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { GraduationCap, Plus, Search, Filter, X, Trash2, Edit2, Clock, Users } from 'lucide-react'
+import { GraduationCap, Plus, Search, Filter, X, Trash2, Edit2, Clock, Users, FileText, CheckCircle2 } from 'lucide-react'
 import { SidePanel } from '@/components/ui/SidePanel'
+import { AssinaturaDigitalModal } from '@/components/gestao-pessoas/AssinaturaDigitalModal'
 
 type Treinamento = {
   id: string
@@ -20,6 +21,10 @@ export default function Treinamentos() {
   const [busca, setBusca] = useState('')
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
+  const [assinaturaData, setAssinaturaData] = useState<{ id: string, title: string } | null>(null)
+  const [reportTreinamentoId, setReportTreinamentoId] = useState<{ id: string, title: string } | null>(null)
+  const [assinaturasList, setAssinaturasList] = useState<any[]>([])
+  const [loadingReport, setLoadingReport] = useState(false)
   
   // Form state
   const [formData, setFormData] = useState({
@@ -105,6 +110,22 @@ export default function Treinamentos() {
     t.nome?.toLowerCase().includes(busca.toLowerCase()) || 
     t.publico_alvo?.toLowerCase().includes(busca.toLowerCase())
   )
+
+  const fetchRelatorio = async (treinamentoId: string, treinamentoTitle: string) => {
+    setReportTreinamentoId({ id: treinamentoId, title: treinamentoTitle })
+    setLoadingReport(true)
+    try {
+      const res = await fetch(`/api/gestao-pessoas/assinaturas?entidade_id=${treinamentoId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setAssinaturasList(data)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingReport(false)
+    }
+  }
 
   return (
     <div style={{ padding: '32px 40px', maxWidth: 1400, margin: '0 auto', position: 'relative' }}>
@@ -196,6 +217,12 @@ export default function Treinamentos() {
                     </td>
                     <td style={{ padding: '20px 24px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button onClick={() => fetchRelatorio(t.id, t.nome)} style={{ padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', color: '#4f46e5', cursor: 'pointer', fontSize: 12, fontWeight: 700, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 4 }} title="Relatório de Assinaturas" onMouseEnter={e => e.currentTarget.style.background = '#eef2ff'} onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}>
+                          <FileText size={14} /> Relatório
+                        </button>
+                        <button onClick={() => setAssinaturaData({ id: t.id, title: t.nome })} style={{ padding: '8px 12px', borderRadius: 8, background: '#10b981', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700, transition: 'all 0.2s' }} title="Assinar Lista de Presença">
+                          Assinar
+                        </button>
                         <button onClick={() => handleOpenPanel(t)} style={{ padding: 8, borderRadius: 8, background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#475569', cursor: 'pointer', transition: 'all 0.2s' }} title="Editar" onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0' }} onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9' }}>
                           <Edit2 size={16} />
                         </button>
@@ -250,6 +277,66 @@ export default function Treinamentos() {
         </form>
       </SidePanel>
 
+      <SidePanel
+        isOpen={!!reportTreinamentoId}
+        onClose={() => setReportTreinamentoId(null)}
+        title="Relatório de Assinaturas"
+        subtitle={reportTreinamentoId?.title || ''}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {loadingReport ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Carregando assinaturas...</div>
+          ) : assinaturasList.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Nenhuma assinatura registrada ainda.</div>
+          ) : (
+            assinaturasList.map(ass => (
+              <div key={ass.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{ass.user_nome}</div>
+                  <div style={{ fontSize: 13, color: '#64748b' }}>{ass.user_cargo}</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  <div style={{ fontSize: 11, color: '#64748b', fontFamily: 'monospace', display: 'flex', gap: 4, flexDirection: 'column', alignItems: 'flex-end', background: '#fff', padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                    <div style={{ color: '#10b981', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <CheckCircle2 size={12} /> {new Date(ass.created_at).toLocaleString('pt-BR')}
+                    </div>
+                    <div><span style={{ color: '#94a3b8' }}>IP:</span> {ass.ip_address === '::1' ? '127.0.0.1' : ass.ip_address}</div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        
+        <div style={{ marginTop: 32, padding: 16, background: '#eff6ff', borderRadius: 12, border: '1px solid #bfdbfe' }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#1e40af', lineHeight: 1.5 }}>
+            <strong>Nota:</strong> Estas assinaturas possuem validade jurídica através da autenticação por senha e coleta de logs de acesso (IP e Timestamp).
+          </p>
+        </div>
+      </SidePanel>
+
+      <AssinaturaDigitalModal
+        isOpen={!!assinaturaData}
+        onClose={() => setAssinaturaData(null)}
+        title={assinaturaData?.title || ''}
+        subtitle="Lista de Presença do Treinamento"
+        onSign={async (senha) => {
+          try {
+            const res = await fetch('/api/gestao-pessoas/assinaturas', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                senha,
+                entidade_id: assinaturaData?.id,
+                entidade_tipo: 'treinamento'
+              })
+            })
+            return res.ok
+          } catch (e) {
+            return false
+          }
+        }}
+      />
     </div>
   )
 }

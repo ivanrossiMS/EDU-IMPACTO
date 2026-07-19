@@ -259,10 +259,12 @@ export function ComunicadoChat({ comunicadoId, remetenteId, remetenteNome, remet
                 maxHeight: 80, minHeight: 20, fontSize: 13, color: '#0f172a', padding: '4px 0', lineHeight: 1.4
               }}
               rows={1}
+              disabled={isSending}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
-                  handleSend()
+                  // Guarda contra duplo envio via teclado durante o envio
+                  if (!isSending) handleSend()
                 }
               }}
               onInput={e => {
@@ -281,13 +283,20 @@ export function ComunicadoChat({ comunicadoId, remetenteId, remetenteNome, remet
             onClick={handleSend}
             disabled={isSending || isUploading || (!newMessage.trim() && pendingAnexos.length === 0)}
             style={{ 
-              background: 'transparent', 
-              color: (!newMessage.trim() && pendingAnexos.length === 0) ? '#cbd5e1' : '#3b82f6', 
-              border: 'none', fontWeight: 600, fontSize: 13, padding: '4px 4px 4px 0',
-              cursor: (!newMessage.trim() && pendingAnexos.length === 0) ? 'default' : 'pointer'
+              background: isSending ? 'rgba(59,130,246,0.08)' : 'transparent',
+              color: isSending ? '#3b82f6' : (!newMessage.trim() && pendingAnexos.length === 0) ? '#cbd5e1' : '#3b82f6', 
+              border: 'none', fontWeight: 600, fontSize: 13, padding: '4px 8px 4px 4px',
+              cursor: (isSending || (!newMessage.trim() && pendingAnexos.length === 0)) ? 'not-allowed' : 'pointer',
+              borderRadius: 8,
+              opacity: isSending ? 0.7 : 1,
+              transition: 'all 0.2s',
+              display: 'flex', alignItems: 'center', gap: 4, minWidth: 64, justifyContent: 'center'
             }}
           >
-            {isSending ? <Loader2 size={16} className="animate-spin" /> : 'Enviar'}
+            {isSending 
+              ? <><Loader2 size={14} className="animate-spin" /><span style={{ fontSize: 12 }}>Enviando...</span></>
+              : 'Enviar'
+            }
           </button>
         </div>
       </div>

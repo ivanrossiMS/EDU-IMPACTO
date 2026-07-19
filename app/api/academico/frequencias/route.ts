@@ -5,6 +5,7 @@ import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()

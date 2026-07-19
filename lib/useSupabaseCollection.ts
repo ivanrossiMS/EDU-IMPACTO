@@ -136,7 +136,8 @@ export function useSupabaseCollection<T>(
     // Cache HIT but stale → show cached data immediately, revalidate in background
     if (existing) {
       setState(existing.data)
-      setLoading(false)
+      const isCacheEmpty = Array.isArray(existing.data) ? existing.data.length === 0 : !existing.data;
+      setLoading(isCacheEmpty)
     } else {
       setLoading(true)
     }

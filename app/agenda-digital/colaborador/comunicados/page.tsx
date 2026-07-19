@@ -832,7 +832,18 @@ function ColaboradorComunicadosContent() {
             return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
           }).map((g: any) => g.nome);
 
-          const filteredComunicados = (comunicados || []).filter((c: any) => {
+          // Deduplicar por id — previne "Encountered two children with the same key"
+          // causado pela atualização otimística (setComunicadosLocally) sobreposta ao
+          // refetch do Realtime (invalidateQueries). A entrada mais recente (índice menor,
+          // já que o array vem ordenado DESC) prevalece sobre duplicatas.
+          const seenIds = new Set<string>()
+          const uniqueComunicados = (comunicados || []).filter((c: any) => {
+            if (!c.id || seenIds.has(c.id)) return false
+            seenIds.add(c.id)
+            return true
+          })
+
+          const filteredComunicados = uniqueComunicados.filter((c: any) => {
             if (c.id?.startsWith('AD-COM-REL-STU')) return false;
             const isAuthor = String(c.autorId) === String(effectiveUser?.id) || c.autor === effectiveUser?.nome;
             if ((c.status === 'rascunho' || c.status === 'agendado') && !isAuthor) return false;
@@ -990,8 +1001,10 @@ function ColaboradorComunicadosContent() {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           tipo: 'comunicado',
-                          ids: [c.id],
-                          alunoId: userSlug
+                          ids: [c.id]
+                          // Colaboradores não enviam alunoId — evita mismatch de chave
+                          // na tabela agenda_notification_reads (chave seria "userId_userId"
+                          // mas o frontend verifica só "userId")
                         })
                       })
                       .then(res => {

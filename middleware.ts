@@ -36,6 +36,8 @@ const PUBLIC_PATHS = [
   '/favicon.ico',
   '/api/webhooks',      // webhooks externos (Asaas, etc)
   '/ajuda',             // Central de ajuda pública
+  '/pesquisa',          // Formulários de pesquisa de clima (público)
+  '/api/pesquisa',      // API pública para formulários de pesquisa
 ]
 
 function isPublicPath(pathname: string): boolean {

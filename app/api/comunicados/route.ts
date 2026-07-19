@@ -7,6 +7,7 @@ import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 function normalizeRow(row: any) {
   const merged = { ...row, ...(row.dados || {}) }

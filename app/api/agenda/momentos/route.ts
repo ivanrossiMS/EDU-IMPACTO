@@ -8,6 +8,7 @@ import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResp
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()

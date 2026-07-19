@@ -8,18 +8,18 @@ import {
   Users, Activity, ShieldAlert,
   ClipboardCheck, GraduationCap,
   MessageSquareWarning, Settings,
-  LogOut, Home, Stethoscope
+  LogOut, Home, Stethoscope, Heart, PieChart, Grid
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 const MENUS = [
   { href: '/gestao-pessoas', icon: Home, label: 'Visão Geral' },
+  { href: '/gestao-pessoas/saude-mental', icon: Heart, label: 'Bem-Estar' },
+  { href: '/gestao-pessoas/denuncias', icon: ShieldAlert, label: 'Canal de Denúncias' },
+  { href: '/gestao-pessoas/pesquisa-clima', icon: PieChart, label: 'Pesquisa de Clima' },
   { href: '/gestao-pessoas/colaboradores', icon: Users, label: 'Colaboradores' },
   { href: '/gestao-pessoas/sst', icon: Stethoscope, label: 'SST e NR-01' },
-  { href: '/gestao-pessoas/inventario-riscos', icon: ShieldAlert, label: 'Inventário de Riscos' },
-  { href: '/gestao-pessoas/plano-acao', icon: Activity, label: 'Plano de Ação' },
   { href: '/gestao-pessoas/treinamentos', icon: GraduationCap, label: 'Treinamentos' },
-  { href: '/gestao-pessoas/checklists', icon: ClipboardCheck, label: 'Checklists' },
   { href: '/gestao-pessoas/atendimentos', icon: MessageSquareWarning, label: 'Atendimentos' },
 ]
 
@@ -102,7 +102,7 @@ export function PeopleSidebar() {
         <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)', flexShrink: 0, margin: '0 4px' }} />
 
         <button
-          onClick={() => router.push('/dashboard')}
+          onClick={() => router.push('/')}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -117,9 +117,9 @@ export function PeopleSidebar() {
           }}
         >
           <div style={{ padding: '6px 14px', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-             <Settings size={18} />
+             <Grid size={18} />
           </div>
-          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>ERP</span>
+          <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, whiteSpace: 'nowrap' }}>Módulos</span>
         </button>
 
         <button
@@ -211,7 +211,7 @@ export function PeopleSidebar() {
       {/* Footer / User */}
       <div style={{ marginTop: 'auto', paddingTop: 24, borderTop: '1px solid #1e293b' }}>
         <button
-          onClick={() => router.push('/dashboard')}
+          onClick={() => router.push('/')}
           style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 16, border: '1px solid #1e293b', cursor: 'pointer',
             background: 'rgba(255,255,255,0.02)', color: '#e2e8f0', fontWeight: 600, marginBottom: 12, transition: 'all 0.2s'
@@ -220,9 +220,9 @@ export function PeopleSidebar() {
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.borderColor = '#1e293b' }}
         >
           <div style={{ width: 32, height: 32, borderRadius: 10, background: '#0f172a', border: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Settings size={16} color="#94a3b8" />
+            <Grid size={16} color="#94a3b8" />
           </div>
-          <span style={{ fontSize: 14 }}>Voltar ao ERP</span>
+          <span style={{ fontSize: 14 }}>Trocar de Módulo</span>
         </button>
 
         <button

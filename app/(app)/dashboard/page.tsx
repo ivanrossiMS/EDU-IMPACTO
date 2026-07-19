@@ -82,10 +82,8 @@ export default function DashboardPage() {
 
   // ── Data for Stats
   const { data: aniversariantesList, isLoading: loadAniv } = useApiQuery<any[]>(['dash-aniversariantes'], '/api/alunos/aniversariantes')
-  const [alunos, , { loading: loadAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [titulos, , { loading: loadTitulos }] = useSupabaseArray<any>('titulos')
-  const [pedidos, , { loading: loadPedidosMeta }] = useSupabaseArray<any>('administrativo/pedidos-livros')
-  const [pedidosManuais, , { loading: loadPedidosManuais }] = useSupabaseArray<any>('administrativo/pedidos-livros-manuais')
+  const { data: ordersData, isLoading: loadOrders } = useApiQuery<any>(['dash-pedidos-summary'], '/api/administrativo/pedidos-summary', {}, { staleTime: 60000 })
+  const ordersSummary = ordersData || { totalOrders: 0, totalValue: 0, entregueCount: 0, preparadoCount: 0, pendenteCount: 0, recentOrders: [] }
 
   // ── Ocorrências
   const { data: ocorrData, isLoading: loadOcorr } = useApiQuery<any>(
@@ -198,125 +196,7 @@ export default function DashboardPage() {
     }).sort((a: any, b: any) => a.dia - b.dia)
   }, [aniversariantesList, turmas])
 
-  const ordersSummary = useMemo(() => {
-    const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv', 'itinerário', 'itinerario']
-    function isEventoLivro(descricao?: string): boolean {
-      if (!descricao) return false
-      return EVENTOS_LIVROS.some(e => descricao.toLowerCase().includes(e))
-    }
-
-    const resolverDesc = (raw: any): string => {
-      if (raw.evento?.trim()) return raw.evento.trim()
-      if (raw.eventoDescricao?.trim()) return raw.eventoDescricao.trim()
-      return raw.descricao?.trim() ?? ''
-    }
-
-    const parcelasDeAlunos: any[] = []
-    for (const alu of (alunos || [])) {
-      const tObj = turmas.find((t: any) => t.id === alu.turma || t.codigo === alu.turma)
-      const turmaNome = tObj?.nome || alu.turma || 'S/T'
-      for (const p of (alu.parcelas ?? [])) {
-        const desc = resolverDesc(p)
-        if (!isEventoLivro(desc)) continue
-        parcelasDeAlunos.push({
-          id: `alu-${alu.id}-p-${p.num ?? p.codigo ?? String(Math.random()).slice(2)}`,
-          aluno: alu.nome,
-          alunoId: alu.id,
-          turma: turmaNome,
-          eventoDescricao: desc,
-          valor: Number(p.valor) || 0,
-          dataLancamento: p.dataLancamento,
-          created_at: p.created_at,
-          createdAt: p.createdAt,
-          vencimento: p.vencimento
-        })
-      }
-    }
-
-    const parcelasDeTitulos: any[] = (titulos || [])
-      .filter((t: any) => isEventoLivro(resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao })))
-      .map((t: any) => {
-        const matchingAluno = (alunos || []).find((a: any) => a.nome === t.aluno)
-        let turmaNome = 'S/T'
-        if (matchingAluno) {
-          const tObj = turmas.find((x: any) => x.id === matchingAluno.turma || x.codigo === matchingAluno.turma)
-          turmaNome = tObj?.nome || matchingAluno.turma || 'S/T'
-        }
-        return {
-          id: t.id,
-          aluno: t.aluno,
-          alunoId: matchingAluno?.id,
-          turma: turmaNome,
-          eventoDescricao: resolverDesc({ eventoDescricao: t.eventoDescricao, descricao: t.descricao }),
-          valor: t.valor,
-          dataLancamento: t.dataLancamento,
-          created_at: t.created_at,
-          createdAt: t.createdAt,
-          vencimento: t.vencimento
-        }
-      })
-
-    const alunosComParcDiretas = new Set(parcelasDeAlunos.map((p: any) => p.aluno))
-    const titulosFiltrados = parcelasDeTitulos.filter((p: any) => !alunosComParcDiretas.has(p.aluno))
-    const todasParcelas = [...parcelasDeAlunos, ...titulosFiltrados, ...(Array.isArray(pedidosManuais) ? pedidosManuais : [])]
-
-    const map = new Map<string, any>()
-    let totalValue = 0, entregueCount = 0, preparadoCount = 0, pendenteCount = 0
-
-    for (const p of todasParcelas) {
-      const key = `${p.aluno}__${p.eventoDescricao}`
-      const pMeta = (pedidos || []).find((x: any) => x.tituloId === p.id)
-      
-      let finalTurma = p.turma
-      if (!finalTurma || finalTurma === 'S/T' || finalTurma === '—') {
-        const matchingAluno = (alunos || []).find((a: any) => a.nome === p.aluno || a.id === p.alunoId)
-        if (matchingAluno) {
-          const tObj = turmas.find((x: any) => x.id === matchingAluno.turma || x.codigo === matchingAluno.turma)
-          finalTurma = tObj?.nome || matchingAluno.turma || 'S/T'
-        }
-      }
-
-      if (!map.has(key)) {
-        map.set(key, { 
-          id: p.id, 
-          aluno: p.aluno, 
-          turma: finalTurma || 'S/T', 
-          material: p.eventoDescricao, 
-          valor: 0, 
-          feito: pMeta?.feito ?? false, 
-          entregue: pMeta?.entregue ?? false,
-          timestamp: new Date(p.dataLancamento || p.created_at || p.createdAt || p.vencimento || 0).getTime() 
-        })
-      } else {
-        const existing = map.get(key)
-        if (pMeta?.feito) existing.feito = true
-        if (pMeta?.entregue) existing.entregue = true
-        if (finalTurma && (!existing.turma || existing.turma === 'S/T' || existing.turma === '—')) {
-          existing.turma = finalTurma
-        }
-      }
-      map.get(key).valor += p.valor
-      totalValue += p.valor
-    }
-
-    const uniqueOrders = Array.from(map.values())
-    uniqueOrders.forEach((o: any) => {
-      if (o.entregue) entregueCount++
-      else if (o.feito) preparadoCount++
-      else pendenteCount++
-    })
-
-    const sortedOrders = [...uniqueOrders].sort((a, b) => b.timestamp - a.timestamp)
-
-    return {
-      totalOrders: uniqueOrders.length,
-      totalValue,
-      entregueCount,
-      preparadoCount,
-      pendenteCount,
-      recentOrders: sortedOrders.slice(0, 4)
-    }
-  }, [alunos, titulos, pedidos, pedidosManuais, turmas])
+  // Orders summary logic moved to backend API (/api/administrativo/pedidos-summary)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
@@ -382,7 +262,7 @@ export default function DashboardPage() {
             <Link href="/administrativo/pedidos-livros" style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', fontWeight: 800 }}>Ver todos</Link>
           </div>
 
-          {(loadAlunos || loadTitulos || loadPedidosMeta || loadPedidosManuais) ? (
+          {loadOrders ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
               <Loader2 className="animate-spin" size={32} color="#3b82f6" />
             </div>

@@ -31,6 +31,15 @@ export default function Atendimentos() {
 
   useEffect(() => {
     fetchAtendimentos()
+    
+    // Check if we came from the Saude Mental page with a pre-filled type
+    const urlParams = new URLSearchParams(window.location.search)
+    const tipo = urlParams.get('tipo')
+    if (tipo) {
+      setFormData(prev => ({ ...prev, tipo }))
+      setIsPanelOpen(true)
+      window.history.replaceState({}, '', '/gestao-pessoas/atendimentos')
+    }
   }, [])
 
   const fetchAtendimentos = async () => {
@@ -129,7 +138,8 @@ export default function Atendimentos() {
   const getTipoColor = (tipo: string) => {
     if (tipo.includes('Férias')) return '#f59e0b'
     if (tipo.includes('Acidente')) return '#ef4444'
-    if (tipo.includes('Denúncia')) return '#8b5cf6'
+    if (tipo.includes('Denúncia') || tipo.includes('Ouvidoria')) return '#8b5cf6'
+    if (tipo.includes('Psicológico') || tipo.includes('Profissional') || tipo.includes('Conflito')) return '#10b981' // Verde para Saúde Mental
     return '#0ea5e9' // Dúvida ou outro
   }
 
@@ -265,6 +275,9 @@ export default function Atendimentos() {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Tipo de Atendimento</label>
             <select required value={formData.tipo} onChange={e => setFormData({...formData, tipo: e.target.value})} style={{ width: '100%', padding: '12px 16px', borderRadius: 12, border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: 14 }}>
               <option>Dúvida</option>
+              <option>Apoio Psicológico</option>
+              <option>Orientação Profissional</option>
+              <option>Mediação de Conflitos</option>
               <option>Solicitação de Férias</option>
               <option>Relato de Acidente</option>
               <option>Denúncia / Ouvidoria</option>

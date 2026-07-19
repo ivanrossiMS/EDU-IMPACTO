@@ -43,6 +43,11 @@ export async function createProtectedClient() {
           }
         },
       },
+      global: {
+        fetch: (url, options) => {
+          return fetch(url, { ...options, cache: 'no-store' })
+        }
+      }
     }
   )
 }

@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 30
 
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()

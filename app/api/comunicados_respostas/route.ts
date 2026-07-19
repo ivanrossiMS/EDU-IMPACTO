@@ -288,18 +288,30 @@ export async function POST(request: Request) {
         }
 
         if (usersToReset.length > 0) {
-          let changed = false;
-          usersToReset.forEach(uid => {
-             if (leituras[uid]) {
-                delete leituras[uid];
-                changed = true;
-             }
-          });
+          // Removemos o 'if (changed)' para FORÇAR um update na tabela comunicados
+          // Isso é essencial para engatilhar o evento do Supabase Realtime e fazer 
+          // a tela do outro usuário atualizar instantaneamente, já que a deleção
+          // real do status de leitura ocorreu na tabela agenda_notification_reads.
+          await supabase.from('comunicados').update({ 
+            leituras: { ...leituras, _last_reply: new Date().toISOString() } 
+          }).eq('id', finalComunicadoId);
           
-          if (changed) {
-             await supabase.from('comunicados').update({ leituras }).eq('id', finalComunicadoId);
+          // Deleta a leitura da nova tabela também
+          for (const uid of usersToReset) {
+            if (!serverIsAdmin) {
+               // Familia respondeu, reseta para o admin (autor)
+               await supabase.from('agenda_notification_reads')
+                 .delete()
+                 .eq('content_id', finalComunicadoId)
+                 .eq('usuario_id', uid);
+            } else {
+               // Admin respondeu, reseta para a familia/aluno
+               await supabase.from('agenda_notification_reads')
+                 .delete()
+                 .eq('content_id', finalComunicadoId)
+                 .eq('aluno_id', uid);
+            }
           }
-          
           // Se a resposta foi feita por uma familia num child report, temos que resetar o lido do PAI tambem pro Admin!
           if (!serverIsAdmin && finalComunicadoId.startsWith('AD-COM-REL-STU-')) {
              const autorId = comData.dados?.autorId;
@@ -319,10 +331,17 @@ export async function POST(request: Request) {
                    .limit(1)
                    .single();
                    
-                 if (parentCom && parentCom.leituras && parentCom.leituras[autorId]) {
+                 if (parentCom && parentCom.leituras) {
                    let parentLeituras = parentCom.leituras;
-                   delete parentLeituras[autorId];
+                   if (parentLeituras[autorId]) delete parentLeituras[autorId];
+                   parentLeituras._last_reply = new Date().toISOString();
                    await supabase.from('comunicados').update({ leituras: parentLeituras }).eq('id', parentCom.id);
+                   
+                   // Deleta do pai na nova tabela também
+                   await supabase.from('agenda_notification_reads')
+                     .delete()
+                     .eq('content_id', parentCom.id)
+                     .eq('usuario_id', autorId);
                  }
                }
              }

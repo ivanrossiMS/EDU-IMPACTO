@@ -11,7 +11,7 @@ import {
   BookOpen, CheckCircle2, Clock, Search, Users, Building2,
   ChevronDown, X, MessageSquare, RotateCcw, Download, Filter,
   BookMarked, StickyNote, Check, Layers, PackageCheck, Plus, User, CalendarDays,
-  Edit2, Trash2
+  Edit2, Trash2, Loader2
 } from 'lucide-react'
 
 // ─── Tipos locais ─────────────────────────────────────────────────
@@ -95,7 +95,7 @@ function inferirSegmento(serie?: string, turma?: string): string {
 }
 
 export default function PedidosLivrosPage() {
-  const { cfgEventos, turmas: rawTurmas = [] } = useData();
+  const { cfgEventos, turmas: rawTurmas = [], cfgCalendarioLetivo = [] } = useData();
   const { currentUser } = useApp();
 
   const [titulos, setTitulos, { loading: isTitulosLoading }] = useSupabaseArray<any>('titulos');
@@ -256,11 +256,12 @@ export default function PedidosLivrosPage() {
     const result: ParcelaUnificada[] = []
     for (const alu of (alunos || [])) {
       const parcs: any[] = (alu as any).parcelas ?? []
-      for (const p of parcs) {
+      for (let i = 0; i < parcs.length; i++) {
+        const p = parcs[i]
         const desc = resolverDesc(p)
         if (!isEventoLivro(desc)) continue
         result.push({
-          id: `alu-${alu.id}-p-${p.num ?? p.codigo ?? String(Math.random()).slice(2)}`,
+          id: `alu-${alu.id}-p-${p.num ?? p.codigo ?? `idx-${i}`}`,
           aluno: alu.nome,
           alunoId: alu.id,
           eventoDescricao: desc,
@@ -322,7 +323,13 @@ export default function PedidosLivrosPage() {
     const map = new Map<string, GrupoAluno>()
     for (const p of todasParcelas) {
       const alu = (alunos || []).find(a => a.nome === p.aluno || a.id === p.alunoId)
-      const key = `${p.aluno}__${p.eventoDescricao}`
+      
+      let groupIdentifier = p.dataLancamento ? p.dataLancamento.substring(0, 10) : 'default'
+      if (p.id.startsWith('man-')) {
+        groupIdentifier = p.id
+      }
+      const key = `${p.aluno}__${p.eventoDescricao}__${groupIdentifier}`
+      
       if (!map.has(key)) {
         const tObj = rawTurmas.find((t: any) => t.id === (p.turmaId || alu?.turma))
         const nomeTurma = p.turma || tObj?.nome || alu?.turma || '—'
@@ -445,7 +452,9 @@ export default function PedidosLivrosPage() {
 
   // ── Filtrar grupos ─────────────────────────────────────────────────
   const turmas       = [...new Set(grupos.map(g => g.turma))].filter(t => t !== '—').sort()
-  const anosDisponiveis = [...new Set(grupos.map(g => g.anoLetivo))].filter(Boolean).sort().reverse()
+  const anosOficiais = (cfgCalendarioLetivo || []).map((c: any) => c.ano ? String(c.ano) : null).filter(Boolean)
+  const anosTurmas   = rawTurmas.map((t: any) => t.ano ? String(t.ano) : t.ano_letivo ? String(t.ano_letivo) : null).filter(Boolean)
+  const anosDisponiveis = [...new Set([...anosOficiais, ...grupos.map(g => g.anoLetivo), ...anosTurmas, new Date().getFullYear().toString()])].filter(Boolean).sort().reverse()
   const eventosLista = [...new Set(grupos.map(g => g.eventoDescricao))].sort()
   const segmentos    = [...new Set(grupos.map(g => g.segmento))].filter(Boolean).sort()
 
@@ -582,6 +591,16 @@ export default function PedidosLivrosPage() {
         </div>
       </div>
 
+      {/* Loading state / Content */}
+      {isLoading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 16 }}>
+          <Loader2 className="animate-spin" size={48} color="#3b82f6" />
+          <div style={{ color: 'hsl(var(--text-secondary))', fontWeight: 600, fontSize: 14 }}>
+            Carregando pedidos de materiais...
+          </div>
+        </div>
+      ) : (
+      <>
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
@@ -708,55 +727,8 @@ export default function PedidosLivrosPage() {
         </div>
       </div>
 
-      {/* Loading state / Empty / Content */}
-      {isLoading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {Array.from({ length: 3 }).map((_, idx) => (
-            <div key={idx} className="card" style={{ padding: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div className="skeleton-shimmer" style={{ width: 32, height: 32, borderRadius: 8 }} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div className="skeleton-shimmer" style={{ height: 16, width: 140, borderRadius: 6 }} />
-                    <div className="skeleton-shimmer" style={{ height: 12, width: 220, borderRadius: 6 }} />
-                  </div>
-                </div>
-                <div className="skeleton-shimmer" style={{ height: 32, width: 120, borderRadius: 8 }} />
-              </div>
-              <div className="table-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th style={{ width: 40 }}><div className="skeleton-shimmer" style={{ height: 16, width: 20, borderRadius: 4 }} /></th>
-                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 120, borderRadius: 4 }} /></th>
-                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 80, borderRadius: 4 }} /></th>
-                      <th style={{ textAlign: 'center' }}><div className="skeleton-shimmer" style={{ height: 16, width: 40, borderRadius: 4 }} /></th>
-                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 100, borderRadius: 4 }} /></th>
-                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 80, borderRadius: 4 }} /></th>
-                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 100, borderRadius: 4 }} /></th>
-                      <th><div className="skeleton-shimmer" style={{ height: 16, width: 80, borderRadius: 4 }} /></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Array.from({ length: 2 }).map((_, rIdx) => (
-                      <tr key={rIdx}>
-                        <td><div className="skeleton-shimmer" style={{ height: 16, width: 16, borderRadius: 4 }} /></td>
-                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 150, borderRadius: 4 }} /></td>
-                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 100, borderRadius: 4 }} /></td>
-                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 30, borderRadius: 4, margin: '0 auto' }} /></td>
-                        <td><div className="skeleton-shimmer" style={{ height: 20, width: 70, borderRadius: 12 }} /></td>
-                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 90, borderRadius: 4 }} /></td>
-                        <td><div className="skeleton-shimmer" style={{ height: 20, width: 80, borderRadius: 12 }} /></td>
-                        <td><div className="skeleton-shimmer" style={{ height: 14, width: 70, borderRadius: 4 }} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : grupos.length === 0 ? (
+      {/* Empty / Content */}
+      {grupos.length === 0 ? (
         <div className="card" style={{ padding: '80px 40px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
           <BookMarked size={52} style={{ margin: '0 auto 20px', opacity: 0.2 }} />
           <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Nenhum pedido de livros/apostilas encontrado</div>
@@ -831,10 +803,9 @@ export default function PedidosLivrosPage() {
 
                 {/* Tabela do grupo */}
                 <div className="table-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
-                  <table>
+                  <table style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                     <thead>
                       <tr>
-                        <th style={{ width: 40 }}></th>
                         <th>Aluno & Turma</th>
                         {agrupamento !== 'evento' && <th>Evento</th>}
                         <th style={{ textAlign: 'center' }}>Qtd</th>
@@ -844,67 +815,125 @@ export default function PedidosLivrosPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {gsChave.map(g => {
-                        const pedido  = getPedido(g.pedidoId)
-                        const feito   = pedido?.feito ?? false
-                        const chegou  = pedido?.chegou ?? false
-                        const entregue = pedido?.entregue ?? false
-                        const cor = getEventoCor(g.eventoDescricao)
-                        const vencMin = g.vencimentos.sort()[0]
-                        const vencMax = g.vencimentos.sort().at(-1)
+                      {Object.values(gsChave.reduce((acc, g) => {
+                        if (!acc[g.alunoNome]) acc[g.alunoNome] = { alunoNome: g.alunoNome, turma: g.turma, segmento: g.segmento, pedidos: [] };
+                        acc[g.alunoNome].pedidos.push(g);
+                        return acc;
+                      }, {} as Record<string, { alunoNome: string, turma: string, segmento: string, pedidos: typeof gsChave }>)).map((sg, sgIndex) => (
+                        <React.Fragment key={sg.alunoNome}>
+                          {sgIndex > 0 && <tr style={{ height: 12 }}><td colSpan={6} style={{ border: 'none', background: 'transparent', padding: 0 }} /></tr>}
+                          {sg.pedidos.map((g, rowIndex) => {
+                            const isFirst = rowIndex === 0;
+                            const isLast = rowIndex === sg.pedidos.length - 1;
+                            const hasMultiple = sg.pedidos.length > 1;
 
-                        return (
-                          <motion.tr 
-                            key={g.pedidoId} 
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            whileHover={{ scale: 1.002, backgroundColor: 'rgba(59, 130, 246, 0.02)' }}
-                            style={{
-                              background: feito ? 'rgba(16,185,129,0.02)' : undefined,
-                              transition: 'all 0.2s',
-                              borderBottom: '1px solid hsl(var(--border-subtle))'
-                            }}
-                          >
-                            {/* Checkbox */}
-                            <td style={{ textAlign: 'center' }}>
-                              <button
-                                onClick={() => marcarFeito([g.pedidoId], !feito)}
+                            const pedido  = getPedido(g.pedidoId)
+                            const feito   = pedido?.feito ?? false
+                            const chegou  = pedido?.chegou ?? false
+                            const entregue = pedido?.entregue ?? false
+                            const cor = getEventoCor(g.eventoDescricao)
+                            
+                            let bg = sgIndex % 2 === 0 ? 'hsl(var(--bg-surface))' : 'rgba(128,128,128,0.015)';
+                            if (feito) bg = 'rgba(16,185,129,0.03)';
+
+                            const totalCols = agrupamento !== 'evento' ? 6 : 5;
+                            const mainBorder = '1px solid hsl(var(--border-default))';
+                            const innerBorder = '1px solid hsl(var(--border-subtle))';
+
+                            const getTdStyle = (colIndex: number) => ({
+                              borderLeft: colIndex === 0 ? mainBorder : 'none',
+                              borderRight: colIndex === totalCols - 1 ? mainBorder : 'none',
+                              borderTop: isFirst ? mainBorder : 'none',
+                              borderBottom: isLast ? mainBorder : innerBorder,
+                              borderTopLeftRadius: isFirst && colIndex === 0 ? 12 : 0,
+                              borderTopRightRadius: isFirst && colIndex === totalCols - 1 ? 12 : 0,
+                              borderBottomLeftRadius: isLast && colIndex === 0 ? 12 : 0,
+                              borderBottomRightRadius: isLast && colIndex === totalCols - 1 ? 12 : 0,
+                            });
+
+                            return (
+                              <motion.tr 
+                                key={g.pedidoId} 
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                whileHover={{ backgroundColor: 'rgba(59, 130, 246, 0.04)' }}
                                 style={{
-                                  width: 22, height: 22, borderRadius: 6,
-                                  border: `2px solid ${feito ? '#10b981' : 'hsl(var(--border-default))'}`,
-                                  background: feito ? '#10b981' : 'transparent',
-                                  cursor: 'pointer',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  transition: 'all 0.15s',
+                                  background: bg,
+                                  transition: 'all 0.2s',
                                 }}
                               >
-                                {feito && <Check size={12} color="#fff" strokeWidth={3} />}
-                              </button>
-                            </td>
-
-                            {/* Aluno */}
-                            <td>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                <div style={{ 
-                                  width: 32, height: 32, borderRadius: 8, 
-                                  background: 'linear-gradient(135deg, #3b82f615, #8b5cf615)',
-                                  color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: 12, fontWeight: 700, border: '1px solid #3b82f630'
-                                }}>
-                                  {g.alunoNome.charAt(0)}
-                                </div>
-                                <div>
-                                  <div style={{ fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-foreground))' }}>{g.alunoNome}</div>
-                                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', gap: 4, alignItems: 'center' }}>
-                                    <Layers size={10} /> {g.turma} • {g.segmento}
+                                {/* Aluno */}
+                                <td style={{ ...getTdStyle(0), padding: 0, verticalAlign: 'top' }}>
+                                  <div style={{ padding: '12px 16px', position: 'relative', height: '100%', minHeight: 56, display: 'flex', alignItems: 'center' }}>
+                                    {isFirst ? (
+                                      <>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                          <div style={{ 
+                                            width: 32, height: 32, borderRadius: 8, 
+                                            background: 'linear-gradient(135deg, #3b82f615, #8b5cf615)',
+                                            color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: 12, fontWeight: 700, border: '1px solid #3b82f630',
+                                            position: 'relative', zIndex: 2
+                                          }}>
+                                            {g.alunoNome.charAt(0)}
+                                          </div>
+                                          <div>
+                                            <div style={{ fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-foreground))' }}>{g.alunoNome}</div>
+                                            <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', gap: 4, alignItems: 'center' }}>
+                                              <Layers size={10} /> {g.turma} • {g.segmento}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        {hasMultiple && (
+                                          <div style={{
+                                            position: 'absolute',
+                                            left: 31,
+                                            top: 44,
+                                            bottom: 0,
+                                            width: 2,
+                                            background: 'hsl(var(--border-subtle))',
+                                            zIndex: 1
+                                          }} />
+                                        )}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div style={{
+                                          position: 'absolute',
+                                          left: 31,
+                                          top: 0,
+                                          bottom: isLast ? '50%' : 0,
+                                          width: 2,
+                                          background: 'hsl(var(--border-subtle))',
+                                          zIndex: 1
+                                        }} />
+                                        <div style={{
+                                          position: 'absolute',
+                                          left: 31,
+                                          top: '50%',
+                                          width: 14,
+                                          height: 2,
+                                          background: 'hsl(var(--border-subtle))',
+                                          zIndex: 1
+                                        }} />
+                                        <div style={{ marginLeft: 36, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                          <div style={{ 
+                                            width: 20, height: 20, borderRadius: 6, 
+                                            background: 'rgba(128,128,128,0.1)',
+                                            color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          }}>
+                                            <PackageCheck size={10} />
+                                          </div>
+                                          <span style={{ fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Item Adicional</span>
+                                        </div>
+                                      </>
+                                    )}
                                   </div>
-                                </div>
-                              </div>
-                            </td>
+                                </td>
 
                             {/* Evento */}
                             {agrupamento !== 'evento' && (
-                              <td>
+                              <td style={getTdStyle(1)}>
                                 <span style={{
                                   display: 'inline-block', fontSize: 11, fontWeight: 600,
                                   background: cor.bg, color: cor.color,
@@ -917,12 +946,12 @@ export default function PedidosLivrosPage() {
                             )}
 
                             {/* Qtd */}
-                            <td style={{ textAlign: 'center' }}>
+                            <td style={{ ...getTdStyle(agrupamento !== 'evento' ? 2 : 1), textAlign: 'center' }}>
                               <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>{g.parcelas.length}</span>
                             </td>
 
                             {/* Rastreamento Moderno */}
-                            <td style={{ padding: '12px 16px' }}>
+                            <td style={{ ...getTdStyle(agrupamento !== 'evento' ? 3 : 2), padding: '12px 16px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 0, justifyContent: 'space-between', position: 'relative' }}>
                                 
                                 {/* Linha de fundo conectora */}
@@ -1014,7 +1043,7 @@ export default function PedidosLivrosPage() {
                             </td>
 
                             {/* Observações */}
-                            <td style={{ maxWidth: 150 }}>
+                            <td style={{ ...getTdStyle(agrupamento !== 'evento' ? 4 : 3), maxWidth: 150 }}>
                               {pedido?.obs ? (
                                 <div 
                                   onClick={() => abrirObs(g.pedidoId)}
@@ -1029,7 +1058,7 @@ export default function PedidosLivrosPage() {
                             </td>
 
                             {/* Ações */}
-                            <td>
+                            <td style={getTdStyle(agrupamento !== 'evento' ? 5 : 4)}>
                               <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
                                 {!feito && (
                                   <button
@@ -1101,11 +1130,13 @@ export default function PedidosLivrosPage() {
                             </td>
                           </motion.tr>
                         )
-                      })}
+                          })}
+                        </React.Fragment>
+                      ))}
                     </tbody>
                     <tfoot>
                       <tr style={{ background: 'hsl(var(--bg-elevated))' }}>
-                        <td colSpan={agrupamento === 'escola' ? 5 : agrupamento === 'turma' ? 4 : 4}
+                        <td colSpan={agrupamento === 'escola' ? 4 : 3}
                           style={{ padding: '10px 16px', fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>
                           Subtotal ({gsChave.length} aluno(s))
                         </td>
@@ -1118,6 +1149,8 @@ export default function PedidosLivrosPage() {
             )
           })}
         </div>
+      )}
+      </>
       )}
 
       <AnimatePresence>
