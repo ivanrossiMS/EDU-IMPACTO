@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, useRef } from 'react'
-import { Search, UserPlus, Filter, Clock, Calendar, CheckCircle2, AlertTriangle, Printer, BadgeIcon, Download, Info } from 'lucide-react'
+import { Search, UserPlus, Filter, Clock, Calendar, CheckCircle2, AlertTriangle, Printer, BadgeIcon, Download, Info, HeartPulse } from 'lucide-react'
 import { SidePanel } from '@/components/ui/SidePanel'
 
 type Funcionario = { id: string; nome: string; cpf: string; email: string; telefone: string; status: string; cargo: string; data_nascimento?: string; foto?: string }
@@ -15,6 +15,8 @@ export default function GestaoPessoasColaboradores() {
   const [selectedFunc, setSelectedFunc] = useState<Funcionario | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [isCrachaView, setIsCrachaView] = useState(false)
+  const [checkins, setCheckins] = useState([])
+  const [loadingCheckins, setLoadingCheckins] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -60,6 +62,14 @@ export default function GestaoPessoasColaboradores() {
     setSelectedFunc(f)
     setIsCrachaView(false)
     setIsPanelOpen(true)
+    setLoadingCheckins(true)
+    fetch(`/api/rh/funcionarios/${f.id}/checkins`)
+      .then(r => r.json())
+      .then(data => {
+        setCheckins(Array.isArray(data) ? data : [])
+        setLoadingCheckins(false)
+      })
+      .catch(() => setLoadingCheckins(false))
   }
 
   const handleOpenCracha = (f: Funcionario) => {
@@ -298,6 +308,47 @@ export default function GestaoPessoasColaboradores() {
                           De {new Date(aus.data_inicio).toLocaleDateString('pt-BR')} até {new Date(aus.data_fim).toLocaleDateString('pt-BR')}
                         </div>
                         {aus.motivo && <div style={{ fontSize: 13, color: '#475569', marginTop: 8, background: '#f8fafc', padding: 8, borderRadius: 8 }}>{aus.motivo}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Histórico de Bem-Estar */}
+              <div style={{ marginTop: 24 }}>
+                <h4 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <HeartPulse size={18} color="#ef4444" /> Histórico de Bem-Estar
+                </h4>
+                {loadingCheckins ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 14 }}>Carregando...</div>
+                ) : checkins.length === 0 ? (
+                  <div style={{ padding: 24, background: '#f8fafc', borderRadius: 16, textAlign: 'center', color: '#64748b', fontSize: 14 }}>
+                    Nenhum check-in registrado.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {checkins.map(ck => (
+                      <div key={ck.id} style={{ padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <strong style={{ fontSize: 14, color: '#0f172a' }}>{ck.emocao_geral}</strong>
+                          <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 100, 
+                            background: ck.risco_burnout === 'Alto risco' ? '#fef2f2' : ck.risco_burnout === 'Atenção' ? '#fffbeb' : '#f0fdf4',
+                            color: ck.risco_burnout === 'Alto risco' ? '#ef4444' : ck.risco_burnout === 'Atenção' ? '#d97706' : '#10b981' 
+                          }}>
+                            {ck.risco_burnout}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+                          Respondido em: {new Date(ck.data_checkin).toLocaleDateString('pt-BR')} às {new Date(ck.data_checkin).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
+                        </div>
+                        {ck.motivos && ck.motivos.length > 0 && (
+                           <div style={{ fontSize: 13, color: '#475569', marginTop: 8 }}>Motivos: {ck.motivos.join(', ')}</div>
+                        )}
+                        {ck.quer_conversar && (
+                           <div style={{ marginTop: 8, padding: 8, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 13, color: '#ef4444', fontWeight: 600 }}>
+                             🚨 Solicitou conversa ({ck.quer_conversar})
+                           </div>
+                        )}
                       </div>
                     ))}
                   </div>

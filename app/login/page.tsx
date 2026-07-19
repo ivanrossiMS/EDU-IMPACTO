@@ -35,11 +35,15 @@ function verificarSenha(uid: string, senha: string): boolean { return getSenhas(
 function temSenha(uid: string): boolean { return !!getSenhas()[uid] }
 
 import { BackgroundEffects } from '@/components/ui/LoginBackground'
+import { BemEstarCheckinModal } from '@/components/login/BemEstarCheckinModal'
 
 const ModernLoadingSpinner = () => (
   <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
     <div style={{ width: 24, height: 24, border: "3px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-    <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+    
+      {/* Modal de Bem-Estar */}
+      <BemEstarCheckinModal isOpen={showCheckinModal} onClose={() => setShowCheckinModal(false)} />
+      <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
   </div>
 );
 
@@ -49,8 +53,31 @@ export default function LoginPage() {
   const [showBlockModal, setShowBlockModal] = useState(false)
 
   // ── step manager
-  const [step, setStep] = useState<Step>('login')
+    const [step, setStep] = useState<Step>('login')
   const [pendingAuth, setPendingAuth] = useState<any>(null)
+  
+  const [showCheckinModal, setShowCheckinModal] = useState(false)
+
+  useEffect(() => {
+    console.log('[Checkin Debug] useEffect triggered. step=', step, 'pendingAuth=', pendingAuth);
+    if (step === 'choose_system' && pendingAuth && pendingAuth.perfil !== 'Família' && pendingAuth.cargo !== 'Aluno' && pendingAuth.cargo !== 'Responsável') {
+      console.log('[Checkin Debug] Condition met! Fetching status...');
+      fetch('/api/gestao-pessoas/checkin/status')
+        .then(r => r.json())
+        .then(data => {
+          console.log('[Checkin Debug] Status response:', data);
+          if (data.needsCheckin) {
+            console.log('[Checkin Debug] Needs checkin! Showing modal.');
+            setShowCheckinModal(true)
+          } else {
+            console.log('[Checkin Debug] Does not need checkin.');
+          }
+        })
+        .catch(err => {
+          console.error('[Checkin Debug] Fetch error:', err);
+        })
+    }
+  }, [step, pendingAuth])
   const [hasDualRole, setHasDualRole] = useState(false)
   const [profileData, setProfileData] = useState<any>(null)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
@@ -523,6 +550,9 @@ export default function LoginPage() {
           <div style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 8px #10b981' }} />
           <span style={{ fontSize:11, color:'#34d399', fontWeight:800, letterSpacing:'0.08em' }}>SISTEMA SEGURO</span>
         </div>
+
+        
+        
       </div>
 
       <div className="hide-on-mobile" style={{ marginTop:28, textAlign:'center' }}>
