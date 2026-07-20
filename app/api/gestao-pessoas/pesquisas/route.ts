@@ -23,10 +23,7 @@ export async function GET(req: Request) {
     const formatted = pesquisas.map((p: any) => {
       const respostas = p.gp_pesquisa_respostas || []
       return {
-        id: p.id,
-        titulo: p.titulo,
-        data_fim: p.data_fim,
-        status: p.status,
+        ...p,
         respostasCount: respostas.length,
         respostas: respostas
       }

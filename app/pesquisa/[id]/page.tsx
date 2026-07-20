@@ -311,45 +311,68 @@ export default function ResponderPesquisaPage({ params }: { params: Promise<{ id
             {(!hydrated || !currentUser) && (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
-                style={{ display: 'flex', flexDirection: 'column', gap: 20, background: '#f8fafc', padding: 24, borderRadius: 20, border: '1px solid #e2e8f0' }}
+                style={{ 
+                  display: 'flex', flexDirection: 'column', gap: 20, 
+                  background: 'linear-gradient(145deg, #0f172a 0%, #1e293b 100%)', 
+                  padding: 32, borderRadius: 24, 
+                  boxShadow: '0 12px 32px rgba(15, 23, 42, 0.2)',
+                  position: 'relative', overflow: 'hidden'
+                }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#1e293b', fontWeight: 800, fontSize: 16 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
-                    <Lock size={18} />
+                <div style={{ position: 'absolute', top: -100, right: -100, width: 250, height: 250, background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', bottom: -50, left: -50, width: 150, height: 150, background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)', borderRadius: '50%', pointerEvents: 'none' }} />
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#f8fafc', fontWeight: 800, fontSize: 18, zIndex: 1 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#818cf8', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                    <Lock size={20} />
                   </div>
-                  Assinatura Digital (Credenciais)
+                  Assinatura Digital de Segurança
                 </div>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                
+                <p style={{ color: '#94a3b8', fontSize: 14, marginTop: -10, zIndex: 1 }}>
+                  Por exigência de conformidade, suas credenciais garantem a validade desta avaliação. Em pesquisas anônimas, seu usuário não é atrelado às respostas no relatório.
+                </p>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 8, zIndex: 1 }}>
                   <input 
-                    className="modern-input"
                     required
                     type="email" 
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    placeholder="Seu E-mail de acesso ao sistema..."
-                    style={{ width: '100%', padding: '16px 20px', borderRadius: 16, border: '1px solid #cbd5e1', outline: 'none', fontSize: 15, transition: 'all 0.2s' }}
+                    placeholder="Seu E-mail cadastrado"
+                    style={{ width: '100%', padding: '16px 20px', borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', outline: 'none', fontSize: 15, transition: 'all 0.2s' }}
+                    onFocus={e => e.currentTarget.style.borderColor = '#818cf8'}
+                    onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
                   />
                 </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 8, zIndex: 1 }}>
                   <input 
-                    className="modern-input"
                     required
                     type="password" 
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    placeholder="Sua senha de acesso..."
-                    style={{ width: '100%', padding: '16px 20px', borderRadius: 16, border: '1px solid #cbd5e1', outline: 'none', fontSize: 15, transition: 'all 0.2s' }}
+                    placeholder="Sua Senha de Acesso"
+                    style={{ width: '100%', padding: '16px 20px', borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: '#f8fafc', outline: 'none', fontSize: 15, transition: 'all 0.2s' }}
+                    onFocus={e => e.currentTarget.style.borderColor = '#818cf8'}
+                    onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
                   />
-                  <span style={{ fontSize: 12, color: '#64748b', marginLeft: 4 }}>Sua assinatura garante a autenticidade e validade destas respostas.</span>
                 </label>
               </motion.div>
             )}
             
             {hydrated && currentUser && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#10b981', fontWeight: 600, fontSize: 14 }}>
-                <CheckCircle2 size={18} />
-                Você está logado como {currentUser.nome}. Sua assinatura será automática.
-              </div>
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 16, background: '#ecfdf5', border: '1px solid #10b981', padding: '20px 24px', borderRadius: 20 }}
+              >
+                <div style={{ padding: 10, background: '#10b981', color: '#fff', borderRadius: 12 }}>
+                  <CheckCircle2 size={24} />
+                </div>
+                <div>
+                  <div style={{ color: '#065f46', fontWeight: 800, fontSize: 16 }}>Assinatura Verificada</div>
+                  <div style={{ color: '#047857', fontSize: 14 }}>Autenticado como <strong>{currentUser.nome}</strong>. Sua assinatura será validada automaticamente.</div>
+                </div>
+              </motion.div>
             )}
 
             <motion.button 

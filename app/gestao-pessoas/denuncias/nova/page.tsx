@@ -5,10 +5,12 @@ import { motion } from 'framer-motion'
 import { ShieldAlert, AlertTriangle, Send, CheckCircle, Info } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
+import { useRouter } from 'next/navigation'
 
 export default function NovaDenunciaPage() {
   const isMobile = useIsMobile()
   const { currentUser } = useApp()
+  const router = useRouter()
   const [step, setStep] = useState(1)
   const [protocolo, setProtocolo] = useState('')
 
@@ -34,7 +36,7 @@ export default function NovaDenunciaPage() {
         body: JSON.stringify({
           ...formData,
           protocolo: newProtocol,
-          relator_id: formData.anonimo ? null : currentUser?.id,
+          relator_id: currentUser?.id,
           status: 'nova'
         })
       })
@@ -64,7 +66,7 @@ export default function NovaDenunciaPage() {
           <div style={{ background: '#f1f5f9', padding: '16px', borderRadius: 12, fontSize: 28, fontWeight: 800, letterSpacing: '0.2em', color: '#0f172a', marginBottom: 32 }}>
             {protocolo}
           </div>
-          <button onClick={() => setStep(1)} style={{ padding: '12px 24px', background: '#0f172a', color: '#fff', borderRadius: 12, border: 'none', fontWeight: 600, width: '100%', cursor: 'pointer' }}>
+          <button onClick={() => router.push('/gestao-pessoas/denuncias')} style={{ padding: '12px 24px', background: '#0f172a', color: '#fff', borderRadius: 12, border: 'none', fontWeight: 600, width: '100%', cursor: 'pointer' }}>
             Voltar
           </button>
         </motion.div>

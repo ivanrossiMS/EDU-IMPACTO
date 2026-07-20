@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, Library, ChevronLeft, ChevronRight, PenTool, LogOut, User, Activity, Loader2, Upload, FolderArchive, Sparkles
+  LayoutDashboard, Users, BookOpen, Layers, Settings, FileText, Library, ChevronLeft, ChevronRight, PenTool, LogOut, User, Activity, Loader2, Upload, FolderArchive, Sparkles, Grid
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
@@ -298,40 +298,58 @@ export function SidebarSimulados() {
         <div style={{
           marginTop: 'auto',
           marginBottom: 16,
-          padding: collapsed ? '12px 0' : '16px',
-          background: 'rgba(255,255,255,0.02)',
+          padding: collapsed ? '12px 0' : '20px 8px',
+          background: collapsed ? 'transparent' : 'rgba(255,255,255,0.02)',
           borderRadius: 20,
-          border: '1px solid rgba(255,255,255,0.05)',
+          borderTop: '1px solid rgba(255,255,255,0.05)',
+          borderRight: collapsed ? 'none' : '1px solid rgba(255,255,255,0.05)',
+          borderBottom: collapsed ? 'none' : '1px solid rgba(255,255,255,0.05)',
+          borderLeft: collapsed ? 'none' : '1px solid rgba(255,255,255,0.05)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: collapsed ? 'center' : 'stretch',
-          gap: 14,
+          gap: 16,
           transition: 'all 0.3s'
         }}>
           {/* User Info (Icon + Name) */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 14 }}>
-            <div style={{
-              width: 40,
-              height: 40,
-              borderRadius: 14,
-              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              flexShrink: 0,
-              boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
-            }}>
-              <User size={20} strokeWidth={2.5} />
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start', gap: 16, padding: collapsed ? '0' : '0 4px' }}>
+            {currentUser?.foto ? (
+              <img 
+                src={currentUser.foto} 
+                alt={currentUser.nome || 'Avatar'}
+                style={{
+                  width: collapsed ? 40 : 52, 
+                  height: collapsed ? 40 : 52, 
+                  borderRadius: 16, 
+                  objectFit: 'cover',
+                  boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  flexShrink: 0
+                }}
+              />
+            ) : (
+              <div style={{
+                width: collapsed ? 40 : 52, 
+                height: collapsed ? 40 : 52, 
+                borderRadius: 16,
+                background: 'linear-gradient(135deg, #38bdf8, #2563eb)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
+                color: 'white',
+                flexShrink: 0
+              }}>
+                <User size={collapsed ? 20 : 24} strokeWidth={2.5} />
+              </div>
+            )}
+            
             <AnimatePresence>
               {!collapsed && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ overflow: 'hidden' }}>
-                  <div style={{ color: 'white', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', letterSpacing: '-0.01em' }}>
+                  <div style={{ color: '#f8fafc', fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', letterSpacing: '-0.01em', marginBottom: 2 }}>
                     {currentUser?.nome || 'Usuário'}
                   </div>
-                  <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontWeight: 500, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    {currentUserPerfil || 'Admin'}
+                  <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    {currentUser?.cargo || currentUser?.perfil || 'COLABORADOR'}
                   </div>
                 </motion.div>
               )}
@@ -341,55 +359,53 @@ export function SidebarSimulados() {
           {/* Action Buttons inside Card */}
           <AnimatePresence>
             {!collapsed ? (
-              <motion.div key="expanded" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <motion.div key="expanded" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <button
                   onClick={() => window.location.href = '/login?step=choose_system'}
                   style={{
-                    width: '100%', height: 34, borderRadius: 8,
-                    background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))',
-                    border: '1px solid rgba(0, 210, 255, 0.3)',
-                    color: '#00D2FF', fontSize: 11, fontWeight: 700, 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, 
-                    cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: '0 4px 15px rgba(0, 210, 255, 0.1)',
-                    position: 'relative', overflow: 'hidden', textTransform: 'uppercase', letterSpacing: '0.05em'
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 12, 
+                    border: '1px solid rgba(6, 182, 212, 0.3)', cursor: 'pointer',
+                    background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))', 
+                    color: '#06b6d4', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
                   }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))';
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 210, 255, 0.2)';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  onMouseEnter={e => { 
+                    e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.5))'; 
+                    e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.6)'; 
+                    e.currentTarget.style.boxShadow = '0 0 15px rgba(6, 182, 212, 0.15)';
                   }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))';
-                    e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 210, 255, 0.1)';
-                    e.currentTarget.style.transform = 'translateY(0)';
+                  onMouseLeave={e => { 
+                    e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))'; 
+                    e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.3)'; 
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
                   }}
                 >
-                  <LayoutDashboard size={14} style={{ zIndex: 1 }} />
-                  <span style={{ zIndex: 1 }}>Trocar de Módulo</span>
+                  <Grid size={18} strokeWidth={2.5} />
+                  <span style={{ fontSize: 13 }}>TROCAR DE MÓDULO</span>
                 </button>
 
                 <button
                   onClick={handleLogout}
                   style={{
-                    width: '100%', height: 34, borderRadius: 8,
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                    color: '#ef4444', fontSize: 11, fontWeight: 700, 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, 
-                    cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                    textTransform: 'uppercase', letterSpacing: '0.05em'
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 12, 
+                    border: '1px solid rgba(239, 68, 68, 0.3)', cursor: 'pointer',
+                    background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))', 
+                    color: '#ef4444', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
                   }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                    e.currentTarget.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                  onMouseEnter={e => { 
+                    e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.5))'; 
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; 
+                    e.currentTarget.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.15)';
                   }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                    e.currentTarget.style.border = '1px solid rgba(239, 68, 68, 0.2)';
+                  onMouseLeave={e => { 
+                    e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))'; 
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; 
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
                   }}
                 >
-                  <LogOut size={14} /> Sair
+                  <LogOut size={18} strokeWidth={2.5} />
+                  <span style={{ fontSize: 13 }}>SAIR</span>
                 </button>
               </motion.div>
             ) : (
@@ -397,11 +413,11 @@ export function SidebarSimulados() {
                 <button
                   title="Trocar de Módulo"
                   onClick={() => window.location.href = '/login?step=choose_system'}
-                  style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))', border: '1px solid rgba(0, 210, 255, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00D2FF', cursor: 'pointer', transition: 'all 0.3s', flexShrink: 0 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.25), rgba(121, 40, 202, 0.25))' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(121, 40, 202, 0.15))' }}
+                  style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#06b6d4', cursor: 'pointer', transition: 'all 0.3s', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(6, 182, 212, 0.2)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(6, 182, 212, 0.1)' }}
                 >
-                  <LayoutDashboard size={18} />
+                  <Grid size={18} />
                 </button>
                 <button
                   title="Sair"

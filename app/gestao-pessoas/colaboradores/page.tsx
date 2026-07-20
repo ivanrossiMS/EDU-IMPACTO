@@ -15,8 +15,15 @@ export default function GestaoPessoasColaboradores() {
   const [selectedFunc, setSelectedFunc] = useState<Funcionario | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [isCrachaView, setIsCrachaView] = useState(false)
-  const [checkins, setCheckins] = useState([])
+  const [checkins, setCheckins] = useState<any[]>([])
   const [loadingCheckins, setLoadingCheckins] = useState(false)
+  const [expandedCheckins, setExpandedCheckins] = useState<string[]>([])
+
+  const [isReportOpen, setIsReportOpen] = useState(false)
+  const [reportCheckins, setReportCheckins] = useState<any[]>([])
+  const [loadingReport, setLoadingReport] = useState(false)
+  const [reportPeriod, setReportPeriod] = useState('30d')
+  const [reportRisk, setReportRisk] = useState('all')
 
   useEffect(() => {
     Promise.all([
@@ -96,6 +103,34 @@ export default function GestaoPessoasColaboradores() {
             Base de dados unificada de funcionários, emissão de crachás e histórico de ausências.
           </p>
         </div>
+        <button 
+          onClick={async () => {
+            setIsReportOpen(true)
+            setLoadingReport(true)
+            try {
+              const res = await fetch('/api/rh/checkins/relatorio')
+              const data = await res.json()
+              if (data.success) {
+                setReportCheckins(data.checkins || [])
+              }
+            } catch (err) {
+              console.error(err)
+            } finally {
+              setLoadingReport(false)
+            }
+          }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '12px 24px', background: '#fff', color: '#10b981',
+            border: '2px solid #10b981', borderRadius: 12, fontWeight: 700, cursor: 'pointer',
+            transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.1)'
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#10b981'; e.currentTarget.style.color = '#fff' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#10b981' }}
+        >
+          <HeartPulse size={18} />
+          Relatório de Bem-Estar
+        </button>
       </div>
 
       {/* Search Bar */}
@@ -298,18 +333,28 @@ export default function GestaoPessoasColaboradores() {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {getAusenciasFuncionario(selectedFunc.id).map(aus => (
+                    {getAusenciasFuncionario(selectedFunc.id).map(aus => {
+                      const formatSafeDate = (dString: string) => {
+                        if (!dString) return 'Data não informada'
+                        if (dString.includes('/')) return dString // already formatted or brazilian format
+                        const d = new Date(dString)
+                        if (isNaN(d.getTime())) return dString // fallback to raw string
+                        // For ISO strings like 'YYYY-MM-DD', UTC prevents day shifting
+                        return dString.length === 10 ? d.toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : d.toLocaleDateString('pt-BR')
+                      }
+                      
+                      return (
                       <div key={aus.id} style={{ padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                           <strong style={{ fontSize: 14, color: '#0f172a' }}>{aus.tipo}</strong>
                           <span style={{ fontSize: 12, fontWeight: 600, color: aus.status === 'aprovado' ? '#059669' : '#d97706', textTransform: 'uppercase' }}>{aus.status}</span>
                         </div>
                         <div style={{ fontSize: 13, color: '#64748b' }}>
-                          De {new Date(aus.data_inicio).toLocaleDateString('pt-BR')} até {new Date(aus.data_fim).toLocaleDateString('pt-BR')}
+                          De {formatSafeDate(aus.data_inicio)} até {formatSafeDate(aus.data_fim)}
                         </div>
                         {aus.motivo && <div style={{ fontSize: 13, color: '#475569', marginTop: 8, background: '#f8fafc', padding: 8, borderRadius: 8 }}>{aus.motivo}</div>}
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
@@ -327,16 +372,33 @@ export default function GestaoPessoasColaboradores() {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {checkins.map(ck => (
-                      <div key={ck.id} style={{ padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    {checkins.map(ck => {
+                      const isExpanded = expandedCheckins.includes(ck.id)
+                      
+                      const getLabel = (qIndex: number, score: number) => {
+                        const labels = ['Nada', 'Pouco', 'Médio', 'Muito', 'Totalmente']
+                        let originalVal = score
+                        if (qIndex === 3 || qIndex === 4) { // Ansiedade (3) e Sobrecarga (4)
+                          originalVal = 6 - score
+                        }
+                        return labels[originalVal - 1] || 'Não respondeu'
+                      }
+
+                      return (
+                      <div key={ck.id} 
+                           onClick={() => setExpandedCheckins(prev => prev.includes(ck.id) ? prev.filter(id => id !== ck.id) : [...prev, ck.id])}
+                           style={{ padding: 16, border: '1px solid #e2e8f0', borderRadius: 12, background: '#fff', cursor: 'pointer', transition: 'all 0.2s' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
                           <strong style={{ fontSize: 14, color: '#0f172a' }}>{ck.emocao_geral}</strong>
-                          <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 100, 
-                            background: ck.risco_burnout === 'Alto risco' ? '#fef2f2' : ck.risco_burnout === 'Atenção' ? '#fffbeb' : '#f0fdf4',
-                            color: ck.risco_burnout === 'Alto risco' ? '#ef4444' : ck.risco_burnout === 'Atenção' ? '#d97706' : '#10b981' 
-                          }}>
-                            {ck.risco_burnout}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 100, 
+                              background: ck.risco_burnout === 'Alto risco' ? '#fef2f2' : ck.risco_burnout === 'Atenção' ? '#fffbeb' : '#f0fdf4',
+                              color: ck.risco_burnout === 'Alto risco' ? '#ef4444' : ck.risco_burnout === 'Atenção' ? '#d97706' : '#10b981' 
+                            }}>
+                              {ck.risco_burnout}
+                            </span>
+                            <span style={{ fontSize: 16, color: '#94a3b8', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: '0.3s' }}>▼</span>
+                          </div>
                         </div>
                         <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
                           Respondido em: {new Date(ck.data_checkin).toLocaleDateString('pt-BR')} às {new Date(ck.data_checkin).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
@@ -349,8 +411,34 @@ export default function GestaoPessoasColaboradores() {
                              🚨 Solicitou conversa ({ck.quer_conversar})
                            </div>
                         )}
+                        
+                        {/* Detalhes das Perguntas (Expandível) */}
+                        {isExpanded && (
+                          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, borderBottom: '1px dashed #e2e8f0', paddingBottom: 6 }}>
+                              <span style={{ color: '#475569' }}>1. Estou dormindo bem?</span>
+                              <strong style={{ color: '#0f172a' }}>{getLabel(1, ck.burnout_q1)}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, borderBottom: '1px dashed #e2e8f0', paddingBottom: 6 }}>
+                              <span style={{ color: '#475569' }}>2. Tenho energia para trabalhar?</span>
+                              <strong style={{ color: '#0f172a' }}>{getLabel(2, ck.burnout_q2)}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, borderBottom: '1px dashed #e2e8f0', paddingBottom: 6 }}>
+                              <span style={{ color: '#475569' }}>3. Tenho sentido ansiedade?</span>
+                              <strong style={{ color: '#0f172a' }}>{getLabel(3, ck.burnout_q3)}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, borderBottom: '1px dashed #e2e8f0', paddingBottom: 6 }}>
+                              <span style={{ color: '#475569' }}>4. Estou sobrecarregado?</span>
+                              <strong style={{ color: '#0f172a' }}>{getLabel(4, ck.burnout_q4)}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, paddingBottom: 6 }}>
+                              <span style={{ color: '#475569' }}>5. Consigo descansar?</span>
+                              <strong style={{ color: '#0f172a' }}>{getLabel(5, ck.burnout_q5)}</strong>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
@@ -358,6 +446,129 @@ export default function GestaoPessoasColaboradores() {
             </div>
           )
         )}
+      </SidePanel>
+
+      {/* Relatório SidePanel */}
+      <SidePanel 
+        isOpen={isReportOpen} 
+        onClose={() => setIsReportOpen(false)} 
+        title="Relatório Geral de Bem-Estar" 
+        width={600}
+      >
+        <div style={{ padding: '24px 32px' }}>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8, display: 'block' }}>Período</label>
+              <select 
+                value={reportPeriod} 
+                onChange={e => setReportPeriod(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e2e8f0', outline: 'none', background: '#fff' }}
+              >
+                <option value="7d">Últimos 7 dias</option>
+                <option value="30d">Últimos 30 dias</option>
+                <option value="all">Todo o histórico</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8, display: 'block' }}>Risco</label>
+              <select 
+                value={reportRisk} 
+                onChange={e => setReportRisk(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1px solid #e2e8f0', outline: 'none', background: '#fff' }}
+              >
+                <option value="all">Todos</option>
+                <option value="Alto risco">Alto risco</option>
+                <option value="Atenção">Atenção</option>
+                <option value="Baixo risco">Baixo risco</option>
+              </select>
+            </div>
+          </div>
+
+          {loadingReport ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Carregando dados...</div>
+          ) : (
+            <>
+              {(() => {
+                const now = new Date()
+                const filtered = reportCheckins.filter(ck => {
+                  if (reportRisk !== 'all' && ck.risco_burnout !== reportRisk) return false
+                  if (reportPeriod !== 'all') {
+                    const ckDate = new Date(ck.data_checkin)
+                    const diffDays = (now.getTime() - ckDate.getTime()) / (1000 * 3600 * 24)
+                    if (reportPeriod === '7d' && diffDays > 7) return false
+                    if (reportPeriod === '30d' && diffDays > 30) return false
+                  }
+                  return true
+                })
+
+                const altoRiscoCount = filtered.filter(c => c.risco_burnout === 'Alto risco').length
+                const atencaoCount = filtered.filter(c => c.risco_burnout === 'Atenção').length
+                const coversaCount = filtered.filter(c => !!c.quer_conversar).length
+
+                return (
+                  <div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 32 }}>
+                      <div style={{ padding: 16, background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+                        <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Total</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#0f172a' }}>{filtered.length}</div>
+                      </div>
+                      <div style={{ padding: 16, background: '#fef2f2', borderRadius: 16, border: '1px solid #fecaca' }}>
+                        <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 600 }}>Alto Risco</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#b91c1c' }}>{altoRiscoCount}</div>
+                      </div>
+                      <div style={{ padding: 16, background: '#fffbeb', borderRadius: 16, border: '1px solid #fde68a' }}>
+                        <div style={{ fontSize: 12, color: '#d97706', fontWeight: 600 }}>Atenção / Papo</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: '#b45309' }}>{atencaoCount + coversaCount}</div>
+                      </div>
+                    </div>
+
+                    {filtered.length === 0 ? (
+                      <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40, border: '1px dashed #cbd5e1', borderRadius: 16 }}>Nenhum check-in neste filtro.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                        {filtered.map(ck => (
+                          <div key={ck.id} style={{ padding: 16, borderRadius: 12, border: '1px solid #e2e8f0', background: '#fff' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <strong style={{ fontSize: 15, color: '#0f172a' }}>{ck.colaborador_nome}</strong>
+                              <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 100, 
+                                background: ck.risco_burnout === 'Alto risco' ? '#fef2f2' : ck.risco_burnout === 'Atenção' ? '#fffbeb' : '#f0fdf4',
+                                color: ck.risco_burnout === 'Alto risco' ? '#ef4444' : ck.risco_burnout === 'Atenção' ? '#d97706' : '#10b981' 
+                              }}>
+                                {ck.risco_burnout}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{ck.colaborador_cargo}</div>
+                            
+                            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 8 }}>
+                              {new Date(ck.data_checkin).toLocaleDateString('pt-BR')} às {new Date(ck.data_checkin).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
+                            </div>
+                            
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              <div style={{ fontSize: 12, background: '#f1f5f9', color: '#475569', padding: '4px 10px', borderRadius: 8 }}>
+                                Emoção: {ck.emocao_geral}
+                              </div>
+                              {ck.motivos?.length > 0 && (
+                                <div style={{ fontSize: 12, background: '#f1f5f9', color: '#475569', padding: '4px 10px', borderRadius: 8 }}>
+                                  Motivos: {ck.motivos.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                            
+                            {ck.quer_conversar && (
+                              <div style={{ marginTop: 12, fontSize: 13, color: '#ef4444', fontWeight: 600, background: '#fef2f2', padding: 10, borderRadius: 8, border: '1px solid #fecaca' }}>
+                                🚨 Solicitou conversa ({ck.quer_conversar})
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </>
+          )}
+        </div>
       </SidePanel>
 
       {/* Global Print Styles */}

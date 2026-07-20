@@ -674,7 +674,7 @@ export default function PedidosLivrosPage() {
           {/* Ano Letivo */}
           <select className="form-input" style={{ width: 120 }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
             <option value="">Todos os anos</option>
-            {anosDisponiveis.map(a => <option key={a} value={a}>{a}</option>)}
+            {anosDisponiveis.map(a => <option key={String(a)} value={a || ""}>{a}</option>)}
           </select>
 
           {/* Segmento */}

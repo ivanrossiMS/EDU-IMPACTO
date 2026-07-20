@@ -64,7 +64,20 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
     }
 
     const hasAccess = !userPerfilObj.bloqueadoGestaoPessoas
-    setAccessState(hasAccess ? 'allowed' : 'denied')
+    
+    const isAdmin = currentUser.cargo === 'Administrador Master' || currentUser.perfil === 'Administrador'
+    const restrictedPaths = ['/gestao-pessoas/colaboradores', '/gestao-pessoas/sst']
+    const isTryingToAccessRestricted = restrictedPaths.some(p => pathname.startsWith(p))
+
+    if (hasAccess) {
+      if (!isAdmin && isTryingToAccessRestricted) {
+        setAccessState('denied')
+      } else {
+        setAccessState('allowed')
+      }
+    } else {
+      setAccessState('denied')
+    }
 
   }, [hydrated, currentUser, pathname, perfisLoading, perfis])
 

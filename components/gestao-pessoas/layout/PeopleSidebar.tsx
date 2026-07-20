@@ -8,19 +8,21 @@ import {
   Users, Activity, ShieldAlert,
   ClipboardCheck, GraduationCap,
   MessageSquareWarning, Settings,
-  LogOut, Home, Stethoscope, Heart, PieChart, Grid
+  LogOut, Home, Stethoscope, Heart, PieChart, Grid, HelpCircle, Scale, User
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 const MENUS = [
   { href: '/gestao-pessoas', icon: Home, label: 'Visão Geral' },
-  { href: '/gestao-pessoas/saude-mental', icon: Heart, label: 'Bem-Estar' },
-  { href: '/gestao-pessoas/denuncias', icon: ShieldAlert, label: 'Canal de Denúncias' },
+  { href: '/gestao-pessoas/colaboradores', icon: Users, label: 'Colaboradores', adminOnly: true },
   { href: '/gestao-pessoas/pesquisa-clima', icon: PieChart, label: 'Pesquisa de Clima' },
-  { href: '/gestao-pessoas/colaboradores', icon: Users, label: 'Colaboradores' },
-  { href: '/gestao-pessoas/sst', icon: Stethoscope, label: 'SST e NR-01' },
   { href: '/gestao-pessoas/treinamentos', icon: GraduationCap, label: 'Treinamentos' },
+  { href: '/gestao-pessoas/sst', icon: Stethoscope, label: 'SST e NR-01', adminOnly: true },
+  { href: '/gestao-pessoas/saude-mental', icon: Heart, label: 'Bem-Estar' },
   { href: '/gestao-pessoas/atendimentos', icon: MessageSquareWarning, label: 'Atendimentos' },
+  { href: '/gestao-pessoas/denuncias', icon: ShieldAlert, label: 'Canal de Denúncias' },
+  { href: '/gestao-pessoas/direitos', icon: Scale, label: 'Direitos do Colaborador' },
+  { href: '/gestao-pessoas/faq', icon: HelpCircle, label: 'Dúvidas Frequentes' },
 ]
 
 export function PeopleSidebar() {
@@ -37,6 +39,9 @@ export function PeopleSidebar() {
       console.error('Logout error:', e)
     }
   }
+
+  const isAdmin = currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Administrador'
+  const filteredMenus = MENUS.filter(m => isAdmin || !m.adminOnly)
 
   if (isMobile) {
     return (
@@ -61,7 +66,7 @@ export function PeopleSidebar() {
           boxShadow: '0 -4px 20px rgba(0,0,0,0.5)'
         }}
       >
-        {MENUS.map(m => {
+        {filteredMenus.map(m => {
           const isActive = pathname === m.href || (m.href !== '/gestao-pessoas' && pathname?.startsWith(m.href))
           return (
             <button
@@ -170,7 +175,7 @@ export function PeopleSidebar() {
 
       {/* Navigation */}
       <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {MENUS.map(m => {
+        {filteredMenus.map(m => {
           const isActive = pathname === m.href || (m.href !== '/gestao-pessoas' && pathname?.startsWith(m.href))
           return (
             <button
@@ -209,33 +214,87 @@ export function PeopleSidebar() {
       </nav>
 
       {/* Footer / User */}
-      <div style={{ marginTop: 'auto', paddingTop: 24, borderTop: '1px solid #1e293b' }}>
+      <div style={{ marginTop: 'auto', paddingTop: 24, borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+        {/* USER INFO */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, padding: '0 4px' }}>
+          {currentUser?.foto ? (
+            <img 
+              src={currentUser.foto} 
+              alt={currentUser.nome || 'Avatar'}
+              style={{
+                width: 52, height: 52, borderRadius: 16, objectFit: 'cover',
+                boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)',
+                border: '1px solid rgba(59, 130, 246, 0.2)'
+              }}
+            />
+          ) : (
+            <div style={{
+              width: 52, height: 52, borderRadius: 16,
+              background: 'linear-gradient(135deg, #38bdf8, #2563eb)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)'
+            }}>
+              <User size={24} color="#ffffff" strokeWidth={2.5} />
+            </div>
+          )}
+          
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.01em', marginBottom: 4 }}>
+              {currentUser?.nome || 'Usuário'}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              {currentUser?.cargo || currentUser?.perfil || 'COLABORADOR'}
+            </span>
+          </div>
+        </div>
+
+        {/* BUTTONS */}
         <button
           onClick={() => router.push('/')}
           style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 16, border: '1px solid #1e293b', cursor: 'pointer',
-            background: 'rgba(255,255,255,0.02)', color: '#e2e8f0', fontWeight: 600, marginBottom: 12, transition: 'all 0.2s'
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 12, 
+            border: '1px solid rgba(6, 182, 212, 0.3)', cursor: 'pointer',
+            background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))', 
+            color: '#06b6d4', fontWeight: 700, marginBottom: 12, transition: 'all 0.2s', letterSpacing: '0.02em',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = '#334155' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; e.currentTarget.style.borderColor = '#1e293b' }}
+          onMouseEnter={e => { 
+            e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.5))'; 
+            e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.6)'; 
+            e.currentTarget.style.boxShadow = '0 0 15px rgba(6, 182, 212, 0.15)';
+          }}
+          onMouseLeave={e => { 
+            e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))'; 
+            e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.3)'; 
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+          }}
         >
-          <div style={{ width: 32, height: 32, borderRadius: 10, background: '#0f172a', border: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Grid size={16} color="#94a3b8" />
-          </div>
-          <span style={{ fontSize: 14 }}>Trocar de Módulo</span>
+          <Grid size={18} strokeWidth={2.5} />
+          <span style={{ fontSize: 13 }}>TROCAR DE MÓDULO</span>
         </button>
 
         <button
           onClick={handleLogout}
           style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 16, border: 'none', cursor: 'pointer',
-            background: 'transparent', color: '#f87171', fontWeight: 600, transition: 'all 0.2s'
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 12, 
+            border: '1px solid rgba(239, 68, 68, 0.3)', cursor: 'pointer',
+            background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))', 
+            color: '#ef4444', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(248, 113, 113, 0.1)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          onMouseEnter={e => { 
+            e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.5))'; 
+            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; 
+            e.currentTarget.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.15)';
+          }}
+          onMouseLeave={e => { 
+            e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))'; 
+            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; 
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+          }}
         >
-          <LogOut size={20} />
-          <span style={{ fontSize: 14 }}>Sair do Sistema</span>
+          <LogOut size={18} strokeWidth={2.5} />
+          <span style={{ fontSize: 13 }}>SAIR</span>
         </button>
       </div>
     </div>

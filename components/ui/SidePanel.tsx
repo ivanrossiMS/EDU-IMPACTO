@@ -22,14 +22,18 @@ export function SidePanel({ isOpen, onClose, title, subtitle, children, width = 
   }, [])
 
   useEffect(() => {
+    let timeout: NodeJS.Timeout
     if (isOpen) {
       setVisible(true)
       document.body.style.overflow = 'hidden'
     } else {
-      setTimeout(() => setVisible(false), 300)
+      timeout = setTimeout(() => setVisible(false), 300)
       document.body.style.overflow = ''
     }
-    return () => { document.body.style.overflow = '' }
+    return () => {
+      clearTimeout(timeout)
+      document.body.style.overflow = ''
+    }
   }, [isOpen])
 
   if (!mounted || !visible) return null

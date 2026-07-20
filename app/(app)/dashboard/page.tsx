@@ -302,7 +302,7 @@ export default function DashboardPage() {
             {ordersSummary.recentOrders.length === 0 ? (
               <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '10px 0', fontWeight: 600 }}>Nenhum material registrado.</div>
             ) : (
-              ordersSummary.recentOrders.slice(0, 3).map((o) => {
+              ordersSummary.recentOrders.slice(0, 3).map((o: any) => {
                 const IconComponent = o.material.toLowerCase().includes('livro') ? BookMarked : Users;
                 const iconColor = o.entregue ? '#10b981' : (o.feito ? '#f59e0b' : '#3b82f6');
                 const iconBg = o.entregue ? '#ecfdf5' : (o.feito ? 'hsl(var(--bg-surface))beb' : '#eff6ff');

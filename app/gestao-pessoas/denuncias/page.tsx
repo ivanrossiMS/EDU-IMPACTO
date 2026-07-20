@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
-import { ShieldAlert, Plus, Search, Filter, MoreVertical, Eye, Trash2 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ShieldAlert, Plus, Search, Filter, MoreVertical, Eye, Trash2, AlertTriangle, X, Info, AlertOctagon, Scale, UserX } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useRouter } from 'next/navigation'
 import { SidePanel } from '@/components/ui/SidePanel'
+import { useApp } from '@/lib/context'
 
 type Denuncia = {
   id: string
@@ -18,16 +19,19 @@ type Denuncia = {
   anonimo: boolean
   status: string
   created_at: string
+  relator_id?: string | null
 }
 
 export default function DenunciasAdminPage() {
   const isMobile = useIsMobile()
   const router = useRouter()
+  const { currentUser } = useApp()
   const [denuncias, setDenuncias] = useState<Denuncia[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('todas')
   const [viewDenuncia, setViewDenuncia] = useState<Denuncia | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchDenuncias()
@@ -48,13 +52,14 @@ export default function DenunciasAdminPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta denúncia permanentemente?')) return
+  const confirmDelete = async (id: string) => {
     try {
       const res = await fetch(`/api/gestao-pessoas/denuncias/${id}`, { method: 'DELETE' })
       if (res.ok) fetchDenuncias()
     } catch (e) {
       console.error(e)
+    } finally {
+      setDeleteConfirmId(null)
     }
   }
 
@@ -81,7 +86,10 @@ export default function DenunciasAdminPage() {
     }
   }
 
+  const isAdmin = currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Administrador'
+
   const filtered = denuncias.filter(d => {
+    if (!isAdmin && d.relator_id !== currentUser?.id) return false
     if (filterStatus !== 'todas' && d.status !== filterStatus) return false
     if (searchTerm && !d.protocolo?.toLowerCase().includes(searchTerm.toLowerCase()) && !d.tipo?.toLowerCase().includes(searchTerm.toLowerCase())) return false
     return true
@@ -121,6 +129,38 @@ export default function DenunciasAdminPage() {
         >
           <Plus size={18} /> Nova Denúncia
         </button>
+      </div>
+
+      {/* Info Banner */}
+      <div style={{ background: 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)', border: '1px solid #fecdd3', borderRadius: 24, padding: 32, marginBottom: 32, display: 'flex', gap: 24, alignItems: 'flex-start', boxShadow: '0 10px 30px -10px rgba(225, 29, 72, 0.15)', position: 'relative', overflow: 'hidden' }}>
+        {/* Decoration */}
+        <div style={{ position: 'absolute', top: -20, right: -20, width: 150, height: 150, background: 'radial-gradient(circle, rgba(251,113,133,0.2) 0%, rgba(255,255,255,0) 70%)', borderRadius: '50%' }} />
+        
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', flexShrink: 0, color: '#e11d48' }}>
+          <Info size={28} strokeWidth={2.5} />
+        </div>
+        
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <h2 style={{ margin: '0 0 8px 0', fontSize: 20, fontWeight: 800, color: '#0f172a', fontFamily: "'Outfit', sans-serif" }}>Sobre o Canal de Denúncias</h2>
+          <p style={{ margin: '0 0 20px 0', fontSize: 15, color: '#334155', lineHeight: 1.6, maxWidth: 800 }}>
+            Ambiente seguro e totalmente sigiloso para relatar infrações ao Código de Ética. Você pode optar pelo anonimato total. Garantimos a não retaliação a quem relatar de boa-fé.
+          </p>
+          
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', padding: '10px 16px', borderRadius: 12, fontSize: 14, fontWeight: 600, color: '#e11d48', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <UserX size={16} /> Assédio Moral ou Sexual
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', padding: '10px 16px', borderRadius: 12, fontSize: 14, fontWeight: 600, color: '#c026d3', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <Scale size={16} /> Discriminação
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', padding: '10px 16px', borderRadius: 12, fontSize: 14, fontWeight: 600, color: '#ea580c', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <AlertOctagon size={16} /> Fraudes e Corrupção
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', padding: '10px 16px', borderRadius: 12, fontSize: 14, fontWeight: 600, color: '#4f46e5', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+              <ShieldAlert size={16} /> Desvios de Conduta
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
@@ -194,15 +234,15 @@ export default function DenunciasAdminPage() {
                   </td>
                   <td style={{ padding: '16px 24px' }}>
                     <span 
-                      onClick={() => handleStatusChange(d.id, d.status)}
-                      title="Clique para avançar o status"
+                      onClick={() => isAdmin && handleStatusChange(d.id, d.status)}
+                      title={isAdmin ? "Clique para avançar o status" : "Status atual da denúncia"}
                       style={{ 
                         display: 'inline-block', padding: '6px 12px', background: status.bg, 
                         color: status.text, borderRadius: 20, fontSize: 12, fontWeight: 700, 
-                        cursor: 'pointer', transition: 'all 0.2s', userSelect: 'none' 
+                        cursor: isAdmin ? 'pointer' : 'default', transition: 'all 0.2s', userSelect: 'none' 
                       }}
-                      onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
-                      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                      onMouseEnter={e => { if (isAdmin) e.currentTarget.style.opacity = '0.8' }}
+                      onMouseLeave={e => { if (isAdmin) e.currentTarget.style.opacity = '1' }}
                     >
                       {status.label}
                     </span>
@@ -212,7 +252,7 @@ export default function DenunciasAdminPage() {
                       <button onClick={() => setViewDenuncia(d)} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569', cursor: 'pointer', padding: 8, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Ver Detalhes">
                         <Eye size={18} />
                       </button>
-                      <button onClick={() => handleDelete(d.id)} style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#ef4444', cursor: 'pointer', padding: 8, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Excluir">
+                      <button onClick={() => setDeleteConfirmId(d.id)} style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#ef4444', cursor: 'pointer', padding: 8, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Excluir">
                         <Trash2 size={18} />
                       </button>
                     </div>
@@ -266,38 +306,105 @@ export default function DenunciasAdminPage() {
               <div style={{ fontSize: 15, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{viewDenuncia.descricao}</div>
             </div>
             
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12 }}>Atualizar Status</div>
-              <div style={{ display: 'flex', gap: 6, background: '#e2e8f0', padding: 4, borderRadius: 12 }}>
-                {[
-                  { id: 'nova', label: 'Nova', activeColor: '#ef4444' },
-                  { id: 'em_analise', label: 'Em Análise', activeColor: '#d97706' },
-                  { id: 'concluida', label: 'Concluída', activeColor: '#10b981' }
-                ].map(s => {
-                  const isActive = viewDenuncia.status === s.id
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        handleStatusChange(viewDenuncia.id, viewDenuncia.status, s.id)
-                        setViewDenuncia({ ...viewDenuncia, status: s.id })
-                      }}
-                      style={{
-                        flex: 1, padding: '10px 0', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
-                        background: isActive ? '#fff' : 'transparent',
-                        color: isActive ? s.activeColor : '#64748b',
-                        boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                      }}
-                    >
-                      {s.label}
-                    </button>
-                  )
-                })}
+            {isAdmin && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12 }}>Atualizar Status</div>
+                <div style={{ display: 'flex', gap: 6, background: '#e2e8f0', padding: 4, borderRadius: 12 }}>
+                  {[
+                    { id: 'nova', label: 'Nova', activeColor: '#ef4444' },
+                    { id: 'em_analise', label: 'Em Análise', activeColor: '#d97706' },
+                    { id: 'concluida', label: 'Concluída', activeColor: '#10b981' }
+                  ].map(s => {
+                    const isActive = viewDenuncia.status === s.id
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          handleStatusChange(viewDenuncia.id, viewDenuncia.status, s.id)
+                          setViewDenuncia({ ...viewDenuncia, status: s.id })
+                        }}
+                        style={{
+                          flex: 1, padding: '10px 0', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                          background: isActive ? '#fff' : 'transparent',
+                          color: isActive ? s.activeColor : '#64748b',
+                          boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </SidePanel>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirmId && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)' }}
+              onClick={() => setDeleteConfirmId(null)}
+            />
+            
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              style={{ 
+                position: 'relative', width: '100%', maxWidth: 400, background: '#fff', 
+                borderRadius: 24, padding: 32, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center'
+              }}
+            >
+              <button 
+                onClick={() => setDeleteConfirmId(null)}
+                style={{ position: 'absolute', top: 16, right: 16, background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, borderRadius: '50%', transition: 'background 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <X size={20} />
+              </button>
+
+              <div style={{ width: 64, height: 64, background: '#fee2e2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
+                <AlertTriangle size={32} color="#ef4444" strokeWidth={2} />
+              </div>
+
+              <h3 style={{ margin: '0 0 12px 0', fontSize: 20, fontWeight: 800, color: '#0f172a', fontFamily: "'Outfit', sans-serif" }}>
+                Excluir Denúncia?
+              </h3>
+              <p style={{ margin: '0 0 32px 0', fontSize: 15, color: '#64748b', lineHeight: 1.5 }}>
+                Esta ação não pode ser desfeita. A denúncia e todo o seu histórico serão removidos permanentemente.
+              </p>
+
+              <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+                <button 
+                  onClick={() => setDeleteConfirmId(null)}
+                  style={{ flex: 1, padding: '12px 0', background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => confirmDelete(deleteConfirmId)}
+                  style={{ flex: 1, padding: '12px 0', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s', boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)' }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+                >
+                  Sim, Excluir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   )

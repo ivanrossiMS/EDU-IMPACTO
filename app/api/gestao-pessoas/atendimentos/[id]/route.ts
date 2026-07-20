@@ -11,10 +11,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   try {
     const supabase = await createProtectedClient()
     const body = await request.json()
+    const payload: any = {}
+    if (body.tipo) payload.categoria = body.tipo
+    if (body.descricao) payload.descricao = body.descricao
+    if (body.status) payload.status = body.status
+    if (body.funcionario_id) payload.funcionario_id = body.funcionario_id
+    if (body.solicitante) payload.dados = { solicitante: body.solicitante }
+    if (body.created_at) payload.created_at = body.created_at
 
     const { error } = await supabase
       .from('gp_atendimentos')
-      .update(body)
+      .update(payload)
       .eq('id', id)
 
     if (error) throw error

@@ -999,6 +999,8 @@ export default function LoginPage() {
           <span style={{ fontSize:10, color:'rgba(16,185,129,0.7)', fontWeight:700, letterSpacing:'0.06em' }}>SISTEMA SEGURO</span>
         </div>
       </div>
+      {/* Modal de Bem-Estar */}
+      <BemEstarCheckinModal isOpen={showCheckinModal} onClose={() => setShowCheckinModal(false)} />
       <style>{`
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
         @keyframes spin  { to{transform:rotate(360deg)} }

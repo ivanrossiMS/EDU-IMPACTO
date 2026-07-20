@@ -1,20 +1,43 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Heart, Activity, Coffee, Brain, Phone, ShieldCheck, FileText, ArrowRight, 
-  CheckCircle, Star, Moon, AlertCircle, Zap, Flame, Users, Wind, Video, Headphones 
+  CheckCircle, Star, Moon, AlertCircle, Zap, Flame, Users, Wind, Video, Headphones,
+  Lightbulb, Send, Droplet, Dumbbell, CheckSquare, Square, MessageCircle,
+  Monitor, Sun, User, MousePointer2, Keyboard
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useRouter } from 'next/navigation'
 import { SidePanel } from '@/components/ui/SidePanel'
+import { useApp } from '@/lib/context'
 
 export default function SaudeMentalPage() {
   const isMobile = useIsMobile()
   const router = useRouter()
+  const { currentUser } = useApp()
   const [isManualOpen, setIsManualOpen] = useState(false)
   const [activeCard, setActiveCard] = useState<{ id: string, title: string, icon: any, color: string, bg: string, subtitle: string } | null>(null)
+
+  // Novas ferramentas
+  const [ideia, setIdeia] = useState('')
+  const [ideiaEnviada, setIdeiaEnviada] = useState(false)
+  const [isIdeiaModalOpen, setIsIdeiaModalOpen] = useState(false)
+  const [dicaDia, setDicaDia] = useState('')
+  
+  useEffect(() => {
+    const dicas = [
+      "Levante da cadeira a cada 60 minutos.",
+      "Beba água, hidratação é energia.",
+      "Descanse a visão focando longe por 20 segundos.",
+      "Ajuste seu monitor para a altura dos olhos.",
+      "Alongue o pescoço e os pulsos antes de começar.",
+      "Respire fundo 3 vezes antes de reuniões.",
+      "Mantenha as costas totalmente apoiadas na cadeira."
+    ]
+    setDicaDia(dicas[Math.floor(Math.random() * dicas.length)])
+  }, [])
 
   const cards = [
     { id: 'sono', title: 'Higiene do Sono', desc: 'Práticas para melhorar a qualidade do seu descanso e restaurar a energia.', icon: Moon, color: '#6366f1', bg: '#e0e7ff', subtitle: 'Durma melhor, viva melhor.' },
@@ -26,6 +49,18 @@ export default function SaudeMentalPage() {
     { id: 'videos', title: 'Vídeos Recomendados', desc: 'Palestras e documentários sobre bem-estar emocional e mental.', icon: Video, color: '#8b5cf6', bg: '#ede9fe', subtitle: 'Aprenda com especialistas.' },
     { id: 'podcasts', title: 'Podcasts', desc: 'Programas de áudio para ouvir no trânsito ou durante caminhadas.', icon: Headphones, color: '#f97316', bg: '#ffedd5', subtitle: 'Conteúdo em áudio para o seu bem-estar.' },
     { id: 'pdfs', title: 'Materiais (PDFs)', desc: 'Guias, cartilhas e manuais para download e leitura offline.', icon: FileText, color: '#0ea5e9', bg: '#e0f2fe', subtitle: 'Biblioteca de recursos em PDF.' }
+  ]
+
+  const ergoCards = [
+    { id: 'monitor', title: 'Monitor', desc: 'Ajuste a altura do monitor para que o topo da tela fique na linha dos olhos.', icon: Monitor, color: '#3b82f6', bg: '#eff6ff', subtitle: 'Protegendo sua visão e pescoço.' },
+    { id: 'iluminacao', title: 'Iluminação', desc: 'Evite reflexos na tela e priorize luz natural sempre que possível.', icon: Sun, color: '#f59e0b', bg: '#fef3c7', subtitle: 'Ambiente claro, mente focada.' },
+    { id: 'postura', title: 'Postura', desc: 'Mantenha as costas retas e apoiadas no encosto da cadeira. Pés retos no chão.', icon: User, color: '#10b981', bg: '#ecfdf5', subtitle: 'A base para um dia produtivo.' },
+    { id: 'mouse', title: 'Mouse', desc: 'Deixe o mouse próximo ao teclado para evitar esticar demais o braço.', icon: MousePointer2, color: '#8b5cf6', bg: '#ede9fe', subtitle: 'Prevenindo lesões por esforço.' },
+    { id: 'teclado', title: 'Teclado', desc: 'Mantenha os pulsos retos e relaxados enquanto digita.', icon: Keyboard, color: '#6366f1', bg: '#e0e7ff', subtitle: 'Conforto na ponta dos dedos.' },
+    { id: 'agua', title: 'Beber Água', desc: 'Mantenha uma garrafa de água na mesa e hidrate-se constantemente.', icon: Droplet, color: '#0ea5e9', bg: '#e0f2fe', subtitle: 'Hidratação é saúde e foco.' },
+    { id: 'alongar', title: 'Alongar', desc: 'Faça pausas a cada hora para esticar os braços, pernas e pescoço.', icon: Activity, color: '#ef4444', bg: '#fee2e2', subtitle: 'Movimento é vida.' },
+    { id: 'academia', title: 'Academia', desc: 'Fortaleça a musculatura para evitar dores causadas pela posição sentada.', icon: Dumbbell, color: '#ec4899', bg: '#fce7f3', subtitle: 'Corpo forte, mente forte.' },
+    { id: 'meditacao', title: 'Meditação', desc: 'Tire 5 minutos para fechar os olhos, respirar e clarear a mente.', icon: Brain, color: '#14b8a6', bg: '#ccfbf1', subtitle: 'Tranquilidade e foco.' }
   ]
 
   return (
@@ -140,10 +175,77 @@ export default function SaudeMentalPage() {
               </motion.div>
             ))}
           </div>
+
+          <div style={{ marginTop: 48 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: '8px 0 -8px 0' }}>Ergonomia e Hábitos Saudáveis</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, marginTop: 32 }}>
+              {ergoCards.map((item, i) => (
+                <motion.div 
+                  key={item.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 * (i + 1) }}
+                  onClick={() => setActiveCard(item)}
+                  style={{
+                    background: '#fff', borderRadius: 24, padding: 24,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9',
+                    display: 'flex', flexDirection: 'column', height: '100%', cursor: 'pointer',
+                    position: 'relative', overflow: 'hidden'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-6px)';
+                    e.currentTarget.style.boxShadow = '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)';
+                    e.currentTarget.style.borderColor = item.bg;
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.03)';
+                    e.currentTarget.style.borderColor = '#f1f5f9';
+                  }}
+                >
+                  <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: `radial-gradient(circle, ${item.bg} 0%, transparent 70%)`, opacity: 0.8, transform: 'translate(30%, -30%)' }} />
+                  
+                  <div style={{ width: 56, height: 56, borderRadius: 16, background: item.bg, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20, zIndex: 1 }}>
+                    <item.icon size={28} />
+                  </div>
+                  
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 8, zIndex: 1 }}>
+                    {item.title}
+                  </h3>
+                  
+                  <p style={{ margin: 0, fontSize: 14, color: '#64748b', lineHeight: 1.6, flex: 1, zIndex: 1 }}>
+                    {item.desc}
+                  </p>
+
+                  <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 8, color: item.color, fontSize: 14, fontWeight: 700, zIndex: 1 }}>
+                    Acessar <ArrowRight size={16} />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
         </div>
 
         {/* Sidebar Cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <motion.div
+            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
+            style={{
+              background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+              borderRadius: 24, padding: '24px 32px', color: '#b45309',
+              boxShadow: '0 4px 20px rgba(245, 158, 11, 0.1)', border: '1px solid #fde68a',
+              position: 'relative', overflow: 'hidden'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <Lightbulb size={20} color="#d97706" />
+              <strong style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dica do Dia</strong>
+            </div>
+            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#92400e', lineHeight: 1.4 }}>
+              {dicaDia}
+            </p>
+          </motion.div>
           
           <motion.div
             initial={{ opacity: 0, x: 20 }}
@@ -165,7 +267,10 @@ export default function SaudeMentalPage() {
               Precisando conversar? Temos profissionais parceiros prontos para ouvir de forma 100% sigilosa, sem burocracia.
             </p>
             <button 
-              onClick={() => router.push('/gestao-pessoas/atendimentos?tipo=Apoio%20Psicologico')}
+              onClick={() => {
+                sessionStorage.setItem('novoAtendimentoTipo', 'Apoio Psicológico')
+                router.push('/gestao-pessoas/atendimentos')
+              }}
               style={{
                 width: '100%', padding: '14px', background: '#38bdf8', color: '#0f172a',
                 border: 'none', borderRadius: 12, fontWeight: 800, cursor: 'pointer',
@@ -203,6 +308,91 @@ export default function SaudeMentalPage() {
             >
               Acessar Canal de Denúncias <ArrowRight size={16} />
             </a>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
+            style={{
+              background: 'linear-gradient(135deg, #4f46e5 0%, #312e81 100%)',
+              borderRadius: 24, padding: 32, color: '#fff',
+              boxShadow: '0 10px 40px rgba(49, 46, 129, 0.25)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <div style={{ padding: 10, background: 'rgba(255,255,255,0.1)', borderRadius: 12, color: '#a5b4fc' }}>
+                <MessageCircle size={24} />
+              </div>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#fff' }}>Canal de Ideias</h3>
+            </div>
+            <p style={{ color: '#c7d2fe', fontSize: 14, lineHeight: 1.6, marginBottom: 20, fontFamily: "'Inter', sans-serif" }}>
+              Como podemos melhorar o ambiente de trabalho e o bem-estar da equipe?
+            </p>
+            
+            {!ideiaEnviada ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <textarea
+                  value={ideia}
+                  onChange={e => setIdeia(e.target.value)}
+                  placeholder="Deixe sua sugestão aqui..."
+                  style={{
+                    width: '100%', padding: '16px', borderRadius: 16, border: '1px solid rgba(255,255,255,0.2)',
+                    background: 'rgba(255,255,255,0.05)', color: '#fff', outline: 'none', resize: 'none',
+                    minHeight: 100, fontFamily: "'Inter', sans-serif", fontSize: 14
+                  }}
+                />
+                <button
+                  onClick={async () => {
+                    if(ideia.trim()) {
+                      try {
+                        const res = await fetch('/api/gestao-pessoas/atendimentos', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            tipo: 'Sugestões',
+                            categoria: 'Sugestão',
+                            solicitante: currentUser?.nome || 'Anônimo (Canal de Ideias)',
+                            descricao: `[SUGESTÃO] ${ideia.trim()}`,
+                            status: 'novo',
+                            funcionario_id: currentUser?.id
+                          })
+                        })
+                        if (res.ok) {
+                          setIdeiaEnviada(true)
+                        } else {
+                          const errText = await res.text()
+                          console.error(`Erro ao salvar ideia: STATUS ${res.status} BODY: ${errText}`)
+                        }
+                      } catch(e) {
+                        console.error('Erro de rede ou crash:', e)
+                      }
+                    }
+                  }}
+                  disabled={!ideia.trim()}
+                  style={{
+                    padding: '12px', background: ideia.trim() ? '#fff' : 'rgba(255,255,255,0.1)', 
+                    color: ideia.trim() ? '#312e81' : 'rgba(255,255,255,0.3)',
+                    border: 'none', borderRadius: 12, fontWeight: 700, cursor: ideia.trim() ? 'pointer' : 'not-allowed',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 0.2s'
+                  }}
+                >
+                  <Send size={16} /> Enviar Ideia
+                </button>
+              </div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                style={{ padding: 20, background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}
+              >
+                <CheckCircle size={28} color="#34d399" />
+                <span style={{ color: '#a7f3d0', fontWeight: 600 }}>Ideia enviada! Obrigado por contribuir.</span>
+                <button 
+                  onClick={() => { setIdeia(''); setIdeiaEnviada(false); }}
+                  style={{ marginTop: 8, background: 'transparent', border: 'none', color: '#fff', fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}
+                >
+                  Enviar outra
+                </button>
+              </motion.div>
+            )}
           </motion.div>
 
         </div>
@@ -538,6 +728,96 @@ export default function SaudeMentalPage() {
                       <button style={{ padding: '8px 16px', background: '#f1f5f9', color: '#0ea5e9', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Download</button>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* MONITOR */}
+            {activeCard.id === 'monitor' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>Ajuste do Monitor</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>Para evitar dores no pescoço e tensão ocular, o topo da tela do seu monitor deve estar exatamente na linha dos seus olhos. Mantenha uma distância de um braço esticado entre você e a tela.</p>
+                </div>
+              </div>
+            )}
+
+            {/* ILUMINAÇÃO */}
+            {activeCard.id === 'iluminacao' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>Luz e Foco</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>Trabalhe preferencialmente com luz natural. Evite que a janela fique diretamente atrás do monitor (ofuscamento) ou atrás de você (reflexo na tela). A iluminação correta reduz dores de cabeça no fim do dia.</p>
+                </div>
+              </div>
+            )}
+
+            {/* POSTURA */}
+            {activeCard.id === 'postura' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>O Ponto de Apoio</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>Sente-se com as costas totalmente apoiadas no encosto da cadeira. Seus joelhos devem formar um ângulo de 90 graus e a planta dos pés deve estar totalmente encostada no chão ou em um suporte.</p>
+                </div>
+              </div>
+            )}
+
+            {/* MOUSE */}
+            {activeCard.id === 'mouse' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>Ergonomia do Mouse</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>Mantenha o mouse próximo ao teclado. Seu antebraço deve estar apoiado na mesa ou no braço da cadeira, evitando que você "estique" o braço constantemente para alcançar o mouse.</p>
+                </div>
+              </div>
+            )}
+
+            {/* TECLADO */}
+            {activeCard.id === 'teclado' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>Digitando com Saúde</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>Durante a digitação, seus pulsos devem estar retos (neutros), não flexionados para cima ou para baixo. Teclados ergonômicos ou suportes macios de punho podem prevenir tendinites.</p>
+                </div>
+              </div>
+            )}
+
+            {/* ÁGUA */}
+            {activeCard.id === 'agua' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>A Regra da Garrafinha</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>A desidratação leve causa fadiga e queda de atenção. Deixe sempre uma garrafa de água visível em cima da sua mesa de trabalho. Beba água antes de sentir sede!</p>
+                </div>
+              </div>
+            )}
+
+            {/* ALONGAR */}
+            {activeCard.id === 'alongar' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>Pausas Ativas</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>A cada hora de trabalho, levante-se por 5 minutos. Estique os braços para o teto, gire os ombros para trás, alongue o pescoço suavemente e caminhe um pouco pelo ambiente.</p>
+                </div>
+              </div>
+            )}
+
+            {/* ACADEMIA */}
+            {activeCard.id === 'academia' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>Músculos Protetores</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>O corpo humano não foi feito para ficar 8 horas sentado. Fortalecer os músculos das costas e do core (abdômen) é a melhor armadura contra hérnias de disco e dores crônicas.</p>
+                </div>
+              </div>
+            )}
+
+            {/* MEDITAÇÃO */}
+            {activeCard.id === 'meditacao' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div>
+                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 12, fontFamily: "'Outfit', sans-serif" }}>Pausa para a Mente</h4>
+                  <p style={{ color: '#475569', lineHeight: 1.7, fontSize: 15 }}>Se sentir que o estresse está subindo, afaste-se das telas. Feche os olhos, inspire profundamente contando até 4, segure por 2, e solte contando até 6. Repita isso 5 vezes.</p>
                 </div>
               </div>
             )}

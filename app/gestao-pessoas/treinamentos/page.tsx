@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { GraduationCap, Plus, Search, Filter, X, Trash2, Edit2, Clock, Users, FileText, CheckCircle2 } from 'lucide-react'
 import { SidePanel } from '@/components/ui/SidePanel'
 import { AssinaturaDigitalModal } from '@/components/gestao-pessoas/AssinaturaDigitalModal'
+import { useApp } from '@/lib/context'
 
 type Treinamento = {
   id: string
@@ -25,6 +26,9 @@ export default function Treinamentos() {
   const [reportTreinamentoId, setReportTreinamentoId] = useState<{ id: string, title: string } | null>(null)
   const [assinaturasList, setAssinaturasList] = useState<any[]>([])
   const [loadingReport, setLoadingReport] = useState(false)
+  
+  const { currentUser } = useApp()
+  const isAdmin = currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Administrador'
   
   // Form state
   const [formData, setFormData] = useState({
@@ -149,12 +153,14 @@ export default function Treinamentos() {
             <Filter size={18} color="#64748b" />
             Filtrar
           </button>
-          <button onClick={() => handleOpenPanel()} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 12, background: '#10b981', border: 'none', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)' }}>
-            <Plus size={18} />
-            Novo Treinamento
-          </button>
+          {isAdmin && (
+            <button onClick={() => handleOpenPanel()} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', borderRadius: 12, background: '#10b981', border: 'none', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)' }}>
+              <Plus size={18} />
+              Novo Treinamento
+            </button>
+          )}
         </div>
       </div>
 
@@ -223,12 +229,16 @@ export default function Treinamentos() {
                         <button onClick={() => setAssinaturaData({ id: t.id, title: t.nome })} style={{ padding: '8px 12px', borderRadius: 8, background: '#10b981', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700, transition: 'all 0.2s' }} title="Assinar Lista de Presença">
                           Assinar
                         </button>
-                        <button onClick={() => handleOpenPanel(t)} style={{ padding: 8, borderRadius: 8, background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#475569', cursor: 'pointer', transition: 'all 0.2s' }} title="Editar" onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0' }} onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9' }}>
-                          <Edit2 size={16} />
-                        </button>
-                        <button onClick={() => handleDelete(t.id)} style={{ padding: 8, borderRadius: 8, background: '#fee2e2', border: '1px solid #fecaca', color: '#ef4444', cursor: 'pointer', transition: 'all 0.2s' }} title="Excluir" onMouseEnter={e => { e.currentTarget.style.background = '#fecaca'; e.currentTarget.style.color = '#b91c1c' }} onMouseLeave={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#ef4444' }}>
-                          <Trash2 size={16} />
-                        </button>
+                        {isAdmin && (
+                          <>
+                            <button onClick={() => handleOpenPanel(t)} style={{ padding: 8, borderRadius: 8, background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#475569', cursor: 'pointer', transition: 'all 0.2s' }} title="Editar" onMouseEnter={e => { e.currentTarget.style.background = '#e2e8f0' }} onMouseLeave={e => { e.currentTarget.style.background = '#f1f5f9' }}>
+                              <Edit2 size={16} />
+                            </button>
+                            <button onClick={() => handleDelete(t.id)} style={{ padding: 8, borderRadius: 8, background: '#fee2e2', border: '1px solid #fecaca', color: '#ef4444', cursor: 'pointer', transition: 'all 0.2s' }} title="Excluir" onMouseEnter={e => { e.currentTarget.style.background = '#fecaca'; e.currentTarget.style.color = '#b91c1c' }} onMouseLeave={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#ef4444' }}>
+                              <Trash2 size={16} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

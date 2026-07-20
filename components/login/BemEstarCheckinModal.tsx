@@ -114,9 +114,11 @@ export function BemEstarCheckinModal({ isOpen, onClose }: { isOpen: boolean, onC
             </Dialog.Overlay>
             <Dialog.Content asChild>
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                initial={{ opacity: 0, scale: 0.95, x: '-50%', y: '-45%' }} 
+                animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }} 
+                exit={{ opacity: 0, scale: 0.95, x: '-50%', y: '-45%' }}
                 style={{
-                  position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                  position: 'fixed', top: '50%', left: '50%',
                   width: '90%', maxWidth: 500, background: '#1e293b', borderRadius: 24, padding: 32,
                   boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', zIndex: 100000,
                   border: '1px solid rgba(255,255,255,0.1)', color: '#fff'
@@ -128,11 +130,10 @@ export function BemEstarCheckinModal({ isOpen, onClose }: { isOpen: boolean, onC
                       <HeartPulse size={20} color="#fff" />
                     </div>
                     <div>
-                      <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Check-in de Bem-Estar</h2>
+                      <Dialog.Title style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Check-in de Bem-Estar</Dialog.Title>
                       <p style={{ margin: 0, fontSize: 13, color: '#94a3b8' }}>Acompanhamento Semanal</p>
                     </div>
                   </div>
-                  {/* Cannot close if it's mandatory, but if you want to allow them to close, uncomment the button */}
                 </div>
 
                 {step === 1 && (
@@ -276,12 +277,22 @@ export function BemEstarCheckinModal({ isOpen, onClose }: { isOpen: boolean, onC
                       </>
                     ) : (
                       <>
-                        <div style={{ width: 80, height: 80, borderRadius: '50%', background: risco === 'Atenção' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)', border: risco === 'Atenção' ? '2px solid rgba(245, 158, 11, 0.3)' : '2px solid rgba(16, 185, 129, 0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-                          <CheckCircle2 size={40} color={risco === 'Atenção' ? '#fbbf24' : '#10b981'} />
+                        <div style={{ 
+                          width: 80, height: 80, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px',
+                          background: risco === 'Alto risco' ? 'rgba(239, 68, 68, 0.1)' : risco === 'Atenção' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
+                          border: risco === 'Alto risco' ? '2px solid rgba(239, 68, 68, 0.3)' : risco === 'Atenção' ? '2px solid rgba(245, 158, 11, 0.3)' : '2px solid rgba(16, 185, 129, 0.3)' 
+                        }}>
+                          {risco === 'Alto risco' 
+                            ? <AlertTriangle size={40} color="#ef4444" />
+                            : <CheckCircle2 size={40} color={risco === 'Atenção' ? '#fbbf24' : '#10b981'} />}
                         </div>
                         <h3 style={{ fontSize: 24, fontWeight: 800, color: '#fff', marginBottom: 12 }}>Obrigado pelo Check-in!</h3>
                         <p style={{ fontSize: 15, color: '#cbd5e1', lineHeight: 1.6, marginBottom: 32 }}>
-                          {risco === 'Atenção' ? 'Seu resultado indica que você precisa de um pouco mais de descanso. Tente desconectar-se no tempo livre!' : 'Que bom que as coisas estão indo bem! Continue cuidando de você.'}
+                          {risco === 'Alto risco' 
+                            ? 'Notamos que você está passando por um momento de bastante estresse. Por favor, considere conversar com alguém de confiança ou com o RH. Sua saúde é nossa prioridade!'
+                            : risco === 'Atenção' 
+                              ? 'Seu resultado indica que você precisa de um pouco mais de descanso. Tente desconectar-se no seu tempo livre e cuidar mais de você!' 
+                              : 'Que bom que as coisas estão indo bem! Continue cuidando de você.'}
                         </p>
                         <button onClick={finish} style={{ ...btnBaseStyle, background: '#3b82f6', color: '#fff' }}>
                           Ir para o Sistema

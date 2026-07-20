@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const userId = user.id
+  const userId = user.user_metadata?.uid_legacy || user.id
   const supabase = getAdminClient()
 
   try {
