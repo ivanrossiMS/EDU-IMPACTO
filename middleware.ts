@@ -23,6 +23,7 @@ const PUBLIC_PATHS = [
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/verify-first-access',
+  '/api/auth/update-password',
   '/api/auth/reset-access',
   '/api/test',
   '/monitor-tv',        // painel TV da portaria

@@ -318,9 +318,9 @@ export function SidebarSimulados() {
                 src={currentUser.foto} 
                 alt={currentUser.nome || 'Avatar'}
                 style={{
-                  width: collapsed ? 40 : 52, 
-                  height: collapsed ? 40 : 52, 
-                  borderRadius: 16, 
+                  width: collapsed ? 36 : 44, 
+                  height: collapsed ? 36 : 44, 
+                  borderRadius: 14, 
                   objectFit: 'cover',
                   boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)',
                   border: '1px solid rgba(59, 130, 246, 0.2)',
@@ -329,26 +329,26 @@ export function SidebarSimulados() {
               />
             ) : (
               <div style={{
-                width: collapsed ? 40 : 52, 
-                height: collapsed ? 40 : 52, 
-                borderRadius: 16,
+                width: collapsed ? 36 : 44, 
+                height: collapsed ? 36 : 44, 
+                borderRadius: 14,
                 background: 'linear-gradient(135deg, #38bdf8, #2563eb)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
                 color: 'white',
                 flexShrink: 0
               }}>
-                <User size={collapsed ? 20 : 24} strokeWidth={2.5} />
+                <User size={collapsed ? 18 : 20} strokeWidth={2.5} />
               </div>
             )}
             
             <AnimatePresence>
               {!collapsed && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ overflow: 'hidden' }}>
-                  <div style={{ color: '#f8fafc', fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', letterSpacing: '-0.01em', marginBottom: 2 }}>
+                  <div style={{ color: '#f8fafc', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', letterSpacing: '-0.01em', marginBottom: 2 }}>
                     {currentUser?.nome || 'Usuário'}
                   </div>
-                  <div style={{ color: '#64748b', fontSize: 11, fontWeight: 700, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  <div style={{ color: '#64748b', fontSize: 9, fontWeight: 700, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                     {currentUser?.cargo || currentUser?.perfil || 'COLABORADOR'}
                   </div>
                 </motion.div>
@@ -360,53 +360,53 @@ export function SidebarSimulados() {
           <AnimatePresence>
             {!collapsed ? (
               <motion.div key="expanded" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 8, width: '100%' }}>
                 <button
                   onClick={() => window.location.href = '/login?step=choose_system'}
                   style={{
-                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 12, 
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '8px 4px', borderRadius: 12, 
                     border: '1px solid rgba(6, 182, 212, 0.3)', cursor: 'pointer',
-                    background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))', 
                     color: '#06b6d4', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
                   }}
                   onMouseEnter={e => { 
-                    e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.5))'; 
+                    e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.5))'; 
                     e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.6)'; 
                     e.currentTarget.style.boxShadow = '0 0 15px rgba(6, 182, 212, 0.15)';
                   }}
                   onMouseLeave={e => { 
-                    e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))'; 
+                    e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))'; 
                     e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.3)'; 
                     e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
                   }}
                 >
-                  <Grid size={18} strokeWidth={2.5} />
-                  <span style={{ fontSize: 13 }}>TROCAR DE MÓDULO</span>
+                  <Grid size={16} strokeWidth={2.5} />
+                  <span style={{ fontSize: 9, whiteSpace: 'nowrap' }}>MÓDULOS</span>
                 </button>
 
                 <button
                   onClick={handleLogout}
                   style={{
-                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 12, 
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '8px 4px', borderRadius: 12, 
                     border: '1px solid rgba(239, 68, 68, 0.3)', cursor: 'pointer',
-                    background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))', 
                     color: '#ef4444', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
                   }}
                   onMouseEnter={e => { 
-                    e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.5))'; 
+                    e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.5))'; 
                     e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; 
                     e.currentTarget.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.15)';
                   }}
                   onMouseLeave={e => { 
-                    e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))'; 
+                    e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))'; 
                     e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; 
                     e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
                   }}
                 >
-                  <LogOut size={18} strokeWidth={2.5} />
-                  <span style={{ fontSize: 13 }}>SAIR</span>
+                  <LogOut size={16} strokeWidth={2.5} />
+                  <span style={{ fontSize: 9, whiteSpace: 'nowrap' }}>SAIR</span>
                 </button>
+                </div>
               </motion.div>
             ) : (
               <motion.div key="collapsed" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', width: '100%', padding: '0 8px' }}>

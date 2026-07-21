@@ -222,80 +222,80 @@ export function PeopleSidebar() {
               src={currentUser.foto} 
               alt={currentUser.nome || 'Avatar'}
               style={{
-                width: 52, height: 52, borderRadius: 16, objectFit: 'cover',
+                width: 44, height: 44, borderRadius: 14, objectFit: 'cover',
                 boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)',
                 border: '1px solid rgba(59, 130, 246, 0.2)'
               }}
             />
           ) : (
             <div style={{
-              width: 52, height: 52, borderRadius: 16,
+              width: 44, height: 44, borderRadius: 14,
               background: 'linear-gradient(135deg, #38bdf8, #2563eb)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)'
             }}>
-              <User size={24} color="#ffffff" strokeWidth={2.5} />
+              <User size={20} color="#ffffff" strokeWidth={2.5} />
             </div>
           )}
           
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.01em', marginBottom: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.01em', marginBottom: 2 }}>
               {currentUser?.nome || 'Usuário'}
             </span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#64748b', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               {currentUser?.cargo || currentUser?.perfil || 'COLABORADOR'}
             </span>
           </div>
         </div>
 
         {/* BUTTONS */}
-        <button
-          onClick={() => router.push('/')}
-          style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 12, 
+        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+          <button
+            onClick={() => router.push('/')}
+            style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '8px 4px', borderRadius: 12, 
             border: '1px solid rgba(6, 182, 212, 0.3)', cursor: 'pointer',
-            background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))', 
-            color: '#06b6d4', fontWeight: 700, marginBottom: 12, transition: 'all 0.2s', letterSpacing: '0.02em',
+            color: '#06b6d4', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
           }}
           onMouseEnter={e => { 
-            e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.5))'; 
+            e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.5))'; 
             e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.6)'; 
             e.currentTarget.style.boxShadow = '0 0 15px rgba(6, 182, 212, 0.15)';
           }}
           onMouseLeave={e => { 
-            e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))'; 
+            e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.3))'; 
             e.currentTarget.style.borderColor = 'rgba(6, 182, 212, 0.3)'; 
             e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
           }}
         >
-          <Grid size={18} strokeWidth={2.5} />
-          <span style={{ fontSize: 13 }}>TROCAR DE MÓDULO</span>
+          <Grid size={16} strokeWidth={2.5} />
+          <span style={{ fontSize: 9, whiteSpace: 'nowrap' }}>MÓDULOS</span>
         </button>
 
         <button
           onClick={handleLogout}
           style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px', borderRadius: 12, 
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '8px 4px', borderRadius: 12, 
             border: '1px solid rgba(239, 68, 68, 0.3)', cursor: 'pointer',
-            background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))', 
             color: '#ef4444', fontWeight: 700, transition: 'all 0.2s', letterSpacing: '0.02em',
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
           }}
           onMouseEnter={e => { 
-            e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.5))'; 
+            e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.5))'; 
             e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)'; 
             e.currentTarget.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.15)';
           }}
           onMouseLeave={e => { 
-            e.currentTarget.style.background = 'linear-gradient(90deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))'; 
+            e.currentTarget.style.background = 'linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(127, 29, 29, 0.3))'; 
             e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; 
             e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
           }}
         >
-          <LogOut size={18} strokeWidth={2.5} />
-          <span style={{ fontSize: 13 }}>SAIR</span>
+          <LogOut size={16} strokeWidth={2.5} />
+          <span style={{ fontSize: 9, whiteSpace: 'nowrap' }}>SAIR</span>
         </button>
+        </div>
       </div>
     </div>
   )
