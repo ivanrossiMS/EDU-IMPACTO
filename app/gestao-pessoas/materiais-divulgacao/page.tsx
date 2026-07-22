@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
+import { useApp } from '@/lib/context'
 import {
   Megaphone,
   Eye,
@@ -33,6 +34,9 @@ interface MaterialItem {
 }
 
 export default function MateriaisDivulgacaoPage() {
+  const { currentUser } = useApp()
+  const isAdmin = currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Administrador'
+
   const [materiais, setMateriais] = useState<MaterialItem[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -413,27 +417,29 @@ export default function MateriaisDivulgacaoPage() {
           </div>
         </div>
 
-        <button
-          onClick={handleOpenNewModal}
-          style={{
-            padding: '12px 24px',
-            borderRadius: 14,
-            border: 'none',
-            backgroundColor: '#0047ab',
-            color: '#ffffff',
-            fontSize: 14,
-            fontWeight: 800,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            boxShadow: '0 6px 18px rgba(0, 71, 171, 0.25)',
-            transition: 'all 0.2s'
-          }}
-        >
-          <Plus size={18} />
-          <span>+ Novo Material</span>
-        </button>
+        {isAdmin && (
+          <button
+            onClick={handleOpenNewModal}
+            style={{
+              padding: '12px 24px',
+              borderRadius: 14,
+              border: 'none',
+              backgroundColor: '#0047ab',
+              color: '#ffffff',
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              boxShadow: '0 6px 18px rgba(0, 71, 171, 0.25)',
+              transition: 'all 0.2s'
+            }}
+          >
+            <Plus size={18} />
+            <span>+ Novo Material</span>
+          </button>
+        )}
       </div>
 
 
@@ -547,24 +553,26 @@ export default function MateriaisDivulgacaoPage() {
                 </div>
 
                 {/* Edit / Delete Action Buttons for Featured */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button
-                    onClick={() => handleOpenEditModal(maisVisitado)}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', backgroundColor: '#ffffff', color: '#0f172a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}
-                    title="Editar Material"
-                  >
-                    <Edit3 size={14} color="#0047ab" />
-                    <span>Editar</span>
-                  </button>
-                  <button
-                    onClick={() => setDeletingItem(maisVisitado)}
-                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}
-                    title="Excluir Material"
-                  >
-                    <Trash2 size={14} />
-                    <span>Excluir</span>
-                  </button>
-                </div>
+                {isAdmin && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button
+                      onClick={() => handleOpenEditModal(maisVisitado)}
+                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', backgroundColor: '#ffffff', color: '#0f172a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}
+                      title="Editar Material"
+                    >
+                      <Edit3 size={14} color="#0047ab" />
+                      <span>Editar</span>
+                    </button>
+                    <button
+                      onClick={() => setDeletingItem(maisVisitado)}
+                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}
+                      title="Excluir Material"
+                    >
+                      <Trash2 size={14} />
+                      <span>Excluir</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
@@ -787,42 +795,46 @@ export default function MateriaisDivulgacaoPage() {
                     </div>
 
                     {/* Edit Icon */}
-                    <button
-                      onClick={() => handleOpenEditModal(item)}
-                      style={{
-                        padding: '6px',
-                        borderRadius: 8,
-                        border: '1px solid #cbd5e1',
-                        backgroundColor: '#ffffff',
-                        color: '#0047ab',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      title="Editar Material"
-                    >
-                      <Edit3 size={14} />
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleOpenEditModal(item)}
+                        style={{
+                          padding: '6px',
+                          borderRadius: 8,
+                          border: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
+                          color: '#0047ab',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title="Editar Material"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                    )}
 
                     {/* Delete Icon */}
-                    <button
-                      onClick={() => setDeletingItem(item)}
-                      style={{
-                        padding: '6px',
-                        borderRadius: 8,
-                        border: '1px solid #fca5a5',
-                        backgroundColor: '#fef2f2',
-                        color: '#dc2626',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      title="Excluir Material"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setDeletingItem(item)}
+                        style={{
+                          padding: '6px',
+                          borderRadius: 8,
+                          border: '1px solid #fca5a5',
+                          backgroundColor: '#fef2f2',
+                          color: '#dc2626',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title="Excluir Material"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
 

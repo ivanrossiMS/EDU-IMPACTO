@@ -29,8 +29,11 @@ export function PageContent({
   bottomMarginOffset = 0, onBottomMarginOffsetChange,
   leftMarginOffset = 0, onLeftMarginOffsetChange,
   rightMarginOffset = 0, onRightMarginOffsetChange,
-  readOnly = false
+  readOnly = false,
+  totalPages = 0,
+  adicionarPaginaRedacao = false
 }: any) {
+  const isLastRedacaoPage = adicionarPaginaRedacao && pIndex === totalPages - 1 && pIndex > 0;
   const [imgMenuOpen, setImgMenuOpen] = useState<string | null>(null);
   const [mainImgMenuOpen, setMainImgMenuOpen] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
@@ -214,9 +217,9 @@ export function PageContent({
           <img src={(simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config.provas_modelo_pdf_url : config.modelo_pdf_url)) || undefined} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
-      {pIndex > 0 && (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config?.provas_modelo_pdf_outras_paginas_url : config?.modelo_pdf_outras_paginas_url)) && (
+      {pIndex > 0 && (isLastRedacaoPage ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config?.provas_modelo_pdf_outras_paginas_url : config?.modelo_pdf_outras_paginas_url))) && (
         <div className="print-repeating-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
-          <img src={(simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config.provas_modelo_pdf_outras_paginas_url : config.modelo_pdf_outras_paginas_url)) || undefined} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img src={(isLastRedacaoPage ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config.provas_modelo_pdf_outras_paginas_url : config.modelo_pdf_outras_paginas_url))) || undefined} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
 
@@ -884,7 +887,21 @@ export function PageContent({
               if (block.type === 'part_descritiva_line') {
                 return (
                   <div key={`b-${bIndex}`} style={{ marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
-                    <div style={{ width: '28px', minWidth: '28px' }}></div>
+                    <div style={{
+                      width: '28px',
+                      minWidth: '28px',
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      justifyContent: 'flex-end',
+                      paddingRight: '6px',
+                      fontSize: '9pt',
+                      color: '#a1a1aa',
+                      fontWeight: 500,
+                      userSelect: 'none',
+                      height: 28
+                    }}>
+                      {block.estiloEspaco === 'pautado' ? (block.lineIndex + 1) : ''}
+                    </div>
                     <div style={{ flex: 1 }}>
                       {block.estiloEspaco === 'pautado' ? (
                         <div style={{ height: 28, borderBottom: '1px solid #000', width: '100%' }} />
@@ -942,11 +959,20 @@ export function PageContent({
                 return (
                   <div key={`b-${bIndex}`} className="alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
                     <div style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      width: '28px', height: '28px', minWidth: '28px', backgroundColor: block.isFirst ? '#1e293b' : 'transparent', color: block.isFirst ? '#ffffff' : 'transparent',
-                      fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
+                      display: 'flex',
+                      alignItems: block.isFirst ? 'center' : 'flex-end',
+                      justifyContent: block.isFirst ? 'center' : 'flex-end',
+                      width: '28px', height: '28px', minWidth: '28px',
+                      backgroundColor: block.isFirst ? '#1e293b' : 'transparent',
+                      color: block.isFirst ? '#ffffff' : '#a1a1aa',
+                      fontWeight: block.isFirst ? 900 : 500,
+                      borderRadius: block.isFirst ? '8px' : '0px',
+                      fontSize: block.isFirst ? '11pt' : '9pt',
+                      marginTop: block.isFirst ? '4px' : '0px',
+                      paddingRight: block.isFirst ? '0px' : '6px',
+                      userSelect: 'none'
                     }}>
-                      {block.isFirst ? block.qIndex + 1 : ''}
+                      {block.isFirst ? (block.qIndex + 1) : (block.style !== 'branco' ? (block.lineIndex + 1) : '')}
                     </div>
                     <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                       <div style={{ width: '100%', borderBottom: block.style === 'branco' ? 'none' : '1px solid #000', height: 28 }} />

@@ -41,6 +41,7 @@ const PUBLIC_PATHS = [
   '/api/pesquisa',      // API pública para formulários de pesquisa
   '/guia-seguranca-digital', // Guia E-book de Segurança Digital (Público/Orfão)
   '/guia-seguranca',    // Alias do guia público
+  '/regimento-interno', // Regimento Interno do Colégio Impacto (Público/Orfão)
 ]
 
 function isPublicPath(pathname: string): boolean {

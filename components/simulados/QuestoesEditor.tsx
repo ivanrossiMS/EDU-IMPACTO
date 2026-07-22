@@ -392,7 +392,7 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))' }}>
                               <label style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Tamanho (em linhas):</label>
                               <div style={{ display: 'flex', gap: 6 }}>
-                                {[3, 5, 10, 15, 20].map(n => (
+                                {[3, 5, 10, 15, 20, 25, 30].map(n => (
                                   <button
                                     key={n}
                                     onClick={() => !readOnly && updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', linhas_resposta: n })}

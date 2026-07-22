@@ -34,6 +34,7 @@ interface PaginationEngineProps {
   onLeftMarginOffsetChange?: (offset: number) => void;
   rightMarginOffset?: number;
   onRightMarginOffsetChange?: (offset: number) => void;
+  adicionarPaginaRedacao?: boolean;
 }
 
 export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
@@ -143,7 +144,7 @@ export function PaginationEngine({
   isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage,
   showMargins, topMarginOffset, onTopMarginOffsetChange, bottomMarginOffset, onBottomMarginOffsetChange,
   leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange,
-  readOnly = false
+  readOnly = false, adicionarPaginaRedacao
 }: PaginationEngineProps) {
   
   const [pages, setPages] = useState<any[]>([]);
@@ -303,7 +304,7 @@ export function PaginationEngine({
               renderBlocks.push({ item: { type: 'part_enun_txt', q, content: group.content, originalIndex: group.originalIndex, isFirst: group.originalIndex === 0, qIndex: idx }, h, margin: group.originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_text' });
             } else if (group.type === 'lines') {
               for (let j = 0; j < group.count; j++) {
-                renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex: idx, style: group.style }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
+                renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex: idx, style: group.style, lineIndex: j }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
               }
             } else {
               const h = heights[`${q.id}-img-group-${gIdx}`] || 0;
@@ -313,7 +314,7 @@ export function PaginationEngine({
 
           if (q.tipo_questao === 'descritiva') {
              for (let j = 0; j < linhasResposta; j++) {
-                renderBlocks.push({ item: { type: 'part_descritiva_line', q, estiloEspaco }, h: 28, margin: j === 0 ? 8 : 0, category: 'descritiva_line' });
+                renderBlocks.push({ item: { type: 'part_descritiva_line', q, estiloEspaco, lineIndex: j }, h: 28, margin: j === 0 ? 8 : 0, category: 'descritiva_line' });
              }
           } else {
             if (alternativasLayout === 'horizontal') {
@@ -449,7 +450,7 @@ export function PaginationEngine({
         newPages.push(Array.from({ length: columns }, () => []));
       }
 
-      if (forceExtraPage) {
+      if (forceExtraPage || adicionarPaginaRedacao) {
         newPages.push(Array.from({ length: columns }, () => []));
       }
 
@@ -458,7 +459,7 @@ export function PaginationEngine({
     }, 300);
     
     return () => clearTimeout(timer);
-  }, [questoes, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayout, alternativasLayout, simulado?.isRedacao]);
+  }, [questoes, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayout, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
   const shadowColWidth = columns === 1 ? '174mm' : '81mm';
@@ -724,6 +725,8 @@ export function PaginationEngine({
               rightMarginOffset={rightMarginOffset} 
               onRightMarginOffsetChange={onRightMarginOffsetChange}
               readOnly={readOnly}
+              totalPages={pages.length}
+              adicionarPaginaRedacao={adicionarPaginaRedacao}
             />
           </div>
         ))}
@@ -771,6 +774,8 @@ export function PaginationEngine({
                 rightMarginOffset={rightMarginOffset} 
                 onRightMarginOffsetChange={onRightMarginOffsetChange}
                 readOnly={readOnly}
+                totalPages={pages.length}
+                adicionarPaginaRedacao={adicionarPaginaRedacao}
               />
             </div>
           ))}

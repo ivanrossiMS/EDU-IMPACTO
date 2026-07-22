@@ -103,6 +103,11 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
         if (matchLinhas) {
           setLinhasResposta(parseInt(matchLinhas[1], 10) || 5)
           finalHtml = finalHtml.replace(matchLinhas[0], '').trim()
+          setTipoQuestao('descritiva')
+        } else if (questao?.tipo_questao === 'descritiva') {
+          setTipoQuestao('descritiva')
+        } else {
+          setTipoQuestao('multipla_escolha')
         }
 
         const matchEstilo = finalHtml.match(/<meta name="estilo_espaco" content="(.*?)">/)
@@ -325,12 +330,22 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
 
     try {
       let savedEnunciado = getEnunciadoComImagens()
-      if (turma) savedEnunciado += `\n<meta name="turma" content="${turma}">`
+      
+      // Clean meta tags to avoid duplication
+      savedEnunciado = savedEnunciado.replace(/<meta name="linhas_resposta" content=".*?">/g, '')
+      savedEnunciado = savedEnunciado.replace(/<meta name="estilo_espaco" content=".*?">/g, '')
+      savedEnunciado = savedEnunciado.replace(/<meta name="turma" content=".*?">/g, '')
+      savedEnunciado = savedEnunciado.replace(/<meta name="gerado_por_ia" content=".*?">/g, '')
+      savedEnunciado = savedEnunciado.replace(/<meta name="ia_autor_nome" content=".*?">/g, '')
+      savedEnunciado = savedEnunciado.replace(/<meta name="ia_prova_titulo" content=".*?">/g, '')
+
       if (tipoQuestao === 'descritiva') {
         savedEnunciado += `\n<meta name="linhas_resposta" content="${linhasResposta}">`
         savedEnunciado += `\n<meta name="estilo_espaco" content="${estiloEspaco}">`
       }
 
+      if (turma) savedEnunciado += `\n<meta name="turma" content="${turma}">`
+      
       if (isAiGenerated && !questao?.id) {
         let autorNome = 'Professor'
         if (defaultProfessorId) {
@@ -382,9 +397,9 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
         if (errDel) throw errDel
       }
 
-      const altsData = tipoQuestao === 'multipla_escolha' ? alternativas.filter(a => a.texto.trim() !== '').map(a => ({
+      const altsData = tipoQuestao === 'multipla_escolha' ? alternativas.filter(a => a.texto.trim() !== '').map((a, i) => ({
         id_questao: qId,
-        letra: a.letra,
+        letra: ['A','B','C','D','E','F','G','H'][i] || a.letter || a.letra,
         texto: a.texto,
         eh_correta: a.correta
       })) : []
@@ -449,6 +464,17 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
       }
       newAlts[index] = { ...newAlts[index], [field]: value }
       return newAlts
+    })
+  }
+
+  const removeAlternativa = (index: number) => {
+    setAlternativas(prev => {
+      const remaining = prev.filter((_, i) => i !== index)
+      const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+      return remaining.map((alt, i) => ({
+        ...alt,
+        letra: letters[i] || String.fromCharCode(65 + i)
+      }))
     })
   }
 
@@ -631,42 +657,163 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
                 </div>
               </div>
 
-              {tipoQuestao === 'multipla_escolha' && (
-                <div style={{ marginTop: 8 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: '0 0 16px' }}>Alternativas</h3>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {alternativas.map((alt, i) => (
-                      <div key={alt.letra} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div 
-                          onClick={() => updateAlternativa(i, 'correta', true)}
-                          style={{ 
-                            width: 40, height: 40, borderRadius: '50%', 
-                            background: alt.correta ? '#10b981' : 'rgba(100,116,139,0.1)', 
-                            color: alt.correta ? 'white' : 'hsl(var(--text-secondary))', 
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                            fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s'
-                          }}
-                          title="Marcar como correta"
-                        >
-                          {alt.letra}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0, borderRadius: 12, border: `1px solid ${alt.correta ? '#10b981' : 'transparent'}` }}>
-                          <EditorQuill 
-                            value={alt.texto} 
-                            onChange={(val) => updateAlternativa(i, 'texto', val)} 
-                            placeholder={`Texto da alternativa ${alt.letra}`}
-                            compact={true}
-                          />
-                        </div>
-                      </div>
-                    ))}
+              <div style={{ marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: 0 }}>Tipo de Resposta</h3>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setTipoQuestao('multipla_escolha')}
+                      style={{
+                        padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+                        background: tipoQuestao === 'multipla_escolha' ? 'rgba(59,130,246,0.1)' : 'transparent',
+                        color: tipoQuestao === 'multipla_escolha' ? '#3b82f6' : 'hsl(var(--text-secondary))',
+                        borderColor: tipoQuestao === 'multipla_escolha' ? 'rgba(59,130,246,0.3)' : 'hsl(var(--border-subtle))',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Múltipla Escolha
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTipoQuestao('descritiva')}
+                      style={{
+                        padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+                        background: tipoQuestao === 'descritiva' ? 'rgba(59,130,246,0.1)' : 'transparent',
+                        color: tipoQuestao === 'descritiva' ? '#3b82f6' : 'hsl(var(--text-secondary))',
+                        borderColor: tipoQuestao === 'descritiva' ? 'rgba(59,130,246,0.3)' : 'hsl(var(--border-subtle))',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Descritiva
+                    </button>
                   </div>
-                  <p style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', marginTop: 12 }}>
-                    * Clique na letra (A, B, C...) para marcar a alternativa correta.
-                  </p>
                 </div>
-              )}
+
+                {tipoQuestao === 'multipla_escolha' ? (
+                  <div>
+                    <h4 style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 12 }}>Alternativas</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {alternativas.map((alt, i) => (
+                        <div key={alt.letra} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div 
+                            onClick={() => updateAlternativa(i, 'correta', true)}
+                            style={{ 
+                              width: 40, height: 40, borderRadius: '50%', 
+                              background: alt.correta ? '#10b981' : 'rgba(100,116,139,0.1)', 
+                              color: alt.correta ? 'white' : 'hsl(var(--text-secondary))', 
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                              fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s',
+                              flexShrink: 0
+                            }}
+                            title="Marcar como correta"
+                          >
+                            {alt.letra}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0, borderRadius: 12, border: `1px solid ${alt.correta ? '#10b981' : 'transparent'}` }}>
+                            <EditorQuill 
+                              value={alt.texto} 
+                              onChange={(val) => updateAlternativa(i, 'texto', val)} 
+                              placeholder={`Texto da alternativa ${alt.letra}`}
+                              compact={true}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeAlternativa(i)}
+                            style={{
+                              width: 32, height: 32, borderRadius: 8,
+                              background: 'transparent', border: '1px solid hsl(var(--border-subtle))',
+                              color: '#ef4444', display: 'flex', alignItems: 'center',
+                              justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s',
+                              flexShrink: 0
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.05)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            title="Excluir alternativa"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    {alternativas.length < 8 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+                          setAlternativas(prev => {
+                            const nextLetter = letters[prev.length] || String.fromCharCode(65 + prev.length)
+                            return [...prev, { letra: nextLetter, texto: '', correta: false }]
+                          })
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '8px 16px', borderRadius: 10,
+                          background: 'rgba(59,130,246,0.08)', color: '#3b82f6',
+                          border: '1px solid rgba(59,130,246,0.15)', fontSize: 13,
+                          fontWeight: 700, cursor: 'pointer', width: 'fit-content',
+                          marginTop: 12
+                        }}
+                      >
+                        <Plus size={16} /> Adicionar Alternativa
+                      </button>
+                    )}
+                    <p style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', marginTop: 12 }}>
+                      * Clique na letra (A, B, C...) para marcar a alternativa correta.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px', borderRadius: 16, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Questão Descritiva</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button 
+                          type="button"
+                          onClick={() => setEstiloEspaco('pautado')}
+                          style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid', 
+                                   background: estiloEspaco === 'pautado' ? 'rgba(59,130,246,0.1)' : 'transparent',
+                                   color: estiloEspaco === 'pautado' ? '#3b82f6' : 'hsl(var(--text-secondary))',
+                                   borderColor: estiloEspaco === 'pautado' ? 'rgba(59,130,246,0.3)' : 'hsl(var(--border-subtle))' }}>
+                          Linhas Pautadas
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setEstiloEspaco('em_branco')}
+                          style={{ padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid',
+                                   background: estiloEspaco === 'em_branco' ? 'rgba(59,130,246,0.1)' : 'transparent',
+                                   color: estiloEspaco === 'em_branco' ? '#3b82f6' : 'hsl(var(--text-secondary))',
+                                   borderColor: estiloEspaco === 'em_branco' ? 'rgba(59,130,246,0.3)' : 'hsl(var(--border-subtle))' }}>
+                          Espaço em Branco
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))' }}>
+                      <label style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Tamanho (em linhas):</label>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {[3, 5, 10, 15, 20, 25, 30].map(n => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setLinhasResposta(n)}
+                            style={{
+                              width: 32, height: 32, borderRadius: 8, border: '1px solid',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                              background: linhasResposta === n ? '#8b5cf6' : 'transparent',
+                              color: linhasResposta === n ? 'white' : 'hsl(var(--text-secondary))',
+                              borderColor: linhasResposta === n ? '#8b5cf6' : 'hsl(var(--border-subtle))',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
 
             </form>
           </div>
@@ -703,12 +850,21 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
                     )}
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ padding: '24px 16px', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px dashed hsl(var(--border-subtle))', textAlign: 'center' }}>
-                      <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: 14 }}>
-                        Espaço para resposta do aluno ({linhasResposta} linhas - {estiloEspaco === 'pautado' ? 'Pautado' : 'Em Branco'})
-                      </span>
-                    </div>
+                  <div>
+                    {estiloEspaco === 'pautado' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '12px 16px', background: 'white' }}>
+                        {Array.from({ length: linhasResposta }).map((_, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', height: 24, width: '100%' }}>
+                            <span style={{ width: 20, fontSize: 10, color: '#a1a1aa', textAlign: 'right', paddingRight: 6, userSelect: 'none' }}>{i + 1}</span>
+                            <div style={{ flex: 1, height: '100%', borderBottom: '1px solid #e2e8f0' }} />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ height: linhasResposta * 24, border: '1px dashed #cbd5e1', borderRadius: 8, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 12, fontStyle: 'italic' }}>
+                        Espaço em branco ({linhasResposta} linhas)
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

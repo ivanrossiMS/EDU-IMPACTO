@@ -339,7 +339,7 @@ export default function EditarRedaçãoUploadPage() {
 
               return (
                 <motion.div key={a.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px auto', gap: 14, alignItems: 'flex-end', background: 'hsl(var(--bg-app))', padding: '16px 20px', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))', opacity: isDisabled ? 0.7 : 1 }}>
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 14, alignItems: 'flex-end', background: 'hsl(var(--bg-app))', padding: '16px 20px', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))', opacity: isDisabled ? 0.7 : 1 }}>
                   <div>
                     <label style={{ ...labelStyle, marginBottom: 6 }}>Disciplina *</label>
                     <select value={a.disciplinaId} onChange={e => updateAssignment(a.id, 'disciplinaId', e.target.value)}
@@ -367,13 +367,7 @@ export default function EditarRedaçãoUploadPage() {
                       {filteredProfs.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label style={{ ...labelStyle, marginBottom: 6 }}>Qtd. Quest.</label>
-                    <input type="number" min={1} max={100}
-                      value={Number.isNaN(a.qtdQuestoes) ? '' : a.qtdQuestoes}
-                      onChange={e => updateAssignment(a.id, 'qtdQuestoes', parseInt(e.target.value))}
-                      style={{ ...inputStyle, padding: '10px 12px', fontSize: 14, textAlign: 'center' }} />
-                  </div>
+
                   <div>
                     <motion.button onClick={() => removeAssignment(a.id)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }} disabled={assignments.length === 1 || isDisabled}
                       style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (assignments.length === 1 || isDisabled) ? 'not-allowed' : 'pointer', opacity: (assignments.length === 1 || isDisabled) ? 0.3 : 1 }}>

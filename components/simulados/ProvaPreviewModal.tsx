@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, Reorder } from 'framer-motion'
-import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit } from 'lucide-react'
+import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, PenTool } from 'lucide-react'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
@@ -62,6 +62,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
   const [rightMarginOffset, setRightMarginOffset] = useState<number>(prova?.config_estudio?.config_margin_right || 0);
   const [topMarginOffset, setTopMarginOffset] = useState<number>(prova?.config_estudio?.config_margin_top || 0);
   const [bottomMarginOffset, setBottomMarginOffset] = useState<number>(prova?.config_estudio?.config_margin_bottom || 0);
+  const [adicionarPaginaRedacao, setAdicionarPaginaRedacao] = useState<boolean>(prova?.config_estudio?.adicionar_pagina_redacao || false);
 
   useEffect(() => {
     const saved = localStorage.getItem('simulador_margins_padrao')
@@ -401,6 +402,27 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
           </div>
 
           <div style={{ marginBottom: 32 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 12 }}>
+              <PenTool size={16} color="#8b5cf6" /> Folha de Redação
+            </label>
+            <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12, lineHeight: 1.4 }}>Adiciona uma folha de redação oficial (estilo ENEM) ao final do documento, após todas as questões.</p>
+            <button
+              type="button"
+              onClick={() => setAdicionarPaginaRedacao(!adicionarPaginaRedacao)}
+              style={{
+                width: '100%', padding: '12px', borderRadius: 12,
+                background: adicionarPaginaRedacao ? 'rgba(139,92,246,0.1)' : '#f8fafc',
+                color: adicionarPaginaRedacao ? '#8b5cf6' : '#475569',
+                border: `1px solid ${adicionarPaginaRedacao ? '#8b5cf6' : '#e2e8f0'}`,
+                fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', fontSize: 13,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+              }}
+            >
+              {adicionarPaginaRedacao ? 'Remover Página de Redação' : 'Adicionar Página de Redação'}
+            </button>
+          </div>
+
+          <div style={{ marginBottom: 32 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
               <CheckSquare size={16} color="#10b981" /> Resumo de Seleção
             </label>
@@ -485,7 +507,12 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                   config_fonte_enunciado: enunciadoFontSize,
                   config_fonte_alternativa: alternativasFontSize,
                   config_colunas: columns,
-                  config_layout_alternativas: alternativasLayout
+                  config_layout_alternativas: alternativasLayout,
+                  config_margin_left: leftMarginOffset,
+                  config_margin_right: rightMarginOffset,
+                  config_margin_top: topMarginOffset,
+                  config_margin_bottom: bottomMarginOffset,
+                  adicionar_pagina_redacao: adicionarPaginaRedacao
                 })
                 onClose()
               }} 
@@ -542,6 +569,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
             onLeftMarginOffsetChange={setLeftMarginOffset}
             rightMarginOffset={rightMarginOffset}
             onRightMarginOffsetChange={setRightMarginOffset}
+            adicionarPaginaRedacao={adicionarPaginaRedacao}
             onEditEnunciado={isReadOnly ? () => {} : (qId, newText) => {
               setLocalQuestoes(prev => prev.map(q => {
                 if ((q._internalId || q.id) !== qId) return q
