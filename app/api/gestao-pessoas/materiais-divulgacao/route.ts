@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  return createClient(supabaseUrl, supabaseKey)
+}
 
 // Only real materials created in the application
 const REAL_DEFAULT_MATERIALS = [
@@ -21,47 +29,32 @@ const REAL_DEFAULT_MATERIALS = [
 
 export async function GET() {
   try {
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll() },
-          setAll(cookiesToSet) {}
-        }
-      }
-    )
-
+    const supabase = getSupabaseClient()
     const { data, error } = await supabase
       .from('gp_materiais_divulgacao')
       .select('*')
       .order('created_at', { ascending: false })
 
     if (error || !data || data.length === 0) {
-      return NextResponse.json({ success: true, data: REAL_DEFAULT_MATERIALS })
+      return NextResponse.json({ success: true, data: REAL_DEFAULT_MATERIALS }, {
+        headers: { 'Cache-Control': 'no-store, max-age=0' }
+      })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data }, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' }
+    })
   } catch (err: any) {
-    return NextResponse.json({ success: true, data: REAL_DEFAULT_MATERIALS })
+    return NextResponse.json({ success: true, data: REAL_DEFAULT_MATERIALS }, {
+      headers: { 'Cache-Control': 'no-store, max-age=0' }
+    })
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() { return cookieStore.getAll() },
-          setAll(cookiesToSet) {}
-        }
-      }
-    )
+    const supabase = getSupabaseClient()
 
     // Increment Visit Action
     if (body.action === 'increment_visit' && body.id) {
@@ -125,6 +118,7 @@ export async function POST(request: Request) {
         .single()
 
       if (error) {
+        console.error('Supabase insert error:', error)
         return NextResponse.json({ success: true, newItem: { id: `mat-${Date.now()}`, ...payload } })
       }
 
