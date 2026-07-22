@@ -79,9 +79,30 @@ export async function POST(request: Request) {
           .eq('id', body.id)
 
         return NextResponse.json({ success: true, contador_visitas: newCount })
-      }
+      } else {
+        // If not in Supabase yet, upsert the material into the cloud database with count = 1
+        const initialItem = REAL_DEFAULT_MATERIALS.find(m => m.id === body.id) || {
+          id: body.id,
+          titulo: 'Guia de Segurança Digital para Pais e Responsáveis',
+          descricao: 'E-book e guia prático interativo sobre Controle Parental, tempo de tela, redes sociais e segurança no celular para famílias do Colégio Impacto.',
+          categoria: 'Guias & E-books',
+          link: '/guia-seguranca',
+          imagem_url: '/guia-seguranca/family_digital_safety.jpg',
+          autor: 'Equipe Pedagógica – Colégio Impacto',
+          tags: ['Segurança Digital', 'Controle Parental', 'Família', 'E-book']
+        }
 
-      return NextResponse.json({ success: true, incremented: true })
+        const { data: created } = await supabase
+          .from('gp_materiais_divulgacao')
+          .upsert({
+            ...initialItem,
+            contador_visitas: 1,
+            ativo: true
+          })
+          .select()
+
+        return NextResponse.json({ success: true, contador_visitas: 1, created })
+      }
     }
 
     // Create New Material Action
