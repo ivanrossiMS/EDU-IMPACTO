@@ -13,8 +13,9 @@ import {
   Award,
   Check,
   X,
-  Sparkles,
-  BookOpen
+  Edit3,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 
 interface MaterialItem {
@@ -37,10 +38,14 @@ export default function MateriaisDivulgacaoPage() {
   const [search, setSearch] = useState('')
   const [selectedCategoria, setSelectedCategoria] = useState<string>('Todas')
   const [sortBy, setSortBy] = useState<'visitas' | 'recentes' | 'titulo'>('visitas')
+  
+  // Modals state
   const [showModal, setShowModal] = useState(false)
+  const [editingItem, setEditingItem] = useState<MaterialItem | null>(null)
+  const [deletingItem, setDeletingItem] = useState<MaterialItem | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  // Form State for new material
+  // Form State
   const [formTitulo, setFormTitulo] = useState('')
   const [formDescricao, setFormDescricao] = useState('')
   const [formCategoria, setFormCategoria] = useState('Guias & E-books')
@@ -87,12 +92,10 @@ export default function MateriaisDivulgacaoPage() {
   const handleOpenMaterial = async (item: MaterialItem) => {
     const newCount = (item.contador_visitas || 0) + 1
 
-    // Instant local state update
     setMateriais(prev =>
       prev.map(m => (m.id === item.id ? { ...m, contador_visitas: newCount } : m))
     )
 
-    // Save to localStorage immediately
     try {
       const saved = localStorage.getItem('impacto_materiais_visitas')
       const localVisits = saved ? JSON.parse(saved) : {}
@@ -100,7 +103,6 @@ export default function MateriaisDivulgacaoPage() {
       localStorage.setItem('impacto_materiais_visitas', JSON.stringify(localVisits))
     } catch (e) {}
 
-    // Call API to persist visit count in Supabase
     try {
       fetch('/api/gestao-pessoas/materiais-divulgacao', {
         method: 'POST',
@@ -111,7 +113,6 @@ export default function MateriaisDivulgacaoPage() {
       console.error(e)
     }
 
-    // Open link
     if (item.link.startsWith('/')) {
       window.open(item.link, '_blank')
     } else {
@@ -129,42 +130,128 @@ export default function MateriaisDivulgacaoPage() {
     setTimeout(() => setCopiedId(null), 2500)
   }
 
-  // Create new material
-  const handleCreateMaterial = async (e: React.FormEvent) => {
+  // Open modal for new item
+  const handleOpenNewModal = () => {
+    setEditingItem(null)
+    setFormTitulo('')
+    setFormDescricao('')
+    setFormCategoria('Guias & E-books')
+    setFormLink('')
+    setFormImagemUrl('')
+    setFormAutor('Equipe Pedagógica')
+    setFormTags('Divulgação, Escola')
+    setShowModal(true)
+  }
+
+  // Open modal for editing existing item
+  const handleOpenEditModal = (item: MaterialItem) => {
+    setEditingItem(item)
+    setFormTitulo(item.titulo)
+    setFormDescricao(item.descricao)
+    setFormCategoria(item.categoria)
+    setFormLink(item.link)
+    setFormImagemUrl(item.imagem_url || '')
+    setFormAutor(item.autor)
+    setFormTags(item.tags ? item.tags.join(', ') : '')
+    setShowModal(true)
+  }
+
+  // Save (Create or Update)
+  const handleSaveMaterial = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formTitulo || !formLink) return
 
     const tagsArray = formTags.split(',').map(t => t.trim()).filter(Boolean)
 
-    const payload = {
-      action: 'create',
-      titulo: formTitulo,
-      descricao: formDescricao,
-      categoria: formCategoria,
-      link: formLink,
-      imagem_url: formImagemUrl || null,
-      autor: formAutor,
-      tags: tagsArray.length > 0 ? tagsArray : ['Divulgação']
+    if (editingItem) {
+      // UPDATE EXISTING
+      const payload = {
+        action: 'update',
+        id: editingItem.id,
+        titulo: formTitulo,
+        descricao: formDescricao,
+        categoria: formCategoria,
+        link: formLink,
+        imagem_url: formImagemUrl || null,
+        autor: formAutor,
+        tags: tagsArray.length > 0 ? tagsArray : ['Divulgação']
+      }
+
+      setMateriais(prev =>
+        prev.map(m => (m.id === editingItem.id ? { ...m, ...payload } : m))
+      )
+
+      try {
+        await fetch('/api/gestao-pessoas/materiais-divulgacao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+      } catch (e) {
+        console.error(e)
+      }
+    } else {
+      // CREATE NEW
+      const payload = {
+        action: 'create',
+        titulo: formTitulo,
+        descricao: formDescricao,
+        categoria: formCategoria,
+        link: formLink,
+        imagem_url: formImagemUrl || null,
+        autor: formAutor,
+        tags: tagsArray.length > 0 ? tagsArray : ['Divulgação']
+      }
+
+      try {
+        const res = await fetch('/api/gestao-pessoas/materiais-divulgacao', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        const json = await res.json()
+        if (json.success && json.newItem) {
+          setMateriais(prev => [json.newItem, ...prev])
+        }
+      } catch (e) {
+        console.error(e)
+      }
     }
 
+    setShowModal(false)
+  }
+
+  // Delete Material
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return
+
+    const targetId = deletingItem.id
+
+    // Update local state immediately
+    setMateriais(prev => prev.filter(m => m.id !== targetId))
+
+    // Remove from localStorage cache
     try {
-      const res = await fetch('/api/gestao-pessoas/materiais-divulgacao', {
+      const saved = localStorage.getItem('impacto_materiais_visitas')
+      if (saved) {
+        const localVisits = JSON.parse(saved)
+        delete localVisits[targetId]
+        localStorage.setItem('impacto_materiais_visitas', JSON.stringify(localVisits))
+      }
+    } catch (e) {}
+
+    // Call API to delete from Supabase
+    try {
+      await fetch('/api/gestao-pessoas/materiais-divulgacao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ action: 'delete', id: targetId })
       })
-      const json = await res.json()
-      if (json.success && json.newItem) {
-        setMateriais(prev => [json.newItem, ...prev])
-        setShowModal(false)
-        setFormTitulo('')
-        setFormDescricao('')
-        setFormLink('')
-        setFormImagemUrl('')
-      }
     } catch (e) {
       console.error(e)
     }
+
+    setDeletingItem(null)
   }
 
   const categorias = ['Todas', 'Guias & E-books', 'Manuais & Tutoriais', 'Campanhas & Folders', 'Formulários & Pesquisas']
@@ -200,7 +287,7 @@ export default function MateriaisDivulgacaoPage() {
       margin: '0 auto'
     }}>
       
-      {/* ──────────────── HEADER DA PÁGINA (LIGHT THEME) ──────────────── */}
+      {/* ──────────────── HEADER DA PÁGINA ──────────────── */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -239,7 +326,7 @@ export default function MateriaisDivulgacaoPage() {
         </div>
 
         <button
-          onClick={() => setShowModal(true)}
+          onClick={handleOpenNewModal}
           style={{
             padding: '12px 24px',
             borderRadius: 14,
@@ -262,7 +349,7 @@ export default function MateriaisDivulgacaoPage() {
       </div>
 
 
-      {/* ──────────────── CARDS DE MÉTRICAS (LIGHT THEME) ──────────────── */}
+      {/* ──────────────── CARDS DE MÉTRICAS ──────────────── */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -270,7 +357,6 @@ export default function MateriaisDivulgacaoPage() {
         marginBottom: 32
       }}>
         
-        {/* Metric 1: Total Materiais */}
         <div style={{
           backgroundColor: '#ffffff',
           padding: 24,
@@ -292,7 +378,6 @@ export default function MateriaisDivulgacaoPage() {
           </div>
         </div>
 
-        {/* Metric 2: Total de Visitas */}
         <div style={{
           backgroundColor: '#ffffff',
           padding: 24,
@@ -314,7 +399,6 @@ export default function MateriaisDivulgacaoPage() {
           </div>
         </div>
 
-        {/* Metric 3: Mais Visitado */}
         <div style={{
           backgroundColor: '#ffffff',
           padding: 24,
@@ -335,7 +419,7 @@ export default function MateriaisDivulgacaoPage() {
             </p>
             {maisVisitado && (
               <span style={{ fontSize: 12, color: '#d97706', fontWeight: 700 }}>
-                🔥 {maisVisitado.contador_visitas} acessos
+                🔥 {maisVisitado.contador_visitas || 0} acessos
               </span>
             )}
           </div>
@@ -344,7 +428,7 @@ export default function MateriaisDivulgacaoPage() {
       </div>
 
 
-      {/* ──────────────── BANNER EM DESTAQUE (LIGHT THEME) ──────────────── */}
+      {/* ──────────────── BANNER EM DESTAQUE ──────────────── */}
       {maisVisitado && (
         <div style={{
           backgroundColor: '#ffffff',
@@ -364,13 +448,35 @@ export default function MateriaisDivulgacaoPage() {
           }}>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ backgroundColor: '#0047ab', color: '#ffffff', fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 12px', borderRadius: 20 }}>
-                  ⭐ Material em Destaque
-                </span>
-                <span style={{ backgroundColor: '#ecfdf5', color: '#047857', fontSize: 12, fontWeight: 800, padding: '4px 10px', borderRadius: 20, border: '1px solid #a7f3d0' }}>
-                  👁️ {maisVisitado.contador_visitas} Acessos Registrados
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ backgroundColor: '#0047ab', color: '#ffffff', fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', padding: '4px 12px', borderRadius: 20 }}>
+                    ⭐ Material em Destaque
+                  </span>
+                  <span style={{ backgroundColor: '#ecfdf5', color: '#047857', fontSize: 12, fontWeight: 800, padding: '4px 10px', borderRadius: 20, border: '1px solid #a7f3d0' }}>
+                    👁️ {maisVisitado.contador_visitas || 0} Acessos Registrados
+                  </span>
+                </div>
+
+                {/* Edit / Delete Action Buttons for Featured */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    onClick={() => handleOpenEditModal(maisVisitado)}
+                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', backgroundColor: '#ffffff', color: '#0f172a', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}
+                    title="Editar Material"
+                  >
+                    <Edit3 size={14} color="#0047ab" />
+                    <span>Editar</span>
+                  </button>
+                  <button
+                    onClick={() => setDeletingItem(maisVisitado)}
+                    style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #fca5a5', backgroundColor: '#fef2f2', color: '#dc2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700 }}
+                    title="Excluir Material"
+                  >
+                    <Trash2 size={14} />
+                    <span>Excluir</span>
+                  </button>
+                </div>
               </div>
 
               <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
@@ -442,7 +548,7 @@ export default function MateriaisDivulgacaoPage() {
       )}
 
 
-      {/* ──────────────── BARRA DE FERRAMENTAS & FILTROS (LIGHT THEME) ──────────────── */}
+      {/* ──────────────── BARRA DE FERRAMENTAS & FILTROS ──────────────── */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
@@ -457,7 +563,6 @@ export default function MateriaisDivulgacaoPage() {
         boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
       }}>
         
-        {/* Search input */}
         <div style={{ position: 'relative', flex: 1, minWidth: 260 }}>
           <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
           <input
@@ -478,7 +583,6 @@ export default function MateriaisDivulgacaoPage() {
           />
         </div>
 
-        {/* Categories Pills */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {categorias.map(cat => (
             <button
@@ -500,7 +604,6 @@ export default function MateriaisDivulgacaoPage() {
           ))}
         </div>
 
-        {/* Sort selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Ordenar:</span>
           <select
@@ -527,7 +630,7 @@ export default function MateriaisDivulgacaoPage() {
       </div>
 
 
-      {/* ──────────────── GRID DE CARDS DE MATERIAIS (LIGHT THEME) ──────────────── */}
+      {/* ──────────────── GRID DE CARDS DE MATERIAIS ──────────────── */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
           <div style={{ width: 36, height: 36, border: '3px solid #cbd5e1', borderTopColor: '#0047ab', borderRadius: '50%', margin: '0 auto 16px', animation: 'spin 1s linear infinite' }} />
@@ -537,7 +640,7 @@ export default function MateriaisDivulgacaoPage() {
         <div style={{ textAlign: 'center', padding: '60px 0', backgroundColor: '#ffffff', borderRadius: 24, border: '1px solid #e2e8f0' }}>
           <Megaphone size={40} color="#94a3b8" style={{ margin: '0 auto 12px' }} />
           <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>Nenhum material encontrado</p>
-          <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0' }}>Tente ajustar a busca ou alterar o filtro de categorias.</p>
+          <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0' }}>Tente ajustar a busca ou clicar em "+ Novo Material".</p>
         </div>
       ) : (
         <div style={{
@@ -558,12 +661,13 @@ export default function MateriaisDivulgacaoPage() {
                 justifyContent: 'space-between',
                 gap: 16,
                 boxShadow: '0 4px 16px rgba(0, 0, 0, 0.03)',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                position: 'relative'
               }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 
-                {/* Category & Visit Counter Header */}
+                {/* Category, Visits Counter & Edit/Delete Action Icons */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{
                     backgroundColor: '#eff6ff',
@@ -577,21 +681,60 @@ export default function MateriaisDivulgacaoPage() {
                     {item.categoria}
                   </span>
 
-                  {/* VISITS COUNTER BADGE */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    backgroundColor: '#ecfdf5',
-                    color: '#047857',
-                    fontSize: 12,
-                    fontWeight: 800,
-                    padding: '4px 10px',
-                    borderRadius: 12,
-                    border: '1px solid #a7f3d0'
-                  }}>
-                    <Eye size={14} />
-                    <span>{item.contador_visitas || 0} acessos</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      backgroundColor: '#ecfdf5',
+                      color: '#047857',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      padding: '4px 10px',
+                      borderRadius: 12,
+                      border: '1px solid #a7f3d0'
+                    }}>
+                      <Eye size={14} />
+                      <span>{item.contador_visitas || 0} acessos</span>
+                    </div>
+
+                    {/* Edit Icon */}
+                    <button
+                      onClick={() => handleOpenEditModal(item)}
+                      style={{
+                        padding: '6px',
+                        borderRadius: 8,
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: '#ffffff',
+                        color: '#0047ab',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Editar Material"
+                    >
+                      <Edit3 size={14} />
+                    </button>
+
+                    {/* Delete Icon */}
+                    <button
+                      onClick={() => setDeletingItem(item)}
+                      style={{
+                        padding: '6px',
+                        borderRadius: 8,
+                        border: '1px solid #fca5a5',
+                        backgroundColor: '#fef2f2',
+                        color: '#dc2626',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}
+                      title="Excluir Material"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
 
@@ -671,7 +814,7 @@ export default function MateriaisDivulgacaoPage() {
       )}
 
 
-      {/* ──────────────── MODAL: CADASTRAR NOVO MATERIAL (LIGHT THEME) ──────────────── */}
+      {/* ──────────────── MODAL: CADASTRAR OU EDITAR MATERIAL ──────────────── */}
       {showModal && (
         <div style={{
           position: 'fixed',
@@ -699,14 +842,14 @@ export default function MateriaisDivulgacaoPage() {
             
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0 }}>
-                + Cadastrar Novo Material
+                {editingItem ? '✏️ Editar Material' : '+ Cadastrar Novo Material'}
               </h3>
               <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateMaterial} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <form onSubmit={handleSaveMaterial} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               
               <div>
                 <label style={{ fontSize: 12, fontWeight: 700, color: '#334155', display: 'block', marginBottom: 6 }}>
@@ -790,11 +933,73 @@ export default function MateriaisDivulgacaoPage() {
                   type="submit"
                   style={{ padding: '10px 20px', borderRadius: 10, border: 'none', backgroundColor: '#0047ab', color: '#ffffff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
                 >
-                  Salvar Material
+                  {editingItem ? 'Salvar Alterações' : 'Salvar Material'}
                 </button>
               </div>
 
             </form>
+
+          </div>
+        </div>
+      )}
+
+
+      {/* ──────────────── MODAL: CONFIRMAÇÃO DE EXCLUSÃO ──────────────── */}
+      {deletingItem && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          backgroundColor: 'rgba(15, 23, 42, 0.5)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20
+        }}>
+          <div style={{
+            backgroundColor: '#ffffff',
+            border: '1px solid #fee2e2',
+            borderRadius: 24,
+            padding: 32,
+            width: '100%',
+            maxWidth: 460,
+            boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            gap: 16
+          }}>
+            
+            <div style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <AlertTriangle size={28} />
+            </div>
+
+            <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0 }}>
+              Excluir Material?
+            </h3>
+
+            <p style={{ fontSize: 14, color: '#475569', margin: 0, lineHeight: 1.5 }}>
+              Tem certeza que deseja excluir o material <strong>&quot;{deletingItem.titulo}&quot;</strong>? Esta ação removerá o item da lista e não poderá ser desfeita.
+            </p>
+
+            <div style={{ display: 'flex', gap: 12, width: '100%', paddingTop: 12 }}>
+              <button
+                type="button"
+                onClick={() => setDeletingItem(null)}
+                style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid #cbd5e1', backgroundColor: '#ffffff', color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                style={{ flex: 1, padding: '12px', borderRadius: 12, border: 'none', backgroundColor: '#dc2626', color: '#ffffff', fontSize: 13, fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)' }}
+              >
+                Sim, Excluir
+              </button>
+            </div>
 
           </div>
         </div>

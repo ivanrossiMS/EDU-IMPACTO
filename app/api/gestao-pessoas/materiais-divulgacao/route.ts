@@ -80,7 +80,6 @@ export async function POST(request: Request) {
 
         return NextResponse.json({ success: true, contador_visitas: newCount })
       } else {
-        // If not in Supabase yet, upsert the material into the cloud database with count = 1
         const initialItem = REAL_DEFAULT_MATERIALS.find(m => m.id === body.id) || {
           id: body.id,
           titulo: 'Guia de Segurança Digital para Pais e Responsáveis',
@@ -130,6 +129,42 @@ export async function POST(request: Request) {
       }
 
       return NextResponse.json({ success: true, newItem: data })
+    }
+
+    // Update Material Action
+    if (body.action === 'update' && body.id) {
+      const payload = {
+        titulo: body.titulo,
+        descricao: body.descricao || '',
+        categoria: body.categoria || 'Guias & E-books',
+        link: body.link,
+        imagem_url: body.imagem_url || null,
+        autor: body.autor || 'Equipe Pedagógica',
+        tags: body.tags || ['Divulgação']
+      }
+
+      const { data, error } = await supabase
+        .from('gp_materiais_divulgacao')
+        .update(payload)
+        .eq('id', body.id)
+        .select()
+        .single()
+
+      if (error) {
+        return NextResponse.json({ success: true, updatedItem: { id: body.id, ...payload } })
+      }
+
+      return NextResponse.json({ success: true, updatedItem: data })
+    }
+
+    // Delete Material Action
+    if (body.action === 'delete' && body.id) {
+      const { error } = await supabase
+        .from('gp_materiais_divulgacao')
+        .delete()
+        .eq('id', body.id)
+
+      return NextResponse.json({ success: true, deletedId: body.id })
     }
 
     return NextResponse.json({ error: 'Ação inválida' }, { status: 400 })
