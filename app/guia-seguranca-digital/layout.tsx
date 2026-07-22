@@ -41,31 +41,5 @@ export default function GuiaSegurancaDigitalLayout({
 }: {
   children: React.ReactNode
 }) {
-  return (
-    <>
-      <head>
-        <title>Guia de Segurança Digital — Colégio Impacto</title>
-        <meta name="title" content="Guia de Segurança Digital — Colégio Impacto" />
-        <meta name="description" content="Guia prático e interativo de Controle Parental, tempo de tela, redes sociais e proteção infantil no celular para famílias do Colégio Impacto." />
-
-        {/* Open Graph / Facebook / WhatsApp */}
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://impacto-edu.net/guia-seguranca-digital" />
-        <meta property="og:title" content="Guia de Segurança Digital — Colégio Impacto" />
-        <meta property="og:description" content="Guia prático e interativo de Controle Parental, tempo de tela, redes sociais e proteção infantil no celular para famílias do Colégio Impacto." />
-        <meta property="og:image" content="https://impacto-edu.net/logo-impacto.png" />
-        <meta property="og:image:secure_url" content="https://impacto-edu.net/logo-impacto.png" />
-        <meta property="og:image:type" content="image/png" />
-        <meta property="og:site_name" content="Colégio Impacto" />
-
-        {/* Twitter */}
-        <meta property="twitter:card" content="summary_large_image" />
-        <meta property="twitter:url" content="https://impacto-edu.net/guia-seguranca-digital" />
-        <meta property="twitter:title" content="Guia de Segurança Digital — Colégio Impacto" />
-        <meta property="twitter:description" content="Guia prático e interativo de Controle Parental, tempo de tela, redes sociais e proteção infantil no celular para famílias do Colégio Impacto." />
-        <meta property="twitter:image" content="https://impacto-edu.net/logo-impacto.png" />
-      </head>
-      {children}
-    </>
-  )
+  return <>{children}</>
 }
