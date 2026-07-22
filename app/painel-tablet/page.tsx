@@ -11,7 +11,7 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { RFIDInput, RFIDInputHandle } from '@/components/saida/RFIDInput'
 import {
   Scan, X, Tablet, ShieldOff, Phone, Search,
-  GraduationCap, CheckCircle2, Clock, Megaphone,
+  GraduationCap, CheckCircle2, Clock, Megaphone, Users,
 } from 'lucide-react'
 
 // ─── CSS vars standalone + animações ──────────────────────────────────────────
@@ -381,6 +381,269 @@ function TabletCardSkeleton() {
   )
 }
 
+// ─── Modal Ultra Moderno para Múltiplos Alunos do Responsável ─────────────────
+function SiblingCallModal({
+  calledStudent,
+  remainingStudents,
+  guardianName,
+  onCallAnother,
+  onCallAllRemaining,
+  onFinish,
+}: {
+  calledStudent: any
+  remainingStudents: any[]
+  guardianName: string
+  onCallAnother: (aluno: any) => void
+  onCallAllRemaining: () => void
+  onFinish: () => void
+}) {
+  const [countdown, setCountdown] = useState(14)
+  const isMobile = useIsMobile()
+
+  useEffect(() => {
+    if (countdown <= 0) {
+      onFinish()
+      return
+    }
+    const timer = setInterval(() => {
+      setCountdown(prev => prev - 1)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [countdown, onFinish])
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(4, 10, 20, 0.92)',
+        backdropFilter: 'blur(24px)',
+        zIndex: 9995,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: isMobile ? 16 : 24,
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0, y: 24 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.92, opacity: 0, y: 24 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+        style={{
+          width: '100%',
+          maxWidth: 720,
+          background: 'linear-gradient(165deg, #0f1c2e 0%, #080f1a 100%)',
+          borderRadius: 32,
+          border: '1.5px solid rgba(6, 182, 212, 0.4)',
+          boxShadow: '0 30px 90px rgba(0, 0, 0, 0.7), 0 0 50px rgba(6, 182, 212, 0.2)',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          position: 'relative',
+        }}
+      >
+        {/* Top Progress bar countdown */}
+        <div style={{ width: '100%', height: 6, background: 'rgba(255, 255, 255, 0.08)', position: 'relative' }}>
+          <div
+            style={{
+              height: '100%',
+              width: `${(countdown / 14) * 100}%`,
+              background: 'linear-gradient(90deg, #06b6d4, #10b981)',
+              transition: 'width 1s linear',
+              boxShadow: '0 0 14px #06b6d4',
+            }}
+          />
+        </div>
+
+        {/* Modal Header */}
+        <div style={{ padding: isMobile ? '24px 20px 16px' : '32px 36px 20px', textAlign: 'center', position: 'relative' }}>
+          {/* Animated Success Check Badge */}
+          <div
+            style={{
+              width: isMobile ? 64 : 76,
+              height: isMobile ? 64 : 76,
+              borderRadius: '50%',
+              margin: '0 auto 16px',
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(6, 182, 212, 0.15))',
+              border: '2px solid rgba(16, 185, 129, 0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 0 35px rgba(16, 185, 129, 0.35)',
+            }}
+          >
+            <CheckCircle2 size={isMobile ? 32 : 40} color="#10b981" />
+          </div>
+
+          <h2 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 900, color: '#fff', margin: '0 0 8px', letterSpacing: '-0.02em', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>
+            {calledStudent.nome} foi chamado(a)!
+          </h2>
+
+          <p style={{ fontSize: isMobile ? 13 : 15, color: '#94a3b8', margin: 0, fontWeight: 600, lineHeight: 1.5 }}>
+            Existe(m) mais <span style={{ color: '#06b6d4', fontWeight: 900 }}>{remainingStudents.length} aluno(s)</span> vinculado(s) ao cartão de <strong style={{ color: '#f1f5f9' }}>{guardianName}</strong>.
+          </p>
+        </div>
+
+        {/* Remaining Siblings List */}
+        <div style={{ padding: isMobile ? '0 20px 20px' : '0 36px 24px', display: 'flex', flexDirection: 'column', gap: 16, maxHeight: 380, overflowY: 'auto' }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Deseja solicitar a saída dos outros alunos?
+          </div>
+
+          {remainingStudents.map((aluno, i) => {
+            const initials = (aluno.nome || '?').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
+            return (
+              <div
+                key={aluno.id || i}
+                style={{
+                  padding: isMobile ? '14px 16px' : '16px 20px',
+                  borderRadius: 24,
+                  background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%)',
+                  border: '1.5px solid rgba(255, 255, 255, 0.1)',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {/* Photo / Initials */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: isMobile ? 64 : 76,
+                      height: isMobile ? 64 : 76,
+                      borderRadius: 20,
+                      flexShrink: 0,
+                      overflow: 'hidden',
+                      background: 'linear-gradient(145deg, #06b6d440, #6366f130)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: isMobile ? 22 : 26,
+                      fontWeight: 900,
+                      color: '#fff',
+                      border: '2px solid rgba(6, 182, 212, 0.4)',
+                      boxShadow: '0 0 20px rgba(6, 182, 212, 0.25)',
+                    }}
+                  >
+                    {aluno.foto ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      initials
+                    )}
+                  </div>
+
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 900, fontSize: isMobile ? 16 : 18, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>
+                      {aluno.nome}
+                    </div>
+                    <div style={{ fontSize: isMobile ? 12 : 14, color: '#06b6d4', fontWeight: 800, marginTop: 4 }}>
+                      🎓 {aluno.turmaNome || aluno.turma || '—'} {aluno.turno ? `· ${aluno.turno}` : ''}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Call button (Bigger & Highlighted) */}
+                <button
+                  onClick={() => onCallAnother(aluno)}
+                  style={{
+                    padding: isMobile ? '12px 18px' : '14px 26px',
+                    borderRadius: 18,
+                    background: 'linear-gradient(135deg, #06b6d4 0%, #2563eb 100%)',
+                    border: 'none',
+                    color: '#fff',
+                    fontWeight: 900,
+                    fontSize: isMobile ? 13 : 15,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexShrink: 0,
+                    boxShadow: '0 6px 24px rgba(6, 182, 212, 0.45)',
+                    transition: 'transform 0.15s, box-shadow 0.15s',
+                  }}
+                  onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.96)')}
+                  onMouseUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+                >
+                  <Megaphone size={isMobile ? 16 : 18} /> CHAMAR
+                </button>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Modal Footer Actions */}
+        <div
+          style={{
+            padding: isMobile ? '18px 20px 22px' : '22px 36px 30px',
+            background: 'rgba(0, 0, 0, 0.35)',
+            borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+            display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 14,
+          }}
+        >
+          {remainingStudents.length > 1 && (
+            <button
+              onClick={onCallAllRemaining}
+              style={{
+                width: isMobile ? '100%' : 'auto',
+                flex: 1,
+                padding: '16px 22px',
+                borderRadius: 18,
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                border: 'none',
+                color: '#fff',
+                fontWeight: 900,
+                fontSize: 14,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                boxShadow: '0 6px 22px rgba(16, 185, 129, 0.35)',
+              }}
+            >
+              <Users size={18} /> CHAMAR TODOS OS RESTANTES ({remainingStudents.length})
+            </button>
+          )}
+
+          <button
+            onClick={onFinish}
+            style={{
+              width: isMobile ? '100%' : 'auto',
+              flex: remainingStudents.length > 1 ? 1 : 1,
+              padding: '16px 22px',
+              borderRadius: 18,
+              background: 'rgba(255, 255, 255, 0.07)',
+              border: '1px solid rgba(255, 255, 255, 0.14)',
+              color: '#cbd5e1',
+              fontWeight: 800,
+              fontSize: 15,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+          >
+            ENCERRAR ({countdown}s)
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 function PainelTabletContent() {
   const isMobile = useIsMobile()
   const { config, callStudent, blockAttempt, recallStudent, activeCalls, realtimeStatus, refreshCalls } = useSaida()
@@ -409,6 +672,11 @@ function PainelTabletContent() {
     guardianName: string
   } | null>(null)
   const [showInactiveAlert, setShowInactiveAlert] = useState<{ name: string } | null>(null)
+  const [siblingModal, setSiblingModal] = useState<{
+    calledStudent: any
+    remainingStudents: any[]
+    guardianName: string
+  } | null>(null)
 
   // Ref to RFIDInput so we can clear the buffer after each scan
   const rfidRef = useRef<RFIDInputHandle>(null)
@@ -627,35 +895,91 @@ function PainelTabletContent() {
     }
   }, [handleRFIDCore])
 
+  const handleReset = useCallback(() => {
+    rfidRef.current?.clear()
+    setMode('idle'); setRfidCode(undefined); setRfidError(null)
+    setBlockInfo(null)
+    setSiblingModal(null)
+    setMatchedGuardianName(''); setMatchedGuardianRole(''); setRfidStudents([]); setSearch('')
+    setManualStudents([]); setIsSearching(false); setHasSearched(false)
+  }, [])
+
   // ── Call student ───────────────────────────────────────────────────────────
   const handleCall = useCallback((a: any) => {
     const gId  = `rfid-${rfidCode}`
-    // Convert empty string foto to null so callStudent receives proper value
     const foto = a.foto && typeof a.foto === 'string' && a.foto.length > 10 ? a.foto : null
     const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
     const turmaNome = tObj?.nome || a.turma
     const call = callStudent(a.id, a.nome, turmaNome, gId, matchedGuardianName, 'rfid', rfidCode, foto)
     if (!call) { showToast(`${a.nome} já está em chamada ativa!`, false); return }
     showToast(`📣 ${a.nome} foi chamado(a)!`)
-    // Limpa buffer RFID imediatamente e volta ao idle após 1s
     rfidRef.current?.clear()
-    setTimeout(() => {
-      setMode('idle')
-      setRfidCode(undefined)
-      setRfidError(null)
-      setMatchedGuardianName('')
-      setMatchedGuardianRole('')
-      setRfidStudents([])
-    }, 1000)
-  }, [rfidCode, matchedGuardianName, callStudent, showToast, turmas])
 
-  const handleReset = useCallback(() => {
-    rfidRef.current?.clear()
-    setMode('idle'); setRfidCode(undefined); setRfidError(null)
-    setBlockInfo(null)
-    setMatchedGuardianName(''); setMatchedGuardianRole(''); setRfidStudents([]); setSearch('')
-    setManualStudents([]); setIsSearching(false); setHasSearched(false)
-  }, [])
+    // Verificar se existem outros alunos vinculados a esta leitura de RFID que ainda não foram chamados
+    const remaining = rfidStudents.filter(s => {
+      if (s.id === a.id) return false
+      const alreadyActive = activeCalls.some(c => c.studentId === s.id && (c.status === 'waiting' || c.status === 'called'))
+      const isProibido = s._aut?.proibido === true
+      const diaOk = isDiaPermitido(s._aut?.diasSemana || [])
+      return !alreadyActive && !isProibido && diaOk
+    })
+
+    if (remaining.length > 0) {
+      setSiblingModal({
+        calledStudent: a,
+        remainingStudents: remaining,
+        guardianName: matchedGuardianName
+      })
+    } else {
+      setTimeout(() => {
+        handleReset()
+      }, 1000)
+    }
+  }, [rfidCode, matchedGuardianName, callStudent, showToast, turmas, rfidStudents, activeCalls, handleReset])
+
+  const handleCallAnotherInModal = useCallback((sibling: any) => {
+    const gId  = `rfid-${rfidCode}`
+    const foto = sibling.foto && typeof sibling.foto === 'string' && sibling.foto.length > 10 ? sibling.foto : null
+    const tObj = (turmas || []).find((t: any) => String(t.id) === String(sibling.turma) || t.codigo === sibling.turma || t.nome === sibling.turma)
+    const turmaNome = tObj?.nome || sibling.turma
+    const call = callStudent(sibling.id, sibling.nome, turmaNome, gId, matchedGuardianName, 'rfid', rfidCode, foto)
+    if (call) {
+      showToast(`📣 ${sibling.nome} foi chamado(a)!`)
+    }
+
+    setSiblingModal(prev => {
+      if (!prev) return null
+      const nextRemaining = prev.remainingStudents.filter(s => s.id !== sibling.id)
+      if (nextRemaining.length === 0) {
+        setTimeout(() => handleReset(), 800)
+        return null
+      }
+      return {
+        ...prev,
+        calledStudent: sibling,
+        remainingStudents: nextRemaining
+      }
+    })
+  }, [rfidCode, turmas, callStudent, matchedGuardianName, showToast, handleReset])
+
+  const handleCallAllRemainingInModal = useCallback(() => {
+    if (!siblingModal) return
+    const gId  = `rfid-${rfidCode}`
+    siblingModal.remainingStudents.forEach(sibling => {
+      const foto = sibling.foto && typeof sibling.foto === 'string' && sibling.foto.length > 10 ? sibling.foto : null
+      const tObj = (turmas || []).find((t: any) => String(t.id) === String(sibling.turma) || t.codigo === sibling.turma || t.nome === sibling.turma)
+      const turmaNome = tObj?.nome || sibling.turma
+      callStudent(sibling.id, sibling.nome, turmaNome, gId, matchedGuardianName, 'rfid', rfidCode, foto)
+    })
+    showToast(`📣 Todos os outros alunos foram chamados!`)
+    setSiblingModal(null)
+    setTimeout(() => handleReset(), 800)
+  }, [siblingModal, rfidCode, turmas, callStudent, matchedGuardianName, showToast, handleReset])
+
+  const handleFinishModal = useCallback(() => {
+    setSiblingModal(null)
+    handleReset()
+  }, [handleReset])
 
   return (
     <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-base))', fontFamily: 'Outfit, sans-serif' }}>
@@ -664,7 +988,17 @@ function PainelTabletContent() {
 />}
 
       <AnimatePresence>
-{/* ── BLOCKED OVERLAY ─────────────────────────────────────── */}
+        {/* ── SIBLING CALL MODAL ───────────────────────────────────── */}
+        {siblingModal && (
+          <SiblingCallModal
+            calledStudent={siblingModal.calledStudent}
+            remainingStudents={siblingModal.remainingStudents}
+            guardianName={siblingModal.guardianName}
+            onCallAnother={handleCallAnotherInModal}
+            onCallAllRemaining={handleCallAllRemainingInModal}
+            onFinish={handleFinishModal}
+          />
+        )}{/* ── BLOCKED OVERLAY ─────────────────────────────────────── */}
       {blockInfo && (
 <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{
           position: 'fixed', inset: 0,

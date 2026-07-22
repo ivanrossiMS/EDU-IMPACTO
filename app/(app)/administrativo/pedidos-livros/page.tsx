@@ -29,7 +29,7 @@ interface PedidoMeta {
   obs?: string
 }
 
-const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'apostilas ens. médio', 'liv', 'itinerário', 'itinerario']
+const EVENTOS_LIVROS = ['livros', 'apostilas em', 'apostilas fund2', 'apostila em', 'apostila fund2', 'liv', 'itinerário', 'itinerario', 'arte', 'inglês', 'ingles']
 
 function isEventoLivro(descricao?: string): boolean {
   if (!descricao) return false
@@ -68,6 +68,9 @@ const EVENTO_CORES: Record<string, { bg: string; color: string }> = {
   'apostila fund2': { bg: 'rgba(236,72,153,0.12)',  color: '#f472b6' },
   'itinerário':     { bg: 'rgba(16,185,129,0.12)',  color: '#34d399' },
   'itinerario':     { bg: 'rgba(16,185,129,0.12)',  color: '#34d399' },
+  'arte':           { bg: 'rgba(245,158,11,0.12)',  color: '#fbbf24' },
+  'inglês':         { bg: 'rgba(239,68,68,0.12)',   color: '#f87171' },
+  'ingles':         { bg: 'rgba(239,68,68,0.12)',   color: '#f87171' },
 }
 function getEventoCor(desc?: string) {
   if (!desc) return { bg: 'rgba(100,116,139,0.12)', color: '#94a3b8' }
@@ -604,7 +607,7 @@ export default function PedidosLivrosPage() {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Total de Pedidos',  value: totalGrupos,    icon: '📋', color: '#60a5fa' },
+          { label: 'Total de Materiais',  value: totalGrupos,    icon: '📋', color: '#60a5fa' },
           { label: 'Pendentes',         value: pendenteCount,  icon: '⏳', color: '#f59e0b' },
           { label: 'Pedido Feito',      value: feitosCount,    icon: '✅', color: '#8b5cf6' },
           { label: 'Chegou na Escola',  value: chegouCount,    icon: '🏢', color: '#a78bfa' },
@@ -723,7 +726,7 @@ export default function PedidosLivrosPage() {
           )}
         </div>
         <div style={{ marginTop: 8, fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-          {gruposFiltrados.length} pedido(s) encontrado(s) de {totalGrupos} total
+          {gruposFiltrados.length} materia{gruposFiltrados.length === 1 ? 'l' : 'is'} encontrado(s) de {totalGrupos} total
         </div>
       </div>
 
@@ -750,6 +753,7 @@ export default function PedidosLivrosPage() {
             const algumFeito  = gsChave.some(g => isFeito(g.pedidoId))
             const valorChave  = gsChave.reduce((s, g) => s + g.valorTotal, 0)
             const feitosChave = gsChave.filter(g => isFeito(g.pedidoId)).length
+            const uniqueAlunosCount = new Set(gsChave.map(g => g.alunoNome)).size
 
             const corEvento = agrupamento === 'evento' ? getEventoCor(chave) : undefined
 
@@ -771,7 +775,7 @@ export default function PedidosLivrosPage() {
                     <div>
                       <div style={{ fontWeight: 800, fontSize: 14 }}>{chave}</div>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-                        {gsChave.length} aluno(s) · {feitosChave}/{gsChave.length} feitos
+                        {uniqueAlunosCount} aluno(s) · {gsChave.length} materia{gsChave.length === 1 ? 'l' : 'is'} · {feitosChave}/{gsChave.length} feitos
                       </div>
                     </div>
                     {/* Barra de progresso inline */}
@@ -924,7 +928,7 @@ export default function PedidosLivrosPage() {
                                           }}>
                                             <PackageCheck size={10} />
                                           </div>
-                                          <span style={{ fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Item Adicional</span>
+                                          <span style={{ fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Material Adicional</span>
                                         </div>
                                       </>
                                     )}
@@ -1138,7 +1142,7 @@ export default function PedidosLivrosPage() {
                       <tr style={{ background: 'hsl(var(--bg-elevated))' }}>
                         <td colSpan={agrupamento === 'escola' ? 4 : 3}
                           style={{ padding: '10px 16px', fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>
-                          Subtotal ({gsChave.length} aluno(s))
+                          Subtotal ({uniqueAlunosCount} aluno(s) · {gsChave.length} materia{gsChave.length === 1 ? 'l' : 'is'})
                         </td>
                         <td colSpan={5} />
                       </tr>
@@ -1383,9 +1387,10 @@ export default function PedidosLivrosPage() {
                     <option value="Livros">Livros</option>
                     <option value="Apostilas EM">Apostilas EM</option>
                     <option value="Apostilas FUND2">Apostilas FUND2</option>
-                    <option value="Apostilas Ens. Médio">Apostilas Ens. Médio</option>
                     <option value="LIV">LIV</option>
                     <option value="Itinerário">Itinerário</option>
+                    <option value="Arte">Arte</option>
+                    <option value="Inglês">Inglês</option>
                   </select>
                 </div>
                 {novoPedidoForm.alunoId && (
@@ -1483,9 +1488,10 @@ export default function PedidosLivrosPage() {
                     <option value="Livros">Livros</option>
                     <option value="Apostilas EM">Apostilas EM</option>
                     <option value="Apostilas FUND2">Apostilas FUND2</option>
-                    <option value="Apostilas Ens. Médio">Apostilas Ens. Médio</option>
                     <option value="LIV">LIV</option>
                     <option value="Itinerário">Itinerário</option>
+                    <option value="Arte">Arte</option>
+                    <option value="Inglês">Inglês</option>
                   </select>
                 </div>
               </div>

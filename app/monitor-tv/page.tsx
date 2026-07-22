@@ -289,30 +289,40 @@ function MonitorContent() {
     }
   }, [])
 
-  // Fallback Polling 60s se o Supabase Realtime falhar, desconectar ou perder evento
+  // Fallback Polling 5s para auto-correção contínua e garantir zero perda de chamadas
   useEffect(() => {
-    // A primeira chamada de refresh imediato (na montagem ou mudança de status)
-    // só é necessária se estivermos offline.
-    if (realtimeStatus !== 'online') {
-      refreshCalls()
-    }
-    
-    // O intervalo RODA SEMPRE, para auto-correção a cada 60s caso perca evento
+    refreshCalls()
     const iv = setInterval(() => {
       refreshCalls()
-    }, 60000)
-    
+    }, 5000)
     return () => clearInterval(iv)
-  }, [realtimeStatus, refreshCalls])
+  }, [refreshCalls])
+
+  // Chrome/Browser TTS Resume Heartbeat (evita travamento do sintetizador de voz em background)
+  useEffect(() => {
+    if (!audioUnlocked) return
+    const iv = setInterval(() => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume()
+        }
+      }
+    }, 10000)
+    return () => clearInterval(iv)
+  }, [audioUnlocked])
 
   const handleUnlockAudio = () => {
     setAudioUnlocked(true)
     if (config?.voiceEnabled && voice.isSupported) {
       voice.speak('', { volume: 0 })
-      // Populate spokenRef with current calls so they don't play immediately
-      displayCalls.forEach(c => {
+      // Apenas registrar chamadas muito antigas (> 10min) no spokenRef
+      // Chamadas ativas/recentes serão anunciadas normalmente.
+      const tenMinsAgo = Date.now() - 10 * 60 * 1000
+      activeCalls.forEach(c => {
          const ts = c.calledAt ? new Date(c.calledAt).getTime() : Date.now()
-         spokenRef.current.add(c.id + '_' + Math.floor(ts / 1000))
+         if (ts < tenMinsAgo) {
+           spokenRef.current.add(c.id + '_' + Math.floor(ts / 1000))
+         }
       })
     }
   }
@@ -333,14 +343,11 @@ function MonitorContent() {
     }
   }
 
-  // Sync from context — sort most recent first & show top 25 to support both panels
+  // Sincronizar displayCalls diretamente de activeCalls (apenas alunos aguardando retirada na portaria)
+  // Assim que a saída é confirmada em /saida-alunos/chamadas, o aluno sai imediatamente do Monitor TV.
   useEffect(() => {
-    setDisplayCalls(
-      activeCalls
-        .filter(c => c.status === 'waiting' || c.status === 'called')
-        .sort(byTimeDesc)
-        .slice(0, 25)
-    )
+    const waitingCalls = activeCalls.filter(c => c.status === 'waiting' || c.status === 'called')
+    setDisplayCalls(waitingCalls.sort(byTimeDesc).slice(0, 25))
   }, [activeCalls])
 
   // Live clock
@@ -355,7 +362,12 @@ function MonitorContent() {
   useEffect(() => {
     if (!audioUnlocked || !config?.voiceEnabled || !voice.isSupported) return
     displayCalls.forEach(call => {
+      if (call.status === 'blocked' || call.status === 'special_auth') return
       const ts = call.calledAt ? new Date(call.calledAt).getTime() : Date.now()
+      
+      // Ignorar chamadas com mais de 10 minutos para não tocar histórico antigo
+      if (Date.now() - ts > 10 * 60 * 1000) return
+
       const speechKey = call.id + '_' + Math.floor(ts / 1000)
       if (!spokenRef.current.has(speechKey)) {
         spokenRef.current.add(speechKey)
@@ -363,8 +375,12 @@ function MonitorContent() {
           const turmaObj = (turmas || []).find((t: any) => String(t.id) === String(call.studentClass) || t.codigo === call.studentClass || t.nome === call.studentClass)
           const tName = turmaObj?.nome || call.studentClass
           const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar ? tName.split(config.voiceTruncateChar)[0].trim() : tName
+          
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis.paused) {
+            window.speechSynthesis.resume()
+          }
           voice.speak(`${call.studentName}, turma ${cName}`)
-        }, 600)
+        }, 500)
       }
     })
   }, [displayCalls, config, voice, audioUnlocked, turmas])
@@ -381,45 +397,24 @@ function MonitorContent() {
     displayCallsRef.current = displayCalls
   }, [turmas, config, audioUnlocked, displayCalls])
 
-  // Listen for realtime from other tabs
+  // Realtime events listener
   useEffect(() => {
     const unsub = on('*', payload => {
       const d = payload.data as any
-      const currentConfig = configRef.current
-      const currentTurmas = turmasRef.current
 
-      if (payload.event === 'CALL_STUDENT') {
-        if (d.status === 'blocked' || d.status === 'special_auth') return // Não exibir nem falar autorizações e bloqueados
-        setDisplayCalls(prev => {
-          const next = prev.find(c => c.id === d.id) ? prev : [d, ...prev]
-          return [...next].sort(byTimeDesc).slice(0, 25)
-        })
-      }
       if (payload.event === 'CONFIRM_PICKUP' && d.callId) {
-        setTimeout(() => {
-          setDisplayCalls(prev => prev.filter(c => c.id !== d.callId))
-          spokenRef.current.delete(d.callId)
-        }, (currentConfig?.tvDisplayTime || 5) * 1000)
+        spokenRef.current.delete(d.callId)
       }
       if (payload.event === 'CANCEL_CALL' && d.callId) {
-        setDisplayCalls(prev => prev.filter(c => c.id !== d.callId))
         spokenRef.current.delete(d.callId)
       }
       if (payload.event === 'CLEAR_ALL_CALLS') {
         setDisplayCalls([])
         spokenRef.current.clear()
       }
-      if (payload.event === 'RECALL_STUDENT' && d.callId) {
-        setDisplayCalls(prev => {
-          const updated = prev.map(c =>
-            c.id === d.callId ? { ...c, status: 'waiting' as const, calledAt: d.calledAt || new Date().toISOString() } : c
-          )
-          return [...updated].sort(byTimeDesc).slice(0, 25)
-        })
-      }
     })
     return () => { unsub() }
-  }, [on, voice])
+  }, [on])
 
   const isScreenLoading = !mounted || isLoadingCalls
   const hasCards = displayCalls.length > 0

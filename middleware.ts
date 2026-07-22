@@ -39,6 +39,8 @@ const PUBLIC_PATHS = [
   '/ajuda',             // Central de ajuda pública
   '/pesquisa',          // Formulários de pesquisa de clima (público)
   '/api/pesquisa',      // API pública para formulários de pesquisa
+  '/guia-seguranca-digital', // Guia E-book de Segurança Digital (Público/Orfão)
+  '/guia-seguranca',    // Alias do guia público
 ]
 
 function isPublicPath(pathname: string): boolean {

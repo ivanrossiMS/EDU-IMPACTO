@@ -179,17 +179,23 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   }, [])
 
   const sendBroadcast = useCallback((event: string, data: any) => {
-    if (channelRef.current && channelRef.current.state === 'joined') {
-      const eventId = Math.random().toString(36).substring(2, 15);
-      processedBroadcasts.current.add(eventId);
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'CALL_EVENT',
-        payload: { event, data, eventId }
-      }).catch((e: any) => {
-        console.warn('Realtime send ignored:', e)
-      })
+    const eventId = Math.random().toString(36).substring(2, 15);
+    processedBroadcasts.current.add(eventId);
+
+    const doSend = () => {
+      if (channelRef.current && channelRef.current.state === 'joined') {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'CALL_EVENT',
+          payload: { event, data, eventId }
+        }).catch((e: any) => {
+          console.warn('Realtime send ignored:', e)
+        })
+      }
     }
+
+    doSend()
+    setTimeout(doSend, 350)
   }, [])
 
   // ── Listen to Supabase Realtime changes and Broadcast Room ──────────────────
@@ -226,7 +232,12 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
               const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
               setActiveCallsLocal?.((prev: PickupCall[]) => {
                 const arr = prev || []
-                if (arr.some(c => c.id === call.id)) return arr
+                const idx = arr.findIndex(c => c.id === call.id)
+                if (idx >= 0) {
+                  const updated = [...arr]
+                  updated[idx] = { ...updated[idx], ...call }
+                  return updated
+                }
                 return [call, ...arr]
               })
             } else if (eventType === 'UPDATE') {
@@ -250,7 +261,12 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
             if (event === 'CALL_STUDENT') {
               setActiveCallsLocal?.((prev: PickupCall[]) => {
                 const arr = prev || []
-                if (arr.some(c => c.id === data.id)) return arr
+                const idx = arr.findIndex(c => c.id === data.id)
+                if (idx >= 0) {
+                  const updated = [...arr]
+                  updated[idx] = { ...updated[idx], ...data }
+                  return updated
+                }
                 return [data, ...arr]
               })
             } else if (event === 'CONFIRM_PICKUP') {
