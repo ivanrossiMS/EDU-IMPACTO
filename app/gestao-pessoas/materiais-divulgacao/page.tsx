@@ -59,24 +59,44 @@ export default function MateriaisDivulgacaoPage() {
     try {
       setLoading(true)
       let localVisits: Record<string, number> = {}
+      let localCustomItems: MaterialItem[] = []
+
       try {
-        const saved = localStorage.getItem('impacto_materiais_visitas')
-        if (saved) localVisits = JSON.parse(saved)
+        const savedVisits = localStorage.getItem('impacto_materiais_visitas')
+        if (savedVisits) localVisits = JSON.parse(savedVisits)
+
+        const savedCustom = localStorage.getItem('impacto_materiais_custom_list')
+        if (savedCustom) localCustomItems = JSON.parse(savedCustom)
       } catch (e) {}
 
       const res = await fetch('/api/gestao-pessoas/materiais-divulgacao')
       const json = await res.json()
-      if (json.success && json.data) {
-        const merged = json.data.map((item: MaterialItem) => {
-          const lCount = localVisits[item.id] || 0
-          const apiCount = item.contador_visitas || 0
-          return {
-            ...item,
-            contador_visitas: Math.max(apiCount, lCount)
-          }
-        })
-        setMateriais(merged)
-      }
+      
+      let baseData: MaterialItem[] = json.success && json.data ? json.data : []
+
+      // Merge custom local materials with API items (avoiding duplicate IDs)
+      const mergedMap = new Map<string, MaterialItem>()
+      baseData.forEach(item => mergedMap.set(item.id, item))
+      localCustomItems.forEach(item => {
+        if (!mergedMap.has(item.id)) {
+          mergedMap.set(item.id, item)
+        } else {
+          // If already exists, update properties from local
+          const existing = mergedMap.get(item.id)!
+          mergedMap.set(item.id, { ...existing, ...item })
+        }
+      })
+
+      const finalItems = Array.from(mergedMap.values()).map(item => {
+        const lCount = localVisits[item.id] || 0
+        const apiCount = item.contador_visitas || 0
+        return {
+          ...item,
+          contador_visitas: Math.max(apiCount, lCount)
+        }
+      })
+
+      setMateriais(finalItems)
     } catch (e) {
       console.error(e)
     } finally {
@@ -165,9 +185,8 @@ export default function MateriaisDivulgacaoPage() {
 
     if (editingItem) {
       // UPDATE EXISTING
-      const payload = {
-        action: 'update',
-        id: editingItem.id,
+      const updatedItem: MaterialItem = {
+        ...editingItem,
         titulo: formTitulo,
         descricao: formDescricao,
         categoria: formCategoria,
@@ -178,40 +197,81 @@ export default function MateriaisDivulgacaoPage() {
       }
 
       setMateriais(prev =>
-        prev.map(m => (m.id === editingItem.id ? { ...m, ...payload } : m))
+        prev.map(m => (m.id === editingItem.id ? updatedItem : m))
       )
+
+      // Save to custom list in localStorage
+      try {
+        const saved = localStorage.getItem('impacto_materiais_custom_list')
+        let customList: MaterialItem[] = saved ? JSON.parse(saved) : []
+        customList = customList.map(m => (m.id === editingItem.id ? updatedItem : m))
+        if (!customList.some(m => m.id === editingItem.id)) {
+          customList.push(updatedItem)
+        }
+        localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(customList))
+      } catch (e) {}
 
       try {
         await fetch('/api/gestao-pessoas/materiais-divulgacao', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            action: 'update',
+            ...updatedItem
+          })
         })
       } catch (e) {
         console.error(e)
       }
     } else {
       // CREATE NEW
-      const payload = {
-        action: 'create',
+      const newItem: MaterialItem = {
+        id: `mat-${Date.now()}`,
         titulo: formTitulo,
         descricao: formDescricao,
         categoria: formCategoria,
         link: formLink,
         imagem_url: formImagemUrl || null,
         autor: formAutor,
-        tags: tagsArray.length > 0 ? tagsArray : ['Divulgação']
+        tags: tagsArray.length > 0 ? tagsArray : ['Divulgação'],
+        contador_visitas: 0,
+        data_publicacao: new Date().toISOString()
       }
+
+      setMateriais(prev => [newItem, ...prev])
+
+      // Save to custom list in localStorage immediately
+      try {
+        const saved = localStorage.getItem('impacto_materiais_custom_list')
+        const customList: MaterialItem[] = saved ? JSON.parse(saved) : []
+        customList.unshift(newItem)
+        localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(customList))
+      } catch (e) {}
 
       try {
         const res = await fetch('/api/gestao-pessoas/materiais-divulgacao', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            action: 'create',
+            ...newItem
+          })
         })
         const json = await res.json()
-        if (json.success && json.newItem) {
-          setMateriais(prev => [json.newItem, ...prev])
+        if (json.success && json.newItem && json.newItem.id) {
+          // Update item with server generated id
+          const serverItem = json.newItem
+          setMateriais(prev =>
+            prev.map(m => (m.id === newItem.id ? { ...m, id: serverItem.id } : m))
+          )
+          try {
+            const saved = localStorage.getItem('impacto_materiais_custom_list')
+            if (saved) {
+              const customList: MaterialItem[] = JSON.parse(saved)
+              const updatedList = customList.map(m => (m.id === newItem.id ? { ...m, id: serverItem.id } : m))
+              localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(updatedList))
+            }
+          } catch (e) {}
         }
       } catch (e) {
         console.error(e)
@@ -227,20 +287,27 @@ export default function MateriaisDivulgacaoPage() {
 
     const targetId = deletingItem.id
 
-    // Update local state immediately
+    // Update state
     setMateriais(prev => prev.filter(m => m.id !== targetId))
 
-    // Remove from localStorage cache
+    // Remove from localStorage
     try {
-      const saved = localStorage.getItem('impacto_materiais_visitas')
-      if (saved) {
-        const localVisits = JSON.parse(saved)
+      const savedVisits = localStorage.getItem('impacto_materiais_visitas')
+      if (savedVisits) {
+        const localVisits = JSON.parse(savedVisits)
         delete localVisits[targetId]
         localStorage.setItem('impacto_materiais_visitas', JSON.stringify(localVisits))
       }
+
+      const savedCustom = localStorage.getItem('impacto_materiais_custom_list')
+      if (savedCustom) {
+        let customList: MaterialItem[] = JSON.parse(savedCustom)
+        customList = customList.filter(m => m.id !== targetId)
+        localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(customList))
+      }
     } catch (e) {}
 
-    // Call API to delete from Supabase
+    // Call API
     try {
       await fetch('/api/gestao-pessoas/materiais-divulgacao', {
         method: 'POST',
