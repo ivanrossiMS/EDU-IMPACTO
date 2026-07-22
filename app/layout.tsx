@@ -8,6 +8,7 @@ import { Suspense } from 'react'
 
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://impacto-edu.net'),
   title: 'IMPACTO EDU — Sistema de Gestão Escolar',
   description: 'Plataforma enterprise de gestão escolar completa — acadêmico, financeiro, RH, CRM, comunicação, BI e IA.',
 }
