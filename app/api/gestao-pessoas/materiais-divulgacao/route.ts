@@ -126,11 +126,10 @@ export async function POST(request: Request) {
         ativo: true
       }
 
-      // Omit temporary string IDs from insert to avoid UUID/Text conflicts in Supabase
-      const insertPayload = body.id && !body.id.startsWith('mat-') 
-        ? { id: body.id, ...payload } 
-        : payload
-
+      const insertPayload = {
+        id: body.id || `mat-${Date.now()}`,
+        ...payload
+      }
       const { data, error } = await supabase
         .from('gp_materiais_divulgacao')
         .insert(insertPayload)
