@@ -8,13 +8,14 @@ import {
   Users, Activity, ShieldAlert,
   ClipboardCheck, GraduationCap,
   MessageSquareWarning, Settings,
-  LogOut, Home, Stethoscope, Heart, PieChart, Grid, HelpCircle, Scale, User
+  LogOut, Home, Stethoscope, Heart, PieChart, Grid, HelpCircle, Scale, User, Megaphone
 } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
 const MENUS = [
   { href: '/gestao-pessoas', icon: Home, label: 'Visão Geral' },
   { href: '/gestao-pessoas/colaboradores', icon: Users, label: 'Colaboradores', adminOnly: true },
+  { href: '/gestao-pessoas/materiais-divulgacao', icon: Megaphone, label: 'Materiais de Divulgação' },
   { href: '/gestao-pessoas/pesquisa-clima', icon: PieChart, label: 'Pesquisa de Clima' },
   { href: '/gestao-pessoas/treinamentos', icon: GraduationCap, label: 'Treinamentos' },
   { href: '/gestao-pessoas/sst', icon: Stethoscope, label: 'SST e NR-01', adminOnly: true },
