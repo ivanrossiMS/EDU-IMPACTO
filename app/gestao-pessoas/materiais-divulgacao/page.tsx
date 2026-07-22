@@ -212,7 +212,7 @@ export default function MateriaisDivulgacaoPage() {
       } catch (e) {}
 
       try {
-        await fetch('/api/gestao-pessoas/materiais-divulgacao', {
+        const res = await fetch('/api/gestao-pessoas/materiais-divulgacao', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -220,6 +220,10 @@ export default function MateriaisDivulgacaoPage() {
             ...updatedItem
           })
         })
+        const json = await res.json()
+        if (!json.success) {
+          alert('Erro ao atualizar online no Supabase: ' + (json.error || 'Erro desconhecido'))
+        }
       } catch (e) {
         console.error(e)
       }
@@ -270,6 +274,18 @@ export default function MateriaisDivulgacaoPage() {
               const customList: MaterialItem[] = JSON.parse(saved)
               const updatedList = customList.map(m => (m.id === newItem.id ? { ...m, id: serverItem.id } : m))
               localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(updatedList))
+            }
+          } catch (e) {}
+        } else {
+          alert('Erro ao criar online no Supabase: ' + (json.error || 'Erro desconhecido'))
+          // Remove from local list if failed to save to database
+          setMateriais(prev => prev.filter(m => m.id !== newItem.id))
+          try {
+            const saved = localStorage.getItem('impacto_materiais_custom_list')
+            if (saved) {
+              let customList: MaterialItem[] = JSON.parse(saved)
+              customList = customList.filter(m => m.id !== newItem.id)
+              localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(customList))
             }
           } catch (e) {}
         }

@@ -1,13 +1,28 @@
 import { NextResponse } from 'next/server'
+import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  return createClient(supabaseUrl, supabaseKey)
+// Fallback client for anonymous/system ops
+function getSystemClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: { autoRefreshToken: false, persistSession: false }
+    }
+  )
+}
+
+// Get the authenticated client or system client
+async function getClient() {
+  try {
+    return await createProtectedClient()
+  } catch (e) {
+    return getSystemClient()
+  }
 }
 
 // Only real materials created in the application
@@ -29,7 +44,7 @@ const REAL_DEFAULT_MATERIALS = [
 
 export async function GET() {
   try {
-    const supabase = getSupabaseClient()
+    const supabase = await getClient()
     const { data, error } = await supabase
       .from('gp_materiais_divulgacao')
       .select('*')
@@ -54,7 +69,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const supabase = getSupabaseClient()
+    const supabase = await getClient()
 
     // Increment Visit Action
     if (body.action === 'increment_visit' && body.id) {
@@ -111,15 +126,20 @@ export async function POST(request: Request) {
         ativo: true
       }
 
+      // Omit temporary string IDs from insert to avoid UUID/Text conflicts in Supabase
+      const insertPayload = body.id && !body.id.startsWith('mat-') 
+        ? { id: body.id, ...payload } 
+        : payload
+
       const { data, error } = await supabase
         .from('gp_materiais_divulgacao')
-        .insert(payload)
+        .insert(insertPayload)
         .select()
         .single()
 
       if (error) {
         console.error('Supabase insert error:', error)
-        return NextResponse.json({ success: true, newItem: { id: `mat-${Date.now()}`, ...payload } })
+        return NextResponse.json({ success: false, error: error.message })
       }
 
       return NextResponse.json({ success: true, newItem: data })
@@ -145,7 +165,8 @@ export async function POST(request: Request) {
         .single()
 
       if (error) {
-        return NextResponse.json({ success: true, updatedItem: { id: body.id, ...payload } })
+        console.error('Supabase update error:', error)
+        return NextResponse.json({ success: false, error: error.message })
       }
 
       return NextResponse.json({ success: true, updatedItem: data })
@@ -157,6 +178,11 @@ export async function POST(request: Request) {
         .from('gp_materiais_divulgacao')
         .delete()
         .eq('id', body.id)
+
+      if (error) {
+        console.error('Supabase delete error:', error)
+        return NextResponse.json({ success: false, error: error.message })
+      }
 
       return NextResponse.json({ success: true, deletedId: body.id })
     }
