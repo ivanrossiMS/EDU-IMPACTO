@@ -69,7 +69,10 @@ export default function MateriaisDivulgacaoPage() {
         if (savedCustom) localCustomItems = JSON.parse(savedCustom)
       } catch (e) {}
 
-      const res = await fetch('/api/gestao-pessoas/materiais-divulgacao')
+      const res = await fetch(`/api/gestao-pessoas/materiais-divulgacao?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      })
       const json = await res.json()
       
       let baseData: MaterialItem[] = json.success && json.data ? json.data : []
@@ -81,18 +84,20 @@ export default function MateriaisDivulgacaoPage() {
         if (!mergedMap.has(item.id)) {
           mergedMap.set(item.id, item)
         } else {
-          // If already exists, update properties from local
+          // If already exists, update properties from local, BUT preserve the API visit count!
           const existing = mergedMap.get(item.id)!
-          mergedMap.set(item.id, { ...existing, ...item })
+          mergedMap.set(item.id, { 
+            ...item, 
+            ...existing, // API data overwrites local data
+            contador_visitas: existing.contador_visitas || item.contador_visitas || 0 
+          })
         }
       })
 
       const finalItems = Array.from(mergedMap.values()).map(item => {
-        const lCount = localVisits[item.id] || 0
-        const apiCount = item.contador_visitas || 0
         return {
           ...item,
-          contador_visitas: Math.max(apiCount, lCount)
+          contador_visitas: item.contador_visitas || 0
         }
       })
 
