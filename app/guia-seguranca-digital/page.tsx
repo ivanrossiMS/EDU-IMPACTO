@@ -70,6 +70,21 @@ export default function GuiaSegurancaDigitalPage() {
     } catch (e) {
       console.error(e)
     }
+
+    // Auto increment visit count for digital safety guide
+    try {
+      const savedVisits = localStorage.getItem('impacto_materiais_visitas')
+      const localVisits = savedVisits ? JSON.parse(savedVisits) : {}
+      const current = localVisits['mat-guia-seguranca'] || 0
+      localVisits['mat-guia-seguranca'] = current + 1
+      localStorage.setItem('impacto_materiais_visitas', JSON.stringify(localVisits))
+
+      fetch('/api/gestao-pessoas/materiais-divulgacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'increment_visit', id: 'mat-guia-seguranca' })
+      }).catch(() => {})
+    } catch (e) {}
   }, [])
 
   const toggleCheckitem = (id: string) => {

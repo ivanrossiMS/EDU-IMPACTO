@@ -49,14 +49,28 @@ export default function MateriaisDivulgacaoPage() {
   const [formAutor, setFormAutor] = useState('Equipe Pedagógica')
   const [formTags, setFormTags] = useState('Divulgação, Escola')
 
-  // Fetch materials
+  // Fetch materials with localStorage persistence fallback
   const loadMateriais = async () => {
     try {
       setLoading(true)
+      let localVisits: Record<string, number> = {}
+      try {
+        const saved = localStorage.getItem('impacto_materiais_visitas')
+        if (saved) localVisits = JSON.parse(saved)
+      } catch (e) {}
+
       const res = await fetch('/api/gestao-pessoas/materiais-divulgacao')
       const json = await res.json()
       if (json.success && json.data) {
-        setMateriais(json.data)
+        const merged = json.data.map((item: MaterialItem) => {
+          const lCount = localVisits[item.id] || 0
+          const apiCount = item.contador_visitas || 0
+          return {
+            ...item,
+            contador_visitas: Math.max(apiCount, lCount)
+          }
+        })
+        setMateriais(merged)
       }
     } catch (e) {
       console.error(e)
@@ -71,10 +85,20 @@ export default function MateriaisDivulgacaoPage() {
 
   // Handle visit increment and navigate to link
   const handleOpenMaterial = async (item: MaterialItem) => {
+    const newCount = (item.contador_visitas || 0) + 1
+
     // Instant local state update
     setMateriais(prev =>
-      prev.map(m => (m.id === item.id ? { ...m, contador_visitas: (m.contador_visitas || 0) + 1 } : m))
+      prev.map(m => (m.id === item.id ? { ...m, contador_visitas: newCount } : m))
     )
+
+    // Save to localStorage immediately
+    try {
+      const saved = localStorage.getItem('impacto_materiais_visitas')
+      const localVisits = saved ? JSON.parse(saved) : {}
+      localVisits[item.id] = newCount
+      localStorage.setItem('impacto_materiais_visitas', JSON.stringify(localVisits))
+    } catch (e) {}
 
     // Call API to persist visit count in Supabase
     try {
