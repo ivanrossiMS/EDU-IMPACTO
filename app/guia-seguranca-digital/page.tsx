@@ -26,7 +26,13 @@ import {
   AlertTriangle,
   ArrowRight,
   Sliders,
-  Check
+  Check,
+  HelpCircle,
+  ShieldAlert,
+  Key,
+  FileText,
+  ChevronDown,
+  UserCheck
 } from 'lucide-react'
 
 // Custom Youtube Icon component
@@ -53,6 +59,7 @@ export default function GuiaSegurancaDigitalPage() {
   const [activeOS, setActiveOS] = useState<'all' | 'ios' | 'android'>('all')
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({})
   const [copiedToast, setCopiedToast] = useState(false)
+  const [openFaq, setOpenFaq] = useState<number | null>(null)
 
   useEffect(() => {
     try {
@@ -173,8 +180,8 @@ export default function GuiaSegurancaDigitalPage() {
             <a href="#apresentacao" style={{ color: '#475569', textDecoration: 'none' }}>Visão Geral</a>
             <a href="#iphone" style={{ color: '#475569', textDecoration: 'none' }}>🍏 iPhone</a>
             <a href="#android" style={{ color: '#475569', textDecoration: 'none' }}>🤖 Android</a>
-            <a href="#regras" style={{ color: '#475569', textDecoration: 'none' }}>Limites</a>
-            <a href="#redes" style={{ color: '#475569', textDecoration: 'none' }}>Redes</a>
+            <a href="#apps-populares" style={{ color: '#475569', textDecoration: 'none' }}>🎮 Apps</a>
+            <a href="#faq" style={{ color: '#475569', textDecoration: 'none' }}>❓ Dúvidas</a>
             <a href="#checklist" style={{ color: '#0047ab', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
               <CheckSquare size={16} /> Checklist
             </a>
@@ -1051,6 +1058,43 @@ export default function GuiaSegurancaDigitalPage() {
               </div>
             </div>
 
+            {/* Segredos Anti-Burlar */}
+            <div style={{ backgroundColor: '#ffffff', padding: 32, borderRadius: 28, border: '1px solid #fcd34d', boxShadow: '0 4px 16px rgba(245, 158, 11, 0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#fef3c7', color: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ShieldAlert size={24} />
+                </div>
+                <div>
+                  <span style={{ fontSize: 11, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#b45309' }}>Segurança Avançada</span>
+                  <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0 }}>🕵️ Segredos Anti-Burlar (Truques comuns das crianças)</h3>
+                </div>
+              </div>
+
+              <p style={{ fontSize: 14, color: '#475569', margin: '0 0 20px 0', lineHeight: 1.6 }}>
+                Crianças e adolescentes descobrem rapidamente truques na internet para tentar contornar os bloqueios. Veja como fechar essas brechas:
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18 }}>
+                
+                <div style={{ backgroundColor: '#fffbeb', padding: 18, borderRadius: 18, border: '1px solid #fde68a' }}>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: '#78350f', margin: '0 0 6px 0' }}>🍏 Truque no iPhone: Mudar Fuso Horário</p>
+                  <p style={{ fontSize: 13, color: '#92400e', margin: 0, lineHeight: 1.5 }}>
+                    Eles alteram o relógio do aparelho para ganhar horas extras de tela. <br />
+                    <strong>Solução:</strong> Vá em <em>Ajustes &gt; Tempo de Uso &gt; Restrições de Conteúdo e Privacidade &gt; Alterações de Fuso Horário</em> e marque <strong>Não Permitir</strong>.
+                  </p>
+                </div>
+
+                <div style={{ backgroundColor: '#fffbeb', padding: 18, borderRadius: 18, border: '1px solid #fde68a' }}>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: '#78350f', margin: '0 0 6px 0' }}>🤖 Truque no Android: Remover Conta Google</p>
+                  <p style={{ fontSize: 13, color: '#92400e', margin: 0, lineHeight: 1.5 }}>
+                    Eles tentam desvincular a conta infantil das configurações. <br />
+                    <strong>Solução:</strong> No app Family Link, acesse <em>Controles &gt; Dispositivo &gt; Exigir senha do responsável para remover conta</em>.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+
           </div>
         </section>
       )}
@@ -1456,6 +1500,70 @@ export default function GuiaSegurancaDigitalPage() {
       </section>
 
 
+      {/* ──────────────── APPS POPULARES ──────────────── */}
+      <section id="apps-populares" style={{ padding: '80px 24px', backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 32 }}>
+          
+          <div style={{ textAlign: 'center', maxWidth: 700, margin: '0 auto' }}>
+            <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#0047ab' }}>
+              Proteção Aplicativo por Aplicativo
+            </span>
+            <h2 style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', margin: '8px 0 0 0' }}>
+              📱 Guia Rápido dos Apps Mais Usados
+            </h2>
+            <p style={{ fontSize: 15, color: '#475569', margin: '4px 0 0 0' }}>
+              Passo a passo direto para blindar as redes e jogos favoritos das crianças e adolescentes:
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20 }}>
+            
+            <div style={{ backgroundColor: '#f8fafc', padding: 24, borderRadius: 24, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 28 }}>🤖</span>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>Roblox</h3>
+              </div>
+              <p style={{ fontSize: 13, color: '#475569', margin: 0, lineHeight: 1.5 }}>
+                Crie um <strong>PIN de Responsáveis</strong> (4 dígitos) em <em>Configurações &gt; Segurança</em> para impedir que a criança altere a senha ou gaste Robux sem permissão.
+              </p>
+            </div>
+
+            <div style={{ backgroundColor: '#f8fafc', padding: 24, borderRadius: 24, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 28 }}>💬</span>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>WhatsApp</h3>
+              </div>
+              <p style={{ fontSize: 13, color: '#475569', margin: 0, lineHeight: 1.5 }}>
+                Ative a <strong>Verificação em Duas Etapas</strong> (PIN de 6 dígitos) para evitar clonagem e em <em>Privacidade &gt; Grupos</em> selecione <strong>Apenas meus contatos</strong>.
+              </p>
+            </div>
+
+            <div style={{ backgroundColor: '#f8fafc', padding: 24, borderRadius: 24, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 28 }}>🎵</span>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>TikTok</h3>
+              </div>
+              <p style={{ fontSize: 13, color: '#475569', margin: 0, lineHeight: 1.5 }}>
+                Use a <strong>Sincronização Familiar</strong> (Family Pairing) para vincular sua conta à do filho e definir tempo máximo e bloqueio de pesquisas.
+              </p>
+            </div>
+
+            <div style={{ backgroundColor: '#f8fafc', padding: 24, borderRadius: 24, border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                <span style={{ fontSize: 28 }}>🎧</span>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: 0 }}>Discord</h3>
+              </div>
+              <p style={{ fontSize: 13, color: '#475569', margin: 0, lineHeight: 1.5 }}>
+                Conecte-se via <strong>Central da Família</strong> do Discord para ver em quais servidores seu filho está sem ler o conteúdo privado das DMs.
+              </p>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+
       {/* ──────────────── PÁGINA 20, 21 & 22: DIÁLOGO & HÁBITOS ──────────────── */}
       <section id="dialogo" style={{ padding: '80px 24px', backgroundColor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 32 }}>
@@ -1561,6 +1669,94 @@ export default function GuiaSegurancaDigitalPage() {
                 Quando um familiar estiver falando com você, a tela deve ser pausada.
               </p>
             </div>
+
+          </div>
+
+        </div>
+      </section>
+
+
+
+
+
+      {/* ──────────────── PERGUNTAS FREQUENTES (FAQ PEDAGÓGICO) ──────────────── */}
+      <section id="faq" style={{ padding: '80px 24px', backgroundColor: '#ffffff', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 32 }}>
+          
+          <div style={{ textAlign: 'center', maxWidth: 700, margin: '0 auto' }}>
+            <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#0047ab' }}>
+              Orientação da Equipe Pedagógica
+            </span>
+            <h2 style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', margin: '8px 0 0 0' }}>
+              ❓ Perguntas Frequentes dos Pais
+            </h2>
+            <p style={{ fontSize: 15, color: '#475569', margin: '4px 0 0 0' }}>
+              Respostas para os dilemas mais comuns na rotina de educar no mundo digital:
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            
+            {[
+              {
+                q: 'Meu filho diz que os colegas da escola não têm limites de tempo. O que responder?',
+                a: 'Explique com afeto que cada família possui regras próprias de proteção baseadas no amor e na saúde. Lembre-o de que regras de segurança como usar o cinto de segurança no carro ou horário de dormir também variam entre famílias, e que o limite de telas é um ato de cuidado da sua casa, não uma punição.'
+              },
+              {
+                q: 'Como lidar com birras ou forte resistência na hora de desligar o celular?',
+                a: 'Dê avisos prévios graduais ("Faltam 15 minutos", "Faltam 5 minutos para encerrar o tempo"). O cérebro da criança precisa desse tempo de transição. Mantenha a firmeza sem gritar e redirecione imediatamente a atenção dela para uma atividade física, refeição ou banho agradável.'
+              },
+              {
+                q: 'Tenho o direito de ler as mensagens e checar o celular do meu filho adolescente?',
+                a: 'A supervisão parental é um dever legal e moral dos pais até a maioridade. No entanto, para adolescentes (13+ anos), faça a checagem com transparência ("Vamos dar uma olhada nos seus aplicativos juntos hoje") em vez de esconder. O objetivo é orientar sobre riscos reais, e não bisbilhotar conversas inofensivas.'
+              },
+              {
+                q: 'O que fazer em caso de suspeita de Cyberbullying ou contato estranho?',
+                a: '1. Não apague as mensagens ou prints (eles servem de prova legal). 2. Acolha seu filho sem brigar ou ameaçar tirar o celular para manter o canal de confiança aberto. 3. Bloqueie e denuncie o perfil. 4. Notifique a coordenação do Colégio Impacto para apoio pedagógico e, se houver crime, registre um B.O.'
+              }
+            ].map((item, index) => {
+              const isOpen = openFaq === index
+              return (
+                <div
+                  key={index}
+                  style={{
+                    backgroundColor: isOpen ? '#f0f6ff' : '#f8fafc',
+                    borderRadius: 20,
+                    border: isOpen ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <button
+                    onClick={() => setOpenFaq(isOpen ? null : index)}
+                    style={{
+                      width: '100%',
+                      padding: 20,
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                      cursor: 'pointer',
+                      fontSize: 15,
+                      fontWeight: 800,
+                      color: '#0f172a'
+                    }}
+                  >
+                    <span>{item.q}</span>
+                    <ChevronDown size={20} color="#0047ab" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', flexShrink: 0 }} />
+                  </button>
+
+                  {isOpen && (
+                    <div style={{ padding: '0 20px 20px 20px', fontSize: 14, color: '#334155', lineHeight: 1.6, borderTop: '1px solid rgba(0,71,171,0.1)', paddingTop: 12 }}>
+                      {item.a}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
 
           </div>
 
