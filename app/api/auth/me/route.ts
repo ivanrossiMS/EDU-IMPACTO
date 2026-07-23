@@ -6,7 +6,9 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton';
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
+export async function GET(request: Request) {
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
+
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,7 +31,7 @@ export async function GET() {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401 });
   }
 
   // Fetch the latest profile data from system_users to ensure it is always up to date
@@ -51,7 +53,7 @@ export async function GET() {
     status: dbUser?.status || 'ativo',
   };
 
-  return NextResponse.json({ user: userData }, {
+  return NextResponse.json({ user: userData, ip }, {
     headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
   });
 }

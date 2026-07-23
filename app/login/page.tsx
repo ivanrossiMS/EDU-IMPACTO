@@ -153,6 +153,27 @@ export default function LoginPage() {
       const params = new URLSearchParams(window.location.search)
       const stepParam = params.get('step') as Step
       const nextParam = params.get('next')
+
+      // Capturar erros vindos do redirecionamento do Supabase (ex: link expirado / otp_expired)
+      const hash = window.location.hash
+      const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.substring(1) : hash)
+      const err = hashParams.get('error_description') || params.get('error_description') || hashParams.get('error') || params.get('error')
+      const errCode = hashParams.get('error_code') || params.get('error_code')
+      
+      if (err || errCode) {
+        console.error('[Auth Error] Error detected in URL on login page:', errCode, err)
+        if (errCode === 'otp_expired' || err?.toLowerCase().includes('expired') || err?.toLowerCase().includes('invalid')) {
+          setLoginError('O link de recuperação de senha expirou ou já foi utilizado. Por segurança, os links de redefinição são de uso único e expiram após 24 horas. Por favor, solicite um novo link clicando em "Esqueci minha senha" abaixo.')
+        } else {
+          setLoginError(err || 'Erro ao validar o link de recuperação de senha.')
+        }
+        
+        // Limpar a hash do URL para evitar reapresentar o erro ao recarregar a página
+        if (window.history && window.history.replaceState) {
+          const cleanUrl = window.location.pathname + window.location.search
+          window.history.replaceState(null, '', cleanUrl)
+        }
+      }
       
       const checkStoredUser = async () => {
         const storedUser = await loadSettingAsync<any>('edu-current-user', null)

@@ -1,7 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Book, Search, FileText, ShieldCheck, ArrowUp, Printer, Bookmark, CheckCircle2 } from "lucide-react";
+import { Book, Search, FileText, ShieldCheck, ArrowUp, Printer, Bookmark, CheckCircle2, ChevronDown, ChevronUp, X, Lock, Trash2 } from "lucide-react";
+import styles from "./regimento.module.css";
+import { supabase } from '@/lib/supabase';
 
 const regimentoData = [
   {
@@ -524,6 +526,258 @@ const regimentoData = [
 export default function RegimentoInternoPage() {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [activeTitle, setActiveTitle] = React.useState('título-i');
+  const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({});
+  const [scrollProgress, setScrollProgress] = React.useState(0);
+  const [showScrollTop, setShowScrollTop] = React.useState(false);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = React.useState(false);
+
+  // Estados para o Sistema de Assinatura e Ciência
+  const [user, setUser] = React.useState<any>(null);
+  const [signatures, setSignatures] = React.useState<any[]>([]);
+  const [userSignature, setUserSignature] = React.useState<any>(null);
+  const [isSignModalOpen, setIsSignModalOpen] = React.useState(false);
+  const [modalEmail, setModalEmail] = React.useState('');
+  const [modalPassword, setModalPassword] = React.useState('');
+  const [signLoading, setSignLoading] = React.useState(false);
+  const [modalError, setModalError] = React.useState('');
+  const [signSuccess, setSignSuccess] = React.useState(false);
+  const [clientIp, setClientIp] = React.useState('');
+
+  // Estados para Primeiro Acesso e Esqueci Senha no Modal
+  const [modalStep, setModalStep] = React.useState<'login' | 'first_access_verify' | 'first_access_create' | 'forgot_password' | 'forgot_password_create'>('login');
+  const [faQuery, setFaQuery] = React.useState('');
+  const [faLoading, setFaLoading] = React.useState(false);
+  const [faError, setFaError] = React.useState('');
+  const [faUser, setFaUser] = React.useState<any>(null);
+  const [faRegEmail, setFaRegEmail] = React.useState('');
+  const [newPass, setNewPass] = React.useState('');
+  const [confirmPass, setConfirmPass] = React.useState('');
+  const [createLoading, setCreateLoading] = React.useState(false);
+  const [createError, setCreateError] = React.useState('');
+  const [createSuccess, setCreateSuccess] = React.useState(false);
+  const [showNewPw, setShowNewPw] = React.useState(false);
+  const [showConfPw, setShowConfPw] = React.useState(false);
+
+  // Calcula força da senha criada no modal
+  const strength = React.useMemo(() => {
+    if (!newPass.length) return { label: '', color: 'transparent', pct: 0 };
+    const has = { u: /[A-Z]/.test(newPass), l: /[a-z]/.test(newPass), n: /\d/.test(newPass), s: /[^A-Za-z0-9]/.test(newPass) };
+    const score = Object.values(has).filter(Boolean).length;
+    if (newPass.length < 6) return { label: 'Muito fraca', color: '#ef4444', pct: 20 };
+    if (newPass.length < 8 || score <= 2) return { label: 'Razoável', color: '#f59e0b', pct: 50 };
+    if (score === 3)                  return { label: 'Boa',      color: '#fbbf24', pct: 75 };
+    if (newPass.length >= 8 && score >= 3) return { label: 'Forte',     color: '#10b981', pct: 100 };
+    return { label: 'Boa', color: '#34d399', pct: 82 };
+  }, [newPass]);
+
+  // Função para limpar todos os estados ao fechar o modal
+  const closeSignModal = React.useCallback(() => {
+    setIsSignModalOpen(false);
+    setModalError('');
+    setModalPassword('');
+    setModalStep('login');
+    setFaQuery('');
+    setFaError('');
+    setFaUser(null);
+    setFaRegEmail('');
+    setNewPass('');
+    setConfirmPass('');
+    setCreateError('');
+    setCreateSuccess(false);
+    setShowNewPw(false);
+    setShowConfPw(false);
+  }, []);
+
+  // Busca assinaturas do documento regimento_interno
+  const fetchSignatures = React.useCallback(async (userId?: string) => {
+    try {
+      const res = await fetch('/api/gestao-pessoas/assinaturas?entidade_id=regimento_interno');
+      if (res.ok) {
+        const data = await res.json();
+        setSignatures(data);
+        if (userId) {
+          const found = data.find((s: any) => s.user_id === userId);
+          if (found) {
+            setUserSignature(found);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao buscar assinaturas', e);
+    }
+  }, []);
+
+  // Monitora mudança no usuário ativo para buscar assinaturas correspondentes e registrar visualização
+  React.useEffect(() => {
+    fetch('/api/auth/me')
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        
+        // Define o IP retornado pelo servidor
+        if (data.ip) {
+          setClientIp(data.ip);
+        }
+        
+        if (res.ok && data.user) {
+          setUser(data.user);
+          fetchSignatures(data.user.id);
+          
+          // Registrar log de visualização
+          fetch('/api/configuracoes/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              usuarioNome: data.user.nome,
+              perfil: data.user.perfil,
+              modulo: 'regimento_interno',
+              acao: 'abrir',
+              nomeRelacionado: data.user.email,
+              descricao: `Usuário ${data.user.nome} visualizou o Regimento Interno`,
+              origem: 'web'
+            })
+          }).catch(() => {});
+        } else {
+          fetchSignatures();
+        }
+      })
+      .catch(() => {
+        fetchSignatures();
+      });
+  }, [fetchSignatures]);
+
+  // Estados e lógica do Relatório de Controle (Admin)
+  const [isAdminReportOpen, setIsAdminReportOpen] = React.useState(false);
+  const [reportTab, setReportTab] = React.useState<'signatures' | 'accesses'>('signatures');
+  const [accessLogs, setAccessLogs] = React.useState<any[]>([]);
+  const [reportLoading, setReportLoading] = React.useState(false);
+
+  const fetchAdminReportData = React.useCallback(async () => {
+    setReportLoading(true);
+    try {
+      await fetchSignatures(user?.id);
+      
+      const resLogs = await fetch('/api/configuracoes/logs?modulo=regimento_interno&limit=500');
+      if (resLogs.ok) {
+        const logsData = await resLogs.json();
+        const abrirLogs = logsData.filter((log: any) => log.acao === 'abrir');
+        setAccessLogs(abrirLogs);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setReportLoading(false);
+    }
+  }, [fetchSignatures, user]);
+
+  React.useEffect(() => {
+    if (isAdminReportOpen) {
+      fetchAdminReportData();
+    }
+  }, [isAdminReportOpen, fetchAdminReportData]);
+
+  const handleModalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSignLoading(true);
+    setModalError('');
+
+    try {
+      let activeUser = user;
+
+      // Se não estiver logado, faz login primeiro
+      if (!activeUser) {
+        if (!modalEmail || !modalPassword) {
+          throw new Error('E-mail e senha são necessários.');
+        }
+
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: modalEmail, password: modalPassword })
+        });
+
+        if (!loginRes.ok) {
+          const errData = await loginRes.json().catch(() => ({}));
+          throw new Error(errData.error || 'Credenciais inválidas.');
+        }
+
+        const loginData = await loginRes.json();
+        if (loginData.error) {
+          throw new Error(loginData.error);
+        }
+        const meta = loginData.user?.user_metadata || {};
+        activeUser = {
+          id: loginData.user.id,
+          nome: meta.nome || modalEmail.split('@')[0],
+          email: modalEmail,
+          cargo: meta.cargo || 'Colaborador',
+          perfil: meta.perfil || 'Usuário'
+        };
+        setUser(activeUser);
+      }
+
+      // Agora registra a assinatura
+      const signRes = await fetch('/api/gestao-pessoas/assinaturas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senha: modalPassword,
+          entidade_id: 'regimento_interno',
+          entidade_tipo: 'regimento_interno'
+        })
+      });
+
+      if (!signRes.ok) {
+        const errData = await signRes.json().catch(() => ({}));
+        throw new Error(errData.error || 'Erro ao registrar assinatura.');
+      }
+
+      setSignSuccess(true);
+      
+      // Recarrega a lista de assinaturas e marca a do usuário ativo
+      await fetchSignatures(activeUser.id);
+
+      setTimeout(() => {
+        setIsSignModalOpen(false);
+        setSignSuccess(false);
+        setModalPassword('');
+        setModalEmail('');
+      }, 2000);
+
+    } catch (err: any) {
+      setModalError(err.message || 'Ocorreu um erro.');
+    } finally {
+      setSignLoading(false);
+    }
+  };
+
+
+  // Update scroll progress & scroll-to-top button visibility
+  React.useEffect(() => {
+    const handleScroll = () => {
+      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+      if (totalHeight > 0) {
+        setScrollProgress((window.scrollY / totalHeight) * 100);
+      }
+      setShowScrollTop(window.scrollY > 300);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Dynamically set overflow-x on html/body to ensure position: sticky works
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const htmlStyle = document.documentElement.style.overflowX;
+    const bodyStyle = document.body.style.overflowX;
+
+    document.documentElement.style.overflowX = 'visible';
+    document.body.style.overflowX = 'visible';
+
+    return () => {
+      document.documentElement.style.overflowX = htmlStyle;
+      document.body.style.overflowX = bodyStyle;
+    };
+  }, []);
 
   // Filter content by search query
   const filteredData = React.useMemo(() => {
@@ -544,9 +798,284 @@ export default function RegimentoInternoPage() {
     }).filter(Boolean) as typeof regimentoData;
   }, [searchTerm]);
 
+  // Scroll Spy to highlight active section in sidebar
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const sections = regimentoData
+      .map(sec => document.getElementById(sec.id))
+      .filter(Boolean) as HTMLElement[];
+
+    const observerOptions = {
+      root: null,
+      rootMargin: '-10% 0px -70% 0px',
+      threshold: 0
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          setActiveTitle(entry.target.id);
+        }
+      });
+    }, observerOptions);
+
+    sections.forEach(sec => observer.observe(sec));
+
+    return () => {
+      sections.forEach(sec => observer.unobserve(sec));
+    };
+  }, [filteredData]);
+
+  const toggleSectionCollapse = (secId: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [secId]: !prev[secId]
+    }));
+  };
+
+  const expandAll = () => {
+    setCollapsedSections({});
+  };
+
+  const collapseAll = () => {
+    const collapsed: Record<string, boolean> = {};
+    regimentoData.forEach(sec => {
+      collapsed[sec.id] = true;
+    });
+    setCollapsedSections(collapsed);
+  };
+
   const handlePrint = () => {
     if (typeof window !== 'undefined') {
       window.print();
+    }
+  };
+
+  const handlePrintReport = () => {
+    const title = reportTab === 'signatures' ? 'Relatório de Ciências Confirmadas' : 'Relatório de Visualizações e Acessos';
+    const dataList = reportTab === 'signatures' ? signatures : accessLogs;
+    
+    let tableHtml = `
+      <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; }
+            h1 { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
+            p { font-size: 12px; color: #64748b; margin-bottom: 24px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
+            th { background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 10px 12px; text-align: left; font-weight: bold; color: #475569; }
+            td { border-bottom: 1px solid #f1f5f9; padding: 10px 12px; color: #334155; }
+            .mono { font-family: monospace; font-size: 11px; }
+          </style>
+        </head>
+        <body>
+          <h1>Colégio Impacto - Regimento Escolar Interno</h1>
+          <p>${title} — Gerado em ${new Date().toLocaleString('pt-BR')}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>E-mail</th>
+                <th>Data e Hora</th>
+                <th>IP</th>
+                ${reportTab === 'signatures' ? '<th>Identificador de Auditoria</th>' : ''}
+              </tr>
+            </thead>
+            <tbody>
+    `;
+
+    dataList.forEach((item: any) => {
+      if (reportTab === 'signatures') {
+        tableHtml += `
+          <tr>
+            <td><strong>${item.user_nome}</strong></td>
+            <td>${item.user_email || '-'}</td>
+            <td>${new Date(item.created_at).toLocaleString('pt-BR')}</td>
+            <td class="mono">${item.ip_address}</td>
+            <td class="mono">${item.hash_assinatura}</td>
+          </tr>
+        `;
+      } else {
+        tableHtml += `
+          <tr>
+            <td><strong>${item.usuarioNome}</strong></td>
+            <td>${item.nomeRelacionado || '-'}</td>
+            <td>${new Date(item.dataHora).toLocaleString('pt-BR')}</td>
+            <td class="mono">${item.ip || '-'}</td>
+          </tr>
+        `;
+      }
+    });
+
+    tableHtml += `
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(tableHtml);
+      printWindow.document.close();
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!faQuery.trim()) { 
+      setFaError(modalStep === 'forgot_password' ? 'Informe seu e-mail cadastrado.' : 'Informe seu e-mail ou código.'); 
+      return; 
+    }
+    setFaLoading(true); setFaError('');
+    
+    if (modalStep === 'forgot_password') {
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(faQuery.trim(), {
+          redirectTo: `${window.location.origin}/atualizar-senha`,
+        });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        setCreateSuccess(true);
+        await new Promise(r => setTimeout(r, 4000));
+        
+        // Retorna para o login
+        setModalStep('login');
+        setModalEmail(faQuery.trim());
+        setFaQuery('');
+        setCreateSuccess(false);
+      } catch (err: any) {
+        setFaError(err.message || 'Erro ao enviar instruções. Verifique o e-mail digitado.');
+      } finally {
+        setFaLoading(false);
+      }
+    } else {
+      // Primeiro Acesso
+      try {
+        const res = await fetch('/api/auth/verify-first-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: faQuery.trim().toLowerCase() })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Nenhum cadastro encontrado. Verifique com a administração.');
+        }
+
+        const { user } = await res.json();
+        setFaUser(user);
+        setModalStep('first_access_create');
+        setFaRegEmail(user.email || '');
+      } catch (err: any) {
+        setFaError(err.message);
+      } finally {
+        setFaLoading(false);
+      }
+    }
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!faRegEmail.trim()) { setCreateError('Informe seu e-mail para continuar.'); return; }
+    if (newPass.length < 6) { setCreateError('Mínimo 6 caracteres.'); return; }
+    if (newPass !== confirmPass) { setCreateError('As senhas não coincidem.'); return; }
+    setCreateLoading(true); setCreateError('');
+    
+    try {
+      const passRes = await fetch('/api/auth/update-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userIdLegacy: faUser.id, 
+          newPass,
+          registeredEmail: faRegEmail.trim()
+        })
+      });
+      
+      if (!passRes.ok) {
+        const errData = await passRes.json().catch(() => ({}));
+        throw new Error(errData.error || 'Erro ao sincronizar senha com servidor.');
+      }
+
+      setCreateLoading(false);
+      setCreateSuccess(true);
+      await new Promise(r => setTimeout(r, 2200));
+      
+      // Retorna para o login preenchendo o email/login
+      setModalStep('login');
+      setModalEmail(faRegEmail || faUser.email || '');
+      
+      // Reseta os estados auxiliares
+      setFaQuery('');
+      setFaUser(null);
+      setNewPass('');
+      setConfirmPass('');
+      setCreateSuccess(false);
+    } catch (err: any) {
+      setCreateLoading(false);
+      setCreateError(err.message || 'Erro ao sincronizar senha com servidor.');
+    }
+  };
+
+  const handleDeleteSignature = async (id: string) => {
+    if (!window.confirm("Deseja realmente excluir esta assinatura digital?")) return;
+    
+    try {
+      const res = await fetch(`/api/gestao-pessoas/assinaturas?id=${id}`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Erro ao excluir assinatura.');
+      }
+
+      // Se a assinatura excluída era a do usuário ativo, remove o estado local dela
+      if (userSignature && userSignature.id === id) {
+        setUserSignature(null);
+      }
+
+      // Recarrega as assinaturas e atualiza o relatório
+      await fetchSignatures(user?.id);
+      alert("Assinatura excluída com sucesso!");
+    } catch (e: any) {
+      alert(e.message || "Erro ao processar exclusão.");
+    }
+  };
+
+  const handleDeleteAllSignatures = async () => {
+    if (!window.confirm("ATENÇÃO: Deseja realmente excluir TODAS as assinaturas registradas para este regimento? Esta ação não pode ser desfeita!")) return;
+    
+    try {
+      const res = await fetch(`/api/gestao-pessoas/assinaturas?entidade_id=regimento_interno`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Erro ao excluir todas as assinaturas.');
+      }
+
+      // Limpa os estados de assinatura locais
+      setUserSignature(null);
+      
+      // Recarrega as assinaturas e atualiza o relatório
+      await fetchSignatures(user?.id);
+      alert("Todas as assinaturas foram excluídas!");
+    } catch (e: any) {
+      alert(e.message || "Erro ao processar exclusão.");
     }
   };
 
@@ -556,288 +1085,1023 @@ export default function RegimentoInternoPage() {
     }
   };
 
-  // Helper to render structured content lines into rich UI components
-  const renderStructuredContent = (paragraphText: string) => {
-    const lines = paragraphText.split('\n').map(l => l.trim()).filter(Boolean);
-
+  // Helper to render matching query text highlights
+  const highlightText = (text: string, search: string) => {
+    if (!search.trim()) return <span>{text}</span>;
+    const regex = new RegExp(`(${search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
+    const parts = text.split(regex);
     return (
-      <div className="space-y-3 my-3">
-        {lines.map((line, lineIdx) => {
-          // 1. CAPÍTULO / Seção / Subseção
-          if (line.startsWith("CAPÍTULO") || line.startsWith("Seção") || line.startsWith("Subseção")) {
+      <>
+        {parts.map((part, i) => 
+          regex.test(part) ? (
+            <mark key={i} className="bg-amber-100 dark:bg-amber-900/50 text-slate-900 dark:text-amber-100 px-0.5 rounded font-medium transition-colors">
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </>
+    );
+  };
+
+  interface GroupedItem {
+    type: 'header' | 'article';
+    lines: string[];
+    originalIndices: number[];
+  }
+
+  // Helper to group paragraphs under their respective articles to avoid nested cards
+  const groupParagraphs = (paragraphs: string[]) => {
+    const groups: GroupedItem[] = [];
+    let currentArticleGroup: GroupedItem | null = null;
+
+    paragraphs.forEach((pText, pIdx) => {
+      const trimmed = pText.trim();
+      if (!trimmed) return;
+
+      // Check if it's a header (Chapter, Section, Subsection)
+      if (trimmed.startsWith("CAPÍTULO") || trimmed.startsWith("Seção") || trimmed.startsWith("Subseção")) {
+        currentArticleGroup = null;
+        groups.push({
+          type: 'header',
+          lines: [pText],
+          originalIndices: [pIdx]
+        });
+      } else if (trimmed.startsWith("Art.")) {
+        currentArticleGroup = {
+          type: 'article',
+          lines: [pText],
+          originalIndices: [pIdx]
+        };
+        groups.push(currentArticleGroup);
+      } else {
+        // List items, single paragraphs, etc.
+        if (currentArticleGroup) {
+          currentArticleGroup.lines.push(pText);
+          currentArticleGroup.originalIndices.push(pIdx);
+        } else {
+          currentArticleGroup = {
+            type: 'article',
+            lines: [pText],
+            originalIndices: [pIdx]
+          };
+          groups.push(currentArticleGroup);
+        }
+      }
+    });
+
+    return groups;
+  };
+
+  const renderGroupedContent = (group: GroupedItem) => {
+    if (group.type === 'header') {
+      const line = group.lines[0];
+      return (
+        <div className={styles.headerBlock}>
+          <h3 className={styles.headerBlockText}>
+            {highlightText(line, searchTerm)}
+          </h3>
+        </div>
+      );
+    }
+
+    // Render grouped articles in a single clean card
+    return (
+      <div className={styles.articleCard}>
+        <div className="space-y-4">
+          {group.lines.map((pText, pIdx) => {
+            const subLines = pText.split('\n').map(l => l.trim()).filter(Boolean);
+            
             return (
-              <div key={lineIdx} className="my-6 pt-6 border-t border-slate-200/80 dark:border-slate-800">
-                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold text-sm tracking-wide shadow-xs border border-slate-200/60 dark:border-slate-700/60">
-                  <Bookmark className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span>{line}</span>
-                </div>
+              <div key={pIdx} className="space-y-3">
+                {subLines.map((line, lineIdx) => {
+                  // 1. Article line
+                  const artMatch = line.match(/^(Art\.\s*\d+\.º?|Art\.\s*\d+)(.*)/);
+                  if (artMatch) {
+                    const artLabel = artMatch[1];
+                    const artBody = artMatch[2];
+                    return (
+                      <div key={lineIdx} className={styles.articleRow}>
+                        <span className={styles.articleBadge}>
+                          {highlightText(artLabel, searchTerm)}
+                        </span>
+                        <span className={styles.articleBody}>
+                          {highlightText(artBody, searchTerm)}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // 2. Parágrafo único or §
+                  if (line.startsWith("Parágrafo único") || line.startsWith("§")) {
+                    const firstDotIndex = line.indexOf('.');
+                    const hasDot = firstDotIndex !== -1;
+                    const prefix = hasDot ? line.substring(0, firstDotIndex + 1) : line;
+                    const restText = hasDot ? line.substring(firstDotIndex + 1) : '';
+                    return (
+                      <div key={lineIdx} className={styles.calloutBlock}>
+                        <span className={styles.calloutPrefix}>
+                          {highlightText(prefix, searchTerm)}
+                        </span>
+                        <span>{highlightText(restText, searchTerm)}</span>
+                      </div>
+                    );
+                  }
+
+                  // 3. List Item
+                  const listMatch = line.match(/^([IVXLC]+\s*[-–]|§\s*\d+º?|[a-z]\))(.*)/);
+                  if (listMatch) {
+                    const bullet = listMatch[1];
+                    const rest = listMatch[2];
+                    return (
+                      <div key={lineIdx} className={styles.listItem}>
+                        <span className={styles.listItemBullet}>
+                          {highlightText(bullet, searchTerm)}
+                        </span>
+                        <span className={styles.listItemBody}>{highlightText(rest, searchTerm)}</span>
+                      </div>
+                    );
+                  }
+
+                  // 4. Default text
+                  return (
+                    <p key={lineIdx} className={styles.defaultParagraph}>
+                      {highlightText(line, searchTerm)}
+                    </p>
+                  );
+                })}
               </div>
             );
-          }
-
-          // 2. Artigo (Art. X)
-          const artMatch = line.match(/^(Art\.\s*\d+\.º?|Art\.\s*\d+)(.*)/);
-          if (artMatch) {
-            const artLabel = artMatch[1];
-            const artBody = artMatch[2];
-            return (
-              <div key={lineIdx} className="my-4 p-4 md:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm hover:border-blue-300 dark:hover:border-blue-700 transition-all">
-                <div className="flex flex-col sm:flex-row sm:items-baseline gap-2 sm:gap-3">
-                  <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-extrabold font-mono bg-blue-50 text-blue-700 border border-blue-200/80 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/80 shrink-0 w-fit">
-                    {artLabel}
-                  </span>
-                  <span className="text-slate-800 dark:text-slate-200 font-medium leading-relaxed text-sm md:text-base">
-                    {artBody}
-                  </span>
-                </div>
-              </div>
-            );
-          }
-
-          // 3. Parágrafo único / § Xº
-          if (line.startsWith("Parágrafo único") || line.startsWith("§")) {
-            const firstDotIndex = line.indexOf('.');
-            const hasDot = firstDotIndex !== -1;
-            const prefix = hasDot ? line.substring(0, firstDotIndex + 1) : line;
-            const restText = hasDot ? line.substring(firstDotIndex + 1) : '';
-
-            return (
-              <div key={lineIdx} className="my-3 ml-2 sm:ml-4 p-4 rounded-r-2xl border-l-4 border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30 text-slate-800 dark:text-slate-200 text-sm leading-relaxed">
-                <span className="font-bold text-indigo-900 dark:text-indigo-300 mr-2">
-                  {prefix}
-                </span>
-                <span>{restText}</span>
-              </div>
-            );
-          }
-
-          // 4. List Items (I -, II -, a), b))
-          const listMatch = line.match(/^([IVXLC]+\s*[-–]|§\s*\d+º?|[a-z]\))(.*)/);
-          if (listMatch) {
-            const bullet = listMatch[1];
-            const rest = listMatch[2];
-            return (
-              <div key={lineIdx} className="my-2 ml-3 sm:ml-6 pl-4 py-2 border-l-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-slate-800/40 transition-colors rounded-r-xl flex items-start gap-3 text-sm md:text-base text-slate-700 dark:text-slate-300 leading-relaxed">
-                <span className="font-bold text-blue-600 dark:text-blue-400 font-mono shrink-0 min-w-[28px] text-xs pt-0.5">
-                  {bullet}
-                </span>
-                <span className="flex-1">{rest}</span>
-              </div>
-            );
-          }
-
-          // 5. Default line (Dates, Signatures, intros)
-          return (
-            <p key={lineIdx} className="my-2.5 text-slate-700 dark:text-slate-300 leading-relaxed text-sm md:text-base font-normal">
-              {line}
-            </p>
-          );
-        })}
+          })}
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans selection:bg-blue-100 selection:text-blue-900 w-full pb-16">
+    <div className={styles.page}>
       
-      {/* Top Navbar */}
-      <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-white/90 dark:bg-slate-900/90 border-b border-slate-200/80 dark:border-slate-800 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <Book className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
-                Regimento Interno
-              </h1>
-              <p className="text-xs text-slate-500 font-medium hidden sm:block">
-                COLÉGIO IMPACTO DE EF
-              </p>
-            </div>
-          </div>
+      {/* Reading Progress Line */}
+      <div 
+        className="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 z-[60] transition-all duration-100 no-print" 
+        style={{ width: `${scrollProgress}%` }}
+      />
 
-          {/* Controls */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrint}
-              className="hidden sm:inline-flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl transition-all border border-slate-200 dark:border-slate-700 cursor-pointer"
-              title="Imprimir Regimento"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Imprimir</span>
-            </button>
+      {/* 1. Header Wrapper */}
+      <header className={`${styles.header} no-print`}>
+        <div className={styles.container}>
+          <div className={styles.headerInner}>
+            <div className={styles.logoAndInfo}>
+              <img src="/logo-impacto.png" alt="Logo Colégio Impacto" className={styles.logoImage} />
+              <div className={styles.headerTitles}>
+                <span className={styles.logoText}>Colégio Impacto</span>
+                <h1 className={styles.title}>Regimento Escolar Interno</h1>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              {/* Botão de Relatório de Controle (Exibido apenas para administradores/diretoria) */}
+              {user && (
+                user.perfil?.toLowerCase()?.includes('admin') || 
+                user.perfil === 'direcao'
+              ) && (
+                <button onClick={() => setIsAdminReportOpen(true)} className={styles.adminButton} title="Relatório de Ciência e Acessos">
+                  <FileText className="w-4.5 h-4.5" />
+                  <span>Relatório</span>
+                </button>
+              )}
+              {userSignature ? (
+                <div className={styles.signatureBadge} title="Sua ciência está confirmada para este documento.">
+                  <ShieldCheck className="w-4.5 h-4.5 text-emerald-500" />
+                  <span>Ciência Confirmada</span>
+                </div>
+              ) : (
+                <button onClick={() => setIsSignModalOpen(true)} className={styles.signButton} title="Assinar Termo de Ciência">
+                  <ShieldCheck className="w-4.5 h-4.5" />
+                  <span>Assinar e Dar Ciência</span>
+                </button>
+              )}
+              <button onClick={handlePrint} className={styles.printButton} title="Imprimir Regimento">
+                <Printer className="w-4.5 h-4.5" />
+                <span>Imprimir documento</span>
+              </button>
+            </div>
           </div>
+          <p className={styles.description}>
+            Instrumento jurídico-educacional que regulamenta a organização administrativa, didático-pedagógica e disciplinar do Colégio.
+          </p>
         </div>
       </header>
 
-      {/* Hero Header */}
-      <div className="bg-gradient-to-b from-blue-900 via-indigo-900 to-slate-900 text-white py-12 px-4 sm:px-6 lg:px-8 border-b border-slate-800 relative overflow-hidden">
-        <div className="max-w-4xl mx-auto text-center relative z-10 space-y-4">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 text-xs font-bold uppercase tracking-wider">
-            <ShieldCheck className="w-3.5 h-3.5" /> Documento Oficial & Regulatório
-          </span>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight">
-            Regimento Escolar Interno
-          </h1>
-          <p className="text-sm sm:text-base text-blue-100/80 max-w-2xl mx-auto leading-relaxed">
-            Instrumento jurídico-educacional que regulamenta a organização administrativa, didático-pedagógica e disciplinar do Colégio Impacto DE EF.
-          </p>
-
-          {/* Live Search Input */}
-          <div className="pt-4 max-w-xl mx-auto">
-            <div className="relative">
-              <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+      {/* 2. Toolbar Wrapper */}
+      <div className={`${styles.toolbar} no-print`}>
+        <div className={styles.container}>
+          <div className={styles.toolbarInner}>
+            {/* Campo de Pesquisa */}
+            <div className={styles.searchWrapper}>
+              <Search className={styles.searchIcon} />
               <input
                 type="text"
-                placeholder="Pesquisar por artigo, direitos, deveres, faltas, proibições..."
+                placeholder="Pesquisar por artigo, direitos, deveres, faltas..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-11 pr-10 py-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white placeholder-blue-200/60 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:bg-white/15 transition-all shadow-lg"
+                className={styles.searchInput}
               />
               {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs bg-white/20 hover:bg-white/30 text-white px-2 py-1 rounded-lg"
-                >
+                <button onClick={() => setSearchTerm('')} className={styles.clearButton}>
                   Limpar
                 </button>
               )}
             </div>
-            {searchTerm && (
-              <p className="text-xs text-blue-200 mt-2">
-                Exibindo resultados para &quot;{searchTerm}&quot; ({filteredData.length} seção(ões) encontrada(s))
-              </p>
-            )}
+
+            {/* Controles Expandir/Recolher */}
+            <div className={styles.controlsWrapper}>
+              <button onClick={expandAll} className={styles.controlButton}>
+                Expandir Tudo
+              </button>
+              <button onClick={collapseAll} className={styles.controlButton}>
+                Recolher Tudo
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Horizontal Quick Title Selector (Mobile + Desktop) */}
-      <div className="sticky top-16 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-xs py-2.5 px-4 sm:px-6 lg:px-8 overflow-x-auto custom-scrollbar">
-        <div className="max-w-7xl mx-auto flex items-center gap-2 min-w-max">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 shrink-0 mr-2 flex items-center gap-1">
-            <FileText className="w-3.5 h-3.5" /> Ir para:
-          </span>
-          {regimentoData.map((sec) => (
-            <a
-              key={sec.id}
-              href={`#${sec.id}`}
-              onClick={() => setActiveTitle(sec.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border ${
-                activeTitle === sec.id
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-slate-700'
-              }`}
-            >
-              {sec.title}
-            </a>
-          ))}
-        </div>
-      </div>
-
-      {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row gap-8 items-start relative">
-
-          {/* Desktop Left Sidebar Navigation */}
-          <aside className="hidden lg:block w-72 shrink-0 sticky top-36">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-4">
-              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2 flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-blue-500" /> Sumário Geral
-              </h2>
-              <div className="overflow-y-auto max-h-[calc(100vh-12rem)] pr-2 space-y-1 custom-scrollbar">
-                {regimentoData.map((section) => (
-                  <a
-                    key={section.id}
-                    href={`#${section.id}`}
-                    onClick={() => setActiveTitle(section.id)}
-                    className={`group flex flex-col p-2.5 rounded-xl text-xs transition-all border ${
-                      activeTitle === section.id
-                        ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-bold border-blue-200/80 dark:border-blue-800'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-transparent'
-                    }`}
-                  >
-                    <span className="font-extrabold">{section.title}</span>
-                    <span className="text-[11px] font-medium opacity-75 truncate">{section.subtitle}</span>
-                  </a>
-                ))}
+      {/* 4. Main Grid Wrapper */}
+      <div className={styles.main}>
+        <div className={styles.container}>
+          <div className={styles.documentGrid}>
+            
+            {/* Coluna Esquerda: Sumário Geral */}
+            <aside className={`${styles.summary} no-print`}>
+              <div className={styles.summaryCard}>
+                <h2 className={styles.summaryTitle}>
+                  <CheckCircle2 className="w-4 h-4 text-blue-500" /> Sumário Geral
+                </h2>
+                <div className={styles.summaryList}>
+                  {regimentoData.map((section) => {
+                    const isSectionCollapsed = collapsedSections[section.id];
+                    return (
+                      <a
+                        key={section.id}
+                        href={`#${section.id}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const el = document.getElementById(section.id);
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth' });
+                          }
+                          setActiveTitle(section.id);
+                          setCollapsedSections(prev => ({ ...prev, [section.id]: false }));
+                        }}
+                        className={`${styles.summaryItem} ${activeTitle === section.id ? styles.summaryItemActive : ''}`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className={styles.summaryItemTitle}>{section.title}</span>
+                          {isSectionCollapsed && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">
+                              oculto
+                            </span>
+                          )}
+                        </div>
+                        <span className={styles.summaryItemSubtitle}>{section.subtitle}</span>
+                      </a>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          </aside>
+            </aside>
 
-          {/* Content Document Viewer */}
-          <main className="flex-1 min-w-0 w-full space-y-12">
-            {filteredData.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900 rounded-2xl p-12 text-center border border-slate-200 dark:border-slate-800 shadow-sm">
-                <Search className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Nenhum resultado encontrado</h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  Não encontramos nenhum artigo ou seção correspondente a &quot;{searchTerm}&quot;.
+            {/* Coluna Direita: Conteúdo do Documento */}
+            <main className={styles.content}>
+              {filteredData.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <Search className={styles.emptyStateIcon} />
+                  <h3 className={styles.emptyStateTitle}>Nenhum resultado encontrado</h3>
+                  <p className={styles.emptyStateText}>
+                    Não encontramos nenhum artigo ou seção contendo o termo <strong className="text-blue-600 dark:text-blue-400">"{searchTerm}"</strong>.
+                  </p>
+                </div>
+              ) : (
+                filteredData.map((section) => {
+                  const isCollapsed = collapsedSections[section.id];
+                  const groupedItems = groupParagraphs(section.paragraphs);
+
+                  return (
+                    <section key={section.id} id={section.id} className={styles.section}>
+                      
+                      {/* Cabeçalho da Seção */}
+                      <div className={styles.sectionHeader}>
+                        <div className={styles.sectionTitleWrapper}>
+                          <span className={styles.sectionLabel}>{section.title}</span>
+                          <h2 className={styles.sectionTitle}>{section.subtitle}</h2>
+                        </div>
+                        <button
+                          onClick={() => toggleSectionCollapse(section.id)}
+                          className={styles.collapseButton}
+                          title={isCollapsed ? "Expandir" : "Recolher"}
+                        >
+                          {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                        </button>
+                      </div>
+
+                      {/* Conteúdo da Seção */}
+                      {isCollapsed ? (
+                        <div onClick={() => toggleSectionCollapse(section.id)} className={styles.sectionCollapsedBox}>
+                          <p className={styles.sectionCollapsedText}>
+                            Seção recolhida. Clique para visualizar os artigos de {section.title}.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          {groupedItems.map((group, idx) => (
+                            <div key={idx} className="card-print">
+                              {renderGroupedContent(group)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                    </section>
+                  );
+                })
+              )}
+
+              {/* Assinatura Final */}
+              <div className={styles.footerCard}>
+                <Book className={styles.footerCardLogo} />
+                <h3 className={styles.footerCardTitle}>COLÉGIO IMPACTO DE EF</h3>
+                <p className={styles.footerCardBody}>
+                  CNPJ nº 04.395.789/0001-88 — Rua Alagoas, n.º 1081, Vila Suíça, Campo Grande, MS.
                 </p>
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors"
-                >
-                  Limpar busca
-                </button>
+                <div className={styles.footerCardDivider} />
+                <p className={styles.footerCardDate}>Campo Grande MS, 30 de junho de 2026.</p>
+                <span className={styles.footerCardBadge}>Aprovado pela Ata 01/2026, de 30/06/2026</span>
               </div>
-            ) : (
-              filteredData.map((section) => (
-                <section
-                  key={section.id}
-                  id={section.id}
-                  className="scroll-mt-36 bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 md:p-10 border border-slate-200/80 dark:border-slate-800 shadow-sm transition-all"
-                >
-                  {/* Title Header */}
-                  <div className="mb-6 pb-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+
+              {/* Seção de Assinatura e Ciência */}
+              <div className="no-print mt-6">
+                {userSignature ? (
+                  <div className={styles.signatureSuccessCard}>
+                    <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-950 rounded-full flex items-center justify-center border border-emerald-100 dark:border-emerald-900 flex-shrink-0">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                    </div>
                     <div>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold uppercase tracking-widest bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 mb-1">
-                        {section.title}
-                      </span>
-                      <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-                        {section.subtitle}
-                      </h2>
+                      <h3 className={styles.signatureSuccessTitle}>Ciência Confirmada</h3>
+                      <p className={styles.signatureSuccessText}>
+                        Assinado digitalmente por <strong>{userSignature.user_nome}</strong> ({userSignature.user_cargo || 'Usuário'}) em {new Date(userSignature.created_at).toLocaleString('pt-BR')}.
+                      </p>
+                      <div className={styles.signatureSuccessMeta}>
+                        Hash: <span className="font-mono text-[10px]">{userSignature.hash_assinatura.substring(0, 24)}...</span> | IP: {userSignature.ip_address}
+                      </div>
                     </div>
                   </div>
+                ) : (
+                  <div className={styles.signatureCtaCard}>
+                    <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950 rounded-xl flex items-center justify-center border border-blue-100 dark:border-blue-900 flex-shrink-0">
+                      <ShieldCheck className="w-6 h-6 text-blue-500" />
+                    </div>
+                    <div>
+                      <h3 className={styles.signatureCtaTitle}>Termo de Ciência do Regimento</h3>
+                      <p className={styles.signatureCtaText}>
+                        Ao dar ciência, você confirma o recebimento e aceite de todas as diretrizes administrativas, pedagógicas e disciplinares contidas neste regimento escolar.
+                      </p>
+                      <button onClick={() => setIsSignModalOpen(true)} className={styles.signButtonLarge}>
+                        Assinar Termo de Ciência
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                  {/* Section Paragraphs */}
-                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                    {section.paragraphs.map((pText, pIdx) => (
-                      <div key={pIdx} className="py-2">
-                        {renderStructuredContent(pText)}
+              {/* Lista de Assinaturas Recentes */}
+              {signatures.length > 0 && (
+                <div className={`${styles.signaturesListSection} no-print`}>
+                  <h4 className={styles.signaturesListTitle}>Assinaturas e Ciências Registradas ({signatures.length})</h4>
+                  <div className={styles.signaturesGrid}>
+                    {signatures.slice(0, 4).map(sig => (
+                      <div key={sig.id} className={styles.signatureItem}>
+                        <div className={styles.signatureItemAvatar}>
+                          {sig.user_nome.charAt(0).toUpperCase()}
+                        </div>
+                        <div className={styles.signatureItemDetails}>
+                          <div className={styles.signatureItemName}>{sig.user_nome}</div>
+                          <div className={styles.signatureItemSub}>{sig.user_cargo || 'Usuário'} • {new Date(sig.created_at).toLocaleDateString('pt-BR')}</div>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </section>
-              ))
-            )}
+                </div>
+              )}
+            </main>
 
-            {/* Document Signature Footer */}
-            <div className="bg-slate-900 text-slate-300 rounded-3xl p-8 text-center space-y-3 shadow-lg border border-slate-800">
-              <Book className="w-8 h-8 text-blue-400 mx-auto" />
-              <h3 className="text-lg font-bold text-white">COLÉGIO IMPACTO DE EF</h3>
-              <p className="text-xs text-slate-400 max-w-md mx-auto">
-                CNPJ nº 04.395.789/0001-88 — Rua Alagoas, n.º 1081, Vila Suíça, Campo Grande, MS.
-              </p>
-              <div className="pt-4 border-t border-slate-800 text-xs text-slate-400 font-mono">
-                <p>Campo Grande MS, 30 de junho de 2026.</p>
-                <p className="text-blue-400 font-semibold mt-1">Aprovado pela Ata 01/2026, de 30/06/2026</p>
-              </div>
-            </div>
-          </main>
-
+          </div>
         </div>
       </div>
 
-      {/* Floating Scroll to Top */}
-      <button
-        onClick={scrollToTop}
-        className="fixed bottom-6 right-6 z-50 p-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-600/30 transition-all cursor-pointer hover:scale-105 active:scale-95"
-        title="Voltar ao topo"
-      >
-        <ArrowUp className="w-5 h-5" />
-      </button>
+      {/* Botão Flutuante Mobile para Sumário */}
+      <div className="lg:hidden fixed bottom-6 left-6 z-50 no-print">
+        <button onClick={() => setIsMobileDrawerOpen(true)} className={styles.floatingButton}>
+          <Book className="w-4 h-4" />
+          <span>Abrir Sumário</span>
+        </button>
+      </div>
+
+      {/* Drawer Overlay e Conteúdo */}
+      {isMobileDrawerOpen && (
+        <div className="fixed inset-0 z-[100] lg:hidden no-print">
+          <div className={styles.drawerOverlay} onClick={() => setIsMobileDrawerOpen(false)} />
+          <div className={styles.drawerContent}>
+            <div className={styles.drawerHeader}>
+              <h2 className={styles.drawerTitle}>
+                <Book className="w-4 h-4 text-blue-500" /> Sumário do Regimento
+              </h2>
+              <button onClick={() => setIsMobileDrawerOpen(false)} className={styles.drawerClose}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className={styles.drawerBody}>
+              {regimentoData.map((section) => {
+                const isSectionCollapsed = collapsedSections[section.id];
+                return (
+                  <a
+                    key={section.id}
+                    href={`#${section.id}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setIsMobileDrawerOpen(false);
+                      setTimeout(() => {
+                        const el = document.getElementById(section.id);
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth' });
+                        }
+                        setActiveTitle(section.id);
+                        setCollapsedSections(prev => ({ ...prev, [section.id]: false }));
+                      }, 100);
+                    }}
+                    className={`${styles.drawerLink} ${activeTitle === section.id ? styles.drawerLinkActive : ''}`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className={styles.summaryItemTitle}>{section.title}</span>
+                      {isSectionCollapsed && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">
+                          oculto
+                        </span>
+                      )}
+                    </div>
+                    <span className={styles.summaryItemSubtitle}>{section.subtitle}</span>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scroll to Top */}
+      {showScrollTop && (
+        <button onClick={scrollToTop} className={styles.scrollTopButton} title="Voltar ao topo">
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Modal de Assinatura / Ciência */}
+      {isSignModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center no-print" style={{ fontFamily: "'Inter', sans-serif" }}>
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => {
+              if (!signLoading && !faLoading && !createLoading) {
+                closeSignModal();
+              }
+            }}
+          />
+          
+          {/* Card */}
+          <div className={styles.modalCard}>
+            <button 
+              className={styles.modalCloseButton}
+              onClick={closeSignModal}
+              disabled={signLoading || faLoading || createLoading}
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {signSuccess ? (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-100 dark:border-emerald-900">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Ciência Confirmada!</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">Sua assinatura digital foi registrada com sucesso no sistema.</p>
+              </div>
+            ) : modalStep === 'login' ? (
+              <div>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950 rounded-xl flex items-center justify-center border border-blue-100 dark:border-blue-900">
+                    <ShieldCheck className="w-6 h-6 text-blue-500" />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Assinatura Eletrônica</h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Validação e registro de ciência do Regimento</p>
+                  </div>
+                </div>
+
+                <div className={styles.modalDocCard}>
+                  <FileText className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <span className={styles.modalDocLabel}>Documento</span>
+                    <h4 className={styles.modalDocTitle}>Regimento Escolar Interno</h4>
+                    <span className={styles.modalDocInstitution}>Colégio Impacto de EF</span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleModalSubmit}>
+                  {user ? (
+                    /* Caso 1: Usuário já Logado */
+                    <div className="space-y-5">
+                      <div className={styles.modalUserBadge}>
+                        <div className={styles.modalUserAvatar}>
+                          {user.nome?.charAt(0).toUpperCase() || 'U'}
+                        </div>
+                        <div>
+                          <span className={styles.modalDocLabel}>Logado como</span>
+                          <h4 className={styles.modalUserDetailName}>{user.nome}</h4>
+                          <span className={styles.modalUserDetailSub}>{user.email} • {user.cargo || user.perfil || 'Usuário'}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className={styles.modalInputLabel} style={{ marginBottom: 0 }}>Confirme sua Senha</label>
+                          <button 
+                            type="button"
+                            onClick={() => { setModalStep('forgot_password'); setFaQuery(user.email || ''); }}
+                            className="text-[10px] text-blue-500 hover:text-blue-600 font-semibold no-print bg-transparent border-none cursor-pointer"
+                          >
+                            Esqueci minha senha
+                          </button>
+                        </div>
+                        <div className={styles.modalInputWrapper}>
+                          <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="password"
+                            placeholder="Sua senha de acesso"
+                            value={modalPassword}
+                            onChange={(e) => setModalPassword(e.target.value)}
+                            required
+                            disabled={signLoading}
+                            className={styles.modalInput}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Caso 2: Usuário Não Logado (Form de Login) */
+                    <div className="space-y-4">
+                      <div>
+                        <label className={styles.modalInputLabel}>E-mail de Acesso</label>
+                        <input
+                          type="email"
+                          placeholder="Ex: joao@colegioimpacto.net"
+                          value={modalEmail}
+                          onChange={(e) => setModalEmail(e.target.value)}
+                          required
+                          disabled={signLoading}
+                          className={styles.modalInputNoIcon}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5">
+                          <label className={styles.modalInputLabel} style={{ marginBottom: 0 }}>Senha</label>
+                          <button 
+                            type="button"
+                            onClick={() => { setModalStep('forgot_password'); setFaQuery(modalEmail); }}
+                            className="text-[10px] text-blue-500 hover:text-blue-600 font-semibold no-print bg-transparent border-none cursor-pointer"
+                          >
+                            Esqueci minha senha
+                          </button>
+                        </div>
+                        <div className={styles.modalInputWrapper}>
+                          <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="password"
+                            placeholder="Sua senha de acesso"
+                            value={modalPassword}
+                            onChange={(e) => setModalPassword(e.target.value)}
+                            required
+                            disabled={signLoading}
+                            className={styles.modalInput}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {modalError && (
+                    <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-medium text-left border border-rose-100 dark:border-rose-950">
+                      {modalError}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={signLoading}
+                    className={styles.modalSubmitButton}
+                  >
+                    {signLoading ? 'Processando...' : user ? 'Confirmar Assinatura' : 'Autenticar e Assinar'}
+                  </button>
+
+                  {!user && (
+                    <div className={styles.firstAccessBox}>
+                      <div className={styles.firstAccessTitle}>Novo no sistema?</div>
+                      <button 
+                        type="button"
+                        onClick={() => setModalStep('first_access_verify')} 
+                        className={styles.firstAccessLinkButton}
+                      >
+                        Ativar Conta (Primeiro Acesso)
+                      </button>
+                    </div>
+                  )}
+
+                  <div className={styles.modalAuditBox}>
+                    <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <span>Validade jurídica assegurada • IP: {clientIp || 'detectando...'}</span>
+                  </div>
+                </form>
+              </div>
+            ) : (modalStep === 'first_access_verify' || modalStep === 'forgot_password') ? (
+              /* Formulário de Verificação de Cadastro */
+              <div className={`text-left ${styles.fadeIn}`}>
+                <button 
+                  type="button" 
+                  onClick={() => setModalStep('login')} 
+                  className="mb-4 text-xs font-semibold text-blue-500 hover:text-blue-600 flex items-center gap-1.5 bg-transparent border-none cursor-pointer p-0"
+                >
+                  <span>←</span> Voltar para a assinatura
+                </button>
+
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950 rounded-xl flex items-center justify-center border border-blue-100 dark:border-blue-900">
+                    <Lock className="w-6 h-6 text-blue-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                      {modalStep === 'forgot_password' ? 'Recuperação de Senha' : 'Primeiro Acesso'}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {modalStep === 'forgot_password' ? 'Redefina seus dados de acesso' : 'Crie sua primeira credencial'}
+                    </p>
+                  </div>
+                </div>
+
+                {createSuccess && modalStep === 'forgot_password' ? (
+                  <div className="text-center py-6">
+                    <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-950 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-100 dark:border-emerald-900">
+                      <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+                    </div>
+                    <h4 className="text-base font-bold text-slate-900 dark:text-white text-center">
+                      Instruções Enviadas!
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
+                      Link seguro enviado para o seu e-mail. Retornando em instantes...
+                    </p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleVerify} className="space-y-5">
+                    <div>
+                      <label className={styles.modalInputLabel}>
+                        {modalStep === 'forgot_password' ? 'E-mail de Cadastro' : 'E-mail, Celular ou Código de Acesso'}
+                      </label>
+                      <input
+                        type={modalStep === 'forgot_password' ? 'email' : 'text'}
+                        placeholder={modalStep === 'forgot_password' ? 'exemplo@escola.com.br' : 'Ex: joao@colegioimpacto.net'}
+                        value={faQuery}
+                        onChange={(e) => { setFaQuery(e.target.value); setFaError(''); }}
+                        required
+                        disabled={faLoading}
+                        className={styles.modalInputNoIcon}
+                      />
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-2">
+                        {modalStep === 'forgot_password' 
+                          ? 'Enviaremos as instruções de recuperação para você voltar a acessar sua conta.' 
+                          : 'Use os mesmos dados fornecidos no ato de sua matrícula ou contratação.'}
+                      </p>
+                    </div>
+
+                    {faError && (
+                      <div className="p-3 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-medium border border-rose-100 dark:border-rose-950">
+                        {faError}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={faLoading || !faQuery.trim()}
+                      className={styles.modalSubmitButton}
+                    >
+                      {faLoading ? 'Enviando...' : modalStep === 'forgot_password' ? 'Enviar Instruções' : 'Verificar Cadastro'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            ) : (
+              /* Formulário de Criação / Redefinição de Senha */
+              <div className={`text-left ${styles.fadeIn}`}>
+                <button 
+                  type="button" 
+                  onClick={() => setModalStep(modalStep === 'forgot_password_create' ? 'forgot_password' : 'first_access_verify')} 
+                  className="mb-4 text-xs font-semibold text-blue-500 hover:text-blue-600 flex items-center gap-1.5 bg-transparent border-none cursor-pointer p-0"
+                >
+                  <span>←</span> Voltar
+                </button>
+
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-950 rounded-xl flex items-center justify-center border border-emerald-100 dark:border-emerald-900">
+                    <ShieldCheck className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white">Cadastro Confirmado</h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Defina sua senha de acesso abaixo</p>
+                  </div>
+                </div>
+
+                {faUser && (
+                  <div className={styles.modalUserBadge} style={{ marginBottom: 20 }}>
+                    <div className={styles.modalUserAvatar}>
+                      {faUser.nome?.charAt(0).toUpperCase() || 'U'}
+                    </div>
+                    <div className="text-left">
+                      <span className={styles.modalDocLabel}>Usuário Encontrado</span>
+                      <h4 className={styles.modalUserDetailName}>{faUser.nome}</h4>
+                      <span className={styles.modalUserDetailSub}>{faUser.cargo} • {faUser.email || 'Sem e-mail'}</span>
+                    </div>
+                  </div>
+                )}
+
+                {createSuccess ? (
+                  <div className="text-center py-6">
+                    <div className="w-14 h-14 bg-emerald-50 dark:bg-emerald-950 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-100 dark:border-emerald-900">
+                      <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+                    </div>
+                    <h4 className="text-base font-bold text-slate-900 dark:text-white text-center">
+                      {modalStep === 'forgot_password_create' ? 'Senha Redefinida!' : 'Senha Criada!'}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">
+                      Retornando para a tela de confirmação...
+                    </p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleCreate} className="space-y-4">
+                    <div>
+                      <label className={styles.modalInputLabel}>Confirme seu E-mail de Cadastro *</label>
+                      <input
+                        type="email"
+                        placeholder="Ex: seu-email@dominio.com"
+                        value={faRegEmail}
+                        onChange={(e) => { setFaRegEmail(e.target.value); setCreateError(''); }}
+                        required
+                        disabled={createLoading}
+                        className={styles.modalInputNoIcon}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={styles.modalInputLabel}>Nova Senha</label>
+                      <div className={styles.modalInputWrapper}>
+                        <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type={showNewPw ? 'text' : 'password'}
+                          placeholder="Mínimo 6 caracteres"
+                          value={newPass}
+                          onChange={(e) => { setNewPass(e.target.value); setCreateError(''); }}
+                          required
+                          disabled={createLoading}
+                          className={styles.modalInput}
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => setShowNewPw(p => !p)} 
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600 bg-none border-none cursor-pointer"
+                        >
+                          {showNewPw ? 'Ocultar' : 'Mostrar'}
+                        </button>
+                      </div>
+                      
+                      {newPass.length > 0 && (
+                        <div className="mt-2.5">
+                          <div className="h-1 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full rounded-full transition-all duration-300"
+                              style={{ width: `${strength.pct}%`, backgroundColor: strength.color }}
+                            />
+                          </div>
+                          <div className="text-[10px] font-bold mt-1.5" style={{ color: strength.color }}>
+                            Força da senha: {strength.label}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className={styles.modalInputLabel}>Confirmar Senha</label>
+                      <div className={styles.modalInputWrapper}>
+                        <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type={showConfPw ? 'text' : 'password'}
+                          placeholder="Repita a senha criada"
+                          value={confirmPass}
+                          onChange={(e) => { setConfirmPass(e.target.value); setCreateError(''); }}
+                          required
+                          disabled={createLoading}
+                          className={styles.modalInput}
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => setShowConfPw(p => !p)} 
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 hover:text-slate-600 bg-none border-none cursor-pointer"
+                        >
+                          {showConfPw ? 'Ocultar' : 'Mostrar'}
+                        </button>
+                      </div>
+                      
+                      {confirmPass && (
+                        <div className={`text-[10px] font-bold mt-1.5 ${confirmPass === newPass ? 'text-emerald-500' : 'text-rose-500'}`}>
+                          {confirmPass === newPass ? '✓ Senhas coincidem' : '⚠ Senhas não coincidem'}
+                        </div>
+                      )}
+                    </div>
+
+                    {createError && (
+                      <div className="p-3 bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 rounded-xl text-xs font-medium border border-rose-100 dark:border-rose-950">
+                        {createError}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={createLoading || newPass.length < 6 || newPass !== confirmPass || !faRegEmail}
+                      className={styles.modalSubmitButton}
+                    >
+                      {createLoading ? 'Salvando...' : 'Criar Minha Senha'}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Modal de Relatório de Acessos e Assinaturas (Apenas Admin) */}
+      {isAdminReportOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center no-print" style={{ fontFamily: "'Inter', sans-serif" }}>
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => setIsAdminReportOpen(false)}
+          />
+          
+          {/* Card */}
+          <div className={`${styles.modalCard} ${styles.modalCardLarge}`}>
+            <button 
+              className={styles.modalCloseButton}
+              onClick={() => setIsAdminReportOpen(false)}
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-950 rounded-xl flex items-center justify-center border border-indigo-100 dark:border-indigo-900">
+                <FileText className="w-6 h-6 text-indigo-500" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Relatório de Controle</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Ciência e Acessos ao Regimento Interno</p>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl mb-6">
+              <button 
+                onClick={() => setReportTab('signatures')}
+                className={`${styles.tabButton} ${reportTab === 'signatures' ? styles.tabButtonActive : ''}`}
+              >
+                Ciências Confirmadas ({signatures.length})
+              </button>
+              <button 
+                onClick={() => setReportTab('accesses')}
+                className={`${styles.tabButton} ${reportTab === 'accesses' ? styles.tabButtonActive : ''}`}
+              >
+                Visualizações / Acessos ({accessLogs.length})
+              </button>
+            </div>
+
+            {/* List / Table */}
+            <div className={styles.tableContainer}>
+              {reportLoading ? (
+                <div className="text-center py-12 text-slate-400">Carregando dados...</div>
+              ) : reportTab === 'signatures' ? (
+                /* Ciências Confirmadas */
+                signatures.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 text-sm">Nenhuma assinatura registrada até o momento.</div>
+                ) : (
+                  <table className={styles.reportTable}>
+                    <thead>
+                      <tr>
+                        <th>Usuário</th>
+                        <th>E-mail</th>
+                        <th>Data e Hora</th>
+                        <th>IP</th>
+                        <th>Identificador de Auditoria</th>
+                        <th className="text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {signatures.map((sig) => (
+                        <tr key={sig.id}>
+                          <td className="font-semibold text-slate-900 dark:text-white">{sig.user_nome}</td>
+                          <td>{sig.user_email || '-'}</td>
+                          <td>{new Date(sig.created_at).toLocaleString('pt-BR')}</td>
+                          <td className="font-mono text-xs">{sig.ip_address}</td>
+                          <td className="font-mono text-[9px] text-slate-400 max-w-[120px] truncate" title={sig.hash_assinatura}>
+                            {sig.hash_assinatura.substring(0, 16)}...
+                          </td>
+                          <td className="text-center">
+                            <button
+                              onClick={() => handleDeleteSignature(sig.id)}
+                              className={styles.deleteRowButton}
+                              title="Excluir esta assinatura"
+                            >
+                              <Trash2 className="w-4 h-4 text-rose-500" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              ) : (
+                /* Acessos / Visualizações */
+                accessLogs.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 text-sm">Nenhum acesso registrado até o momento.</div>
+                ) : (
+                  <table className={styles.reportTable}>
+                    <thead>
+                      <tr>
+                        <th>Usuário</th>
+                        <th>E-mail</th>
+                        <th>Data e Hora</th>
+                        <th>IP</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {accessLogs.map((log) => (
+                        <tr key={log.id}>
+                          <td className="font-semibold text-slate-900 dark:text-white">{log.usuarioNome}</td>
+                          <td>{log.nomeRelacionado || '-'}</td>
+                          <td>{new Date(log.dataHora).toLocaleString('pt-BR')}</td>
+                          <td className="font-mono text-xs">{log.ip || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              )}
+            </div>
+
+            <div className={styles.modalFooter}>
+              {reportTab === 'signatures' && signatures.length > 0 && (
+                <button 
+                  onClick={handleDeleteAllSignatures} 
+                  className={styles.dangerReportButton}
+                  title="Excluir todas as assinaturas registradas"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Excluir Tudo</span>
+                </button>
+              )}
+              
+              <button 
+                onClick={handlePrintReport} 
+                className={styles.printReportButton}
+                title="Imprimir relatório em PDF"
+              >
+                <Printer className="w-4.5 h-4.5" />
+                <span>Imprimir PDF</span>
+              </button>
+              <button 
+                onClick={() => setIsAdminReportOpen(false)} 
+                className={styles.closeReportButton}
+              >
+                Fechar Relatório
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

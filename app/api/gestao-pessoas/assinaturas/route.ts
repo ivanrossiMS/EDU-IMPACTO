@@ -61,7 +61,8 @@ export async function GET(request: Request) {
         if (userAuth?.user) {
           usersMap[uid] = {
              nome: userAuth.user.user_metadata?.nome || userAuth.user.email?.split('@')[0] || 'Usuário Desconhecido',
-             cargo: userAuth.user.user_metadata?.cargo || 'Colaborador'
+             cargo: userAuth.user.user_metadata?.cargo || 'Colaborador',
+             email: userAuth.user.email || ''
           }
         }
       } catch (err) {
@@ -72,7 +73,8 @@ export async function GET(request: Request) {
     const enrichedData = assinaturas?.map(a => ({
       ...a,
       user_nome: usersMap[a.user_id]?.nome || 'Usuário Desconhecido',
-      user_cargo: usersMap[a.user_id]?.cargo || 'Membro'
+      user_cargo: usersMap[a.user_id]?.cargo || 'Membro',
+      user_email: usersMap[a.user_id]?.email || ''
     }))
 
     return NextResponse.json(enrichedData || [])
@@ -130,6 +132,52 @@ export async function POST(request: Request) {
 
     if (error) throw error
     return NextResponse.json({ success: true, id, hash })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 400 })
+  }
+}
+
+export async function DELETE(request: Request) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
+  // Verifica se o usuário é administrador ou diretor
+  const meta = user?.user_metadata || {};
+  const isUserAdmin = meta.perfil?.toLowerCase()?.includes('admin') || 
+                      meta.cargo?.toLowerCase()?.includes('admin') || 
+                      meta.cargo?.toLowerCase()?.includes('diret') || 
+                      meta.perfil === 'direcao';
+
+  if (!isUserAdmin) {
+    return NextResponse.json({ error: 'Não autorizado. Apenas administradores podem excluir assinaturas.' }, { status: 403 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+  const entidade_id = searchParams.get('entidade_id')
+
+  try {
+    const supabase = await createProtectedClient()
+    
+    if (id) {
+      const { error } = await supabase
+        .from('gp_assinaturas')
+        .delete()
+        .eq('id', id)
+      
+      if (error) throw error
+      return NextResponse.json({ success: true, message: 'Assinatura excluída com sucesso.' })
+    } else if (entidade_id) {
+      const { error } = await supabase
+        .from('gp_assinaturas')
+        .delete()
+        .eq('entidade_id', entidade_id)
+      
+      if (error) throw error
+      return NextResponse.json({ success: true, message: 'Todas as assinaturas do documento foram excluídas.' })
+    } else {
+      return NextResponse.json({ error: 'Parâmetro inválido' }, { status: 400 })
+    }
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
