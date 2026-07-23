@@ -613,9 +613,18 @@ export default function RegimentoInternoPage() {
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         
-        // Define o IP retornado pelo servidor
-        if (data.ip) {
+        // Define o IP retornado pelo servidor com fallback para API publica se for localhost ou vazio
+        if (data.ip && data.ip !== '127.0.0.1' && data.ip !== '::1') {
           setClientIp(data.ip);
+        } else {
+          fetch('https://api.ipify.org?format=json')
+            .then(r => r.json())
+            .then(ipData => {
+              if (ipData.ip) setClientIp(ipData.ip);
+            })
+            .catch(() => {
+              if (data.ip) setClientIp(data.ip);
+            });
         }
         
         if (res.ok && data.user) {

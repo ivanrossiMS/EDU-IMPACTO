@@ -22,6 +22,7 @@ const PUBLIC_PATHS = [
   '/atualizar-senha',
   '/api/auth/login',
   '/api/auth/logout',
+  '/api/auth/me',
   '/api/auth/verify-first-access',
   '/api/auth/update-password',
   '/api/auth/reset-access',
