@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus, Trash2, Image as ImageIcon, Upload, Loader2, Eye, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify, Sparkles, Bot } from 'lucide-react'
+import { X, Plus, Trash2, Image as ImageIcon, Upload, Loader2, Eye, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, AlignJustify, Sparkles, Bot, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { EditorQuill } from './EditorQuill'
 import { HtmlContent } from '../HtmlContent'
@@ -19,7 +19,7 @@ export function QuestaoUploadModal({ questao, defaultProfessorId, defaultDiscipl
   const [turma, setTurma] = useState('')
   const [imagensApoio, setImagensApoio] = useState<{url: string, posicao: 'inicio' | 'final'}[]>([])
   const [showPreview, setShowPreview] = useState(true)
-  const [tipoQuestao, setTipoQuestao] = useState<'multipla_escolha' | 'descritiva'>(questao?.tipo_questao || 'multipla_escolha')
+  const [tipoQuestao, setTipoQuestao] = useState<'multipla_escolha' | 'descritiva' | 'texto_apoio'>(questao?.tipo_questao || 'multipla_escolha')
   const [linhasResposta, setLinhasResposta] = useState<number>(questao?.linhas_resposta || 5)
   const [estiloEspaco, setEstiloEspaco] = useState<'em_branco' | 'pautado'>(questao?.estilo_espaco || 'em_branco')
   
@@ -539,8 +539,8 @@ export function QuestaoUploadModal({ questao, defaultProfessorId, defaultDiscipl
 
               <div style={{ marginTop: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: 0 }}>Tipo de Resposta</h3>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'hsl(var(--text-primary))', margin: 0 }}>Tipo de Conteúdo</h3>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() => setTipoQuestao('multipla_escolha')}
@@ -567,10 +567,35 @@ export function QuestaoUploadModal({ questao, defaultProfessorId, defaultDiscipl
                     >
                       Descritiva
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setTipoQuestao('texto_apoio')}
+                      style={{
+                        padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+                        background: tipoQuestao === 'texto_apoio' ? 'rgba(168,85,247,0.15)' : 'transparent',
+                        color: tipoQuestao === 'texto_apoio' ? '#a855f7' : 'hsl(var(--text-secondary))',
+                        borderColor: tipoQuestao === 'texto_apoio' ? 'rgba(168,85,247,0.3)' : 'hsl(var(--border-subtle))',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Texto de Apoio / Consulta
+                    </button>
                   </div>
                 </div>
 
-                {tipoQuestao === 'multipla_escolha' ? (
+                {tipoQuestao === 'texto_apoio' ? (
+                  <div style={{ padding: '20px', borderRadius: 12, background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.2)', display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 10, background: 'rgba(168,85,247,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a855f7', flexShrink: 0 }}>
+                      <FileText size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Este item é um Texto de Apoio / Consulta</div>
+                      <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', marginTop: 3, lineHeight: 1.5 }}>
+                        Este conteúdo será inserido na prova como um bloco de leitura/consulta para os alunos. Não possui alternativas nem gabarito, não recebe numeração de questão e não contabiliza no total de questões da prova.
+                      </div>
+                    </div>
+                  </div>
+                ) : tipoQuestao === 'multipla_escolha' ? (
                   <div>
                     <h4 style={{ fontSize: 14, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 12 }}>Alternativas</h4>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

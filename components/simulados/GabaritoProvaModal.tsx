@@ -148,21 +148,24 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
                     <Users size={14} /> <span>Turmas: {Array.isArray(prova?.series) ? prova.series.join(', ') : (prova?.series || 'Geral')}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.length} Questões</span>
+                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.filter(q => q.tipo_questao !== 'texto_apoio').length} Questões</span>
                   </div>
                 </div>
               </div>
 
               {/* Grid de Respostas */}
               <div className="print-grid-container" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, breakInside: 'avoid' }}>
-                <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-                  {[
-                    questoes.slice(0, Math.ceil(questoes.length / 2)),
-                    questoes.slice(Math.ceil(questoes.length / 2))
-                  ].map((colQuestoes, colIndex) => (
-                    <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
-                      {colQuestoes.map((q, idx) => {
-                        const num = colIndex === 0 ? idx + 1 : Math.ceil(questoes.length / 2) + idx + 1
+                {(() => {
+                  const meQuestoes = questoes.filter(q => q.tipo_questao !== 'texto_apoio')
+                  return (
+                    <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+                      {[
+                        meQuestoes.slice(0, Math.ceil(meQuestoes.length / 2)),
+                        meQuestoes.slice(Math.ceil(meQuestoes.length / 2))
+                      ].map((colQuestoes, colIndex) => (
+                        <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
+                          {colQuestoes.map((q, idx) => {
+                            const num = colIndex === 0 ? idx + 1 : Math.ceil(meQuestoes.length / 2) + idx + 1
                         const alternativaCorreta = q.alternativas?.find((a: any) => a.correct)
                         const letraCorreta = alternativaCorreta ? alternativaCorreta.letter : '?'
 
@@ -211,6 +214,7 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
                     </div>
                   ))}
                 </div>
+              )})()}
               </div>
             </>
           )}

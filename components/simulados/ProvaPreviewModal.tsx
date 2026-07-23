@@ -16,7 +16,7 @@ export interface Questao {
   pontuacao: number
   expandido: boolean
   id_professor?: string
-  tipo_questao?: 'multipla_escolha' | 'descritiva'
+  tipo_questao?: 'multipla_escolha' | 'descritiva' | 'texto_apoio'
   estilo_espaco?: 'em_branco' | 'pautado'
   linhas_resposta?: number
 }

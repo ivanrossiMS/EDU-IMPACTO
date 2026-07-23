@@ -333,8 +333,16 @@ export function PaginationEngine({
         currentY += marginToApply + h;
       }
 
+      let currentQNumber = 0;
+      const questionDisplayNumbers = questoes.map((q: any) => {
+        if (q.tipo_questao === 'texto_apoio') return null;
+        currentQNumber++;
+        return currentQNumber - 1;
+      });
+
       questoes.forEach((q, idx) => {
         let questionMargin = currentY > 0 ? BLOCK_SPACING : 0;
+        const qIndex = questionDisplayNumbers[idx];
 
         const isNewDisciplina = idx === 0 || q.id_disciplina !== questoes[idx - 1].id_disciplina;
         if (isNewDisciplina && q.simulados_disciplinas?.nome) {
@@ -415,12 +423,12 @@ export function PaginationEngine({
         }
 
         if (currentY + questionMargin + totalH <= getAvailableHeight()) {
-          pushBlock({ type: 'full', q, qIndex: idx, linhasResposta, estiloEspaco }, totalH, questionMargin);
+          pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, questionMargin);
         } else if (alternativasLayout === 'horizontal' && totalH < 200) {
           // Orphan protection: Only for horizontal layout.
           // If it doesn't fit, don't split the question text from its horizontal alternatives.
           advanceCol();
-          pushBlock({ type: 'full', q, qIndex: idx, linhasResposta, estiloEspaco }, totalH, 0);
+          pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, 0);
         } else {
           // Orphan Protection: Abandon small remaining space if the whole question fits in a new column.
           const remainingSpace = getAvailableHeight() - currentY - questionMargin;
@@ -428,7 +436,7 @@ export function PaginationEngine({
           
           if (remainingSpace < fifteenPercent && totalH <= getAvailableHeight()) {
              advanceCol();
-             pushBlock({ type: 'full', q, qIndex: idx, linhasResposta, estiloEspaco }, totalH, 0);
+             pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, 0);
              return; // go to next question
           }
 
@@ -452,7 +460,7 @@ export function PaginationEngine({
                     chunkIndex: cIdx,
                     totalChunks: chunks.length,
                     isFirst: isFirstChunk, 
-                    qIndex: idx 
+                    qIndex 
                   }, 
                   h, 
                   margin: isFirstChunk ? questionMargin : 0, 
@@ -461,11 +469,11 @@ export function PaginationEngine({
               });
             } else if (group.type === 'lines') {
               for (let j = 0; j < group.count; j++) {
-                renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex: idx, style: group.style, lineIndex: j }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
+                renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex, style: group.style, lineIndex: j }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
               }
             } else {
               const h = heights[`${q.id}-img-group-${gIdx}`] || 0;
-              renderBlocks.push({ item: { type: 'part_img_group', q, images: group.images, isFirst: group.images[0].originalIndex === 0, qIndex: idx }, h, margin: group.images[0].originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_img' });
+              renderBlocks.push({ item: { type: 'part_img_group', q, images: group.images, isFirst: group.images[0].originalIndex === 0, qIndex }, h, margin: group.images[0].originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_img' });
             }
           });
 

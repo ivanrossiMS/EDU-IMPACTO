@@ -152,12 +152,13 @@ export default function UploadProvaPage() {
 
     const myAssignment = prova?.provas_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
     if (currentUser?.perfil === 'Professor' && myAssignment) {
-      if (currentQs.length > myAssignment.qtd_questoes) {
+      const actualQuestionsCount = currentQs.filter((q: any) => q.tipo_questao !== 'texto_apoio').length;
+      if (actualQuestionsCount > myAssignment.qtd_questoes) {
         setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você nesta prova. Edite ou exclua algumas questões para prosseguir.` });
         return;
       }
-      if (actionType === 'enviar_revisao' && currentQs.length < myAssignment.qtd_questoes) {
-        setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - currentQs.length} questões.` });
+      if (actionType === 'enviar_revisao' && actualQuestionsCount < myAssignment.qtd_questoes) {
+        setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - actualQuestionsCount} questões.` });
         return;
       }
     }
@@ -195,7 +196,7 @@ export default function UploadProvaPage() {
 
       let updatePayload: any = {
         questoes_json: finalQToSave,
-        questoes_count: finalQToSave.length,
+        questoes_count: finalQToSave.filter((q: any) => q.tipo_questao !== 'texto_apoio').length,
         updated_at: new Date().toISOString(),
       }
 
@@ -286,45 +287,45 @@ export default function UploadProvaPage() {
         </div>
 
         {uploadStep === 'review' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {!isProfessorViewAll && (
               <motion.button onClick={() => { setUploadStep('idle'); setQuestoes([]) }}
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.03)', transition: 'all 0.2s' }}>
                 <RefreshCw size={16} color="#64748b" /> Reenviar Arquivo
               </motion.button>
             )}
             <motion.button onClick={() => {
               const myAssignment = prova?.provas_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
+              const actualQsCount = questoes.filter((q: any) => q.tipo_questao !== 'texto_apoio').length;
+              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && actualQsCount > myAssignment.qtd_questoes) {
                 setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você nesta prova. Edite ou exclua algumas questões para acessar.` });
                 return;
               }
               setShowPreview(true);
             }}
-              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-              <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
+              whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', color: '#2563eb', border: '1px solid rgba(37,99,235,0.3)', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(37,99,235,0.05)', transition: 'all 0.2s' }}>
+              <Printer size={16} color="#2563eb" /> Pré-visualizar A4
             </motion.button>
             {!isProfessorViewAll && (
               <>
                 <motion.button onClick={() => handleSave()} disabled={saving}
-                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'transparent', color: '#3b82f6', border: '1px solid #3b82f6', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+                  whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'rgba(59,130,246,0.08)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, transition: 'all 0.2s' }}>
                   {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={16} /> Salvar</>}
                 </motion.button>
                 
                 {currentUser?.perfil === 'Professor' ? (
                   <motion.button onClick={() => handleSave(undefined, 'enviar_revisao')} disabled={saving}
-                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+                    whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.35)', transition: 'all 0.2s' }}>
                     {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><Save size={16} /> Salvar e Enviar para Revisão</>}
                   </motion.button>
                 ) : (
                   <motion.button onClick={() => handleSave(undefined, 'aprovar')} disabled={saving}
-                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
+                    whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.35)', transition: 'all 0.2s' }}>
                     {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><CheckCircle size={16} /> Salvar e Aprovar</>}
                   </motion.button>
                 )}

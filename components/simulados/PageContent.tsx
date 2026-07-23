@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, Plus, Minus } from 'lucide-react';
+import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, Plus, Minus, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { HtmlContent } from '../HtmlContent';
 import { DraggableHeaderField } from './DraggableHeaderField';
@@ -208,7 +208,7 @@ export function PageContent({
             border: none !important;
             cursor: default !important;
           }
-          .field-label-tag {
+          .field-label-tag, .texto-apoio-badge, .texto-apoio-spacer, .no-print {
             display: none !important;
           }
         }
@@ -345,13 +345,24 @@ export function PageContent({
                   <div key={`b-${bIndex}`} className="questao-container alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, breakInside: 'avoid' }}>
 
                     <div style={{ display: 'flex', gap: 10 }}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: '28px', height: '28px', minWidth: '28px', backgroundColor: '#1e293b', color: '#ffffff',
-                        fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
-                      }}>
-                        {block.qIndex + 1}
-                      </div>
+                      {q.tipo_questao === 'texto_apoio' ? (
+                        <div className="no-print texto-apoio-badge" style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                          padding: '4px 10px', backgroundColor: '#7c3aed', color: '#ffffff',
+                          fontWeight: 800, borderRadius: '8px', fontSize: '8.5pt', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', flexShrink: 0
+                        }}>
+                          <FileText size={12} color="#ffffff" />
+                          Texto de Apoio
+                        </div>
+                      ) : (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: '28px', height: '28px', minWidth: '28px', backgroundColor: '#1e293b', color: '#ffffff',
+                          fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
+                        }}>
+                          {block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : ''}
+                        </div>
+                      )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {(() => {
                           const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
@@ -929,13 +940,28 @@ export function PageContent({
                 return (
                   <div key={`b-${bIndex}`} style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
 
-                    <div style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      width: '28px', height: '28px', minWidth: '28px', backgroundColor: block.isFirst ? '#1e293b' : 'transparent', color: block.isFirst ? '#ffffff' : 'transparent',
-                      fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
-                    }}>
-                      {block.isFirst ? block.qIndex + 1 : ''}
-                    </div>
+                    {q.tipo_questao === 'texto_apoio' ? (
+                      block.isFirst ? (
+                        <div className="no-print texto-apoio-badge" style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                          padding: '4px 10px', backgroundColor: '#7c3aed', color: '#ffffff',
+                          fontWeight: 800, borderRadius: '8px', fontSize: '8.5pt', marginTop: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap', flexShrink: 0
+                        }}>
+                          <FileText size={12} color="#ffffff" />
+                          Texto de Apoio
+                        </div>
+                      ) : (
+                        <div className="no-print texto-apoio-spacer" style={{ width: '28px', minWidth: '28px' }} />
+                      )
+                    ) : (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: '28px', height: '28px', minWidth: '28px', backgroundColor: block.isFirst ? '#1e293b' : 'transparent', color: block.isFirst ? '#ffffff' : 'transparent',
+                        fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
+                      }}>
+                        {block.isFirst && block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : ''}
+                      </div>
+                    )}
                     <div style={{ flex: 1, minWidth: 0, display: 'flow-root' }}>
                       <HtmlContent 
                         editable={!readOnly}
@@ -993,7 +1019,7 @@ export function PageContent({
                       paddingRight: block.isFirst ? '0px' : '6px',
                       userSelect: 'none'
                     }}>
-                      {block.isFirst ? (block.qIndex + 1) : (block.style !== 'branco' ? (block.lineIndex + 1) : '')}
+                      {block.isFirst ? (block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : '') : (block.style !== 'branco' ? (block.lineIndex + 1) : '')}
                     </div>
                     <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                       <div style={{ width: '100%', borderBottom: block.style === 'branco' ? 'none' : '1px solid #000', height: 28 }} />
