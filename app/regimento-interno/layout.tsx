@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     siteName: 'Colégio Impacto',
     images: [
       {
-        url: 'https://colegioimpacto.net/wp-content/uploads/2021/04/cropped-logo-colegio-impacto-1.png',
+        url: 'https://impacto-edu.net/logo-impacto.png',
         width: 512,
         height: 512,
         alt: 'Logo Colégio Impacto',
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
     card: 'summary',
     title: 'Regimento Escolar Interno — Colégio Impacto',
     description: 'Instrumento jurídico-educacional que regulamenta a organização administrativa, didático-pedagógica e disciplinar do Colégio.',
-    images: ['https://colegioimpacto.net/wp-content/uploads/2021/04/cropped-logo-colegio-impacto-1.png'],
+    images: ['https://impacto-edu.net/logo-impacto.png'],
   }
 }
 
