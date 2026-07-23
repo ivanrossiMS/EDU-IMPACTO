@@ -47,6 +47,7 @@ export interface PickupCall {
   confirmedAt?: string
   status: CallStatus
   source: CallSource
+  isRevert?: boolean
   // Access control fields
   blockReason?: string       // human-readable reason when status === 'blocked'
   blockType?: 'proibido' | 'dia_restrito'  // machine-readable block type
@@ -294,7 +295,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
             } else if (event === 'RECALL_STUDENT') {
               setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
             } else if (event === 'REVERT_CALL') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt || new Date().toISOString(), confirmedAt: undefined } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt || new Date().toISOString(), confirmedAt: undefined, isRevert: true } : c))
             } else if (event === 'CLEAR_ALL_CALLS') {
               setActiveCallsLocal?.([])
             }
@@ -347,7 +348,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: now() } : c))
       }
       if (payload.event === 'REVERT_CALL' && d.callId) {
-        setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: d.calledAt || now(), confirmedAt: undefined } : c))
+        setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'waiting', calledAt: d.calledAt || now(), confirmedAt: undefined, isRevert: true } : c))
       }
       if (payload.event === 'CLEAR_ALL_CALLS') {
         setActiveCallsLocal?.([])

@@ -367,7 +367,7 @@ function MonitorContent() {
   useEffect(() => {
     if (!audioUnlocked || !config?.voiceEnabled || !voice.isSupported) return
     displayCalls.forEach(call => {
-      if (call.status === 'blocked' || call.status === 'special_auth') return
+      if (call.status === 'blocked' || call.status === 'special_auth' || call.isRevert) return
       const ts = call.calledAt ? new Date(call.calledAt).getTime() : Date.now()
       
       // Ignorar chamadas com mais de 10 minutos para não tocar histórico antigo
@@ -412,6 +412,11 @@ function MonitorContent() {
       }
       if (payload.event === 'CANCEL_CALL' && d.callId) {
         spokenRef.current.delete(d.callId)
+      }
+      if (payload.event === 'REVERT_CALL' && d.callId) {
+        const ts = d.calledAt ? new Date(d.calledAt).getTime() : Date.now()
+        spokenRef.current.add(d.callId + '_' + Math.floor(ts / 1000))
+        spokenRef.current.add(d.callId)
       }
       if (payload.event === 'CLEAR_ALL_CALLS') {
         setDisplayCalls([])
