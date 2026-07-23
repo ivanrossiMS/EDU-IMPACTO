@@ -126,7 +126,7 @@ interface SaidaCtx {
   realtimeStatus: 'online' | 'connecting' | 'offline'
   isLoadingCalls: boolean
   // actions
-  callStudent: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, source?: CallSource, rfidCode?: string, studentPhoto?: string | null) => PickupCall | null
+  callStudent: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, source?: CallSource, rfidCode?: string, studentPhoto?: string | null, forceNewCall?: boolean) => PickupCall | null
   blockAttempt: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, rfidCode: string | undefined, blockType: 'proibido' | 'dia_restrito', blockReason: string, studentPhoto?: string | null) => PickupCall
   confirmPickup: (callId: string) => void
   cancelCall: (callId: string) => void
@@ -376,18 +376,29 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   const callStudent = useCallback((
     studentId: string, studentName: string, studentClass: string,
     guardianId: string, guardianName: string,
-    source: CallSource = 'manual', rfidCode?: string, studentPhoto?: string | null
+    source: CallSource = 'manual', rfidCode?: string, studentPhoto?: string | null,
+    forceNewCall = false
   ): PickupCall | null => {
     const sIdStr = studentId ? String(studentId) : ''
-    // Prevent duplicate active call for the same student, or calling a student whose exit is already confirmed today
-    const existing = activeCalls.find(c =>
+    
+    // Check for existing active call (waiting or called)
+    const existingActive = activeCalls.find(c =>
       c.studentId != null && String(c.studentId) === sIdStr &&
-      (c.status === 'waiting' || c.status === 'called' || c.status === 'confirmed')
+      (c.status === 'waiting' || c.status === 'called')
     )
-    if (existing) {
-      if (existing.status === 'confirmed') {
-        console.warn(`[SaidaContext] Call blocked: student ${studentName} already confirmed departure today.`)
-      }
+    if (existingActive) {
+      return existingActive
+    }
+
+    // Check for existing confirmed call today
+    const existingConfirmed = activeCalls.find(c =>
+      c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed'
+    )
+
+    // Se o aluno já foi confirmado hoje, mas for uma autorização especial ou força nova chamada,
+    // permite criar a nova chamada ativa com status 'waiting'
+    if (existingConfirmed && !forceNewCall && guardianId !== 'special-auth') {
+      console.warn(`[SaidaContext] Call blocked: student ${studentName} already confirmed departure today.`)
       return null
     }
 
@@ -396,6 +407,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       studentPhoto: studentPhoto ?? null,
       guardianId, guardianName, rfidCode,
       calledAt: now(), status: 'waiting', source,
+      isRevert: existingConfirmed ? true : undefined
     }
     setActiveCallsLocal?.(prev => [call, ...(prev || [])])
     persistSingleCall(call)

@@ -782,8 +782,13 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     return activeCalls
       .filter(c => c.status === 'special_auth')
       .map(c => {
-        // Verifica se o aluno já teve uma saída confirmada hoje em chamadas normais
-        const pickUpCall = activeCalls.find(ac => ac.studentId === c.studentId && ac.status === 'confirmed')
+        const cTime = new Date(c.calledAt).getTime()
+        // Uma autorização especial só é marcada como saída confirmada se houver uma confirmação APÓS a data do lançamento especial
+        const pickUpCall = activeCalls.find(ac =>
+          ac.studentId != null && String(ac.studentId) === String(c.studentId) &&
+          ac.status === 'confirmed' &&
+          new Date(ac.confirmedAt || ac.calledAt).getTime() >= cTime - 5000 // tolerância de 5s
+        )
         return {
           id: c.id,
           studentId: c.studentId,
@@ -858,7 +863,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       sPhoto
     )
 
-    // 2. Chamar o aluno na TV com o responsável autorizado digitado
+    // 2. Chamar o aluno na TV com o responsável autorizado digitado (forçando a chamada ativa 'waiting')
     const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === sId && (c.status === 'waiting' || c.status === 'called'))
     if (existingCall) {
       recallStudent(existingCall.id, () => {})
@@ -872,7 +877,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         authPerson,
         'manual',
         undefined,
-        sPhoto
+        sPhoto,
+        true // forceNewCall = true
       )
       showToast(`Autorização lançada e ${sName} chamado na TV!`, true)
     }
