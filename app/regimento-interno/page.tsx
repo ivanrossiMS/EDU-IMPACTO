@@ -1272,7 +1272,15 @@ export default function RegimentoInternoPage() {
               {/* Botão de Relatório de Controle (Exibido apenas para administradores/diretoria) */}
               {user && (
                 user.perfil?.toLowerCase()?.includes('admin') || 
-                user.perfil === 'direcao'
+                user.perfil?.toLowerCase()?.includes('diretor') ||
+                user.perfil?.toLowerCase()?.includes('direção') ||
+                user.perfil?.toLowerCase()?.includes('direcao') ||
+                user.perfil?.toLowerCase()?.includes('diret') ||
+                user.cargo?.toLowerCase()?.includes('admin') ||
+                user.cargo?.toLowerCase()?.includes('diretor') ||
+                user.cargo?.toLowerCase()?.includes('direção') ||
+                user.cargo?.toLowerCase()?.includes('direcao') ||
+                user.cargo?.toLowerCase()?.includes('diret')
               ) && (
                 <button onClick={() => setIsAdminReportOpen(true)} className={styles.adminButton} title="Relatório de Ciência e Acessos">
                   <FileText className="w-4.5 h-4.5" />
