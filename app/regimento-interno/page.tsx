@@ -607,6 +607,23 @@ export default function RegimentoInternoPage() {
     }
   }, []);
 
+  // Auto increment visit count for Regimento Interno
+  React.useEffect(() => {
+    try {
+      const savedVisits = localStorage.getItem('impacto_materiais_visitas');
+      const localVisits = savedVisits ? JSON.parse(savedVisits) : {};
+      const current = localVisits['regimento-interno'] || 0;
+      localVisits['regimento-interno'] = current + 1;
+      localStorage.setItem('impacto_materiais_visitas', JSON.stringify(localVisits));
+
+      fetch('/api/gestao-pessoas/materiais-divulgacao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'increment_visit', link: '/regimento-interno' })
+      }).catch(() => {});
+    } catch (e) {}
+  }, []);
+
   // Monitora mudança no usuário ativo para buscar assinaturas correspondentes e registrar visualização
   React.useEffect(() => {
     fetch('/api/auth/me')

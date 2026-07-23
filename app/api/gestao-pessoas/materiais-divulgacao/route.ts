@@ -72,31 +72,65 @@ export async function POST(request: Request) {
     const supabase = await getClient()
 
     // Increment Visit Action
-    if (body.action === 'increment_visit' && body.id) {
-      const { data: item } = await supabase
-        .from('gp_materiais_divulgacao')
-        .select('contador_visitas')
-        .eq('id', body.id)
-        .single()
+    if (body.action === 'increment_visit' && (body.id || body.link)) {
+      let item = null
+      let targetId = body.id
 
-      if (item) {
+      // Check if body.id is a valid UUID
+      const isUUID = body.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.id)
+
+      if (isUUID) {
+        const { data } = await supabase
+          .from('gp_materiais_divulgacao')
+          .select('id, contador_visitas')
+          .eq('id', body.id)
+          .maybeSingle()
+        item = data
+        if (item) targetId = item.id
+      }
+
+      // If we didn't find by ID or the ID isn't a valid UUID, search by link
+      if (!item && (body.link || body.id)) {
+        let searchLink = body.link || body.id
+        if (typeof searchLink === 'string') {
+          // Normalize the link: strip query params, remove host, ensure leading slash
+          searchLink = searchLink.split('?')[0].replace(/^(https?:\/\/[^\/]+)/, '')
+          if (!searchLink.startsWith('/')) {
+            searchLink = '/' + searchLink
+          }
+          // Strip 'mat-' prefix if it was passed as body.id (e.g. 'mat-guia-seguranca' -> '/guia-seguranca')
+          if (searchLink.startsWith('/mat-')) {
+            searchLink = '/' + searchLink.substring(5)
+          }
+
+          const { data } = await supabase
+            .from('gp_materiais_divulgacao')
+            .select('id, contador_visitas')
+            .eq('link', searchLink)
+            .maybeSingle()
+          item = data
+          if (item) targetId = item.id
+        }
+      }
+
+      if (item && targetId) {
         const newCount = (item.contador_visitas || 0) + 1
         await supabase
           .from('gp_materiais_divulgacao')
           .update({ contador_visitas: newCount })
-          .eq('id', body.id)
+          .eq('id', targetId)
 
         return NextResponse.json({ success: true, contador_visitas: newCount })
       } else {
-        const initialItem = REAL_DEFAULT_MATERIALS.find(m => m.id === body.id) || {
-          id: body.id,
-          titulo: 'Guia de Segurança Digital para Pais e Responsáveis',
-          descricao: 'E-book e guia prático interativo sobre Controle Parental, tempo de tela, redes sociais e segurança no celular para famílias do Colégio Impacto.',
-          categoria: 'Guias & E-books',
-          link: '/guia-seguranca',
-          imagem_url: '/guia-seguranca/family_digital_safety.jpg',
-          autor: 'Equipe Pedagógica – Colégio Impacto',
-          tags: ['Segurança Digital', 'Controle Parental', 'Família', 'E-book']
+        const initialItem = REAL_DEFAULT_MATERIALS.find(m => m.id === body.id || m.link === body.link || m.link === body.id) || {
+          id: body.id || `mat-${Date.now()}`,
+          titulo: body.titulo || 'Guia de Segurança Digital para Pais e Responsáveis',
+          descricao: body.descricao || 'E-book e guia prático interativo sobre Controle Parental, tempo de tela, redes sociais e segurança no celular para famílias do Colégio Impacto.',
+          categoria: body.categoria || 'Guias & E-books',
+          link: body.link || '/guia-seguranca',
+          imagem_url: body.imagem_url || '/guia-seguranca/family_digital_safety.jpg',
+          autor: body.autor || 'Equipe Pedagógica – Colégio Impacto',
+          tags: body.tags || ['Segurança Digital', 'Controle Parental', 'Família', 'E-book']
         }
 
         const { data: created } = await supabase
@@ -107,6 +141,7 @@ export async function POST(request: Request) {
             ativo: true
           })
           .select()
+          .single()
 
         return NextResponse.json({ success: true, contador_visitas: 1, created })
       }
