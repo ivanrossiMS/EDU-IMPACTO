@@ -3,7 +3,7 @@ import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, Alig
 import { useState } from 'react';
 import { HtmlContent } from '../HtmlContent';
 import { DraggableHeaderField } from './DraggableHeaderField';
-import { parseEnunciadoParts } from './PaginationEngine';
+import { parseEnunciadoParts, splitTextIntoChunks } from './PaginationEngine';
 
 export function PageContent({ 
   page, 
@@ -171,8 +171,9 @@ export function PageContent({
           z-index: 100 !important;
         }
 
-        :global(.a4-page-content img) {
+        :global(.a4-page-content img), :global(.preview-area img), :global(.print-page img) {
           max-width: 100% !important;
+          max-height: 220mm !important;
           height: auto !important;
           object-fit: contain;
         }
@@ -925,7 +926,7 @@ export function PageContent({
                     }}>
                       {block.isFirst ? block.qIndex + 1 : ''}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: 1, minWidth: 0, display: 'flow-root' }}>
                       <HtmlContent 
                         editable={!readOnly}
                         html={block.content || ''}
@@ -936,8 +937,18 @@ export function PageContent({
                           
                           const newFullHtml = parts.map((p: any, i: number) => {
                             if (p.type === 'text') {
-                               let txt = i === block.originalIndex ? newHtml : p.content;
-                               return (txt || '').replace(metaRegex, '');
+                               if (i === block.originalIndex) {
+                                 if (block.totalChunks && block.totalChunks > 1) {
+                                   const existingChunks = splitTextIntoChunks(p.content || '');
+                                   const start = block.startChunkIndex ?? block.chunkIndex ?? 0;
+                                   const end = block.endChunkIndex ?? block.chunkIndex ?? 0;
+                                   const count = Math.max(1, end - start + 1);
+                                   existingChunks.splice(start, count, newHtml);
+                                   return existingChunks.join('');
+                                 }
+                                 return newHtml;
+                               }
+                               return p.content;
                             }
                             if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
                             return `[IMAGEM ${p.index + 1}]`;

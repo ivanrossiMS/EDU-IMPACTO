@@ -6,14 +6,34 @@ import { Bold, Italic, Underline } from 'lucide-react'
 interface HtmlContentProps extends React.HTMLAttributes<HTMLDivElement> {
   html: string
   onBlurHtml?: (html: string) => void
+  onBackspaceAtStart?: () => void
   editable?: boolean
 }
 
-export function HtmlContent({ html, onBlurHtml, editable, ...props }: HtmlContentProps) {
+export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ...props }: HtmlContentProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   
   const toolbarRef = useRef<HTMLDivElement>(null)
   const savedRangeRef = useRef<Range | null>(null)
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (props.onKeyDown) props.onKeyDown(e)
+    if (e.key === 'Backspace' && onBackspaceAtStart) {
+      const sel = window.getSelection()
+      if (sel && sel.isCollapsed && sel.anchorNode && containerRef.current) {
+        try {
+          const range = sel.getRangeAt(0)
+          const preRange = document.createRange()
+          preRange.selectNodeContents(containerRef.current)
+          preRange.setEnd(range.startContainer, range.startOffset)
+          const textBefore = preRange.toString()
+          if (textBefore.length === 0) {
+            onBackspaceAtStart()
+          }
+        } catch(err) {}
+      }
+    }
+  }
 
   const renderedHtml = useMemo(() => {
     if (!html) return ''
@@ -175,6 +195,7 @@ export function HtmlContent({ html, onBlurHtml, editable, ...props }: HtmlConten
         onBlur={editable ? handleBlur : undefined}
         onMouseUp={editable ? checkSelection : undefined}
         onKeyUp={editable ? checkSelection : undefined}
+        onKeyDown={editable ? handleKeyDown : props.onKeyDown}
         dangerouslySetInnerHTML={{ __html: renderedHtml }} 
         {...props} 
       />

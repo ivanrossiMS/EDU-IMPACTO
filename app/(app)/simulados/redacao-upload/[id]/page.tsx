@@ -72,14 +72,21 @@ export default function VerRedaçãoUploadPage() {
     finally { setSaving(false) }
   }
 
-  const handleSaveQuestoes = async () => {
+  const handleSaveQuestoes = async (updatedQuestoes?: any[], config_estudio?: any) => {
     setSaving(true)
     try {
-      const { error } = await (supabase as any).from('redacao_upload').update({
-        questoes_json: questoes,
+      let updatePayload: any = {
+        questoes_json: updatedQuestoes || questoes,
         updated_at: new Date().toISOString()
-      }).eq('id', redacaoId)
+      }
+      if (config_estudio) {
+        updatePayload.config_estudio = config_estudio
+      }
+      const { error } = await (supabase as any).from('redacao_upload').update(updatePayload).eq('id', redacaoId)
       if (error) throw error
+      if (config_estudio) {
+        setRedação((prev: any) => ({ ...prev, config_estudio }))
+      }
       setSuccessMessage('Alterações salvas com sucesso!')
       setSuccessModal(true)
       setShowPreview(false)
@@ -206,7 +213,7 @@ export default function VerRedaçãoUploadPage() {
               
               {isCoord && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
-                  <motion.button onClick={handleSaveQuestoes} disabled={saving}
+                  <motion.button onClick={() => handleSaveQuestoes()} disabled={saving}
                     whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12, background: 'hsl(var(--bg-app))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
                     {saving ? <Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Save size={16} />}

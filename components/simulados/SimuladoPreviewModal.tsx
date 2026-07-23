@@ -59,27 +59,114 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   })
   const [isEditHeaderMode, setIsEditHeaderMode] = useState(false)
   const [showMargins, setShowMargins] = useState(true)
-  const [leftMarginOffset, setLeftMarginOffset] = useState<number>(simulado?.config_estudio?.config_margin_left || 0);
-  const [rightMarginOffset, setRightMarginOffset] = useState<number>(simulado?.config_estudio?.config_margin_right || 0);
-  const [topMarginOffset, setTopMarginOffset] = useState<number>(simulado?.config_estudio?.config_margin_top || 0);
-  const [bottomMarginOffset, setBottomMarginOffset] = useState<number>(simulado?.config_estudio?.config_margin_bottom || 0);
-  const [adicionarPaginaRedacao, setAdicionarPaginaRedacao] = useState<boolean>(simulado?.config_estudio?.adicionar_pagina_redacao || false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('simulador_margins_padrao')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        if (parsed.left !== undefined) setLeftMarginOffset(parsed.left)
-        if (parsed.right !== undefined) setRightMarginOffset(parsed.right)
-        if (parsed.top !== undefined) setTopMarginOffset(parsed.top)
-        if (parsed.bottom !== undefined) setBottomMarginOffset(parsed.bottom)
-      } catch(e) {}
+  const itemId = simulado?.id
+  const [leftMarginOffset, setLeftMarginOffset] = useState<number>(() => {
+    if (simulado?.config_estudio?.config_margin_left !== undefined) return simulado.config_estudio.config_margin_left
+    if (typeof window !== 'undefined' && itemId) {
+      const saved = localStorage.getItem(`simulador_margins_${itemId}`)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (parsed.left !== undefined) return parsed.left
+        } catch (e) {}
+      }
     }
-  }, [])
+    return 0
+  });
+  const [rightMarginOffset, setRightMarginOffset] = useState<number>(() => {
+    if (simulado?.config_estudio?.config_margin_right !== undefined) return simulado.config_estudio.config_margin_right
+    if (typeof window !== 'undefined' && itemId) {
+      const saved = localStorage.getItem(`simulador_margins_${itemId}`)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (parsed.right !== undefined) return parsed.right
+        } catch (e) {}
+      }
+    }
+    return 0
+  });
+  const [topMarginOffset, setTopMarginOffset] = useState<number>(() => {
+    if (simulado?.config_estudio?.config_margin_top !== undefined) return simulado.config_estudio.config_margin_top
+    if (typeof window !== 'undefined' && itemId) {
+      const saved = localStorage.getItem(`simulador_margins_${itemId}`)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (parsed.top !== undefined) return parsed.top
+        } catch (e) {}
+      }
+    }
+    return 0
+  });
+  const [bottomMarginOffset, setBottomMarginOffset] = useState<number>(() => {
+    if (simulado?.config_estudio?.config_margin_bottom !== undefined) return simulado.config_estudio.config_margin_bottom
+    if (typeof window !== 'undefined' && itemId) {
+      const saved = localStorage.getItem(`simulador_margins_${itemId}`)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (parsed.bottom !== undefined) return parsed.bottom
+        } catch (e) {}
+      }
+    }
+    return 0
+  });
+  const [adicionarPaginaRedacao, setAdicionarPaginaRedacao] = useState<boolean>(simulado?.config_estudio?.adicionar_pagina_redacao || false);
   const pageA4Ref = useRef<HTMLDivElement>(null)
   const [savingHeader, setSavingHeader] = useState(false)
+  const [savingMargins, setSavingMargins] = useState(false)
   const [showBackModal, setShowBackModal] = useState(false)
+
+  const handleSaveMargins = async () => {
+    setSavingMargins(true)
+    try {
+      const margins = {
+        left: leftMarginOffset,
+        right: rightMarginOffset,
+        top: topMarginOffset,
+        bottom: bottomMarginOffset
+      }
+
+      if (itemId) {
+        localStorage.setItem(`simulador_margins_${itemId}`, JSON.stringify(margins))
+      }
+
+      const updatedConfigEstudio = {
+        ...(simulado?.config_estudio || {}),
+        config_fonte_enunciado: enunciadoFontSize,
+        config_fonte_alternativa: alternativasFontSize,
+        config_colunas: columns,
+        config_layout_alternativas: alternativasLayout,
+        config_margin_left: leftMarginOffset,
+        config_margin_right: rightMarginOffset,
+        config_margin_top: topMarginOffset,
+        config_margin_bottom: bottomMarginOffset,
+        adicionar_pagina_redacao: adicionarPaginaRedacao
+      }
+
+      if (simulado) {
+        simulado.config_estudio = updatedConfigEstudio
+      }
+
+      if (itemId) {
+        const { error } = await (supabase as any)
+          .from('simulados_upload')
+          .update({ config_estudio: updatedConfigEstudio, updated_at: new Date().toISOString() })
+          .eq('id', itemId)
+
+        if (error) {
+          console.error('Erro ao salvar margens no banco:', error)
+        }
+      }
+
+      alert('Margens salvas para este simulado com sucesso!')
+    } catch (e: any) {
+      alert('Erro ao salvar margens: ' + e.message)
+    } finally {
+      setSavingMargins(false)
+    }
+  }
 
   const handleSaveHeaderLayout = async () => {
 
@@ -387,18 +474,12 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                 </button>
                 {showMargins && (
                   <button
-                    onClick={() => {
-                      localStorage.setItem('simulador_margins_padrao', JSON.stringify({
-                        left: leftMarginOffset,
-                        right: rightMarginOffset,
-                        top: topMarginOffset,
-                        bottom: bottomMarginOffset
-                      }))
-                      alert('Padrão de margens salvo com sucesso!')
-                    }}
-                    style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}
-                    title="Salvar como padrão para os próximos"
+                    onClick={handleSaveMargins}
+                    disabled={savingMargins}
+                    style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: savingMargins ? 'wait' : 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                    title="Salvar margens para este simulado"
                   >
+                    {savingMargins ? <Loader2 size={12} className="animate-spin" /> : null}
                     Salvar Padrão
                   </button>
                 )}
@@ -526,6 +607,14 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
               disabled={saving}
               onClick={async () => {
                 setQuestoes(localQuestoes)
+                if (itemId) {
+                  localStorage.setItem(`simulador_margins_${itemId}`, JSON.stringify({
+                    left: leftMarginOffset,
+                    right: rightMarginOffset,
+                    top: topMarginOffset,
+                    bottom: bottomMarginOffset
+                  }))
+                }
                 if (onSave) await onSave(localQuestoes, {
                   config_fonte_enunciado: enunciadoFontSize,
                   config_fonte_alternativa: alternativasFontSize,

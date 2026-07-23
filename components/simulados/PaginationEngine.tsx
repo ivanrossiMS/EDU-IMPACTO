@@ -130,6 +130,94 @@ export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
   return parts;
 }
 
+export function splitTextIntoChunks(htmlText: string): string[] {
+  if (!htmlText || !htmlText.trim()) return [htmlText || ''];
+
+  const metaRegex = /(<meta[^>]+>)/gi;
+  const metaMatch = htmlText.match(metaRegex);
+  let metaPrefix = '';
+  let cleanText = htmlText;
+  if (metaMatch) {
+    metaPrefix = metaMatch.join('\n') + '\n';
+    cleanText = cleanText.replace(metaRegex, '');
+  }
+
+  // 1. Split by HTML block tags: <p>, <div>, <blockquote>, <h1-6>, <ul>, <ol>, <table>, <section>, <article>
+  const blockRegex = /(?=(?:<p[ >]|<div[ >]|<blockquote[ >]|<h[1-6][ >]|<ul[ >]|<ol[ >]|<table[ >]|<section[ >]|<article[ >]|<hr[ >]))/gi;
+  let rawChunks = cleanText.split(blockRegex).filter(c => c.trim().length > 0);
+
+  if (rawChunks.length === 0) {
+    rawChunks = [cleanText];
+  }
+
+  const finalChunks: string[] = [];
+
+  for (let i = 0; i < rawChunks.length; i++) {
+    const chunk = rawChunks[i];
+
+    // If chunk has <br> tags
+    const brMatches = chunk.match(/<br\s*\/?>/gi);
+    if (brMatches && brMatches.length >= 2) {
+      const brParts = chunk.split(/(?<=<br\s*\/?>)/gi).filter(s => s.trim().length > 0);
+      let curr = '';
+      for (const part of brParts) {
+        curr += part;
+        if (curr.length > 200 || part.match(/<br\s*\/?>/i)) {
+          finalChunks.push(curr);
+          curr = '';
+        }
+      }
+      if (curr.trim()) finalChunks.push(curr);
+      continue;
+    }
+
+    // If chunk plain text > 250 chars, split by sentences
+    const plain = chunk.replace(/<[^>]+>/g, '').trim();
+    if (plain.length > 250) {
+      const sentenceRegex = /(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9"<]|<)/g;
+      const sentences = chunk.split(sentenceRegex).filter(s => s.trim().length > 0);
+
+      if (sentences.length > 1) {
+        let curr = '';
+        for (const sent of sentences) {
+          const combinedPlain = (curr + ' ' + sent).replace(/<[^>]+>/g, '').trim();
+          if (curr && combinedPlain.length > 200) {
+            finalChunks.push(curr + ' ');
+            curr = sent;
+          } else {
+            curr = curr ? curr + ' ' + sent : sent;
+          }
+        }
+        if (curr.trim()) finalChunks.push(curr);
+        continue;
+      }
+
+      // If no sentence breaks but plain text > 300 chars, split by word chunks (~35 words)
+      const words = chunk.split(/\s+/);
+      if (words.length > 35) {
+        let currWords: string[] = [];
+        for (const w of words) {
+          currWords.push(w);
+          if (currWords.length >= 35) {
+            finalChunks.push(currWords.join(' ') + ' ');
+            currWords = [];
+          }
+        }
+        if (currWords.length > 0) finalChunks.push(currWords.join(' '));
+        continue;
+      }
+    }
+
+    finalChunks.push(chunk);
+  }
+
+  if (finalChunks.length === 0) return [htmlText];
+  if (metaPrefix) {
+    finalChunks[0] = metaPrefix + finalChunks[0];
+  }
+  return finalChunks;
+}
+
 const MM_TO_PX = 3.7795;
 const PAGE_H = 297 * MM_TO_PX;
 const HEADER_1 = 80 * MM_TO_PX; // Height of cover image header + margins
@@ -137,6 +225,7 @@ const HEADER_OTHER = 25 * MM_TO_PX;
 const BOTTOM = 25 * MM_TO_PX;
 const BLOCK_SPACING = 12; 
 const ALT_SPACING = 8;
+const CHUNK_SPACING = 6;
 
 export function PaginationEngine({
   questoes, columns, enunciadoFontSize, alternativasFontSize, config, simulado,
@@ -181,7 +270,8 @@ export function PaginationEngine({
       let pageIndex = 0;
 
       function getAvailableHeight() {
-        return pageIndex === 0 ? avail1Px : availNPx;
+        const baseAvail = pageIndex === 0 ? avail1Px : availNPx;
+        return Math.max(100, baseAvail - 40);
       }
 
       function advanceCol() {
@@ -237,7 +327,16 @@ export function PaginationEngine({
         groupedParts.forEach((group, gIdx) => {
           let h = 0;
           if (group.type === 'text') {
-            h = heights[`${q.id}-enun-txt-${group.originalIndex}`] || 0;
+            const fullH = heights[`${q.id}-enun-txt-${group.originalIndex}`];
+            if (fullH && fullH > 0) {
+              h = fullH;
+            } else {
+              const chunks = splitTextIntoChunks(group.content || '');
+              chunks.forEach((chunk, cIdx) => {
+                const rawH = heights[`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`] || 0;
+                h += rawH;
+              });
+            }
           } else if (group.type === 'lines') {
             h = group.count * 28; // Each line is 28px tall
           } else {
@@ -300,8 +399,27 @@ export function PaginationEngine({
           
           groupedParts.forEach((group, gIdx) => {
             if (group.type === 'text') {
-              const h = heights[`${q.id}-enun-txt-${group.originalIndex}`] || 0;
-              renderBlocks.push({ item: { type: 'part_enun_txt', q, content: group.content, originalIndex: group.originalIndex, isFirst: group.originalIndex === 0, qIndex: idx }, h, margin: group.originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_text' });
+              const chunks = splitTextIntoChunks(group.content || '');
+              chunks.forEach((chunk, cIdx) => {
+                const rawH = heights[`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`] || 0;
+                const h = rawH > 0 ? rawH : 20;
+                const isFirstChunk = group.originalIndex === 0 && cIdx === 0;
+                renderBlocks.push({ 
+                  item: { 
+                    type: 'part_enun_txt', 
+                    q, 
+                    content: chunk, 
+                    originalIndex: group.originalIndex, 
+                    chunkIndex: cIdx,
+                    totalChunks: chunks.length,
+                    isFirst: isFirstChunk, 
+                    qIndex: idx 
+                  }, 
+                  h, 
+                  margin: isFirstChunk ? questionMargin : 0, 
+                  category: 'enunciado_text' 
+                });
+              });
             } else if (group.type === 'lines') {
               for (let j = 0; j < group.count; j++) {
                 renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex: idx, style: group.style, lineIndex: j }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
@@ -331,6 +449,16 @@ export function PaginationEngine({
           while (i < renderBlocks.length) {
             const block = renderBlocks[i];
             const nextBlock = i + 1 < renderBlocks.length ? renderBlocks[i + 1] : null;
+
+            // Heuristic 0: Orphan Question Header Protection
+            // If this block starts a question (isFirst is true) and remaining space is < 130px, move question start to next column/page
+            if (block.item?.isFirst && currentY > 0) {
+              const remainingSpace = getAvailableHeight() - currentY;
+              if (remainingSpace < 130) {
+                advanceCol();
+                block.margin = 0;
+              }
+            }
 
             // Heuristic A: Enunciado Text + Img indivisible if they fit together on a new page
             if (block.category === 'enunciado_text' && nextBlock?.category === 'enunciado_img') {
@@ -454,15 +582,54 @@ export function PaginationEngine({
         newPages.push(Array.from({ length: columns }, () => []));
       }
 
-      setPages(newPages);
+      const mergedPages = newPages.map((page: any[]) => {
+        return page.map((col: any[]) => {
+          const newCol: any[] = [];
+          col.forEach((block: any) => {
+            const prevBlock = newCol.length > 0 ? newCol[newCol.length - 1] : null;
+            const blockQId = block.q?.id || block.q?._internalId;
+            const prevQId = prevBlock?.q?.id || prevBlock?.q?._internalId;
+
+            if (
+              prevBlock &&
+              prevBlock.type === 'part_enun_txt' &&
+              block.type === 'part_enun_txt' &&
+              blockQId &&
+              blockQId === prevQId &&
+              prevBlock.originalIndex === block.originalIndex
+            ) {
+              prevBlock.content = (prevBlock.content || '') + (block.content || '');
+              const start = prevBlock.startChunkIndex ?? prevBlock.chunkIndex ?? 0;
+              const end = block.endChunkIndex ?? block.chunkIndex ?? 0;
+              prevBlock.startChunkIndex = start;
+              prevBlock.endChunkIndex = end;
+              if (block.totalChunks) prevBlock.totalChunks = block.totalChunks;
+            } else {
+              newCol.push({
+                ...block,
+                startChunkIndex: block.startChunkIndex ?? block.chunkIndex ?? 0,
+                endChunkIndex: block.endChunkIndex ?? block.chunkIndex ?? 0,
+              });
+            }
+          });
+          return newCol;
+        });
+      });
+
+      setPages(mergedPages);
       setIsPaginating(false);
     }, 300);
     
     return () => clearTimeout(timer);
-  }, [questoes, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayout, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao]);
+  }, [questoes, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayout, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
-  const shadowColWidth = columns === 1 ? '174mm' : '81mm';
+  const leftOffsetPx = leftMarginOffset || 0;
+  const rightOffsetPx = rightMarginOffset || 0;
+  const colWidthMm = columns === 1 
+    ? (174 - (leftOffsetPx + rightOffsetPx) / 3.7795) 
+    : ((174 - 10) / columns - (leftOffsetPx + rightOffsetPx) / (3.7795 * columns));
+  const shadowColWidth = `${Math.max(40, colWidthMm)}mm`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
@@ -476,6 +643,8 @@ export function PaginationEngine({
           width: shadowColWidth,
           fontSize: `${enunciadoFontSize}px`, 
           lineHeight: 1.6, 
+          color: '#000',
+          textAlign: 'justify',
           zIndex: -1000 
         }}
       >
@@ -534,9 +703,25 @@ export function PaginationEngine({
 
                   return groupedParts.map((group, gIdx) => (
                     group.type === 'text' ? (
-                      <div key={`txt-${group.originalIndex}`} data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}`}>
-                        <HtmlContent html={group.content || ''} style={{ wordBreak: 'break-word' }} />
-                      </div>
+                      (() => {
+                        const chunks = splitTextIntoChunks(group.content || '');
+                        const isFirstGroup = group.originalIndex === 0;
+                        return (
+                          <React.Fragment key={`txt-grp-${group.originalIndex}`}>
+                            <div data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}`} style={{ display: 'flex', gap: 10, width: '100%' }}>
+                              <div style={{ width: '28px', height: '28px', minWidth: '28px' }} />
+                              <div style={{ flex: 1, minWidth: 0, display: 'flow-root' }}>
+                                <HtmlContent html={group.content || ''} style={{ wordBreak: 'break-word' }} />
+                              </div>
+                            </div>
+                            {chunks.map((chunk, cIdx) => (
+                              <div key={`txt-${group.originalIndex}-${cIdx}`} data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`} style={{ width: '100%', display: 'flow-root' }}>
+                                <HtmlContent html={chunk} style={{ wordBreak: 'break-word' }} />
+                              </div>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })()
                     ) : group.type === 'lines' ? (
                       null
                     ) : (
