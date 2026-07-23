@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useEffect, useState } from 'react'
 import 'katex/dist/katex.min.css'
 import katex from 'katex'
-import { Bold, Italic, Underline } from 'lucide-react'
+import { Bold, Italic, Underline, Subscript, Superscript, RemoveFormatting } from 'lucide-react'
 import { cleanEnunciadoHtml } from '@/components/simulados/PaginationEngine'
 
 interface HtmlContentProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -127,6 +127,8 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
         const isBold = document.queryCommandState('bold')
         const isItalic = document.queryCommandState('italic')
         const isUnderline = document.queryCommandState('underline')
+        const isSubscript = document.queryCommandState('subscript')
+        const isSuperscript = document.queryCommandState('superscript')
         
         const btnBold = toolbarRef.current.querySelector('#btn-bold') as HTMLButtonElement
         if (btnBold) btnBold.style.backgroundColor = isBold ? '#3b82f6' : 'transparent'
@@ -136,6 +138,12 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
 
         const btnUnderline = toolbarRef.current.querySelector('#btn-underline') as HTMLButtonElement
         if (btnUnderline) btnUnderline.style.backgroundColor = isUnderline ? '#3b82f6' : 'transparent'
+
+        const btnSubscript = toolbarRef.current.querySelector('#btn-subscript') as HTMLButtonElement
+        if (btnSubscript) btnSubscript.style.backgroundColor = isSubscript ? '#3b82f6' : 'transparent'
+
+        const btnSuperscript = toolbarRef.current.querySelector('#btn-superscript') as HTMLButtonElement
+        if (btnSuperscript) btnSuperscript.style.backgroundColor = isSuperscript ? '#3b82f6' : 'transparent'
       }
     }, 10)
   }
@@ -186,6 +194,63 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
     if (toolbarRef.current) toolbarRef.current.style.display = 'none'
   }
 
+  const removeFormatting = (e: React.MouseEvent) => {
+    e.preventDefault() 
+    e.stopPropagation()
+
+    const sel = window.getSelection()
+    if (sel && savedRangeRef.current) {
+      sel.removeAllRanges()
+      sel.addRange(savedRangeRef.current)
+    }
+
+    document.execCommand('removeFormat', false)
+
+    try {
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0)
+        if (!range.collapsed) {
+          const container = document.createElement('div')
+          container.appendChild(range.extractContents())
+          const plainText = container.textContent || ''
+          const textNode = document.createTextNode(plainText)
+          range.insertNode(textNode)
+
+          const newRange = document.createRange()
+          newRange.selectNodeContents(textNode)
+          sel.removeAllRanges()
+          sel.addRange(newRange)
+          savedRangeRef.current = newRange.cloneRange()
+        }
+      }
+    } catch (err) {
+      console.error('Error removing format:', err)
+    }
+
+    if (containerRef.current && onBlurHtml) {
+      try {
+        const currentHtml = containerRef.current.innerHTML
+        const parser = new DOMParser()
+        const doc = parser.parseFromString(currentHtml, 'text/html')
+        
+        const formulaSpans = doc.querySelectorAll('.ql-formula')
+        formulaSpans.forEach(span => {
+          const formula = span.getAttribute('data-value')
+          if (formula) {
+            span.innerHTML = formula 
+            span.removeAttribute('contenteditable')
+          }
+        })
+        
+        onBlurHtml(doc.body.innerHTML)
+      } catch (err) {
+        onBlurHtml(containerRef.current.innerHTML)
+      }
+    }
+    
+    if (toolbarRef.current) toolbarRef.current.style.display = 'none'
+  }
+
   return (
     <>
       <style>{`
@@ -201,6 +266,18 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
         }
         .html-content div:first-child {
           margin-top: 0 !important;
+        }
+        .html-content sub, .html-content sup {
+          font-size: 75%;
+          line-height: 0;
+          position: relative;
+          vertical-align: baseline;
+        }
+        .html-content sub {
+          bottom: -0.25em;
+        }
+        .html-content sup {
+          top: -0.5em;
         }
       `}</style>
       <div 
@@ -231,6 +308,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             borderRadius: '6px',
             boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
             display: 'none',
+            alignItems: 'center',
             gap: '2px'
           }}
         >
@@ -257,6 +335,31 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
             title="Sublinhado"
           >
             <Underline size={16}/>
+          </button>
+          <button 
+            id="btn-subscript"
+            onMouseDown={e => formatText(e, 'subscript')} 
+            style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Subescrito (H₂O)"
+          >
+            <Subscript size={16}/>
+          </button>
+          <button 
+            id="btn-superscript"
+            onMouseDown={e => formatText(e, 'superscript')} 
+            style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Sobrescrito (x²)"
+          >
+            <Superscript size={16}/>
+          </button>
+          <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.2)', margin: '0 2px' }} />
+          <button 
+            id="btn-remove-format"
+            onMouseDown={removeFormatting} 
+            style={{ background: 'transparent', color: 'white', border: 'none', padding: '6px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="Texto Normal (Remover Formatação)"
+          >
+            <RemoveFormatting size={16}/>
           </button>
         </div>
       )}

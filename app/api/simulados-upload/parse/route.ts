@@ -60,7 +60,7 @@ function cleanEnunciadoHtml(html: string): string {
 
 function parseBlock(block: string): ParsedBlock {
   const spaceBlock = block.replace(/\[\[GABARITO\]\]/g, '            ')
-  const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[biu]>)*([a-eA-E])(?:<\/[biu]>)*\s*[\.\-\)](?:<\/[biu]>)*\s+/gm
+  const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[^>]+>)*([a-eA-E])(?:<[^>]+>)*\s*[\.\-\)](?:<[^>]+>)*\s+/gm
 
   const found: AltMarker[] = []
   let m: RegExpExecArray | null

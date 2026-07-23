@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, Bold, Italic, Underline, List, CheckCircle2, Sparkles, X, Bot } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, Bold, Italic, Underline, Subscript, Superscript, RemoveFormatting, List, CheckCircle2, Sparkles, X, Bot } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -29,14 +29,36 @@ function SimpleRichTextEditor({ value, onChange, placeholder }: { value: string,
     handleInput()
   }
 
+  const removeFormatting = () => {
+    const sel = window.getSelection()
+    if (sel && !sel.isCollapsed && editorRef.current) {
+      document.execCommand('removeFormat', false)
+      try {
+        const range = sel.getRangeAt(0)
+        const container = document.createElement('div')
+        container.appendChild(range.extractContents())
+        const plainText = container.textContent || ''
+        const textNode = document.createTextNode(plainText)
+        range.insertNode(textNode)
+      } catch (e) {}
+    } else {
+      execCmd('removeFormat')
+    }
+    editorRef.current?.focus()
+    handleInput()
+  }
+
   return (
     <div style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, overflow: 'hidden', background: 'hsl(var(--bg-app))' }}>
       <div style={{ display: 'flex', gap: 4, padding: '8px 12px', background: 'hsl(var(--bg-surface))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-        <button type="button" onClick={() => execCmd('bold')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }}><Bold size={16} /></button>
-        <button type="button" onClick={() => execCmd('italic')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }}><Italic size={16} /></button>
-        <button type="button" onClick={() => execCmd('underline')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }}><Underline size={16} /></button>
+        <button type="button" onClick={() => execCmd('bold')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }} title="Negrito"><Bold size={16} /></button>
+        <button type="button" onClick={() => execCmd('italic')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }} title="Itálico"><Italic size={16} /></button>
+        <button type="button" onClick={() => execCmd('underline')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }} title="Sublinhado"><Underline size={16} /></button>
+        <button type="button" onClick={() => execCmd('subscript')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }} title="Subescrito (H₂O)"><Subscript size={16} /></button>
+        <button type="button" onClick={() => execCmd('superscript')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }} title="Sobrescrito (x²)"><Superscript size={16} /></button>
+        <button type="button" onClick={removeFormatting} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }} title="Texto Normal (Remover Formatação)"><RemoveFormatting size={16} /></button>
         <div style={{ width: 1, background: 'hsl(var(--border-subtle))', margin: '0 4px' }} />
-        <button type="button" onClick={() => execCmd('insertUnorderedList')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }}><List size={16} /></button>
+        <button type="button" onClick={() => execCmd('insertUnorderedList')} style={{ padding: 6, background: 'transparent', border: 'none', color: 'hsl(var(--text-primary))', cursor: 'pointer', borderRadius: 4 }} title="Lista"><List size={16} /></button>
       </div>
       <div 
         ref={editorRef}

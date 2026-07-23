@@ -57,7 +57,9 @@ export function EditorQuill({ value, onChange, placeholder, compact }: EditorQui
     toolbar: {
       container: compact 
         ? [
-            ['bold', 'italic']
+            ['bold', 'italic', 'underline'],
+            [{ 'script': 'sub'}, { 'script': 'super' }],
+            ['clean']
           ]
         : [
             ['bold', 'italic', 'underline', 'strike'],
