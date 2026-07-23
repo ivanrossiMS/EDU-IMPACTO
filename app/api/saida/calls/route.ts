@@ -150,8 +150,36 @@ export async function POST(request: Request) {
 
     const row = buildRow(body)
 
-    // Buscar status anterior
+    // Buscar status anterior do registro e verificar se o aluno já tem saída confirmada hoje
     const supabaseService = getAdminClient()
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+    const todayStr = formatter.format(new Date())
+
+    const studentId = row.dados?.studentId
+    const incomingStatus = row.dados?.status
+    const isRevert = !!row.dados?.isRevert
+
+    if (studentId && (incomingStatus === 'waiting' || incomingStatus === 'called') && !isRevert) {
+      const { data: studentCallsToday } = await supabaseService
+        .from('saida_calls')
+        .select('id, dados')
+        .eq('dados->>studentId', studentId)
+        .gte('created_at', `${todayStr}T00:00:00-03:00`)
+
+      const confirmedEntry = (studentCallsToday || []).find(r => {
+        let d = r.dados
+        if (typeof d === 'string') { try { d = JSON.parse(d) } catch(e){} }
+        return d?.status === 'confirmed'
+      })
+
+      if (confirmedEntry) {
+        console.warn(`[API Saida] Blocked setting status '${incomingStatus}' for student ${studentId} (${row.dados?.studentName}) - Already confirmed today.`)
+        let cDados = confirmedEntry.dados
+        if (typeof cDados === 'string') { try { cDados = JSON.parse(cDados) } catch(e){} }
+        return NextResponse.json({ id: confirmedEntry.id, ...(cDados || {}) }, { status: 200 })
+      }
+    }
+
     const { data: existingRow } = await supabaseService.from('saida_calls').select('dados').eq('id', row.id).maybeSingle()
     
     let wasConfirmed = false
@@ -165,12 +193,9 @@ export async function POST(request: Request) {
       wasConfirmed = existingDados.status === 'confirmed'
 
       // Race condition protection: Prevent delayed "waiting" calls from overwriting "confirmed"
-      // If existing is confirmed, and incoming is waiting/called, it's either a stale update OR a revert.
-      // A genuine revert has a new `calledAt` that is > `confirmedAt`.
-      if ((wasConfirmed || existingDados.status === 'cancelled') && (row.dados.status === 'waiting' || row.dados.status === 'called')) {
+      if ((wasConfirmed || existingDados.status === 'cancelled') && (row.dados.status === 'waiting' || row.dados.status === 'called') && !isRevert) {
         const incomingCalledAt = new Date(row.dados.calledAt || 0).getTime()
         const existingConfirmedAt = new Date(existingDados.confirmedAt || 0).getTime()
-        // Se a "chamada" atual é mais antiga que a "confirmação" existente, é um POST atrasado (stale)
         if (incomingCalledAt < existingConfirmedAt) {
           console.warn(`[API Saida] Stale update prevented for call ${row.id}. Incoming status: ${row.dados.status}, Existing status: ${existingDados.status}`)
           return NextResponse.json({ id: row.id, ...(existingDados || {}) }, { status: 200 })

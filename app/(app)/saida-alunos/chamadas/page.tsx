@@ -1552,6 +1552,11 @@ function ChamadasContent() {
     guardianId: string, guardianName: string,
     studentPhoto?: string | null,
   ) => {
+    const isConfirmedToday = activeCalls.some(c => c.studentId === studentId && c.status === 'confirmed')
+    if (isConfirmedToday) {
+      showToast(`${studentName} já teve a saída confirmada hoje!`, false);
+      return;
+    }
     const hasActive = activeCalls.some(c =>
       c.studentId === studentId && (c.status === 'waiting' || c.status === 'called')
     )
@@ -1561,8 +1566,12 @@ function ChamadasContent() {
     setStudentSearch('')
   }
 
+  const confirmedStudentIds = useMemo(() => {
+    return new Set(activeCalls.filter(c => c.status === 'confirmed').map(c => c.studentId))
+  }, [activeCalls])
+
   const allCalls  = activeCalls.filter(c => c.status !== 'special_auth')
-  const waiting   = activeCalls.filter(c => c.status === 'waiting' || c.status === 'called')
+  const waiting   = activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && !confirmedStudentIds.has(c.studentId))
   const confirmed = activeCalls.filter(c => c.status === 'confirmed')
   const cancelled = activeCalls.filter(c => c.status === 'cancelled')
   const blocked   = activeCalls.filter(c => c.status === 'blocked')
@@ -1578,7 +1587,7 @@ function ChamadasContent() {
     list.sort((a, b) => b._parsedTime - a._parsedTime)
 
     if (filter === 'all')       list = list.filter(c => c.status !== 'special_auth')
-    if (filter === 'waiting')   list = list.filter(c => c.status === 'waiting' || c.status === 'called')
+    if (filter === 'waiting')   list = list.filter(c => (c.status === 'waiting' || c.status === 'called') && !confirmedStudentIds.has(c.studentId))
     if (filter === 'confirmed') list = list.filter(c => c.status === 'confirmed')
     if (filter === 'cancelled') list = list.filter(c => c.status === 'cancelled')
     if (filter === 'blocked')   list = list.filter(c => c.status === 'blocked')
@@ -1588,7 +1597,7 @@ function ChamadasContent() {
       list = list.filter(c => c._searchStr.includes(q))
     }
     return list
-  }, [activeCalls, filter, callSearch])
+  }, [activeCalls, filter, callSearch, confirmedStudentIds])
 
   const FILTERS = [
     { key: 'all'       as FilterType, label: 'Todos',       color: '#818cf8', count: mounted ? allCalls.length : 0 },

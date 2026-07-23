@@ -346,7 +346,12 @@ function MonitorContent() {
   // Sincronizar displayCalls diretamente de activeCalls (apenas alunos aguardando retirada na portaria)
   // Assim que a saída é confirmada em /saida-alunos/chamadas, o aluno sai imediatamente do Monitor TV.
   useEffect(() => {
-    const waitingCalls = activeCalls.filter(c => c.status === 'waiting' || c.status === 'called')
+    const confirmedStudentIds = new Set(
+      activeCalls.filter(c => c.status === 'confirmed').map(c => c.studentId)
+    )
+    const waitingCalls = activeCalls.filter(c => 
+      (c.status === 'waiting' || c.status === 'called') && !confirmedStudentIds.has(c.studentId)
+    )
     setDisplayCalls(waitingCalls.sort(byTimeDesc).slice(0, 25))
   }, [activeCalls])
 
