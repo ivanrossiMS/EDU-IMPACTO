@@ -3,13 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { KeyRound, Save, AlertCircle, Shield, Lock, BookOpen } from 'lucide-react';
+import { KeyRound, Save, AlertCircle, Shield, Lock, BookOpen, CheckCircle2 } from 'lucide-react';
 
 export default function AtualizarSenha() {
   const [novaSenha, setNovaSenha] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sessionValid, setSessionValid] = useState<boolean | null>(null); // null = verificando, false = inválido/erro, true = válido
+  const [sucesso, setSucesso] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -80,10 +81,111 @@ export default function AtualizarSenha() {
       setErro(`Falha ao atualizar: ${error.message}`);
       setLoading(false);
     } else {
-      alert('Senha atualizada com sucesso! Você pode usar a nova senha para acessar sua conta.');
-      router.push('/login');
+      setSucesso(true);
     }
   };
+
+  // Estado de sucesso: modal moderno
+  if (sucesso) {
+    return (
+      <div 
+        style={{ 
+          minHeight: '100vh', 
+          width: '100vw', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          position: 'relative', 
+          overflow: 'hidden',
+          backgroundColor: '#0A0F24', 
+          fontFamily: 'var(--font-inter), -apple-system, sans-serif' 
+        }}
+      >
+        {/* Background dots & glows */}
+        <div style={{ position: 'absolute', inset: 0, opacity: 0.2, backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+        <div style={{ position: 'absolute', top: 0, right: 0, width: '400px', height: '400px', borderRadius: '50%', filter: 'blur(100px)', zIndex: 0, pointerEvents: 'none', backgroundColor: 'rgba(16, 185, 129, 0.12)', transform: 'translate(20%, -20%)' }} />
+        
+        <div style={{ position: 'relative', zIndex: 10, width: '100%', maxWidth: '500px', padding: '0 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          
+          {/* Logo Section */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px', marginBottom: '32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <BookOpen size={36} color="#10b981" strokeWidth={2} />
+              <span style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '1px', color: '#ffffff', fontFamily: 'var(--font-outfit), sans-serif', margin: 0, lineHeight: 1 }}>
+                IMPACTO <span style={{ color: '#10b981' }}>EDU</span>
+              </span>
+            </div>
+            <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', marginTop: '4px' }}>
+              Sistema de Ensino
+            </span>
+          </div>
+
+          {/* Success Card */}
+          <div 
+            style={{ 
+              width: '100%', 
+              borderRadius: '24px', 
+              padding: '40px 32px', 
+              position: 'relative', 
+              overflow: 'hidden', 
+              display: 'flex', 
+              flexDirection: 'column',
+              backgroundColor: 'rgba(15, 23, 42, 0.8)', 
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+              animation: 'scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+          >
+            {/* Glowing Top Line */}
+            <div style={{ position: 'absolute', top: 0, left: '20%', width: '60%', height: '2px', background: 'linear-gradient(90deg, transparent, rgba(16,185,129,0.9), transparent)', boxShadow: '0 0 20px rgba(16,185,129,0.9)' }} />
+
+            {/* Checkmark Icon */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px', marginTop: '8px' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '64px', height: '64px' }}>
+                <Shield style={{ position: 'absolute', width: '100%', height: '100%', color: 'rgba(16, 185, 129, 0.25)' }} strokeWidth={1} />
+                <CheckCircle2 style={{ width: '28px', height: '28px', color: '#10b981', zIndex: 10 }} strokeWidth={2.5} />
+                <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', filter: 'blur(16px)', backgroundColor: 'rgba(16, 185, 129, 0.25)' }} />
+              </div>
+            </div>
+
+            {/* Titles */}
+            <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#ffffff', textAlign: 'center', marginBottom: '12px', fontFamily: 'var(--font-outfit), sans-serif', margin: '0 0 12px 0' }}>
+              Senha Atualizada!
+            </h2>
+            <p style={{ color: '#94a3b8', fontSize: '14px', textAlign: 'center', marginBottom: '32px', lineHeight: 1.6, margin: '0 0 32px 0' }}>
+              Sua senha foi redefinida com sucesso. Você já pode usar a nova credencial para acessar sua conta com segurança.
+            </p>
+
+            <button
+              onClick={() => router.push('/login')}
+              style={{ 
+                width: '100%', 
+                borderRadius: '16px', 
+                padding: '18px', 
+                fontWeight: 600, 
+                fontSize: '15px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                color: '#ffffff', 
+                border: 'none', 
+                cursor: 'pointer',
+                background: 'linear-gradient(90deg, #10b981, #059669)',
+                boxShadow: '0 8px 20px rgba(16,185,129,0.3)',
+                fontFamily: 'var(--font-inter), sans-serif',
+                transition: 'all 0.2s'
+              }}
+            >
+              Ir para a Página de Login
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Estado de carregamento inicial
   if (sessionValid === null) {
@@ -387,6 +489,10 @@ export default function AtualizarSenha() {
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes scaleUp {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
         }
       `}} />
     </div>
