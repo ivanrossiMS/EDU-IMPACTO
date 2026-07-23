@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, Reorder } from 'framer-motion'
-import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, PenTool } from 'lucide-react'
+import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, PenTool, FileText } from 'lucide-react'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
@@ -510,12 +510,18 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
             <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ color: '#475569', fontSize: 14 }}>Questões Originais</span>
-                <span style={{ fontWeight: 700, color: '#0f172a' }}>{localQuestoes.length}</span>
+                <span style={{ fontWeight: 700, color: '#0f172a' }}>{localQuestoes.filter((q: any) => q.tipo_questao !== 'texto_apoio').length}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#475569', fontSize: 14 }}>Questões Selecionadas</span>
-                <span style={{ fontWeight: 700, color: '#10b981' }}>{selectedIds.size}</span>
+                <span style={{ fontWeight: 700, color: '#10b981' }}>{localQuestoes.filter((q: any) => selectedIds.has(q._internalId) && q.tipo_questao !== 'texto_apoio').length}</span>
               </div>
+              {localQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio').length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
+                  <span style={{ color: '#9333ea', fontSize: 14, fontWeight: 600 }}>Textos de Apoio</span>
+                  <span style={{ fontWeight: 700, color: '#9333ea' }}>{localQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio').length}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -524,29 +530,69 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
               <Move size={16} color="#f59e0b" /> Ordem das Questões
             </label>
             <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12 }}>Arraste para reordenar (afeta a numeração final).</p>
-            <Reorder.Group axis="y" values={localQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {localQuestoes.map((q: any, idx) => {
-                const isSelected = selectedIds.has(q._internalId);
-                return (
-                <Reorder.Item key={q._internalId} value={q} style={{ background: isSelected ? '#f8fafc' : '#f1f5f9', border: `1px solid ${isSelected ? '#e2e8f0' : '#cbd5e1'}`, opacity: isSelected ? 1 : 0.6, borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'grab', userSelect: 'none' }}>
-                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, minWidth: 24, borderRadius: 12, background: isSelected ? '#e2e8f0' : '#cbd5e1', color: '#475569', fontSize: 11, fontWeight: 800 }}>
-                     {idx + 1}
-                   </div>
-                   <div style={{ flex: 1, fontSize: 12, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: isSelected ? 'none' : 'line-through' }}>
-                     {q.enunciado ? q.enunciado.replace(/<[^>]+>/g, '') : 'Questão com Imagem'}
-                   </div>
-                   <button 
-                     onClick={(e) => { e.stopPropagation(); handleToggleQuestion(q._internalId); }}
-                     style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 4, display: 'flex' }}
-                     title={isSelected ? 'Excluir questão' : 'Incluir questão'}
-                   >
-                     {isSelected ? <Trash2 size={14} color="#ef4444" /> : <RotateCcw size={14} color="#10b981" />}
-                   </button>
-                   <Move size={14} color="#cbd5e1" />
-                </Reorder.Item>
-                )
-              })}
-            </Reorder.Group>
+            {(() => {
+              let displayCount = 0;
+              const questionNumbersMap = localQuestoes.map((q: any) => {
+                if (q.tipo_questao === 'texto_apoio') return null;
+                displayCount++;
+                return displayCount;
+              });
+
+              return (
+                <Reorder.Group axis="y" values={localQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {localQuestoes.map((q: any, idx) => {
+                    const isSelected = selectedIds.has(q._internalId);
+                    const isTextoApoio = q.tipo_questao === 'texto_apoio';
+
+                    return (
+                      <Reorder.Item
+                        key={q._internalId}
+                        value={q}
+                        style={{
+                          background: isTextoApoio
+                            ? (isSelected ? 'rgba(168,85,247,0.08)' : 'rgba(168,85,247,0.03)')
+                            : (isSelected ? '#f8fafc' : '#f1f5f9'),
+                          border: `1px solid ${
+                            isTextoApoio
+                              ? (isSelected ? 'rgba(168,85,247,0.35)' : 'rgba(168,85,247,0.18)')
+                              : (isSelected ? '#e2e8f0' : '#cbd5e1')
+                          }`,
+                          opacity: isSelected ? 1 : 0.6,
+                          borderRadius: 8,
+                          padding: '10px 12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          cursor: 'grab',
+                          userSelect: 'none'
+                        }}
+                      >
+                        {isTextoApoio ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, minWidth: 24, borderRadius: 12, background: 'rgba(168,85,247,0.2)', color: '#9333ea' }}>
+                            <FileText size={13} color="#9333ea" />
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, minWidth: 24, borderRadius: 12, background: isSelected ? '#e2e8f0' : '#cbd5e1', color: '#475569', fontSize: 11, fontWeight: 800 }}>
+                            {questionNumbersMap[idx]}
+                          </div>
+                        )}
+                        <div style={{ flex: 1, fontSize: 12, color: isTextoApoio ? '#9333ea' : '#334155', fontWeight: isTextoApoio ? 700 : 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textDecoration: isSelected ? 'none' : 'line-through' }}>
+                          {isTextoApoio ? 'Texto de Apoio' : (q.enunciado ? q.enunciado.replace(/<[^>]+>/g, '') : 'Questão com Imagem')}
+                        </div>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleToggleQuestion(q._internalId); }}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 4, display: 'flex' }}
+                          title={isSelected ? 'Excluir item' : 'Incluir item'}
+                        >
+                          {isSelected ? <Trash2 size={14} color="#ef4444" /> : <RotateCcw size={14} color="#10b981" />}
+                        </button>
+                        <Move size={14} color={isTextoApoio ? 'rgba(168,85,247,0.4)' : '#cbd5e1'} />
+                      </Reorder.Item>
+                    )
+                  })}
+                </Reorder.Group>
+              )
+            })()}
           </div>
 
         </div>
