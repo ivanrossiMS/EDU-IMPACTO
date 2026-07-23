@@ -29,7 +29,13 @@ type Pesquisa = {
 export default function PesquisaClimaAdminPage() {
   const isMobile = useIsMobile()
   const { currentUser } = useApp()
-  const isAdmin = currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Administrador'
+  const userPerfil = (currentUser?.perfil || '').toLowerCase()
+  const userCargo = (currentUser?.cargo || '').toLowerCase()
+
+  const allowedResultadosRoles = ['administrador', 'administrador master', 'diretor geral']
+  const canSeeResultados = allowedResultadosRoles.includes(userPerfil) || allowedResultadosRoles.includes(userCargo)
+
+  const isAdmin = canSeeResultados
   
   const [pesquisas, setPesquisas] = useState<Pesquisa[]>([])
   const [loading, setLoading] = useState(true)
@@ -147,6 +153,7 @@ export default function PesquisaClimaAdminPage() {
   }
 
   const fetchResultados = async (id: string) => {
+    if (!canSeeResultados) return
     setLoadingResultados(id)
     try {
       const res = await fetch(`/api/gestao-pessoas/pesquisas/${id}?t=${Date.now()}`, { cache: 'no-store' })
@@ -463,18 +470,20 @@ export default function PesquisaClimaAdminPage() {
                       </td>
                       <td style={{ padding: '24px 32px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <button 
-                            onClick={() => fetchResultados(p.id)}
-                            disabled={loadingResultados === p.id}
-                            style={{ 
-                              padding: '8px 16px', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 8, 
-                              fontSize: 14, fontWeight: 600, cursor: loadingResultados === p.id ? 'not-allowed' : 'pointer',
-                              display: 'flex', alignItems: 'center', gap: 6, opacity: loadingResultados === p.id ? 0.7 : 1
-                            }}
-                          >
-                            {loadingResultados === p.id ? <Loader2 size={16} className="animate-spin" /> : null}
-                            {loadingResultados === p.id ? 'Carregando...' : 'Ver resultados'}
-                          </button>
+                          {canSeeResultados && (
+                            <button 
+                              onClick={() => fetchResultados(p.id)}
+                              disabled={loadingResultados === p.id}
+                              style={{ 
+                                padding: '8px 16px', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 8, 
+                                fontSize: 14, fontWeight: 600, cursor: loadingResultados === p.id ? 'not-allowed' : 'pointer',
+                                display: 'flex', alignItems: 'center', gap: 6, opacity: loadingResultados === p.id ? 0.7 : 1
+                              }}
+                            >
+                              {loadingResultados === p.id ? <Loader2 size={16} className="animate-spin" /> : null}
+                              {loadingResultados === p.id ? 'Carregando...' : 'Ver resultados'}
+                            </button>
+                          )}
                           
                           <button 
                             onClick={() => window.open(`/pesquisa/${p.id}`, '_blank')}
