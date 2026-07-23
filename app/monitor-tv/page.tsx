@@ -347,10 +347,14 @@ function MonitorContent() {
   // Assim que a saída é confirmada em /saida-alunos/chamadas, o aluno sai imediatamente do Monitor TV.
   useEffect(() => {
     const confirmedStudentIds = new Set(
-      activeCalls.filter(c => c.status === 'confirmed').map(c => c.studentId)
+      activeCalls
+        .filter(c => c.status === 'confirmed' && c.studentId != null)
+        .map(c => String(c.studentId))
     )
     const waitingCalls = activeCalls.filter(c => 
-      (c.status === 'waiting' || c.status === 'called') && !confirmedStudentIds.has(c.studentId)
+      (c.status === 'waiting' || c.status === 'called') && 
+      c.studentId != null && 
+      !confirmedStudentIds.has(String(c.studentId))
     )
     setDisplayCalls(waitingCalls.sort(byTimeDesc).slice(0, 25))
   }, [activeCalls])

@@ -233,12 +233,13 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
             
             if (eventType === 'INSERT') {
               const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
+              const callStudentId = call.studentId ? String(call.studentId) : null
               setActiveCallsLocal?.((prev: PickupCall[]) => {
                 const arr = prev || []
                 // Protect confirmed students from being set back to waiting/called via DB triggers/inserts unless isRevert is set
-                const isAlreadyConfirmed = arr.some(c => c.studentId === call.studentId && c.status === 'confirmed' && c.id !== call.id)
+                const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed' && c.id !== call.id) : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
-                  return arr.map(c => c.studentId === call.studentId ? { ...c, status: 'confirmed' } : c)
+                  return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId) ? { ...c, status: 'confirmed' } : c)
                 }
                 const idx = arr.findIndex(c => c.id === call.id)
                 if (idx >= 0) {
@@ -250,13 +251,18 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
               })
             } else if (eventType === 'UPDATE') {
               const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
+              const callStudentId = call.studentId ? String(call.studentId) : null
               setActiveCallsLocal?.((prev: PickupCall[]) => {
                 const arr = prev || []
-                const isAlreadyConfirmed = arr.some(c => c.studentId === call.studentId && c.status === 'confirmed' && c.id !== call.id)
+                const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed' && c.id !== call.id) : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
-                  return arr.map(c => c.studentId === call.studentId ? { ...c, status: 'confirmed' } : c)
+                  return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId) ? { ...c, status: 'confirmed' } : c)
                 }
-                return arr.map(c => c.id === call.id ? call : c)
+                const idx = arr.findIndex(c => c.id === call.id)
+                if (idx >= 0) {
+                  return arr.map(c => c.id === call.id ? { ...c, ...call } : c)
+                }
+                return [call, ...arr]
               })
             } else if (eventType === 'DELETE') {
               setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).filter(c => c.id !== oldRow.id))
@@ -273,12 +279,13 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
               processedBroadcasts.current.add(eventId);
               if (processedBroadcasts.current.size > 200) processedBroadcasts.current.clear();
             }
+            const dataStudentId = data?.studentId ? String(data.studentId) : null
             if (event === 'CALL_STUDENT') {
               setActiveCallsLocal?.((prev: PickupCall[]) => {
                 const arr = prev || []
-                const isAlreadyConfirmed = arr.some(c => c.studentId === data.studentId && c.status === 'confirmed')
+                const isAlreadyConfirmed = dataStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === dataStudentId && c.status === 'confirmed') : false
                 if (isAlreadyConfirmed && data.status !== 'confirmed' && !data.isRevert) {
-                  return arr
+                  return arr.map(c => (c.studentId != null && String(c.studentId) === dataStudentId) ? { ...c, status: 'confirmed' } : c)
                 }
                 const idx = arr.findIndex(c => c.id === data.id)
                 if (idx >= 0) {
@@ -289,7 +296,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 return [data, ...arr]
               })
             } else if (event === 'CONFIRM_PICKUP') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => (c.id === data.callId || (data.studentId && c.studentId === data.studentId)) ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => (c.id === data.callId || (dataStudentId && c.studentId != null && String(c.studentId) === dataStudentId)) ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
             } else if (event === 'CANCEL_CALL') {
               setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
             } else if (event === 'RECALL_STUDENT') {
@@ -327,19 +334,20 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     const unsub = on('*', payload => {
       if ((payload.data as any)._remote) return  // avoid loops
       const d = payload.data as unknown as PickupCall & { callId?: string }
+      const dStudentId = d?.studentId ? String(d.studentId) : null
       if (payload.event === 'CALL_STUDENT') {
         setActiveCallsLocal?.(prev => {
           const arr = prev || []
-          const isAlreadyConfirmed = arr.some(c => c.studentId === d.studentId && c.status === 'confirmed')
+          const isAlreadyConfirmed = dStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === dStudentId && c.status === 'confirmed') : false
           if (isAlreadyConfirmed && d.status !== 'confirmed' && !(d as any).isRevert) {
-            return arr
+            return arr.map(c => (c.studentId != null && String(c.studentId) === dStudentId) ? { ...c, status: 'confirmed' } : c)
           }
           if (arr.find(c => c.id === d.id)) return arr
           return [d, ...arr]
         })
       }
-      if (payload.event === 'CONFIRM_PICKUP' && (d.callId || d.studentId)) {
-        setActiveCallsLocal?.(prev => (prev || []).map(c => (c.id === d.callId || (d.studentId && c.studentId === d.studentId)) ? { ...c, status: 'confirmed', confirmedAt: now() } : c))
+      if (payload.event === 'CONFIRM_PICKUP' && (d.callId || dStudentId)) {
+        setActiveCallsLocal?.(prev => (prev || []).map(c => (c.id === d.callId || (dStudentId && c.studentId != null && String(c.studentId) === dStudentId)) ? { ...c, status: 'confirmed', confirmedAt: now() } : c))
       }
       if (payload.event === 'CANCEL_CALL' && d.callId) {
         setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === d.callId ? { ...c, status: 'cancelled' } : c))
@@ -370,10 +378,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     guardianId: string, guardianName: string,
     source: CallSource = 'manual', rfidCode?: string, studentPhoto?: string | null
   ): PickupCall | null => {
+    const sIdStr = studentId ? String(studentId) : ''
     // Prevent duplicate active call for the same student, or calling a student whose exit is already confirmed today
     const existing = activeCalls.find(c =>
-      c.studentId === studentId &&
-      c.status !== 'cancelled'
+      c.studentId != null && String(c.studentId) === sIdStr &&
+      (c.status === 'waiting' || c.status === 'called' || c.status === 'confirmed')
     )
     if (existing) {
       if (existing.status === 'confirmed') {
@@ -383,7 +392,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     }
 
     const call: PickupCall = {
-      id: uid(), studentId, studentName, studentClass,
+      id: uid(), studentId: sIdStr, studentName, studentClass,
       studentPhoto: studentPhoto ?? null,
       guardianId, guardianName, rfidCode,
       calledAt: now(), status: 'waiting', source,
@@ -407,8 +416,9 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     blockReason: string,
     studentPhoto?: string | null,
   ): PickupCall => {
+    const sIdStr = studentId ? String(studentId) : ''
     const call: PickupCall = {
-      id: uid(), studentId, studentName, studentClass,
+      id: uid(), studentId: sIdStr, studentName, studentClass,
       studentPhoto: studentPhoto ?? null,
       guardianId, guardianName, rfidCode,
       calledAt: now(), status: 'blocked', source: 'rfid',
@@ -428,13 +438,14 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     const callToUpdate = activeCalls.find(c => c.id === callId)
     if (!callToUpdate) return
 
-    const studentIdToConfirm = callToUpdate.studentId
+    const studentIdToConfirm = callToUpdate.studentId ? String(callToUpdate.studentId) : null
     const updatedCallsForStudent: PickupCall[] = []
 
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
       return arr.map(c => {
-        if (c.id === callId || (studentIdToConfirm && c.studentId === studentIdToConfirm && c.status !== 'cancelled')) {
+        const cStudentId = c.studentId ? String(c.studentId) : null
+        if (c.id === callId || (studentIdToConfirm && cStudentId === studentIdToConfirm && c.status !== 'cancelled')) {
           const updated = { ...c, status: 'confirmed' as const, confirmedAt: currentNow }
           updatedCallsForStudent.push(updated)
           return updated
@@ -494,6 +505,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     const currentNow = now()
     const callToUpdate = activeCalls.find(c => c.id === callId)
     if (!callToUpdate) return
+    const sIdStr = callToUpdate.studentId ? String(callToUpdate.studentId) : null
     const updatedCall = { ...callToUpdate, status: 'waiting' as const, calledAt: currentNow, confirmedAt: undefined, isRevert: true }
 
     setActiveCallsLocal?.(prev => {
@@ -503,8 +515,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     
     invalidateCache('saida/calls')
     persistSingleCall(updatedCall)
-    emit('REVERT_CALL', { callId, studentId: callToUpdate.studentId, calledAt: currentNow, _remote: false })
-    sendBroadcast('REVERT_CALL', { callId, studentId: callToUpdate.studentId, calledAt: currentNow })
+    emit('REVERT_CALL', { callId, studentId: sIdStr, calledAt: currentNow, _remote: false })
+    sendBroadcast('REVERT_CALL', { callId, studentId: sIdStr, calledAt: currentNow })
     addLog('REVERT', `Chamada revertida: ${updatedCall.studentName}`)
   }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
@@ -537,8 +549,9 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     studentId: string, studentName: string, studentClass: string,
     authorizedPerson: string, operatorName: string, studentPhoto?: string | null
   ): PickupCall => {
+    const sIdStr = studentId ? String(studentId) : ''
     const call: PickupCall = {
-      id: uid(), studentId, studentName, studentClass,
+      id: uid(), studentId: sIdStr, studentName, studentClass,
       studentPhoto: studentPhoto ?? null,
       guardianId: 'special', guardianName: authorizedPerson,
       operatorId: operatorName,
@@ -557,10 +570,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null
   ): PickupCall | null => {
     const currentNow = now()
+    const sIdStr = studentId ? String(studentId) : ''
 
     // 1. Se o aluno já tem chamada aguardando/chamado, atualiza e confirma a chamada existente
     const existingWaiting = activeCalls.find(c =>
-      c.studentId === studentId && (c.status === 'waiting' || c.status === 'called')
+      c.studentId != null && String(c.studentId) === sIdStr && (c.status === 'waiting' || c.status === 'called')
     )
 
     if (existingWaiting) {
@@ -571,17 +585,17 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         status: 'confirmed',
         confirmedAt: currentNow
       }
-      setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === existingWaiting.id ? updatedCall : c))
+      setActiveCallsLocal?.(prev => (prev || []).map(c => (c.studentId != null && String(c.studentId) === sIdStr) ? { ...c, status: 'confirmed', confirmedAt: currentNow } : c))
       persistSingleCall(updatedCall)
-      emit('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId, confirmedAt: currentNow, _remote: false })
-      sendBroadcast('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId, confirmedAt: currentNow })
+      emit('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
+      sendBroadcast('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, confirmedAt: currentNow })
       addLog('CONFIRM', `Saída confirmada (Saiu Sozinho): ${studentName}`)
       return updatedCall
     }
 
     // 2. Se o aluno já teve uma saída confirmada hoje, retorna a chamada confirmada
     const existingConfirmed = activeCalls.find(c =>
-      c.studentId === studentId && c.status === 'confirmed'
+      c.studentId != null && String(c.studentId) === sIdStr && c.status === 'confirmed'
     )
     if (existingConfirmed) {
       return existingConfirmed
@@ -590,7 +604,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     // 3. Caso contrário, cria uma nova chamada já com status 'confirmed'
     const newCall: PickupCall = {
       id: uid(),
-      studentId,
+      studentId: sIdStr,
       studentName,
       studentClass,
       studentPhoto: studentPhoto ?? null,
@@ -606,8 +620,8 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     persistSingleCall(newCall)
     emit('CALL_STUDENT', { ...newCall })
     sendBroadcast('CALL_STUDENT', newCall)
-    emit('CONFIRM_PICKUP', { callId: newCall.id, studentId, confirmedAt: currentNow, _remote: false })
-    sendBroadcast('CONFIRM_PICKUP', { callId: newCall.id, studentId, confirmedAt: currentNow })
+    emit('CONFIRM_PICKUP', { callId: newCall.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
+    sendBroadcast('CONFIRM_PICKUP', { callId: newCall.id, studentId: sIdStr, confirmedAt: currentNow })
     addLog('CONFIRM', `Saída confirmada (Saiu Sozinho): ${studentName}`)
     return newCall
   }, [activeCalls, setActiveCallsLocal, emit, sendBroadcast, persistSingleCall, addLog])
@@ -653,10 +667,23 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       if (res.ok) {
         const data = await res.json()
         const arr = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []
+        
+        // Normalize array: Ensure that if any entry for a studentId is 'confirmed',
+        // all non-reverted entries for that same studentId are also marked as 'confirmed'.
+        const confirmedSet = new Set(
+          arr.filter((c: PickupCall) => c.status === 'confirmed' && c.studentId != null).map((c: PickupCall) => String(c.studentId))
+        )
+        const normalized = arr.map((c: PickupCall) => {
+          if (c.studentId != null && confirmedSet.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !(c as any).isRevert) {
+            return { ...c, status: 'confirmed' as const }
+          }
+          return c
+        })
+
         if (setActiveCallsLocal) {
-          setActiveCallsLocal(arr)
+          setActiveCallsLocal(normalized)
         } else {
-          setActiveCalls(arr) // fallback
+          setActiveCalls(normalized) // fallback
         }
       }
     } catch (e) {

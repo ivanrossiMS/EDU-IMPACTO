@@ -1135,7 +1135,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 {/* BUTTON: CALL STUDENT */}
                 {(() => {
                   if (l.confirmedOut) return null;
-                  const isCalling = (activeCalls || []).some(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
+                  const lStudentId = l.studentId ? String(l.studentId) : ''
+                  const isCalling = (activeCalls || []).some(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
                   const btnColor = isCalling ? '#f59e0b' : '#818cf8'
                   const btnBg = isCalling ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)'
                   const btnHoverColor = '#fff'
@@ -1148,11 +1149,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        const existingCall = (activeCalls || []).find(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
+                        const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
                         if (existingCall) {
                           recallStudent(existingCall.id, () => {})
-                          // We don't have showToast in scope easily if it's not passed, wait! showToast is available here!
-                          // Wait, showToast is defined outside. Let me keep the original logic.
                           showToast(`Aluno ${l.studentName} chamado novamente!`)
                         } else {
                           callStudent(
@@ -1197,7 +1196,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const existingCall = (activeCalls || []).find(c => c.studentId === l.studentId && (c.status === 'waiting' || c.status === 'called'))
+                    const lStudentId = l.studentId ? String(l.studentId) : ''
+                    const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
                     if (existingCall) {
                       confirmPickup(existingCall.id)
                     } else {
@@ -1567,11 +1567,15 @@ function ChamadasContent() {
   }
 
   const confirmedStudentIds = useMemo(() => {
-    return new Set(activeCalls.filter(c => c.status === 'confirmed').map(c => c.studentId))
+    return new Set(
+      activeCalls
+        .filter(c => c.status === 'confirmed' && c.studentId != null)
+        .map(c => String(c.studentId))
+    )
   }, [activeCalls])
 
   const allCalls  = activeCalls.filter(c => c.status !== 'special_auth')
-  const waiting   = activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && !confirmedStudentIds.has(c.studentId))
+  const waiting   = activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
   const confirmed = activeCalls.filter(c => c.status === 'confirmed')
   const cancelled = activeCalls.filter(c => c.status === 'cancelled')
   const blocked   = activeCalls.filter(c => c.status === 'blocked')
@@ -1587,7 +1591,7 @@ function ChamadasContent() {
     list.sort((a, b) => b._parsedTime - a._parsedTime)
 
     if (filter === 'all')       list = list.filter(c => c.status !== 'special_auth')
-    if (filter === 'waiting')   list = list.filter(c => (c.status === 'waiting' || c.status === 'called') && !confirmedStudentIds.has(c.studentId))
+    if (filter === 'waiting')   list = list.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
     if (filter === 'confirmed') list = list.filter(c => c.status === 'confirmed')
     if (filter === 'cancelled') list = list.filter(c => c.status === 'cancelled')
     if (filter === 'blocked')   list = list.filter(c => c.status === 'blocked')

@@ -45,7 +45,22 @@ export async function GET(request: Request) {
       
     if (error) throw new Error(error.message)
     
-    const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+    const rawResult = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+
+    // Build set of studentIds that have a confirmed call today
+    const confirmedStudentIds = new Set(
+      rawResult
+        .filter(c => c.status === 'confirmed' && c.studentId != null)
+        .map(c => String(c.studentId))
+    )
+
+    // Normalize: if a student has a confirmed call, mark any un-reverted waiting/called calls for that student as confirmed
+    const result = rawResult.map(c => {
+      if (c.studentId != null && confirmedStudentIds.has(String(c.studentId)) && (c.status === 'waiting' || c.status === 'called') && !c.isRevert) {
+        return { ...c, status: 'confirmed' }
+      }
+      return c
+    })
     
     return NextResponse.json(result, {
       headers: { 
@@ -68,16 +83,10 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       if (body.length === 0) {
-        // Apenas retornamos OK sem deletar nada no banco.
-        // O frontend usa um array vazio (via setActiveCalls([])) para limpar a tela
-        // no fim do expediente (23:59), mas as chamadas DEVEM permanecer no banco
-        // para aparecerem no Histórico / Relatórios.
         return NextResponse.json({ ok: true, count: 0 })
       }
       
       const rows = body.map(buildRow)
-      
-      // Buscar status anterior para evitar disparos duplicados de notificação
       const ids = rows.map((r: any) => r.id)
       
       const supabaseService = getAdminClient()
@@ -108,7 +117,6 @@ export async function POST(request: Request) {
             const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
             const { data: aluno } = await supabase.from('alunos').select('nome, turma').eq('id', row.dados.studentId).single()
             if (aluno) {
-              // Create frequencia record
               const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
               const freqId = `FREQ-${row.dados.studentId}-${today}`
               const anoLetivo = new Date().getFullYear().toString()
@@ -150,12 +158,11 @@ export async function POST(request: Request) {
 
     const row = buildRow(body)
 
-    // Buscar status anterior do registro e verificar se o aluno já tem saída confirmada hoje
     const supabaseService = getAdminClient()
     const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
     const todayStr = formatter.format(new Date())
 
-    const studentId = row.dados?.studentId
+    const studentId = row.dados?.studentId ? String(row.dados.studentId) : null
     const incomingStatus = row.dados?.status
     const isRevert = !!row.dados?.isRevert
 
@@ -192,7 +199,6 @@ export async function POST(request: Request) {
       }
       wasConfirmed = existingDados.status === 'confirmed'
 
-      // Race condition protection: Prevent delayed "waiting" calls from overwriting "confirmed"
       if ((wasConfirmed || existingDados.status === 'cancelled') && (row.dados.status === 'waiting' || row.dados.status === 'called') && !isRevert) {
         const incomingCalledAt = new Date(row.dados.calledAt || 0).getTime()
         const existingConfirmedAt = new Date(existingDados.confirmedAt || 0).getTime()
@@ -207,6 +213,30 @@ export async function POST(request: Request) {
     if (error) throw new Error(error.message)
 
     const isConfirmed = data.dados?.status === 'confirmed'
+
+    // If this call is now confirmed, also update any other active/waiting call for this student created today in the DB
+    if (isConfirmed && studentId) {
+      try {
+        const { data: siblingCalls } = await supabaseService
+          .from('saida_calls')
+          .select('id, dados')
+          .eq('dados->>studentId', studentId)
+          .gte('created_at', `${todayStr}T00:00:00-03:00`)
+
+        for (const sRow of (siblingCalls || [])) {
+          if (sRow.id === data.id) continue
+          let sDados = sRow.dados
+          if (typeof sDados === 'string') { try { sDados = JSON.parse(sDados) } catch(e){} }
+          if (sDados && (sDados.status === 'waiting' || sDados.status === 'called') && !sDados.isRevert) {
+            sDados.status = 'confirmed'
+            sDados.confirmedAt = data.dados?.confirmedAt || new Date().toISOString()
+            await supabaseService.from('saida_calls').update({ dados: sDados }).eq('id', sRow.id)
+          }
+        }
+      } catch (errSibling) {
+        console.error('Error updating sibling calls in DB:', errSibling)
+      }
+    }
 
     if (isConfirmed && !wasConfirmed && data.dados?.studentId) {
       try {
