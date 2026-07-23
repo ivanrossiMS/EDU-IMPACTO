@@ -133,6 +133,16 @@ export function PageContent({
   return (
     <>
       <style>{`
+        .questao-container p, .html-content p {
+          margin-top: 0;
+          margin-bottom: 0.25em;
+        }
+        .questao-container p:first-child, .html-content p:first-child {
+          margin-top: 0 !important;
+        }
+        .questao-container p:last-child, .html-content p:last-child {
+          margin-bottom: 0 !important;
+        }
         @media screen {
           .correct-bubble-preview {
             background-color: #22c55e !important;

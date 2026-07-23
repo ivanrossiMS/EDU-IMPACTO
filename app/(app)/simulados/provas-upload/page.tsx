@@ -181,6 +181,7 @@ export default function UploadProvasGerenciamentoPage() {
       delete payload.id
       delete payload.created_at
       delete payload.provas_upload_requisicoes
+      delete payload.criado_por_nome
       payload.titulo = `${prova.titulo || 'Prova'} ADAPTADO`
       payload.updated_at = new Date().toISOString()
       

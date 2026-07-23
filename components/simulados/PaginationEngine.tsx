@@ -37,6 +37,43 @@ interface PaginationEngineProps {
   adicionarPaginaRedacao?: boolean;
 }
 
+export function cleanEnunciadoHtml(html: string): string {
+  if (!html) return '';
+
+  const metaTags: string[] = [];
+  let cleaned = html.replace(/^(?:\s*<meta[^>]+>)+/gi, (match) => {
+    metaTags.push(match);
+    return '';
+  });
+
+  let prev = '';
+  while (cleaned !== prev) {
+    prev = cleaned;
+    cleaned = cleaned
+      .replace(/^[\s\r\n\t]+/, '')
+      .replace(/^(?:<br\s*\/?>|&nbsp;)+/gi, '')
+      .replace(/^<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/p>/gi, '')
+      .replace(/^<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/div>/gi, '')
+      .replace(/^<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)+/gi, '<p>')
+      .replace(/^<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)+/gi, '<div>');
+  }
+
+  prev = '';
+  while (cleaned !== prev) {
+    prev = cleaned;
+    cleaned = cleaned
+      .replace(/[\s\r\n\t]+$/, '')
+      .replace(/(?:<br\s*\/?>|&nbsp;)+$/gi, '')
+      .replace(/<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/p>$/gi, '')
+      .replace(/<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/div>$/gi, '')
+      .replace(/(?:\s|<br\s*\/?>|&nbsp;)+<\/p>$/gi, '</p>')
+      .replace(/(?:\s|<br\s*\/?>|&nbsp;)+<\/div>$/gi, '</div>');
+  }
+
+  const prefix = metaTags.length > 0 ? metaTags.join('\n') + '\n' : '';
+  return prefix + cleaned;
+}
+
 export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
   const parts: { type: 'text'|'img'|'lines', content?: string, url?: string, index?: number, count?: number, style?: 'pautado'|'branco' }[] = [];
   if (!enunciado) {
@@ -46,7 +83,7 @@ export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
     return parts;
   }
 
-  let remaining = enunciado;
+  let remaining = cleanEnunciadoHtml(enunciado);
   
   if (imagens && imagens.length > 0) {
     // Remove HTML comments that might contain old img tags
@@ -84,15 +121,17 @@ export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
   while (true) {
     const match = remaining.match(regex);
     if (!match) {
-      if (remaining.trim()) parts.push({ type: 'text', content: remaining });
+      const cleaned = cleanEnunciadoHtml(remaining);
+      if (cleaned.trim()) parts.push({ type: 'text', content: cleaned });
       break;
     }
     
     const index = match.index!;
     let textBefore = remaining.substring(0, index);
     textBefore = textBefore.replace(/(<br\s*\/?>\s*)+$/i, '').replace(/(<p>\s*(<br\s*\/?>)?\s*<\/p>\s*)+$/i, '');
-    if (textBefore.trim()) {
-      parts.push({ type: 'text', content: textBefore });
+    const cleanedBefore = cleanEnunciadoHtml(textBefore);
+    if (cleanedBefore.trim()) {
+      parts.push({ type: 'text', content: cleanedBefore });
     }
     
     const tag = match[0].toUpperCase();

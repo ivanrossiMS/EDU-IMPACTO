@@ -181,6 +181,7 @@ export default function UploadSimuladosGerenciamentoPage() {
       delete payload.id
       delete payload.created_at
       delete payload.simulados_upload_requisicoes
+      delete payload.criado_por_nome
       payload.titulo = `${simulado.titulo || 'Simulado'} ADAPTADO`
       payload.updated_at = new Date().toISOString()
       

@@ -180,6 +180,7 @@ export default function UploadRedaçõesGerenciamentoPage() {
       delete payload.id
       delete payload.created_at
       delete payload.redacao_upload_requisicoes
+      delete payload.criado_por_nome
       payload.titulo = `${redacao.titulo || 'Redação'} ADAPTADO`
       payload.updated_at = new Date().toISOString()
       

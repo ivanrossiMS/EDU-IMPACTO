@@ -25,11 +25,40 @@ interface ParsedBlock {
 // find the best A→B→C→D→E sequence, then slice text at those positions.
 // This handles: multi-line, single-line, inline, mixed — any format.
 // ═══════════════════════════════════════════════════════════════════════════
+function cleanEnunciadoHtml(html: string): string {
+  if (!html) return ''
+  const metaTags: string[] = []
+  let cleaned = html.replace(/^(?:\s*<meta[^>]+>)+/gi, (match) => {
+    metaTags.push(match)
+    return ''
+  })
+  let prev = ''
+  while (cleaned !== prev) {
+    prev = cleaned
+    cleaned = cleaned
+      .replace(/^[\s\r\n\t]+/, '')
+      .replace(/^(?:<br\s*\/?>|&nbsp;)+/gi, '')
+      .replace(/^<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/p>/gi, '')
+      .replace(/^<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/div>/gi, '')
+      .replace(/^<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)+/gi, '<p>')
+      .replace(/^<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)+/gi, '<div>')
+  }
+  prev = ''
+  while (cleaned !== prev) {
+    prev = cleaned
+    cleaned = cleaned
+      .replace(/[\s\r\n\t]+$/, '')
+      .replace(/(?:<br\s*\/?>|&nbsp;)+$/gi, '')
+      .replace(/<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/p>$/gi, '')
+      .replace(/<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/div>$/gi, '')
+      .replace(/(?:\s|<br\s*\/?>|&nbsp;)+<\/p>$/gi, '</p>')
+      .replace(/(?:\s|<br\s*\/?>|&nbsp;)+<\/div>$/gi, '</div>')
+  }
+  const prefix = metaTags.length > 0 ? metaTags.join('\n') + '\n' : ''
+  return prefix + cleaned
+}
+
 function parseBlock(block: string): ParsedBlock {
-  // Match: (start | whitespace/punct) + letter(a-e) + ) + whitespace
-  // Capture group 1 = optional leading char, group 2 = the letter
-  // We use a simpler approach without lookbehind for max compatibility:
-  // match includes an optional non-word prefix char and optional formatting tags
   const spaceBlock = block.replace(/\[\[GABARITO\]\]/g, '            ')
   const markerRe = /(^|[\s\n,;:!?\u2013\u2014])(?:<[biu]>)*([a-eA-E])(?:<\/[biu]>)*\s*[\.\-\)](?:<\/[biu]>)*\s+/gm
 
@@ -38,18 +67,13 @@ function parseBlock(block: string): ParsedBlock {
 
   while ((m = markerRe.exec(spaceBlock)) !== null) {
     const letter = m[2].toUpperCase()
-    // m[0] = full match e.g. "\na) "
-    // m[1] = prefix char e.g. "\n" (or empty at start)
-    // m[2] = the letter
-    // letter position = m.index + m[1].length
     const letterPos = m.index + m[1].length
-    // end = right after the whole "a) " (where alternative text starts)
     const end = m.index + m[0].length
     found.push({ pos: letterPos, end, letter })
   }
 
   if (found.length === 0) {
-    return { statement: block.trim(), alternatives: [] }
+    return { statement: cleanEnunciadoHtml(block.trim()), alternatives: [] }
   }
 
   // ── Find the best valid sequence (must start at A and go up) ──────────
@@ -74,8 +98,6 @@ function parseBlock(block: string): ParsedBlock {
     }
   }
 
-  // If we couldn't find a valid A-B-C sequence, try any 2+ letter sequence
-  // (for questions with only b) c) d) e) due to PDF extraction artifacts)
   if (bestSeq.length < 2 && found.length >= 2) {
     const seq: AltMarker[] = [found[0]]
     const expectedCode = found[0].letter.charCodeAt(0) + 1
@@ -90,11 +112,11 @@ function parseBlock(block: string): ParsedBlock {
   }
 
   if (bestSeq.length < 2) {
-    return { statement: block.trim(), alternatives: [] }
+    return { statement: cleanEnunciadoHtml(block.trim()), alternatives: [] }
   }
 
   // ── Extract statement (everything before the first alt marker) ─────────
-  const statement = block.slice(0, bestSeq[0].pos).trim()
+  const statement = cleanEnunciadoHtml(block.slice(0, bestSeq[0].pos).trim())
 
   // ── Extract each alternative's text ───────────────────────────────────
   const alternatives: { letter: string; text: string; correct: boolean }[] = []
@@ -117,7 +139,7 @@ function parseBlock(block: string): ParsedBlock {
     alternatives.push({ letter: bestSeq[i].letter, text, correct })
   }
 
-  return { statement: statement, alternatives }
+  return { statement, alternatives }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

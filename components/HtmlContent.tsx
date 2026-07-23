@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect, useState } from 'react'
 import 'katex/dist/katex.min.css'
 import katex from 'katex'
 import { Bold, Italic, Underline } from 'lucide-react'
+import { cleanEnunciadoHtml } from '@/components/simulados/PaginationEngine'
 
 interface HtmlContentProps extends React.HTMLAttributes<HTMLDivElement> {
   html: string
@@ -37,11 +38,12 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
 
   const renderedHtml = useMemo(() => {
     if (!html) return ''
-    if (typeof window === 'undefined') return html
+    const cleanedHtml = cleanEnunciadoHtml(html)
+    if (typeof window === 'undefined') return cleanedHtml
 
     try {
       const parser = new DOMParser()
-      const doc = parser.parseFromString(html, 'text/html')
+      const doc = parser.parseFromString(cleanedHtml, 'text/html')
       
       const formulaSpans = doc.querySelectorAll('.ql-formula')
       formulaSpans.forEach(span => {
@@ -63,7 +65,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
       return doc.body.innerHTML
     } catch (e) {
       console.error('HtmlContent parsing error:', e)
-      return html
+      return cleanedHtml
     }
   }, [html])
 
@@ -84,9 +86,9 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
         }
       })
       
-      onBlurHtml(doc.body.innerHTML)
+      onBlurHtml(cleanEnunciadoHtml(doc.body.innerHTML))
     } catch (err) {
-      onBlurHtml(e.currentTarget.innerHTML)
+      onBlurHtml(cleanEnunciadoHtml(e.currentTarget.innerHTML))
     }
     
     setTimeout(() => {
@@ -186,6 +188,21 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
 
   return (
     <>
+      <style>{`
+        .html-content p {
+          margin-top: 0;
+          margin-bottom: 0.25em;
+        }
+        .html-content p:first-child {
+          margin-top: 0 !important;
+        }
+        .html-content p:last-child {
+          margin-bottom: 0 !important;
+        }
+        .html-content div:first-child {
+          margin-top: 0 !important;
+        }
+      `}</style>
       <div 
         ref={containerRef}
         className={`html-content ${props.className || ''}`}
