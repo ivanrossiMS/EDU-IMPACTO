@@ -43,6 +43,7 @@ const PUBLIC_PATHS = [
   '/guia-seguranca-digital', // Guia E-book de Segurança Digital (Público/Orfão)
   '/guia-seguranca',    // Alias do guia público
   '/regimento-interno', // Regimento Interno do Colégio Impacto (Público/Orfão)
+  '/api/gestao-pessoas/materiais-divulgacao', // Central de materiais de divulgação (acesso público para incremento de visitas)
 ]
 
 function isPublicPath(pathname: string): boolean {

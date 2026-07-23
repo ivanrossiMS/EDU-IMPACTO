@@ -82,7 +82,7 @@ export default function GuiaSegurancaDigitalPage() {
       fetch('/api/gestao-pessoas/materiais-divulgacao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'increment_visit', id: 'mat-guia-seguranca', link: '/guia-seguranca' })
+        body: JSON.stringify({ action: 'increment_visit', id: 'mat-guia-seguranca' })
       }).catch(() => {})
     } catch (e) {}
   }, [])

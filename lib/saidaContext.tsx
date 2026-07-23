@@ -133,6 +133,7 @@ interface SaidaCtx {
   revertCall: (callId: string) => void
   deleteCall: (callId: string) => void
   addSpecialAuth: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, operatorName: string, studentPhoto?: string | null) => PickupCall
+  confirmSoloExit: (studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null) => PickupCall | null
   updateConfig: (patch: Partial<SaidaConfig>) => Promise<void>
   clearLog: () => void
   clearCalls: () => void
@@ -515,7 +516,65 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     return call
   }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
+  // ─── confirmSoloExit ───────────────────────────────────────────────────────
+  const confirmSoloExit = useCallback((
+    studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null
+  ): PickupCall | null => {
+    const currentNow = now()
 
+    // 1. Se o aluno já tem chamada aguardando/chamado, atualiza e confirma a chamada existente
+    const existingWaiting = activeCalls.find(c =>
+      c.studentId === studentId && (c.status === 'waiting' || c.status === 'called')
+    )
+
+    if (existingWaiting) {
+      const updatedCall: PickupCall = {
+        ...existingWaiting,
+        guardianId: 'sozinho',
+        guardianName: 'Saiu Sozinho',
+        status: 'confirmed',
+        confirmedAt: currentNow
+      }
+      setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === existingWaiting.id ? updatedCall : c))
+      persistSingleCall(updatedCall)
+      emit('CONFIRM_PICKUP', { callId: existingWaiting.id, confirmedAt: currentNow, _remote: false })
+      sendBroadcast('CONFIRM_PICKUP', { callId: existingWaiting.id, confirmedAt: currentNow })
+      addLog('CONFIRM', `Saída confirmada (Saiu Sozinho): ${studentName}`)
+      return updatedCall
+    }
+
+    // 2. Se o aluno já teve uma saída confirmada hoje, retorna a chamada confirmada
+    const existingConfirmed = activeCalls.find(c =>
+      c.studentId === studentId && c.status === 'confirmed'
+    )
+    if (existingConfirmed) {
+      return existingConfirmed
+    }
+
+    // 3. Caso contrário, cria uma nova chamada já com status 'confirmed'
+    const newCall: PickupCall = {
+      id: uid(),
+      studentId,
+      studentName,
+      studentClass,
+      studentPhoto: studentPhoto ?? null,
+      guardianId: 'sozinho',
+      guardianName: 'Saiu Sozinho',
+      calledAt: currentNow,
+      confirmedAt: currentNow,
+      status: 'confirmed',
+      source: 'manual',
+    }
+
+    setActiveCallsLocal?.(prev => [newCall, ...(prev || [])])
+    persistSingleCall(newCall)
+    emit('CALL_STUDENT', { ...newCall })
+    sendBroadcast('CALL_STUDENT', newCall)
+    emit('CONFIRM_PICKUP', { callId: newCall.id, confirmedAt: currentNow, _remote: false })
+    sendBroadcast('CONFIRM_PICKUP', { callId: newCall.id, confirmedAt: currentNow })
+    addLog('CONFIRM', `Saída confirmada (Saiu Sozinho): ${studentName}`)
+    return newCall
+  }, [activeCalls, setActiveCallsLocal, emit, sendBroadcast, persistSingleCall, addLog])
 
   // ─── Config ───────────────────────────────────────────────────────────────
   const updateConfig = useCallback((patch: Partial<SaidaConfig>) => {
@@ -572,7 +631,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       config,
       isConfigLoading,
       realtimeStatus, isLoadingCalls,
-      callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth,
+      callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth, confirmSoloExit,
       updateConfig, clearLog, clearCalls, refreshCalls,
     }}>
       {children}

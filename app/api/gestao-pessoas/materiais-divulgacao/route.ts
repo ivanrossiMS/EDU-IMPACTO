@@ -44,19 +44,19 @@ const REAL_DEFAULT_MATERIALS = [
 
 export async function GET() {
   try {
-    const supabase = await getClient()
+    const supabase = getSystemClient()
     const { data, error } = await supabase
       .from('gp_materiais_divulgacao')
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (error || !data || data.length === 0) {
+    if (error) {
       return NextResponse.json({ success: true, data: REAL_DEFAULT_MATERIALS }, {
         headers: { 'Cache-Control': 'no-store, max-age=0' }
       })
     }
 
-    return NextResponse.json({ success: true, data }, {
+    return NextResponse.json({ success: true, data: data || [] }, {
       headers: { 'Cache-Control': 'no-store, max-age=0' }
     })
   } catch (err: any) {
@@ -69,85 +69,53 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const supabase = await getClient()
+    const systemSupabase = getSystemClient()
 
-    // Increment Visit Action
-    if (body.action === 'increment_visit' && (body.id || body.link)) {
-      let item = null
-      let targetId = body.id
+    // 1. Increment Visit Action (Public access, no admin auth required)
+    if (body.action === 'increment_visit' && body.id) {
+      const { data: item } = await systemSupabase
+        .from('gp_materiais_divulgacao')
+        .select('contador_visitas')
+        .eq('id', body.id)
+        .single()
 
-      // Check if body.id is a valid UUID
-      const isUUID = body.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.id)
-
-      if (isUUID) {
-        const { data } = await supabase
-          .from('gp_materiais_divulgacao')
-          .select('id, contador_visitas')
-          .eq('id', body.id)
-          .maybeSingle()
-        item = data
-        if (item) targetId = item.id
-      }
-
-      // If we didn't find by ID or the ID isn't a valid UUID, search by link
-      if (!item && (body.link || body.id)) {
-        let searchLink = body.link || body.id
-        if (typeof searchLink === 'string') {
-          // Normalize the link: strip query params, remove host, ensure leading slash
-          searchLink = searchLink.split('?')[0].replace(/^(https?:\/\/[^\/]+)/, '')
-          if (!searchLink.startsWith('/')) {
-            searchLink = '/' + searchLink
-          }
-          // Strip 'mat-' prefix if it was passed as body.id (e.g. 'mat-guia-seguranca' -> '/guia-seguranca')
-          if (searchLink.startsWith('/mat-')) {
-            searchLink = '/' + searchLink.substring(5)
-          }
-
-          const { data } = await supabase
-            .from('gp_materiais_divulgacao')
-            .select('id, contador_visitas')
-            .eq('link', searchLink)
-            .maybeSingle()
-          item = data
-          if (item) targetId = item.id
-        }
-      }
-
-      if (item && targetId) {
+      if (item) {
         const newCount = (item.contador_visitas || 0) + 1
-        await supabase
+        await systemSupabase
           .from('gp_materiais_divulgacao')
           .update({ contador_visitas: newCount })
-          .eq('id', targetId)
+          .eq('id', body.id)
 
         return NextResponse.json({ success: true, contador_visitas: newCount })
       } else {
-        const initialItem = REAL_DEFAULT_MATERIALS.find(m => m.id === body.id || m.link === body.link || m.link === body.id) || {
-          id: body.id || `mat-${Date.now()}`,
-          titulo: body.titulo || 'Guia de Segurança Digital para Pais e Responsáveis',
-          descricao: body.descricao || 'E-book e guia prático interativo sobre Controle Parental, tempo de tela, redes sociais e segurança no celular para famílias do Colégio Impacto.',
-          categoria: body.categoria || 'Guias & E-books',
-          link: body.link || '/guia-seguranca',
-          imagem_url: body.imagem_url || '/guia-seguranca/family_digital_safety.jpg',
-          autor: body.autor || 'Equipe Pedagógica – Colégio Impacto',
-          tags: body.tags || ['Segurança Digital', 'Controle Parental', 'Família', 'E-book']
-        }
-
-        const { data: created } = await supabase
-          .from('gp_materiais_divulgacao')
-          .upsert({
-            ...initialItem,
-            contador_visitas: 1,
-            ativo: true
-          })
-          .select()
-          .single()
-
-        return NextResponse.json({ success: true, contador_visitas: 1, created })
+        return NextResponse.json({ success: true, message: 'Material não encontrado no banco (provavelmente deletado)' })
       }
     }
 
-    // Create New Material Action
+    // 2. Authentication & Authorization Check for Administrative Actions (create, update, delete)
+    const authClient = await createProtectedClient()
+    const { data: { user }, error: authError } = await authClient.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: 'Não autenticado' }, { status: 401 })
+    }
+
+    // Query system_users table for reliable role check
+    const { data: dbUser } = await systemSupabase
+      .from('system_users')
+      .select('cargo, perfil')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const cargo = dbUser?.cargo || user.user_metadata?.cargo || ''
+    const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
+    const isAdmin = cargo === 'Administrador Master' || perfil === 'Administrador'
+
+    if (!isAdmin) {
+      return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 403 })
+    }
+
+    // 3. Create New Material Action
     if (body.action === 'create') {
       const payload = {
         titulo: body.titulo,
@@ -165,7 +133,7 @@ export async function POST(request: Request) {
         id: body.id || `mat-${Date.now()}`,
         ...payload
       }
-      const { data, error } = await supabase
+      const { data, error } = await systemSupabase
         .from('gp_materiais_divulgacao')
         .insert(insertPayload)
         .select()
@@ -179,7 +147,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, newItem: data })
     }
 
-    // Update Material Action
+    // 4. Update Material Action
     if (body.action === 'update' && body.id) {
       const payload = {
         titulo: body.titulo,
@@ -191,7 +159,7 @@ export async function POST(request: Request) {
         tags: body.tags || ['Divulgação']
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await systemSupabase
         .from('gp_materiais_divulgacao')
         .update(payload)
         .eq('id', body.id)
@@ -206,9 +174,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, updatedItem: data })
     }
 
-    // Delete Material Action
+    // 5. Delete Material Action
     if (body.action === 'delete' && body.id) {
-      const { error } = await supabase
+      const { error } = await systemSupabase
         .from('gp_materiais_divulgacao')
         .delete()
         .eq('id', body.id)

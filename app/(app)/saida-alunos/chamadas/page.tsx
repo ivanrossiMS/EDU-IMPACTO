@@ -288,19 +288,22 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
          prev.call.blockType === next.call.blockType
 })
 
-// ── Student search row with inline guardian buttons ───────────────────────────
+// ── Student search row with inline guardian buttons & solo exit button ─────────
 const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeCalls, onCall, showToast }: {
   student: any
   activeCalls: PickupCall[]
   onCall: (sId: string, sName: string, sClass: string, gId: string, gName: string, foto?: string | null) => void
   showToast: (msg: string, ok?: boolean) => void
 }) {
+  const { confirmSoloExit } = useSaida()
+
   // Read autorizados directly from aluno.saude (set in nova-matricula)
   const saude: any = student.saude || {}
   const autorizados: any[] = saude.autorizados || []
   const autorizaSaida: boolean = student.autorizadoSairSozinho === true || saude.autorizaSaida === true   // can leave alone
 
   const [showProibidoAlert, setShowProibidoAlert] = useState<{ name: string, message: string } | null>(null)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [isCalling, setIsCalling] = useState(false)
 
   // Day-of-week check
@@ -375,6 +378,28 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
 
   const initials = useMemo(() => student.nome?.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase(), [student.nome])
 
+  const executeSoloExit = useCallback(() => {
+    confirmSoloExit(
+      student.id,
+      student.nome,
+      student.turmaNome || student.turma,
+      student.foto || student.imagem1
+    )
+    showToast(`Saída de ${student.nome} confirmada (Saiu Sozinho)!`, true)
+  }, [confirmSoloExit, student.id, student.nome, student.turmaNome, student.turma, student.foto, student.imagem1, showToast])
+
+  const handleSoloExitClick = useCallback(() => {
+    if (alreadyConfirmed) {
+      showToast(`Saída de ${student.nome} já foi confirmada hoje.`, false)
+      return
+    }
+    if (!autorizaSaida) {
+      setShowConfirmModal(true)
+      return
+    }
+    executeSoloExit()
+  }, [alreadyConfirmed, autorizaSaida, executeSoloExit, showToast, student.nome])
+
   return (
     <div style={{
       background: 'hsl(var(--bg-elevated))',
@@ -423,18 +448,66 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
         borderTop: '1px solid hsl(var(--border-subtle))',
         background: 'hsl(var(--bg-base))',
       }}>
-        {/* autorizaSaida badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-          {autorizaSaida ? (
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 800, border: '1px solid rgba(16,185,129,0.25)' }}>
-              ✅ Pode sair sozinho
-            </span>
-          ) : (
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: 'rgba(239,68,68,0.06)', color: '#ef4444', fontWeight: 800, border: '1px solid rgba(239,68,68,0.2)' }}>
-              🚫 Não pode sair sozinho
-            </span>
-          )}
+        {/* autorizaSaida badge & Solo Exit Button */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {autorizaSaida ? (
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 800, border: '1px solid rgba(16,185,129,0.25)' }}>
+                ✅ Pode sair sozinho
+              </span>
+            ) : (
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: 'rgba(239,68,68,0.06)', color: '#ef4444', fontWeight: 800, border: '1px solid rgba(239,68,68,0.2)' }}>
+                🚫 Não pode sair sozinho
+              </span>
+            )}
+          </div>
+
+          {/* 🚶‍♂️ BUTTON: SAIU SOZINHO */}
+          <button
+            type="button"
+            onClick={handleSoloExitClick}
+            disabled={alreadyConfirmed}
+            title={alreadyConfirmed ? 'Saída já confirmada hoje' : autorizaSaida ? 'Confirmar saída do aluno sozinho' : '⚠️ Aluno não possui autorização cadastrada (exige confirmação)'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 12px', borderRadius: 100,
+              background: alreadyConfirmed
+                ? 'hsl(var(--bg-overlay))'
+                : autorizaSaida
+                  ? 'linear-gradient(135deg, #10b981, #059669)'
+                  : 'linear-gradient(135deg, #f59e0b, #d97706)',
+              border: alreadyConfirmed
+                ? '1px solid hsl(var(--border-subtle))'
+                : 'none',
+              color: alreadyConfirmed ? 'hsl(var(--text-muted))' : '#fff',
+              fontWeight: 800, fontSize: 11,
+              cursor: alreadyConfirmed ? 'not-allowed' : 'pointer',
+              boxShadow: alreadyConfirmed
+                ? 'none'
+                : autorizaSaida
+                  ? '0 3px 12px rgba(16,185,129,0.3)'
+                  : '0 3px 12px rgba(245,158,11,0.25)',
+              transition: 'all 0.2s cubic-bezier(0.2, 1, 0.2, 1)',
+              opacity: alreadyConfirmed ? 0.6 : 1,
+            }}
+            onMouseEnter={e => {
+              if (alreadyConfirmed) return
+              const el = e.currentTarget
+              el.style.transform = 'translateY(-1px)'
+              el.style.filter = 'brightness(1.1)'
+            }}
+            onMouseLeave={e => {
+              if (alreadyConfirmed) return
+              const el = e.currentTarget
+              el.style.transform = 'none'
+              el.style.filter = 'none'
+            }}
+          >
+            <UserCheck size={12} />
+            <span>{alreadyConfirmed ? '✅ Saiu Sozinho' : '🚶‍♂️ Saiu Sozinho'}</span>
+          </button>
         </div>
+
         {!autorizaSaida && respList.length === 0 && (
           <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>
             Nenhum responsável configurado. Cadastre em Saúde &amp; Obs do aluno.
@@ -543,6 +616,86 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
               >
                 <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ACESSO NEGADO</h1>
                 <p style={{ fontSize: 32, fontWeight: 700 }}>{showProibidoAlert.name} {showProibidoAlert.message}</p>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {showConfirmModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+                background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(8px)',
+                zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 16,
+              }}
+            >
+              <motion.div
+                initial={{ scale: 0.92, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.92, opacity: 0, y: 15 }}
+                style={{
+                  background: 'hsl(var(--bg-elevated))',
+                  border: '1.5px solid rgba(245, 158, 11, 0.4)',
+                  borderRadius: 24, padding: 24, width: '90%', maxWidth: 420,
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 25px rgba(245, 158, 11, 0.15)',
+                  display: 'flex', flexDirection: 'column', gap: 18,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 16,
+                    background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    fontSize: 24,
+                  }}>
+                    ⚠️
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: 'hsl(var(--text-base))', fontFamily: 'Outfit, sans-serif' }}>
+                      Confirmar Saída Sozinho?
+                    </h3>
+                    <p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>
+                      O(a) aluno(a) <strong style={{ color: 'hsl(var(--text-base))' }}>{student.nome}</strong> <span style={{ color: '#ef4444', fontWeight: 800 }}>NÃO tem autorização cadastrada</span> para sair sozinho(a).
+                      <br/><br/>
+                      Deseja confirmar a saída sozinho(a) mesmo assim?
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmModal(false)}
+                    style={{
+                      flex: 1, height: 42, borderRadius: 12,
+                      background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                      color: 'hsl(var(--text-base))', fontWeight: 700, fontSize: 12,
+                      cursor: 'pointer', transition: 'all 0.2s',
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConfirmModal(false)
+                      executeSoloExit()
+                    }}
+                    style={{
+                      flex: 1.4, height: 42, borderRadius: 12,
+                      background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none',
+                      color: '#fff', fontWeight: 800, fontSize: 12,
+                      cursor: 'pointer', transition: 'all 0.2s',
+                      boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
+                  >
+                    <CheckCircle2 size={14} /> Confirmar Saída
+                  </button>
+                </div>
               </motion.div>
             </motion.div>
           )}

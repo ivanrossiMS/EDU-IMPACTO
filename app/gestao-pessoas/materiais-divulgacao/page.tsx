@@ -58,56 +58,53 @@ export default function MateriaisDivulgacaoPage() {
   const [formAutor, setFormAutor] = useState('Equipe Pedagógica')
   const [formTags, setFormTags] = useState('Divulgação, Escola')
 
+  const getMaterialImage = (item: MaterialItem) => {
+    if (item.imagem_url) return item.imagem_url
+    
+    const link = (item.link || '').toLowerCase()
+    const title = (item.titulo || '').toLowerCase()
+    
+    if (link.includes('guia-seguranca') || title.includes('segurança digital') || title.includes('seguranca digital')) {
+      return '/guia-seguranca/family_digital_safety.jpg'
+    }
+    if (link.includes('regimento') || title.includes('regimento')) {
+      return '/regimento_interno_cover.jpg'
+    }
+    if (link.includes('agenda') || title.includes('agenda')) {
+      return '/comunicados-premium.png'
+    }
+    
+    return '/login_illustration.png'
+  }
+
   // Fetch materials with localStorage persistence fallback
   const loadMateriais = async () => {
     try {
       setLoading(true)
-      let localVisits: Record<string, number> = {}
-      let localCustomItems: MaterialItem[] = []
-
-      try {
-        const savedVisits = localStorage.getItem('impacto_materiais_visitas')
-        if (savedVisits) localVisits = JSON.parse(savedVisits)
-
-        const savedCustom = localStorage.getItem('impacto_materiais_custom_list')
-        if (savedCustom) localCustomItems = JSON.parse(savedCustom)
-      } catch (e) {}
-
       const res = await fetch(`/api/gestao-pessoas/materiais-divulgacao?t=${Date.now()}`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' }
       })
       const json = await res.json()
       
-      let baseData: MaterialItem[] = json.success && json.data ? json.data : []
-
-      // Merge custom local materials with API items (avoiding duplicate IDs)
-      const mergedMap = new Map<string, MaterialItem>()
-      baseData.forEach(item => mergedMap.set(item.id, item))
-      localCustomItems.forEach(item => {
-        if (!mergedMap.has(item.id)) {
-          mergedMap.set(item.id, item)
-        } else {
-          // If already exists, update properties from local, BUT preserve the API visit count!
-          const existing = mergedMap.get(item.id)!
-          mergedMap.set(item.id, { 
-            ...item, 
-            ...existing, // API data overwrites local data
-            contador_visitas: existing.contador_visitas || item.contador_visitas || 0 
-          })
-        }
-      })
-
-      const finalItems = Array.from(mergedMap.values()).map(item => {
-        return {
-          ...item,
-          contador_visitas: item.contador_visitas || 0
-        }
-      })
-
-      setMateriais(finalItems)
+      if (json.success && json.data) {
+        const baseData: MaterialItem[] = json.data
+        setMateriais(baseData)
+        // Update local storage cache as a fallback for next time or offline
+        try {
+          localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(baseData))
+        } catch (e) {}
+      } else {
+        throw new Error(json.error || 'Erro ao carregar do servidor')
+      }
     } catch (e) {
-      console.error(e)
+      console.error('Error loading materials from API, falling back to local storage:', e)
+      try {
+        const savedCustom = localStorage.getItem('impacto_materiais_custom_list')
+        if (savedCustom) {
+          setMateriais(JSON.parse(savedCustom))
+        }
+      } catch (err) {}
     } finally {
       setLoading(false)
     }
@@ -193,7 +190,7 @@ export default function MateriaisDivulgacaoPage() {
     const tagsArray = formTags.split(',').map(t => t.trim()).filter(Boolean)
 
     if (editingItem) {
-      // UPDATE EXISTING
+      // UPDATE EXISTING (Optimistic Update)
       const updatedItem: MaterialItem = {
         ...editingItem,
         titulo: formTitulo,
@@ -209,17 +206,6 @@ export default function MateriaisDivulgacaoPage() {
         prev.map(m => (m.id === editingItem.id ? updatedItem : m))
       )
 
-      // Save to custom list in localStorage
-      try {
-        const saved = localStorage.getItem('impacto_materiais_custom_list')
-        let customList: MaterialItem[] = saved ? JSON.parse(saved) : []
-        customList = customList.map(m => (m.id === editingItem.id ? updatedItem : m))
-        if (!customList.some(m => m.id === editingItem.id)) {
-          customList.push(updatedItem)
-        }
-        localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(customList))
-      } catch (e) {}
-
       try {
         const res = await fetch('/api/gestao-pessoas/materiais-divulgacao', {
           method: 'POST',
@@ -230,14 +216,20 @@ export default function MateriaisDivulgacaoPage() {
           })
         })
         const json = await res.json()
-        if (!json.success) {
+        if (json.success) {
+          // Sync with database
+          loadMateriais()
+        } else {
           alert('Erro ao atualizar online no Supabase: ' + (json.error || 'Erro desconhecido'))
+          loadMateriais() // Revert optimistic update
         }
       } catch (e) {
         console.error(e)
+        alert('Erro de conexão ao atualizar material')
+        loadMateriais() // Revert optimistic update
       }
     } else {
-      // CREATE NEW
+      // CREATE NEW (Optimistic Update)
       const newItem: MaterialItem = {
         id: `mat-${Date.now()}`,
         titulo: formTitulo,
@@ -253,14 +245,6 @@ export default function MateriaisDivulgacaoPage() {
 
       setMateriais(prev => [newItem, ...prev])
 
-      // Save to custom list in localStorage immediately
-      try {
-        const saved = localStorage.getItem('impacto_materiais_custom_list')
-        const customList: MaterialItem[] = saved ? JSON.parse(saved) : []
-        customList.unshift(newItem)
-        localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(customList))
-      } catch (e) {}
-
       try {
         const res = await fetch('/api/gestao-pessoas/materiais-divulgacao', {
           method: 'POST',
@@ -271,35 +255,17 @@ export default function MateriaisDivulgacaoPage() {
           })
         })
         const json = await res.json()
-        if (json.success && json.newItem && json.newItem.id) {
-          // Update item with server generated id
-          const serverItem = json.newItem
-          setMateriais(prev =>
-            prev.map(m => (m.id === newItem.id ? { ...m, id: serverItem.id } : m))
-          )
-          try {
-            const saved = localStorage.getItem('impacto_materiais_custom_list')
-            if (saved) {
-              const customList: MaterialItem[] = JSON.parse(saved)
-              const updatedList = customList.map(m => (m.id === newItem.id ? { ...m, id: serverItem.id } : m))
-              localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(updatedList))
-            }
-          } catch (e) {}
+        if (json.success) {
+          // Sync with database
+          loadMateriais()
         } else {
           alert('Erro ao criar online no Supabase: ' + (json.error || 'Erro desconhecido'))
-          // Remove from local list if failed to save to database
-          setMateriais(prev => prev.filter(m => m.id !== newItem.id))
-          try {
-            const saved = localStorage.getItem('impacto_materiais_custom_list')
-            if (saved) {
-              let customList: MaterialItem[] = JSON.parse(saved)
-              customList = customList.filter(m => m.id !== newItem.id)
-              localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(customList))
-            }
-          } catch (e) {}
+          setMateriais(prev => prev.filter(m => m.id !== newItem.id)) // Revert optimistic insert
         }
       } catch (e) {
         console.error(e)
+        alert('Erro de conexão ao criar material')
+        setMateriais(prev => prev.filter(m => m.id !== newItem.id)) // Revert optimistic insert
       }
     }
 
@@ -312,10 +278,10 @@ export default function MateriaisDivulgacaoPage() {
 
     const targetId = deletingItem.id
 
-    // Update state
+    // Update state (Optimistic Delete)
     setMateriais(prev => prev.filter(m => m.id !== targetId))
 
-    // Remove from localStorage
+    // Remove visits cache if any
     try {
       const savedVisits = localStorage.getItem('impacto_materiais_visitas')
       if (savedVisits) {
@@ -323,24 +289,27 @@ export default function MateriaisDivulgacaoPage() {
         delete localVisits[targetId]
         localStorage.setItem('impacto_materiais_visitas', JSON.stringify(localVisits))
       }
-
-      const savedCustom = localStorage.getItem('impacto_materiais_custom_list')
-      if (savedCustom) {
-        let customList: MaterialItem[] = JSON.parse(savedCustom)
-        customList = customList.filter(m => m.id !== targetId)
-        localStorage.setItem('impacto_materiais_custom_list', JSON.stringify(customList))
-      }
     } catch (e) {}
 
     // Call API
     try {
-      await fetch('/api/gestao-pessoas/materiais-divulgacao', {
+      const res = await fetch('/api/gestao-pessoas/materiais-divulgacao', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'delete', id: targetId })
       })
+      const json = await res.json()
+      if (json.success) {
+        // Sync with database
+        loadMateriais()
+      } else {
+        alert('Erro ao excluir online no Supabase: ' + (json.error || 'Erro desconhecido'))
+        loadMateriais() // Revert optimistic delete
+      }
     } catch (e) {
       console.error(e)
+      alert('Erro de conexão ao excluir material')
+      loadMateriais() // Revert optimistic delete
     }
 
     setDeletingItem(null)
@@ -627,17 +596,15 @@ export default function MateriaisDivulgacaoPage() {
               </div>
             </div>
 
-            {maisVisitado.imagem_url && (
-              <div style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 8px 20px rgba(0,0,0,0.06)' }}>
-                <Image
-                  src={maisVisitado.imagem_url}
-                  alt={maisVisitado.titulo}
-                  width={600}
-                  height={320}
-                  style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'cover' }}
-                />
-              </div>
-            )}
+            <div style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid #e2e8f0', boxShadow: '0 8px 20px rgba(0,0,0,0.06)' }}>
+              <Image
+                src={getMaterialImage(maisVisitado)}
+                alt={maisVisitado.titulo}
+                width={600}
+                height={320}
+                style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'cover' }}
+              />
+            </div>
 
           </div>
         </div>
@@ -763,6 +730,23 @@ export default function MateriaisDivulgacaoPage() {
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 
+                {/* Card Image */}
+                <div style={{
+                  position: 'relative',
+                  height: 160,
+                  borderRadius: 14,
+                  overflow: 'hidden',
+                  border: '1px solid #f1f5f9',
+                  marginBottom: 4
+                }}>
+                  <Image
+                    src={getMaterialImage(item)}
+                    alt={item.titulo}
+                    fill
+                    style={{ objectFit: 'cover' }}
+                  />
+                </div>
+
                 {/* Category, Visits Counter & Edit/Delete Action Icons */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <span style={{
