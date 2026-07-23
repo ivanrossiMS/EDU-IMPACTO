@@ -842,17 +842,40 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     if (!selectedStudent || !authorizedPerson.trim()) return
 
     const operatorName = currentUser?.nome || 'Admin Logado'
+    const sId = String(selectedStudent.id)
+    const sName = selectedStudent.nome
+    const sClass = selectedStudent.turmaNome || selectedStudent.turma
+    const sPhoto = selectedStudent.foto || selectedStudent.imagem1
+    const authPerson = authorizedPerson.trim()
     
+    // 1. Registra no histórico de lançamentos de autorização especial
     addSpecialAuth(
-      selectedStudent.id,
-      selectedStudent.nome,
-      selectedStudent.turmaNome || selectedStudent.turma,
-      authorizedPerson,
+      sId,
+      sName,
+      sClass,
+      authPerson,
       operatorName,
-      selectedStudent.foto || selectedStudent.imagem1
+      sPhoto
     )
 
-    showToast('Autorização especial lançada e sincronizada.', true)
+    // 2. Chamar o aluno na TV com o responsável autorizado digitado
+    const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === sId && (c.status === 'waiting' || c.status === 'called'))
+    if (existingCall) {
+      recallStudent(existingCall.id, () => {})
+      showToast(`Autorização gravada e ${sName} chamado novamente!`, true)
+    } else {
+      callStudent(
+        sId,
+        sName,
+        sClass,
+        'special-auth',
+        authPerson,
+        'manual',
+        undefined,
+        sPhoto
+      )
+      showToast(`Autorização lançada e ${sName} chamado na TV!`, true)
+    }
 
     // Reset Form
     setSelectedStudent(null)
@@ -1044,7 +1067,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
       </div>
 
-      {/* CONFIRM BUTTON */}
+      {/* SUBMIT & CALL BUTTON */}
       <button
         type="button"
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
@@ -1073,7 +1096,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           e.currentTarget.style.transform = 'none'
         }}
       >
-        <CheckCircle2 size={13}/> Confirmar Saída Especial
+        <Megaphone size={13}/> Lançar e Chamar Aluno
       </button>
 
       {/* TIMELINE LOG OF TODAY'S RELEASES */}
@@ -1130,11 +1153,10 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 )}
               </div>
               
-              {/* MICRO ACTION BUTTONS */}
+              {/* MICRO ACTION BUTTONS (CHAMAR, CONFIRMAR, EXCLUIR) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {/* BUTTON: CALL STUDENT */}
+                {/* 1. BUTTON: CALL / RECALL STUDENT */}
                 {(() => {
-                  if (l.confirmedOut) return null;
                   const lStudentId = l.studentId ? String(l.studentId) : ''
                   const isCalling = (activeCalls || []).some(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
                   const btnColor = isCalling ? '#f59e0b' : '#818cf8'
@@ -1152,7 +1174,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
                         if (existingCall) {
                           recallStudent(existingCall.id, () => {})
-                          showToast(`Aluno ${l.studentName} chamado novamente!`)
+                          showToast(`Aluno ${l.studentName} chamado novamente!`, true)
                         } else {
                           callStudent(
                             l.studentId,
@@ -1164,13 +1186,13 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                             undefined,
                             l.studentPhoto
                           )
-                          showToast(`Aluno ${l.studentName} chamado na TV!`)
+                          showToast(`Aluno ${l.studentName} chamado na TV!`, true)
                         }
                       }}
-                      title={isCalling ? "Aluno já está sendo chamado. Clique para rechamar" : "Chamar Aluno"}
+                      title={isCalling ? "Aluno sendo chamado na TV. Clique para rechamar" : "Chamar Aluno na TV"}
                       style={{
                         background: btnBg, border: 'none', cursor: 'pointer',
-                        borderRadius: 6, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: btnColor, transition: 'all 0.2s', flexShrink: 0,
                       }}
                       onMouseEnter={e => {
@@ -1184,13 +1206,12 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         e.currentTarget.style.boxShadow = 'none'
                       }}
                     >
-                      <Megaphone size={11} />
+                      <Megaphone size={12} />
                     </button>
                   )
                 })()}
 
-                {/* BUTTON: CONFIRM PICKUP */}
-                {!l.confirmedOut && (
+                {/* 2. BUTTON: CONFIRM PICKUP */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1215,13 +1236,14 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         confirmPickup(call.id)
                       }
                     }
-                    showToast(`Saída de ${l.studentName} confirmada!`)
+                    showToast(`Saída de ${l.studentName} confirmada!`, true)
                   }}
-                  title="Confirmar Saída"
+                  title="Confirmar Saída do Aluno"
                   style={{
-                    background: 'rgba(16,185,129,0.12)', border: 'none', cursor: 'pointer',
-                    borderRadius: 6, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#34d399', transition: 'all 0.2s', flexShrink: 0,
+                    background: l.confirmedOut ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.12)', 
+                    border: 'none', cursor: 'pointer',
+                    borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: l.confirmedOut ? '#10b981' : '#34d399', transition: 'all 0.2s', flexShrink: 0,
                   }}
                   onMouseEnter={e => {
                     e.currentTarget.style.background = '#10b981'
@@ -1229,26 +1251,25 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                     e.currentTarget.style.boxShadow = '0 0 8px rgba(16,185,129,0.4)'
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(16,185,129,0.12)'
-                    e.currentTarget.style.color = '#34d399'
+                    e.currentTarget.style.background = l.confirmedOut ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.12)'
+                    e.currentTarget.style.color = l.confirmedOut ? '#10b981' : '#34d399'
                     e.currentTarget.style.boxShadow = 'none'
                   }}
                 >
-                  <CheckCircle2 size={11} />
+                  <CheckCircle2 size={12} />
                 </button>
-                )}
 
-                {/* BUTTON: DELETE LAUNCH */}
+                {/* 3. BUTTON: DELETE LAUNCH */}
                 <button
                   type="button"
                   onClick={(e) => {
                     e.preventDefault(); e.stopPropagation();
                     setConfirmDeleteId(l.id)
                   }}
-                  title="Excluir Lançamento"
+                  title="Excluir Autorização Especial"
                   style={{
                     background: 'rgba(239,68,68,0.1)', border: 'none', cursor: 'pointer',
-                    borderRadius: 6, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: '#ef4444', transition: 'all 0.2s', flexShrink: 0,
                   }}
                   onMouseEnter={e => {
@@ -1262,7 +1283,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                     e.currentTarget.style.boxShadow = 'none'
                   }}
                 >
-                  <Trash2 size={11}/>
+                  <Trash2 size={12}/>
                 </button>
               </div>
             </div>
