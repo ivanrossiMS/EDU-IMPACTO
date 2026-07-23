@@ -692,7 +692,7 @@ export default function UploadProvasGerenciamentoPage() {
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, flex: 1, alignContent: 'start' }}>
                           {prova.provas_upload_requisicoes && prova.provas_upload_requisicoes.length > 0 ? prova.provas_upload_requisicoes.map((req: any) => {
-                            const uploaded = Array.isArray(prova.questoes_json) ? prova.questoes_json.filter((q: any) => q.id_professor === req.id_professor).length : 0;
+                            const uploaded = Array.isArray(prova.questoes_json) ? prova.questoes_json.filter((q: any) => q.id_professor === req.id_professor && q.tipo_questao !== 'texto_apoio').length : 0;
                             const pct = Math.min(100, Math.round((uploaded / req.qtd_questoes) * 100));
                             const statusColor = uploaded >= req.qtd_questoes ? '#10b981' : '#f59e0b';
                             const isMyCard = req.id_professor === currentUser?.id;

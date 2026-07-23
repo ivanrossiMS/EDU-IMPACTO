@@ -527,7 +527,7 @@ export default function UploadProvaPage() {
                       
                       const liveQuestions = showAll ? questoes : [...otherQuestions, ...myLiveQs]
                       
-                      const qCount = liveQuestions.filter((q: any) => q.id_professor === req.id_professor).length
+                      const qCount = liveQuestions.filter((q: any) => q.id_professor === req.id_professor && q.tipo_questao !== 'texto_apoio').length
                       const totalReq = req.qtd_questoes || 1
                       const progress = Math.min(100, Math.round((qCount / totalReq) * 100))
                       const progressColor = qCount >= totalReq ? '#10b981' : '#f59e0b'

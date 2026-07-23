@@ -265,8 +265,8 @@ export default function VerProvaUploadPage() {
                       </div>
                       <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>{req.professor_nome}</div>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>
-                        <span style={{ fontWeight: 600, color: questoes.filter((q: any) => q.id_professor === req.id_professor).length >= req.qtd_questoes ? '#10b981' : '#f59e0b' }}>
-                          {questoes.filter((q: any) => q.id_professor === req.id_professor).length}
+                        <span style={{ fontWeight: 600, color: questoes.filter((q: any) => q.id_professor === req.id_professor && q.tipo_questao !== 'texto_apoio').length >= req.qtd_questoes ? '#10b981' : '#f59e0b' }}>
+                          {questoes.filter((q: any) => q.id_professor === req.id_professor && q.tipo_questao !== 'texto_apoio').length}
                         </span> / {req.qtd_questoes} questões
                       </div>
                       {req.enviado_em && (
