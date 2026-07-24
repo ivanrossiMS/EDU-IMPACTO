@@ -765,7 +765,7 @@ interface SpecialLaunch {
 }
 
 function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
-  const { addSpecialAuth, deleteCall, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
+  const { addSpecialAuth, confirmSpecialExit, deleteCall, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const { currentUser } = useApp()
 
@@ -1205,25 +1205,13 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const lStudentId = l.studentId ? String(l.studentId) : ''
-                    const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
-                    if (existingCall) {
-                      confirmPickup(existingCall.id)
-                    } else {
-                      const call = callStudent(
-                        l.studentId,
-                        l.studentName,
-                        l.studentClass,
-                        'special-auth',
-                        l.authorizedPerson,
-                        'manual',
-                        undefined,
-                        l.studentPhoto
-                      )
-                      if (call) {
-                        confirmPickup(call.id)
-                      }
-                    }
+                    confirmSpecialExit(
+                      l.studentId,
+                      l.studentName,
+                      l.studentClass,
+                      l.authorizedPerson,
+                      l.studentPhoto
+                    )
                     showToast(`Saída de ${l.studentName} confirmada!`, true)
                   }}
                   title="Confirmar Saída do Aluno"

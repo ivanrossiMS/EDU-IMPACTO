@@ -134,6 +134,7 @@ interface SaidaCtx {
   revertCall: (callId: string) => void
   deleteCall: (callId: string) => void
   addSpecialAuth: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, operatorName: string, studentPhoto?: string | null) => PickupCall
+  confirmSpecialExit: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null) => PickupCall
   confirmSoloExit: (studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null) => PickupCall | null
   updateConfig: (patch: Partial<SaidaConfig>) => Promise<void>
   clearLog: () => void
@@ -583,6 +584,63 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     return call
   }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
+  // ─── confirmSpecialExit ────────────────────────────────────────────────────
+  const confirmSpecialExit = useCallback((
+    studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null
+  ): PickupCall => {
+    const sIdStr = studentId ? String(studentId) : ''
+    const currentNow = now()
+
+    // Verifica se já existe uma chamada aguardando/chamado para o aluno
+    const existingActive = activeCalls.find(c =>
+      c.studentId != null && String(c.studentId) === sIdStr && (c.status === 'waiting' || c.status === 'called')
+    )
+
+    let callToConfirm: PickupCall
+
+    if (existingActive) {
+      callToConfirm = {
+        ...existingActive,
+        guardianName: authorizedPerson || existingActive.guardianName,
+        status: 'confirmed',
+        confirmedAt: currentNow
+      }
+    } else {
+      callToConfirm = {
+        id: uid(),
+        studentId: sIdStr,
+        studentName,
+        studentClass,
+        studentPhoto: studentPhoto ?? null,
+        guardianId: 'special-auth',
+        guardianName: authorizedPerson,
+        calledAt: currentNow,
+        confirmedAt: currentNow,
+        status: 'confirmed',
+        source: 'manual'
+      }
+    }
+
+    setActiveCallsLocal?.(prev => {
+      const arr = prev || []
+      const idx = arr.findIndex(c => c.id === callToConfirm.id)
+      if (idx >= 0) {
+        const next = [...arr]
+        next[idx] = callToConfirm
+        return next
+      }
+      return [callToConfirm, ...arr]
+    })
+
+    invalidateCache('saida/calls')
+    persistSingleCall(callToConfirm)
+    emit('CONFIRM_PICKUP', { callId: callToConfirm.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
+    sendBroadcast('CONFIRM_PICKUP', { callId: callToConfirm.id, studentId: sIdStr, confirmedAt: currentNow })
+    addLog('CONFIRM', `Saída confirmada (Autorização Especial): ${studentName}`)
+
+    return callToConfirm
+  }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
+
   // ─── confirmSoloExit ───────────────────────────────────────────────────────
   const confirmSoloExit = useCallback((
     studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null
@@ -730,7 +788,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       config,
       isConfigLoading,
       realtimeStatus, isLoadingCalls,
-      callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth, confirmSoloExit,
+      callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth, confirmSpecialExit, confirmSoloExit,
       updateConfig, clearLog, clearCalls, refreshCalls,
     }}>
       {children}
