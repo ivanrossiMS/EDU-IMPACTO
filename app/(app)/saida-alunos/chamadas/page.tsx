@@ -1571,9 +1571,35 @@ function ChamadasContent() {
     )
   }, [activeCalls])
 
-  const allCalls  = activeCalls.filter(c => c.status !== 'special_auth')
+  const confirmed = useMemo(() => {
+    const list = activeCalls.filter(c => c.status === 'confirmed')
+    const seen = new Set<string>()
+    const dedup: any[] = []
+    for (const c of list) {
+      const key = c.studentId ? String(c.studentId) : c.id
+      if (!seen.has(key)) {
+        seen.add(key)
+        dedup.push(c)
+      }
+    }
+    return dedup
+  }, [activeCalls])
+
+  const allCalls = useMemo(() => {
+    const list = activeCalls.filter(c => c.status !== 'special_auth')
+    const seen = new Set<string>()
+    const dedup: any[] = []
+    for (const c of list) {
+      const key = c.status === 'confirmed' && c.studentId ? `confirmed-${c.studentId}` : c.id
+      if (!seen.has(key)) {
+        seen.add(key)
+        dedup.push(c)
+      }
+    }
+    return dedup
+  }, [activeCalls])
+
   const waiting   = activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
-  const confirmed = activeCalls.filter(c => c.status === 'confirmed')
   const cancelled = activeCalls.filter(c => c.status === 'cancelled')
   const blocked   = activeCalls.filter(c => c.status === 'blocked')
 

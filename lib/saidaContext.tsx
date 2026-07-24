@@ -591,22 +591,43 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     const sIdStr = studentId ? String(studentId) : ''
     const currentNow = now()
 
-    // Verifica se já existe uma chamada aguardando/chamado para o aluno
-    const existingActive = activeCalls.find(c =>
-      c.studentId != null && String(c.studentId) === sIdStr && (c.status === 'waiting' || c.status === 'called')
+    // 1. Garantir que exista o registro de Autorização Especial (status: 'special_auth') para o aluno
+    const hasSpecialAuth = activeCalls.some(c =>
+      c.studentId != null && String(c.studentId) === sIdStr && c.status === 'special_auth'
     )
 
-    let callToConfirm: PickupCall
+    let specialAuthCall: PickupCall | null = null
+    if (!hasSpecialAuth) {
+      specialAuthCall = {
+        id: uid(),
+        studentId: sIdStr,
+        studentName,
+        studentClass,
+        studentPhoto: studentPhoto ?? null,
+        guardianId: 'special',
+        guardianName: authorizedPerson,
+        calledAt: currentNow,
+        status: 'special_auth',
+        source: 'manual',
+      }
+    }
 
-    if (existingActive) {
-      callToConfirm = {
-        ...existingActive,
-        guardianName: authorizedPerson || existingActive.guardianName,
+    // 2. Encontrar ou atualizar a chamada de saída do aluno para 'confirmed'
+    const existingCall = activeCalls.find(c =>
+      c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'special_auth' && c.status !== 'cancelled'
+    )
+
+    let confirmedCall: PickupCall
+
+    if (existingCall) {
+      confirmedCall = {
+        ...existingCall,
+        guardianName: authorizedPerson || existingCall.guardianName,
         status: 'confirmed',
         confirmedAt: currentNow
       }
     } else {
-      callToConfirm = {
+      confirmedCall = {
         id: uid(),
         studentId: sIdStr,
         studentName,
@@ -623,22 +644,34 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
 
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
-      const idx = arr.findIndex(c => c.id === callToConfirm.id)
-      if (idx >= 0) {
-        const next = [...arr]
-        next[idx] = callToConfirm
-        return next
+      let next = arr.map(c => {
+        if (c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'special_auth' && c.status !== 'cancelled') {
+          return { ...c, status: 'confirmed' as const, confirmedAt: currentNow }
+        }
+        return c
+      })
+      const existsConfirmed = next.some(c => c.id === confirmedCall.id)
+      if (!existsConfirmed) {
+        next = [confirmedCall, ...next]
       }
-      return [callToConfirm, ...arr]
+      if (specialAuthCall) {
+        const existsSpecial = next.some(c => c.id === specialAuthCall!.id)
+        if (!existsSpecial) {
+          next = [specialAuthCall, ...next]
+        }
+      }
+      return next
     })
 
     invalidateCache('saida/calls')
-    persistSingleCall(callToConfirm)
-    emit('CONFIRM_PICKUP', { callId: callToConfirm.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
-    sendBroadcast('CONFIRM_PICKUP', { callId: callToConfirm.id, studentId: sIdStr, confirmedAt: currentNow })
+    if (specialAuthCall) persistSingleCall(specialAuthCall)
+    persistSingleCall(confirmedCall)
+
+    emit('CONFIRM_PICKUP', { callId: confirmedCall.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
+    sendBroadcast('CONFIRM_PICKUP', { callId: confirmedCall.id, studentId: sIdStr, confirmedAt: currentNow })
     addLog('CONFIRM', `Saída confirmada (Autorização Especial): ${studentName}`)
 
-    return callToConfirm
+    return confirmedCall
   }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
   // ─── confirmSoloExit ───────────────────────────────────────────────────────
