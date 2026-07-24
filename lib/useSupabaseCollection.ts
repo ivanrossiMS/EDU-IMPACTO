@@ -48,7 +48,8 @@ async function fetchWithDedup<T>(
   }
 
   const promise = fetcher().then(data => {
-    setCacheEntry(endpoint, data)
+    // Do NOT call setCacheEntry here — the hook caller decides if it should update
+    // the cache (it may be holding an optimistic lock)
     // Clear inflight reference
     const entry = memCache.get(endpoint)
     if (entry) delete entry.inflightPromise
@@ -108,6 +109,8 @@ export function useSupabaseCollection<T>(
   const [loading, setLoading] = useState(!getCacheEntry<T>(endpoint))
   const [error, setError] = useState<string | null>(null)
   const isMounted = useRef(true)
+  // Optimistic lock: timestamp until which server responses should be merged, not replaced
+  const optimisticLockUntil = useRef<number>(0)
 
   useEffect(() => {
     isMounted.current = true
@@ -127,7 +130,10 @@ export function useSupabaseCollection<T>(
     // Cache HIT and still fresh → skip fetch entirely
     if (existing && !isStale(existing)) {
       if (isMounted.current && !cancelled) {
-        setState(existing.data)
+        // Don't overwrite optimistic local state during lock window
+        if (Date.now() >= optimisticLockUntil.current) {
+          setState(existing.data)
+        }
         setLoading(false)
       }
       return
@@ -198,6 +204,37 @@ export function useSupabaseCollection<T>(
           const first = data[0]
           normalized = (first && typeof first === 'object') ? { ...initialValueRef.current, ...first } : initialValueRef.current
         }
+        // Optimistic lock: if we recently made local changes, merge server data
+        // with local state to avoid losing items that haven't been persisted yet
+        const isLocked = Date.now() < optimisticLockUntil.current
+        if (isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
+          // Keep all local items not yet on server, merge updates from server for existing items
+          const serverMap = new Map<string, any>((normalized as any[]).map((item: any) => [item?.id, item]))
+          const localArr = latestState.current as any[]
+          const merged: any[] = localArr.map((localItem: any) => {
+            const serverVersion = serverMap.get(localItem?.id)
+            return serverVersion ? { ...localItem, ...serverVersion } : localItem
+          })
+          // Add server items not present locally
+          const localIds = new Set(localArr.map((i: any) => i?.id))
+          for (const serverItem of (normalized as any[])) {
+            if (serverItem?.id && !localIds.has(serverItem.id)) {
+              merged.push(serverItem)
+            }
+          }
+          normalized = merged as any
+          // Do NOT update cache while locked — preserve optimistic data
+        } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
+          // Outside lock window: still preserve local items missing from server response
+          const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
+          const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
+          if (localOnly.length > 0) {
+            normalized = [...localOnly, ...(normalized as any[])] as any
+          }
+          setCacheEntry(endpoint, normalized)
+        } else {
+          setCacheEntry(endpoint, normalized)
+        }
         setState(normalized)
         setLoading(false)
       })
@@ -235,6 +272,31 @@ export function useSupabaseCollection<T>(
             } else if (!Array.isArray(initialValueRef.current) && Array.isArray(data)) {
               const first = data[0]
               normalized = (first && typeof first === 'object') ? { ...initialValueRef.current, ...first } : initialValueRef.current
+            }
+            // Optimistic lock: preserve local optimistic state during lock window
+            const isLocked = Date.now() < optimisticLockUntil.current
+            if (isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
+              const serverMap = new Map<string, any>((normalized as any[]).map((item: any) => [item?.id, item]))
+              const localArr = latestState.current as any[]
+              const merged: any[] = localArr.map((localItem: any) => {
+                const serverVersion = serverMap.get(localItem?.id)
+                return serverVersion ? { ...localItem, ...serverVersion } : localItem
+              })
+              const localIds = new Set(localArr.map((i: any) => i?.id))
+              for (const serverItem of (normalized as any[])) {
+                if (serverItem?.id && !localIds.has(serverItem.id)) merged.push(serverItem)
+              }
+              normalized = merged as any
+              // Do NOT update cache during lock — optimistic data wins
+            } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
+              const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
+              const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
+              if (localOnly.length > 0) {
+                normalized = [...localOnly, ...(normalized as any[])] as any
+              }
+              setCacheEntry(endpoint, normalized)
+            } else {
+              setCacheEntry(endpoint, normalized)
             }
             // Only update if data actually changed to avoid unnecessary re-renders
             if (JSON.stringify(latestState.current) !== JSON.stringify(normalized)) {
@@ -338,6 +400,8 @@ export function useSupabaseCollection<T>(
   }, [persist, endpoint]);
 
   const setLocalWrapped = useCallback((valOrFn: any) => {
+    // Extend optimistic lock by 5 seconds every time local state is updated
+    optimisticLockUntil.current = Date.now() + 5000
     setState((prev: any) => {
       const safePrev = prev !== undefined && prev !== null ? prev : initialValueRef.current;
       const next = typeof valOrFn === 'function' ? valOrFn(safePrev) : valOrFn;

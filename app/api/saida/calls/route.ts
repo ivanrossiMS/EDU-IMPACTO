@@ -291,10 +291,29 @@ export async function DELETE(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const { id } = await request.json()
-    if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
-
+    const body = await request.json()
+    const { id, clearToday } = body
     const supabaseService = getAdminClient()
+
+    if (clearToday) {
+      const formatter = new Intl.DateTimeFormat('en-CA', { 
+        timeZone: 'America/Sao_Paulo', 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit' 
+      })
+      const todayStr = formatter.format(new Date())
+      const { error } = await supabaseService
+        .from('saida_calls')
+        .delete()
+        .gte('created_at', `${todayStr}T00:00:00-03:00`)
+
+      if (error) throw new Error(error.message)
+
+      return NextResponse.json({ ok: true, clearedToday: true })
+    }
+
+    if (!id) return NextResponse.json({ error: 'ID is required' }, { status: 400 })
 
     const { error } = await supabaseService.from('saida_calls').delete().eq('id', id)
     if (error) throw new Error(error.message)

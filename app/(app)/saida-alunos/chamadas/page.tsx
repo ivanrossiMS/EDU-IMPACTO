@@ -19,7 +19,7 @@ const getInitials = (name: string) => {
   return name.trim().split(/\s+/).map(n => n[0]).join('').toLowerCase()
 }
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
 import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
@@ -777,39 +777,74 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   const [authorizedPerson, setAuthorizedPerson] = useState('')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
-  // Computed Launches from real-time database
-  const launches = useMemo(() => {
-    return activeCalls
-      .filter(c => c.status === 'special_auth')
-      .map(c => {
-        const sId = c.studentId ? String(c.studentId).trim() : ''
-        const sName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+  // ── Persistent accumulator: never loses a special_auth entry even if activeCalls is overwritten ──
+  // Key: call.id → PickupCall  (grows, never shrinks unless deleteCall is called)
+  const seenSpecialAuthsRef = useRef<Map<string, PickupCall>>(new Map())
 
-        // Encontra a chamada confirmada do aluno (compara tanto por ID quanto por Nome do Aluno)
-        const pickUpCall = activeCalls.find(ac => {
-          if (ac.status !== 'confirmed') return false
-          const acId = ac.studentId ? String(ac.studentId).trim() : ''
-          const acName = ac.studentName ? ac.studentName.trim().toLowerCase() : ''
-          return (sId && acId && sId === acId) || (sName && acName && sName === acName)
-        })
-
-        return {
-          id: c.id,
-          studentId: c.studentId,
-          studentName: c.studentName,
-          studentClass: c.studentClass,
-          studentPhoto: c.studentPhoto,
-          authorizedPerson: c.guardianName,
-          loggedBy: c.operatorId || 'Sistema',
-          date: c.calledAt.split('T')[0],
-          time: new Date(c.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          confirmedOut: !!pickUpCall,
-          confirmedAt: pickUpCall
-            ? new Date(pickUpCall.confirmedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-            : undefined
+  // Whenever activeCalls changes, absorb any special_auth entries into the accumulator
+  useEffect(() => {
+    let changed = false
+    for (const c of activeCalls) {
+      if (c.status === 'special_auth') {
+        const existing = seenSpecialAuthsRef.current.get(c.id)
+        if (!existing || JSON.stringify(existing) !== JSON.stringify(c)) {
+          seenSpecialAuthsRef.current.set(c.id, c)
+          changed = true
         }
-      })
+      }
+    }
+    // Force a re-render if new entries were absorbed
+    if (changed) setSeenSpecialAuthsVersion(v => v + 1)
   }, [activeCalls])
+
+  const [seenSpecialAuthsVersion, setSeenSpecialAuthsVersion] = useState(0)
+
+  // Remove a specific special_auth from the accumulator (called from the delete handler)
+  const removeFromAccumulator = useCallback((callId: string) => {
+    seenSpecialAuthsRef.current.delete(callId)
+    setSeenSpecialAuthsVersion(v => v + 1)
+  }, [])
+
+  // Computed Launches — uses the ACCUMULATOR (persistent) as source + activeCalls for confirmed status
+  const launches = useMemo(() => {
+    // seenSpecialAuthsVersion is referenced here only to trigger re-computation when accumulator changes
+    void seenSpecialAuthsVersion
+    const specialAuthEntries = Array.from(seenSpecialAuthsRef.current.values())
+
+    return specialAuthEntries.map(c => {
+      const sId = c.studentId ? String(c.studentId).trim() : ''
+      const sName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+
+      // Encontra a chamada confirmada do aluno (compara tanto por ID quanto por Nome do Aluno)
+      const pickUpCall = activeCalls.find(ac => {
+        if (ac.status !== 'confirmed') return false
+        const acId = ac.studentId ? String(ac.studentId).trim() : ''
+        const acName = ac.studentName ? ac.studentName.trim().toLowerCase() : ''
+        return (sId && acId && sId === acId) || (sName && acName && sName === acName)
+      })
+
+      return {
+        id: c.id,
+        studentId: c.studentId,
+        studentName: c.studentName,
+        studentClass: c.studentClass,
+        studentPhoto: c.studentPhoto,
+        authorizedPerson: c.guardianName,
+        loggedBy: c.operatorId || 'Sistema',
+        date: c.calledAt.split('T')[0],
+        time: new Date(c.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        calledAtMs: new Date(c.calledAt).getTime(),
+        confirmedOut: !!pickUpCall,
+        confirmedAt: pickUpCall
+          ? new Date(pickUpCall.confirmedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          : undefined
+      }
+    })
+    // Mais recente primeiro
+    .sort((a, b) => b.calledAtMs - a.calledAtMs)
+  }, [activeCalls, seenSpecialAuthsVersion])
+
+
 
   // Search autocomplete debounced
   useEffect(() => {
@@ -1147,8 +1182,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 )}
               </div>
               
-              {/* MICRO ACTION BUTTONS (CHAMAR, CONFIRMAR, EXCLUIR) */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {/* MICRO ACTION BUTTONS (CHAMAR, EXCLUIR) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 {/* 1. BUTTON: CALL / RECALL STUDENT */}
                 {(() => {
                   const lStudentId = l.studentId ? String(l.studentId) : ''
@@ -1186,7 +1221,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                       title={isCalling ? "Aluno sendo chamado na TV. Clique para rechamar" : "Chamar Aluno na TV"}
                       style={{
                         background: btnBg, border: 'none', cursor: 'pointer',
-                        borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: btnColor, transition: 'all 0.2s', flexShrink: 0,
                       }}
                       onMouseEnter={e => {
@@ -1200,48 +1235,12 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         e.currentTarget.style.boxShadow = 'none'
                       }}
                     >
-                      <Megaphone size={12} />
+                      <Megaphone size={18} />
                     </button>
                   )
                 })()}
 
-                {/* 2. BUTTON: CONFIRM PICKUP */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    confirmSpecialExit(
-                      l.studentId,
-                      l.studentName,
-                      l.studentClass,
-                      l.authorizedPerson,
-                      l.studentPhoto
-                    )
-                    showToast(`Saída de ${l.studentName} confirmada!`, true)
-                  }}
-                  title="Confirmar Saída do Aluno"
-                  style={{
-                    background: l.confirmedOut ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.12)', 
-                    border: 'none', cursor: 'pointer',
-                    borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: l.confirmedOut ? '#10b981' : '#34d399', transition: 'all 0.2s', flexShrink: 0,
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = '#10b981'
-                    e.currentTarget.style.color = '#fff'
-                    e.currentTarget.style.boxShadow = '0 0 8px rgba(16,185,129,0.4)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = l.confirmedOut ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.12)'
-                    e.currentTarget.style.color = l.confirmedOut ? '#10b981' : '#34d399'
-                    e.currentTarget.style.boxShadow = 'none'
-                  }}
-                >
-                  <CheckCircle2 size={12} />
-                </button>
-
-                {/* 3. BUTTON: DELETE LAUNCH */}
+                {/* 2. BUTTON: DELETE LAUNCH */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1251,7 +1250,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   title="Excluir Autorização Especial"
                   style={{
                     background: 'rgba(239,68,68,0.1)', border: 'none', cursor: 'pointer',
-                    borderRadius: 6, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: '#ef4444', transition: 'all 0.2s', flexShrink: 0,
                   }}
                   onMouseEnter={e => {
@@ -1265,7 +1264,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                     e.currentTarget.style.boxShadow = 'none'
                   }}
                 >
-                  <Trash2 size={12}/>
+                  <Trash2 size={18}/>
                 </button>
               </div>
             </div>
@@ -1336,6 +1335,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 <button
                   onClick={() => {
                     deleteCall(confirmDeleteId)
+                    removeFromAccumulator(confirmDeleteId)
                     setConfirmDeleteId(null)
                   }}
                   style={{
@@ -1473,10 +1473,27 @@ function ProibidosRetiradaCard() {
 function ChamadasContent() {
 
   const { activeCalls = [], confirmPickup, cancelCall, recallStudent, revertCall, callStudent, clearCalls, realtimeStatus, refreshCalls, isLoadingCalls } = useSaida()
+  const { currentUser, currentUserPerfil } = useApp()
   const [turmas] = useSupabaseArray<any>('turmas');
   const isMobile = useIsMobile()
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+
+  const isAdmin = useMemo(() => {
+    const perfil = (currentUserPerfil || currentUser?.perfil || '').toLowerCase().trim()
+    const cargo = (currentUser?.cargo || '').toLowerCase().trim()
+
+    return (
+      perfil === 'diretor geral' ||
+      perfil === 'administrador' ||
+      perfil === 'admin' ||
+      perfil === 'administrador master' ||
+      cargo === 'administrador master' ||
+      cargo === 'administrador' ||
+      cargo === 'diretor geral' ||
+      cargo.includes('admin')
+    )
+  }, [currentUser, currentUserPerfil])
 
   const [filter,        setFilter]        = useState<FilterType>('waiting')
   const [callSearch,    setCallSearch]    = useState('')
@@ -1849,32 +1866,34 @@ function ChamadasContent() {
           }}
         />
 
-        <button
-          type="button"
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            setConfirmClearAll(true)
-          }}
-          style={{
-            padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700,
-            border: 'none', background: 'rgba(239,68,68,0.1)', color: '#ef4444',
-            cursor: 'pointer', transition: 'all 0.15s',
-            display: 'flex', alignItems: 'center', gap: 5,
-          }}
-          onMouseEnter={e => {
-            const el = e.currentTarget as HTMLButtonElement
-            el.style.background = '#ef4444'
-            el.style.color = '#fff'
-          }}
-          onMouseLeave={e => {
-            const el = e.currentTarget as HTMLButtonElement
-            el.style.background = 'rgba(239,68,68,0.1)'
-            el.style.color = '#ef4444'
-          }}
-        >
-          <X size={14}/> Zerar Chamadas
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setConfirmClearAll(true)
+            }}
+            style={{
+              padding: '8px 16px', borderRadius: 10, fontSize: 12, fontWeight: 700,
+              border: 'none', background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+              cursor: 'pointer', transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+            onMouseEnter={e => {
+              const el = e.currentTarget as HTMLButtonElement
+              el.style.background = '#ef4444'
+              el.style.color = '#fff'
+            }}
+            onMouseLeave={e => {
+              const el = e.currentTarget as HTMLButtonElement
+              el.style.background = 'rgba(239,68,68,0.1)'
+              el.style.color = '#ef4444'
+            }}
+          >
+            <X size={14}/> Zerar Chamadas
+          </button>
+        )}
       </div>
 
       {/* ── CALL GRID ────────────────────────────────────────────────── */}
@@ -1917,7 +1936,7 @@ function ChamadasContent() {
 
       {/* ── MODAL DE CONFIRMAÇÃO (ZERAR CHAMADAS) ───────────────────────── */}
       <AnimatePresence>
-        {confirmClearAll && (
+        {confirmClearAll && isAdmin && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1950,7 +1969,7 @@ function ChamadasContent() {
                 <div>
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-base))' }}>Zerar chamadas?</h3>
                   <p style={{ margin: '4px 0 0', fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.4 }}>
-                    Tem certeza que deseja zerar e excluir todas as chamadas? Esta ação não pode ser desfeita.
+                    Tem certeza que deseja zerar e excluir todas as chamadas do dia? Esta ação não pode ser desfeita.
                   </p>
                 </div>
               </div>
@@ -1970,9 +1989,9 @@ function ChamadasContent() {
                   Cancelar
                 </button>
                 <button
-                  onClick={() => {
-                    clearCalls()
-                    showToast('Todas as chamadas foram zeradas.')
+                  onClick={async () => {
+                    await clearCalls()
+                    showToast('Todas as chamadas do dia foram zeradas.')
                     setConfirmClearAll(false)
                   }}
                   style={{
