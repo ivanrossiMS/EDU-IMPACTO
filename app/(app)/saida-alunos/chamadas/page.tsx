@@ -782,11 +782,17 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     return activeCalls
       .filter(c => c.status === 'special_auth')
       .map(c => {
-        // Encontra a chamada confirmada do aluno para refletir o status de saída no card de Autorização Especial
-        const pickUpCall = activeCalls.find(ac =>
-          ac.studentId != null && String(ac.studentId) === String(c.studentId) &&
-          ac.status === 'confirmed'
-        )
+        const sId = c.studentId ? String(c.studentId).trim() : ''
+        const sName = c.studentName ? c.studentName.trim().toLowerCase() : ''
+
+        // Encontra a chamada confirmada do aluno (compara tanto por ID quanto por Nome do Aluno)
+        const pickUpCall = activeCalls.find(ac => {
+          if (ac.status !== 'confirmed') return false
+          const acId = ac.studentId ? String(ac.studentId).trim() : ''
+          const acName = ac.studentName ? ac.studentName.trim().toLowerCase() : ''
+          return (sId && acId && sId === acId) || (sName && acName && sName === acName)
+        })
+
         return {
           id: c.id,
           studentId: c.studentId,
@@ -798,8 +804,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           date: c.calledAt.split('T')[0],
           time: new Date(c.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
           confirmedOut: !!pickUpCall,
-          confirmedAt: pickUpCall && pickUpCall.confirmedAt 
-            ? new Date(pickUpCall.confirmedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+          confirmedAt: pickUpCall
+            ? new Date(pickUpCall.confirmedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
             : undefined
         }
       })
@@ -1613,11 +1619,31 @@ function ChamadasContent() {
 
     list.sort((a, b) => b._parsedTime - a._parsedTime)
 
-    if (filter === 'all')       list = list.filter(c => c.status !== 'special_auth')
-    if (filter === 'waiting')   list = list.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
-    if (filter === 'confirmed') list = list.filter(c => c.status === 'confirmed')
-    if (filter === 'cancelled') list = list.filter(c => c.status === 'cancelled')
-    if (filter === 'blocked')   list = list.filter(c => c.status === 'blocked')
+    if (filter === 'all') {
+      list = list.filter(c => c.status !== 'special_auth')
+      const seen = new Set<string>()
+      list = list.filter(c => {
+        if (c.status === 'confirmed') {
+          const key = (c.studentId ? String(c.studentId).trim() : '') || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
+          if (seen.has(key)) return false
+          seen.add(key)
+        }
+        return true
+      })
+    }
+    else if (filter === 'waiting')   list = list.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
+    else if (filter === 'confirmed') {
+      list = list.filter(c => c.status === 'confirmed')
+      const seen = new Set<string>()
+      list = list.filter(c => {
+        const key = (c.studentId ? String(c.studentId).trim() : '') || (c.studentName ? c.studentName.trim().toLowerCase() : c.id)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+    }
+    else if (filter === 'cancelled') list = list.filter(c => c.status === 'cancelled')
+    else if (filter === 'blocked')   list = list.filter(c => c.status === 'blocked')
     
     if (callSearch.trim()) {
       const q = callSearch.toLowerCase()
