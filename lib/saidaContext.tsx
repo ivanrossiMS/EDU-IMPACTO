@@ -452,49 +452,24 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
 
     const studentIdToConfirm = callToUpdate.studentId ? String(callToUpdate.studentId) : null
 
-    // Apenas chamadas ativas (waiting, called, confirmed) devem ter seu status alterado para confirmed.
-    // Registros com status 'special_auth' NUNCA devem ter seu status alterado para 'confirmed', para não sumirem de Lançados Hoje.
+    // Compute updated call objects BEFORE scheduling state update so persistSingleCall is guaranteed to execute
+    // IMPORTANTE: Ignora registros de autorizacao especial (status: 'special_auth') para que o card permaneça no quadro Lançados Hoje
     const callsToConfirm = activeCalls.filter(c =>
-      c.status !== 'special_auth' && c.status !== 'cancelled' &&
-      (c.id === callId || (studentIdToConfirm && c.studentId != null && String(c.studentId) === studentIdToConfirm))
+      (c.id === callId || (studentIdToConfirm && c.studentId != null && String(c.studentId) === studentIdToConfirm && c.status !== 'cancelled')) && c.status !== 'special_auth'
     )
-
-    let updatedCalls: PickupCall[] = []
-
-    if (callsToConfirm.length > 0) {
-      updatedCalls = callsToConfirm.map(c => ({ ...c, status: 'confirmed' as const, confirmedAt: currentNow }))
-    } else {
-      // Se não havia uma chamada ativa no estado (ex: confirmação direta via botão no card de autorização especial),
-      // cria um registro de chamada confirmada para este aluno
-      const newConfirmedCall: PickupCall = {
-        id: uid(),
-        studentId: studentIdToConfirm || '',
-        studentName: callToUpdate.studentName,
-        studentClass: callToUpdate.studentClass,
-        studentPhoto: callToUpdate.studentPhoto,
-        guardianId: callToUpdate.guardianId || 'special-auth',
-        guardianName: callToUpdate.guardianName,
-        calledAt: callToUpdate.calledAt || currentNow,
-        confirmedAt: currentNow,
-        status: 'confirmed',
-        source: callToUpdate.source || 'manual'
-      }
-      updatedCalls = [newConfirmedCall]
-    }
+    const updatedCalls: PickupCall[] = callsToConfirm.length > 0
+      ? callsToConfirm.map(c => ({ ...c, status: 'confirmed' as const, confirmedAt: currentNow }))
+      : [{ ...callToUpdate, status: 'confirmed' as const, confirmedAt: currentNow }]
 
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
-      const existingIds = new Set(callsToConfirm.map(c => c.id))
-      const newCallsToAdd = updatedCalls.filter(u => !existingIds.has(u.id))
-      
-      const updatedArr = arr.map(c => {
-        // NUNCA altera o status de um registro special_auth!
-        if (c.status !== 'special_auth' && (existingIds.has(c.id) || (studentIdToConfirm && c.studentId != null && String(c.studentId) === studentIdToConfirm && c.status !== 'cancelled'))) {
+      return arr.map(c => {
+        const cStudentId = c.studentId ? String(c.studentId) : null
+        if ((c.id === callId || (studentIdToConfirm && cStudentId === studentIdToConfirm && c.status !== 'cancelled')) && c.status !== 'special_auth') {
           return { ...c, status: 'confirmed' as const, confirmedAt: currentNow }
         }
         return c
       })
-      return [...newCallsToAdd, ...updatedArr]
     })
     
     invalidateCache('saida/calls')
@@ -621,7 +596,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     )
 
     if (existingWaiting) {
-      const matchingCalls = activeCalls.filter(c => c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled' && c.status !== 'special_auth')
+      const matchingCalls = activeCalls.filter(c => c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled')
       const updatedCalls = matchingCalls.map(c => ({
         ...c,
         guardianId: 'sozinho',
@@ -631,7 +606,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       }))
       const primaryUpdated = updatedCalls.find(c => c.id === existingWaiting.id) || updatedCalls[0]
 
-      setActiveCallsLocal?.(prev => (prev || []).map(c => (c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled' && c.status !== 'special_auth') ? { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', confirmedAt: currentNow } : c))
+      setActiveCallsLocal?.(prev => (prev || []).map(c => (c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled') ? { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', confirmedAt: currentNow } : c))
       invalidateCache('saida/calls')
       updatedCalls.forEach(uCall => persistSingleCall(uCall))
       emit('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
