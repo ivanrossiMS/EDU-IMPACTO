@@ -853,7 +853,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     const sPhoto = selectedStudent.foto || selectedStudent.imagem1
     const authPerson = authorizedPerson.trim()
     
-    // 1. Registra no histórico de lançamentos de autorização especial
+    // Registra no histórico de lançamentos de autorização especial (apenas lança no card)
     addSpecialAuth(
       sId,
       sName,
@@ -863,25 +863,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       sPhoto
     )
 
-    // 2. Chamar o aluno na TV com o responsável autorizado digitado (forçando a chamada ativa 'waiting')
-    const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === sId && (c.status === 'waiting' || c.status === 'called'))
-    if (existingCall) {
-      recallStudent(existingCall.id, () => {})
-      showToast(`Autorização gravada e ${sName} chamado novamente!`, true)
-    } else {
-      callStudent(
-        sId,
-        sName,
-        sClass,
-        'special-auth',
-        authPerson,
-        'manual',
-        undefined,
-        sPhoto,
-        true // forceNewCall = true
-      )
-      showToast(`Autorização lançada e ${sName} chamado na TV!`, true)
-    }
+    showToast(`Autorização lançada no card para ${sName}! Clique no alto-falante 📣 para chamar.`, true)
 
     // Reset Form
     setSelectedStudent(null)
@@ -1073,7 +1055,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
       </div>
 
-      {/* SUBMIT & CALL BUTTON */}
+      {/* SUBMIT BUTTON: LANÇAR AUTORIZAÇÃO */}
       <button
         type="button"
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
@@ -1102,7 +1084,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           e.currentTarget.style.transform = 'none'
         }}
       >
-        <Megaphone size={13}/> Lançar e Chamar Aluno
+        <CheckCircle2 size={13}/> Lançar Autorização Especial
       </button>
 
       {/* TIMELINE LOG OF TODAY'S RELEASES */}
