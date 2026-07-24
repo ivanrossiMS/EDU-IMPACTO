@@ -139,7 +139,8 @@ export default function EditarRedaçãoUploadPage() {
   }
 
   const handleSave = async () => {
-    if (!titulo.trim()) { alert('Informe o título da redacao.'); return }
+    if (!titulo.trim()) { alert('Informe o título da redação.'); return }
+    if (!bimestreId) { alert('Selecione o bimestre da redação.'); return }
     if (series.length === 0) { alert('Selecione ao menos uma série.'); return }
     if (assignments.some(a => !a.disciplinaId || !a.professorId)) {
       alert('Preencha disciplina e professor em todas as atribuições.'); return
@@ -261,7 +262,7 @@ export default function EditarRedaçãoUploadPage() {
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Instruções para os Professores</label>
-              <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: Envie temas para a redação..." rows={3}
+              <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: Instruções da coordenação para os professores" rows={3}
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
@@ -270,9 +271,9 @@ export default function EditarRedaçãoUploadPage() {
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
             </div>
             <div>
-              <label style={labelStyle}>Bimestre</label>
+              <label style={labelStyle}>Bimestre *</label>
               <select value={bimestreId} onChange={e => setBimestreId(e.target.value)} style={inputStyle}>
-                <option value="">Nenhum / Geral</option>
+                <option value="">Selecione o Bimestre...</option>
                 {bimestres.map(b => <option key={b.id} value={b.id}>{b.nome}</option>)}
               </select>
             </div>

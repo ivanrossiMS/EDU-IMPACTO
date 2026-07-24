@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { HtmlContent } from '../HtmlContent';
 import { DraggableHeaderField } from './DraggableHeaderField';
 import { parseEnunciadoParts, splitTextIntoChunks } from './PaginationEngine';
+import { formatProfessorHeaderName } from '@/lib/utils';
 
 export function PageContent({ 
   page, 
@@ -244,7 +245,7 @@ export function PageContent({
                 let value = '';
                 if (key === 'title') value = simulado?.titulo || '';
                 else if (key === 'disciplina') value = simulado?.formattedDisciplinas || '';
-                else if (key === 'professor') value = simulado?.formattedProfessors || '';
+                else if (key === 'professor') value = formatProfessorHeaderName(simulado?.formattedProfessors || '');
                 else if (key === 'data') value = simulado?.formattedDate || '';
                 else if (key === 'turma') value = simulado?.formattedSeries || '';
                 else if (key === 'valor') value = simulado?.valor || '';

@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus } from '@/lib/utils'
+import { getDerivedStatus, formatProfessorHeaderName } from '@/lib/utils'
 import { RedacaoPreviewModal, Questao } from '@/components/simulados/RedacaoPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -318,7 +318,7 @@ export default function VerRedaçãoUploadPage() {
               formattedDisciplinas: Array.from(new Set(requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(requisicoes?.map((r: any) => {
                 const nome = r.professores?.nome || r.professor_nome || '';
-                return nome ? nome.split(' ')[0] : '';
+                return nome ? formatProfessorHeaderName(nome) : '';
               }))).filter(Boolean).join(', ')
             }}
             config={simConfig}

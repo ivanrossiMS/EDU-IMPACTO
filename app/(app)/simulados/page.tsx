@@ -6,7 +6,7 @@ import {
   LayoutDashboard, PenTool, FileText, AlertCircle, Calendar, 
   ChevronRight, Sparkles, BookOpen, Clock, Activity, FileSignature, 
   User, Users, Upload, CheckCircle, ArrowRight, PlusCircle, Settings, 
-  FileEdit, BookMarked
+  FileEdit, BookMarked, GraduationCap
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -139,9 +139,9 @@ export default function SimuladosDashboard() {
           // ==============================
           
           const [resProvas, resSimulados, resRedacao] = await Promise.all([
-            (supabase as any).from('provas_upload').select('id, titulo, status, data_aplicacao, created_at, criado_por, provas_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('simulados_upload').select('id, titulo, status, data_aplicacao, created_at, criado_por, simulados_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('redacao_upload').select('id, titulo, status, data_aplicacao, created_at, criado_por, redacao_upload_requisicoes(status)').order('created_at', { ascending: false }).limit(10)
+            (supabase as any).from('provas_upload').select('*, provas_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10),
+            (supabase as any).from('simulados_upload').select('*, simulados_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10),
+            (supabase as any).from('redacao_upload').select('*, redacao_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10)
           ])
 
           let pData = (resProvas.data || []).map((p: any) => ({ ...p, status: getDerivedStatus(p, 'prova') }))
@@ -482,6 +482,43 @@ export default function SimuladosDashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
               {adminRecent.map((item) => {
                 const sColor = getStatusColor(item.status)
+
+                // Extrair séries
+                const rawSeries = item.series || item.serie || item.series_nomes || item.turmas
+                let seriesText = ''
+                if (Array.isArray(rawSeries)) {
+                  seriesText = rawSeries.filter(Boolean).join(', ')
+                } else if (typeof rawSeries === 'string' && rawSeries.trim()) {
+                  seriesText = rawSeries.trim()
+                }
+
+                // Extrair disciplinas das requisições ou campo direto
+                const reqs = item.provas_upload_requisicoes || item.simulados_upload_requisicoes || item.redacao_upload_requisicoes || item.requisicoes || []
+                const discSet = new Set<string>()
+                if (item.disciplina_nome) discSet.add(item.disciplina_nome)
+                if (item.disciplina) discSet.add(item.disciplina)
+                if (Array.isArray(reqs)) {
+                  reqs.forEach((r: any) => {
+                    if (r.disciplina_nome) discSet.add(r.disciplina_nome)
+                    if (r.nome_disciplina) discSet.add(r.nome_disciplina)
+                  })
+                }
+                const disciplinasText = Array.from(discSet).filter(Boolean).join(', ')
+
+                // Extrair datas de criação e envio
+                const dataCriacao = item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : null
+                const reqsWithEnvio = (reqs || []).filter((r: any) => r.enviado_em || r.status === 'enviado' || r.status === 'aprovado' || r.status === 'concluido')
+                let dataEnvio: string | null = null
+                if (reqsWithEnvio.length > 0) {
+                  const latestEnvio = reqsWithEnvio.map((r: any) => r.enviado_em || r.updated_at).filter(Boolean).sort().reverse()[0]
+                  if (latestEnvio) {
+                    dataEnvio = new Date(latestEnvio).toLocaleDateString('pt-BR')
+                  }
+                }
+                if (!dataEnvio && item.status !== 'aguardando' && item.updated_at) {
+                  dataEnvio = new Date(item.updated_at).toLocaleDateString('pt-BR')
+                }
+
                 return (
                   <Link href={item.link} key={`${item.type}-${item.id}`} style={{ textDecoration: 'none' }}>
                     <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
@@ -505,14 +542,52 @@ export default function SimuladosDashboard() {
                       </div>
 
                       <div>
-                        <h3 style={{ fontSize: 16, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 8px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <h3 style={{ fontSize: 16, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {item.titulo}
                         </h3>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600 }}>
-                          <Calendar size={14} /> Aplicação: {item.data_aplicacao ? item.data_aplicacao.split('-').reverse().join('/') : 'Não definida'}
+
+                        {/* Badges de Série e Disciplina */}
+                        {(seriesText || disciplinasText) && (
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                            {seriesText && (
+                              <span style={{ 
+                                display: 'inline-flex', alignItems: 'center', gap: 5, 
+                                fontSize: 11, fontWeight: 800, color: '#8b5cf6', 
+                                background: 'rgba(139, 92, 246, 0.12)', border: '1px solid rgba(139, 92, 246, 0.2)',
+                                padding: '4px 10px', borderRadius: 8 
+                              }}>
+                                <GraduationCap size={13} strokeWidth={2.5} /> {seriesText}
+                              </span>
+                            )}
+
+                            {disciplinasText && (
+                              <span style={{ 
+                                display: 'inline-flex', alignItems: 'center', gap: 5, 
+                                fontSize: 11, fontWeight: 800, color: '#0284c7', 
+                                background: 'rgba(2, 132, 199, 0.12)', border: '1px solid rgba(2, 132, 199, 0.2)',
+                                padding: '4px 10px', borderRadius: 8 
+                              }}>
+                                <BookOpen size={13} strokeWidth={2.5} /> {disciplinasText}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600 }}>
+                          {dataCriacao && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#8b5cf6' }}>
+                              <Calendar size={13} /> Criada: {dataCriacao}
+                            </span>
+                          )}
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: dataEnvio ? '#10b981' : '#f59e0b' }}>
+                            <Upload size={13} /> Envio: {dataEnvio || 'Pendente'}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Calendar size={13} /> Aplicação: {item.data_aplicacao ? item.data_aplicacao.split('-').reverse().join('/') : 'Não definida'}
+                          </span>
                         </div>
                         {item.criado_por_nome && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#3b82f6', fontSize: 12, fontWeight: 600, marginTop: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#3b82f6', fontSize: 12, fontWeight: 600, marginTop: 6 }}>
                             <User size={14} /> Criado por: {item.criado_por_nome}
                           </div>
                         )}

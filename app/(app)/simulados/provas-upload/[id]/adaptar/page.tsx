@@ -16,6 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { ProvaPreviewModal, Questao, Alternative } from '@/components/simulados/ProvaPreviewModal'
+import { formatProfessorHeaderName } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadProvaPage() {
   const router = useRouter()
@@ -62,7 +63,7 @@ export default function UploadProvaPage() {
       const formattedDisciplinas = Array.from(new Set(reqs?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', ')
       const formattedProfessors = Array.from(new Set(reqs?.map((r: any) => {
         const nome = r.professores?.nome || r.professor_nome || '';
-        return nome ? nome.split(' ').slice(0, 2).join(' ') : '';
+        return nome ? formatProfessorHeaderName(nome) : '';
       }))).filter(Boolean).join(', ')
       const formattedDate = data?.data_aplicacao ? data.data_aplicacao.split('-').reverse().join('/') : ''
       const formattedSeries = Array.isArray(data?.series) ? data.series.join(', ') : (data?.series || '')
@@ -551,7 +552,7 @@ export default function UploadProvaPage() {
               formattedDisciplinas: Array.from(new Set(prova?.provas_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(prova?.provas_upload_requisicoes?.map((r: any) => {
                 const nome = r.professores?.nome || r.professor_nome || '';
-                return nome ? nome.split(' ').slice(0, 2).join(' ') : '';
+                return nome ? formatProfessorHeaderName(nome) : '';
               }))).filter(Boolean).join(', ')
             }}
             config={simConfig}

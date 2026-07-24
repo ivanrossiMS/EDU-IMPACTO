@@ -16,6 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { RedacaoPreviewModal, Questao, Alternative } from '@/components/simulados/RedacaoPreviewModal'
+import { formatProfessorHeaderName } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadRedaçãoPage() {
   const router = useRouter()
@@ -60,7 +61,7 @@ export default function UploadRedaçãoPage() {
       const formattedDisciplinas = Array.from(new Set(reqs?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', ')
       const formattedProfessors = Array.from(new Set(reqs?.map((r: any) => {
         const nome = r.professores?.nome || r.professor_nome || '';
-        return nome ? nome.split(' ')[0] : '';
+        return nome ? formatProfessorHeaderName(nome) : '';
       }))).filter(Boolean).join(', ')
       const formattedDate = data?.data_aplicacao ? data.data_aplicacao.split('-').reverse().join('/') : ''
       const formattedSeries = Array.isArray(data?.series) ? data.series.join(', ') : (data?.series || '')
@@ -577,7 +578,7 @@ export default function UploadRedaçãoPage() {
               formattedDisciplinas: Array.from(new Set(redacao?.redacao_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(redacao?.redacao_upload_requisicoes?.map((r: any) => {
                 const nome = r.professores?.nome || r.professor_nome || '';
-                return nome ? nome.split(' ')[0] : '';
+                return nome ? formatProfessorHeaderName(nome) : '';
               }))).filter(Boolean).join(', ')
             }}
             config={simConfig}

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Search, Filter, Eye, Clock, CheckCircle, XCircle,
   Upload, BookOpen, Users, User, Info, ChevronRight, AlertCircle, Trash2,
-  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp
+  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp, Sparkles, BookMarked
 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -14,6 +14,116 @@ import { useData } from '@/lib/dataContext'
 import { getDerivedStatus } from '@/lib/utils'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 import { GabaritoRedacaoModal } from '@/components/simulados/GabaritoRedacaoModal'
+
+function getSegmentoInfo(serieName: string) {
+  const nameLower = (serieName || '').toLowerCase().trim()
+
+  if (
+    nameLower.includes('infantil') || 
+    nameLower.includes('berçário') || 
+    nameLower.includes('bercario') || 
+    nameLower.includes('maternal') || 
+    nameLower.includes('jardim') || 
+    nameLower.includes('pré') || 
+    nameLower.includes('pre')
+  ) {
+    return {
+      segmento: 'Educação Infantil',
+      color: '#f97316',
+      bgLight: 'rgba(249, 115, 22, 0.12)',
+      border: 'rgba(249, 115, 22, 0.25)',
+      gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+      boxShadow: '0 4px 14px rgba(249, 115, 22, 0.35)',
+      icon: Sparkles
+    }
+  }
+
+  if (
+    nameLower.includes('1º ano') || 
+    nameLower.includes('2º ano') || 
+    nameLower.includes('3º ano') || 
+    nameLower.includes('4º ano') || 
+    nameLower.includes('5º ano') ||
+    nameLower.includes('1° ano') || 
+    nameLower.includes('2° ano') || 
+    nameLower.includes('3° ano') || 
+    nameLower.includes('4° ano') || 
+    nameLower.includes('5° ano') ||
+    nameLower.includes('fundamental 1') ||
+    nameLower.includes('fundamental i') ||
+    nameLower.includes('ef1') ||
+    nameLower.includes('ef i') ||
+    nameLower.includes('anos iniciais')
+  ) {
+    return {
+      segmento: 'Ensino Fundamental I',
+      color: '#10b981',
+      bgLight: 'rgba(16, 185, 129, 0.12)',
+      border: 'rgba(16, 185, 129, 0.25)',
+      gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+      icon: BookOpen
+    }
+  }
+
+  if (
+    nameLower.includes('6º ano') || 
+    nameLower.includes('7º ano') || 
+    nameLower.includes('8º ano') || 
+    nameLower.includes('9º ano') ||
+    nameLower.includes('6° ano') || 
+    nameLower.includes('7° ano') || 
+    nameLower.includes('8° ano') || 
+    nameLower.includes('9° ano') ||
+    nameLower.includes('fundamental 2') ||
+    nameLower.includes('fundamental ii') ||
+    nameLower.includes('ef2') ||
+    nameLower.includes('ef ii') ||
+    nameLower.includes('anos finais')
+  ) {
+    return {
+      segmento: 'Ensino Fundamental II',
+      color: '#0284c7',
+      bgLight: 'rgba(2, 132, 199, 0.12)',
+      border: 'rgba(2, 132, 199, 0.25)',
+      gradient: 'linear-gradient(135deg, #0284c7 0%, #2563eb 100%)',
+      boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
+      icon: BookMarked
+    }
+  }
+
+  if (
+    nameLower.includes('série em') || 
+    nameLower.includes('serie em') || 
+    nameLower.includes('médio') || 
+    nameLower.includes('medio') || 
+    nameLower.includes('terceirão') || 
+    nameLower.includes('terceirao') ||
+    nameLower.includes('pré-vestibular') ||
+    nameLower.includes('pv') ||
+    nameLower.includes('em')
+  ) {
+    return {
+      segmento: 'Ensino Médio',
+      color: '#8b5cf6',
+      bgLight: 'rgba(139, 92, 246, 0.12)',
+      border: 'rgba(139, 92, 246, 0.25)',
+      gradient: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+      boxShadow: '0 4px 14px rgba(139, 92, 246, 0.35)',
+      icon: GraduationCap
+    }
+  }
+
+  return {
+    segmento: 'Geral',
+    color: '#64748b',
+    bgLight: 'rgba(100, 116, 139, 0.12)',
+    border: 'rgba(100, 116, 139, 0.25)',
+    gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+    boxShadow: '0 4px 14px rgba(100, 116, 139, 0.25)',
+    icon: Layers
+  }
+}
 
 export default function UploadRedaçõesGerenciamentoPage() {
   const { currentUser, currentUserPerfil } = useApp()
@@ -522,41 +632,57 @@ export default function UploadRedaçõesGerenciamentoPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             <AnimatePresence>
-              {groupedRedacoes.map(([serie, items]) => (
-                <div key={serie} style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, marginBottom: 24, overflow: 'hidden' }}>
-                  <div 
-                    onClick={() => setExpandedGroups(prev => ({ ...prev, [serie]: !prev[serie] }))}
-                    style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: 'rgba(139,92,246,0.02)', borderBottom: expandedGroups[serie] ? '1px solid hsl(var(--border-subtle))' : 'none' }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(139,92,246,0.3)' }}>
-                        <Users size={24} color="#fff" />
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{serie}</span>
-                          <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>{items.length} redações</span>
-                          {(() => {
-                            const bimsOfGroup = Array.from(new Set(items.map((i: any) => i.id_bimestre))).map((id: any) => bimestres.find((b: any) => b.id === id)?.nome).filter(Boolean);
-                            if (bimsOfGroup.length === 0) return null;
-                            const bimLabel = bimsOfGroup.length > 2 ? `${bimsOfGroup.length} bimestres` : bimsOfGroup.join(', ');
-                            return (
-                              <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(236,72,153,0.1)', color: '#ec4899', whiteSpace: 'nowrap' }}>
-                                {bimLabel}
-                              </span>
-                            );
-                          })()}
-                        </div>
-                        <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>Acompanhe as redações aplicadas e programadas para esta turma.</span>
-                      </div>
-                    </div>
-                    <motion.button 
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: '#8b5cf6', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+              {groupedRedacoes.map(([serie, items]) => {
+                const segInfo = getSegmentoInfo(serie)
+                const SegIcon = segInfo.icon
+
+                return (
+                  <div key={serie} style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 16, marginBottom: 24, overflow: 'hidden' }}>
+                    <div 
+                      onClick={() => setExpandedGroups(prev => ({ ...prev, [serie]: !prev[serie] }))}
+                      style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: `${segInfo.color}05`, borderBottom: expandedGroups[serie] ? '1px solid hsl(var(--border-subtle))' : 'none' }}
                     >
-                      {expandedGroups[serie] ? 'Recolher' : 'Expandir'}
-                      <ChevronUp size={16} style={{ transform: expandedGroups[serie] ? 'none' : 'rotate(180deg)', transition: 'transform 0.2s' }} />
-                    </motion.button>
-                  </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 14, background: segInfo.gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: segInfo.boxShadow, flexShrink: 0 }}>
+                          <SegIcon size={24} color="#fff" strokeWidth={2.5} />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{serie}</span>
+                            
+                            <span style={{ 
+                              padding: '4px 12px', borderRadius: 100, fontSize: 11, fontWeight: 900, 
+                              background: segInfo.bgLight, border: `1px solid ${segInfo.border}`, 
+                              color: segInfo.color, textTransform: 'uppercase', letterSpacing: '0.03em'
+                            }}>
+                              {segInfo.segmento}
+                            </span>
+
+                            <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(139,92,246,0.08)', color: '#8b5cf6' }}>
+                              {items.length} {items.length === 1 ? 'redação' : 'redações'}
+                            </span>
+
+                            {(() => {
+                              const bimsOfGroup = Array.from(new Set(items.map((i: any) => i.id_bimestre))).map((id: any) => bimestres.find((b: any) => b.id === id)?.nome).filter(Boolean);
+                              if (bimsOfGroup.length === 0) return null;
+                              const bimLabel = bimsOfGroup.length > 2 ? `${bimsOfGroup.length} bimestres` : bimsOfGroup.join(', ');
+                              return (
+                                <span style={{ padding: '4px 12px', borderRadius: 100, fontSize: 12, fontWeight: 800, background: 'rgba(236,72,153,0.1)', color: '#ec4899', whiteSpace: 'nowrap' }}>
+                                  {bimLabel}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>Acompanhe as redações aplicadas e programadas para esta turma.</span>
+                        </div>
+                      </div>
+                      <motion.button 
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', border: `1px solid ${segInfo.border}`, color: segInfo.color, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                      >
+                        {expandedGroups[serie] ? 'Recolher' : 'Expandir'}
+                        <ChevronUp size={16} style={{ transform: expandedGroups[serie] ? 'none' : 'rotate(180deg)', transition: 'transform 0.2s' }} />
+                      </motion.button>
+                    </div>
                   
                   <AnimatePresence>
                     {expandedGroups[serie] && (
@@ -574,6 +700,19 @@ export default function UploadRedaçõesGerenciamentoPage() {
                 const showUploadBtn = isProfView && myAssignment && myAssignment.status === 'pendente'
                 const totalRequested = (redacao.redacao_upload_requisicoes || []).reduce((acc: number, req: any) => acc + (req.qtd_questoes || 0), 0)
                 const totalUploaded = Array.isArray(redacao.questoes_json) ? redacao.questoes_json.length : (redacao.questoes_count || 0)
+
+                const dataCriacao = redacao.created_at ? new Date(redacao.created_at).toLocaleDateString('pt-BR') : null
+                const reqsWithEnvio = (redacao.redacao_upload_requisicoes || []).filter((r: any) => r.enviado_em || r.status === 'enviado' || r.status === 'aprovado' || r.status === 'concluido')
+                let dataEnvio: string | null = null
+                if (reqsWithEnvio.length > 0) {
+                  const latestEnvio = reqsWithEnvio.map((r: any) => r.enviado_em || r.updated_at).filter(Boolean).sort().reverse()[0]
+                  if (latestEnvio) {
+                    dataEnvio = new Date(latestEnvio).toLocaleDateString('pt-BR')
+                  }
+                }
+                if (!dataEnvio && redacao.status !== 'aguardando' && redacao.updated_at) {
+                  dataEnvio = new Date(redacao.updated_at).toLocaleDateString('pt-BR')
+                }
 
                 return (
                   <motion.div key={redacao.id}
@@ -616,6 +755,14 @@ export default function UploadRedaçõesGerenciamentoPage() {
                                 <BookOpen size={14} /> {bimestres.find(b => b.id === redacao.id_bimestre)?.nome || 'Bimestre'}
                               </span>
                             )}
+                            {dataCriacao && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#8b5cf6' }}>
+                                <Calendar size={14} /> Criação: {dataCriacao}
+                              </span>
+                            )}
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: dataEnvio ? '#10b981' : '#f59e0b' }}>
+                              <Upload size={14} /> Envio: {dataEnvio ? dataEnvio : 'Pendente'}
+                            </span>
                             {redacao.data_aplicacao && (
                               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <Calendar size={14} /> Aplicação: {redacao.data_aplicacao.split('-').reverse().join('/')}
@@ -738,7 +885,8 @@ export default function UploadRedaçõesGerenciamentoPage() {
                     )}
                   </AnimatePresence>
                 </div>
-              ))}
+              )
+            })}
             </AnimatePresence>
           </div>
         )}

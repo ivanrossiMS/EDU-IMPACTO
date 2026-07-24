@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus } from '@/lib/utils'
+import { getDerivedStatus, formatProfessorHeaderName } from '@/lib/utils'
 import { ProvaPreviewModal, Questao } from '@/components/simulados/ProvaPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -318,7 +318,7 @@ export default function VerProvaUploadPage() {
               formattedDisciplinas: Array.from(new Set(requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(requisicoes?.map((r: any) => {
                 const nome = r.professores?.nome || r.professor_nome || '';
-                return nome ? nome.split(' ').slice(0, 2).join(' ') : '';
+                return nome ? formatProfessorHeaderName(nome) : '';
               }))).filter(Boolean).join(', ')
             }}
             config={simConfig}

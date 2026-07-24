@@ -93,6 +93,36 @@ export function getInitials(name: string): string {
     .toUpperCase()
 }
 
+/**
+ * Formata o nome do professor para exibição nos cabeçalhos das provas (Ex: "Ivan R.", "Wennsllen R.").
+ * Pega o primeiro nome com o sobrenome abreviado.
+ */
+export function formatProfessorHeaderName(nome: string): string {
+  if (!nome || !nome.trim()) return ''
+  if (nome.includes(',')) {
+    return nome.split(',').map(n => formatProfessorHeaderName(n)).filter(Boolean).join(', ')
+  }
+
+  const parts = nome.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return ''
+
+  const firstName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase()
+
+  if (parts.length === 1) return firstName
+
+  const preps = new Set(['de', 'da', 'do', 'dos', 'das', 'e'])
+  let lastPart = parts[parts.length - 1]
+  for (let i = parts.length - 1; i >= 1; i--) {
+    if (!preps.has(parts[i].toLowerCase())) {
+      lastPart = parts[i]
+      break
+    }
+  }
+
+  const lastInitial = lastPart.charAt(0).toUpperCase()
+  return `${firstName} ${lastInitial}.`
+}
+
 export function slugify(text: string): string {
   return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
 }
