@@ -46,28 +46,45 @@ export function cleanEnunciadoHtml(html: string): string {
     return '';
   });
 
+  const isEmptyNode = (str: string) => {
+    if (/<img|video|iframe|audio/i.test(str)) return false;
+    const textOnly = str
+      .replace(/<[^>]+>/g, '')
+      .replace(/[\s\u00a0\ufeff]/g, '')
+      .replace(/&(nbsp|amp|quot|lt|gt|#160);/gi, '');
+    return textOnly.length === 0;
+  };
+
   let prev = '';
   while (cleaned !== prev) {
     prev = cleaned;
+
     cleaned = cleaned
-      .replace(/^[\s\r\n\t]+/, '')
-      .replace(/^(?:<br\s*\/?>|&nbsp;)+/gi, '')
-      .replace(/^<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/p>/gi, '')
-      .replace(/^<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/div>/gi, '')
-      .replace(/^<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)+/gi, '<p>')
-      .replace(/^<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)+/gi, '<div>');
+      .replace(/^[\s\u00a0\ufeff]+/, '')
+      .replace(/^(?:<br\s*\/?>|&nbsp;|&#160;)+/gi, '');
+
+    cleaned = cleaned.replace(/^<(p|div|span)\b[^>]*>([\s\S]*?)<\/\1>/gi, (match, tag, inner) => {
+      if (isEmptyNode(inner)) return '';
+      return match;
+    });
+
+    cleaned = cleaned.replace(/^<(p|div)\b([^>]*)>(?:\s|\u00a0|<br\s*\/?>|&nbsp;|&#160;)+/gi, '<$1$2>');
   }
 
   prev = '';
   while (cleaned !== prev) {
     prev = cleaned;
+
     cleaned = cleaned
-      .replace(/[\s\r\n\t]+$/, '')
-      .replace(/(?:<br\s*\/?>|&nbsp;)+$/gi, '')
-      .replace(/<p\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/p>$/gi, '')
-      .replace(/<div\b[^>]*>(?:\s|<br\s*\/?>|&nbsp;)*<\/div>$/gi, '')
-      .replace(/(?:\s|<br\s*\/?>|&nbsp;)+<\/p>$/gi, '</p>')
-      .replace(/(?:\s|<br\s*\/?>|&nbsp;)+<\/div>$/gi, '</div>');
+      .replace(/[\s\u00a0\ufeff]+$/, '')
+      .replace(/(?:<br\s*\/?>|&nbsp;|&#160;)+$/gi, '');
+
+    cleaned = cleaned.replace(/<(p|div|span)\b[^>]*>([\s\S]*?)<\/\1>$/gi, (match, tag, inner) => {
+      if (isEmptyNode(inner)) return '';
+      return match;
+    });
+
+    cleaned = cleaned.replace(/(?:\s|\u00a0|<br\s*\/?>|&nbsp;|&#160;)+<\/(p|div)>$/gi, '</$1>');
   }
 
   const prefix = metaTags.length > 0 ? metaTags.join('\n') + '\n' : '';
@@ -262,7 +279,7 @@ const PAGE_H = 297 * MM_TO_PX;
 const HEADER_1 = 80 * MM_TO_PX; // Height of cover image header + margins
 const HEADER_OTHER = 25 * MM_TO_PX;
 const BOTTOM = 25 * MM_TO_PX;
-const BLOCK_SPACING = 12; 
+const BLOCK_SPACING = 32; 
 const ALT_SPACING = 8;
 const CHUNK_SPACING = 6;
 
@@ -412,13 +429,14 @@ export function PaginationEngine({
         if (q.tipo_questao === 'descritiva') {
           const match = q.enunciado?.match(/<meta name="linhas_resposta" content="(.*?)">/);
           if (match) {
-            linhasResposta = parseInt(match[1], 10) || 5;
+            const p = parseInt(match[1], 10);
+            linhasResposta = !isNaN(p) ? p : 5;
           }
           const matchEstilo = q.enunciado?.match(/<meta name="estilo_espaco" content="(.*?)">/);
           if (matchEstilo) {
             estiloEspaco = matchEstilo[1];
           }
-          descritivaH = linhasResposta * 28 + 20; // 28px height per line + padding
+          descritivaH = linhasResposta * 28 + (linhasResposta > 0 ? 20 : 0); // 28px height per line + padding
           totalH += descritivaH + ALT_SPACING;
         }
 

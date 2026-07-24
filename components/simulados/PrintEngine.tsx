@@ -117,7 +117,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
     const isNewDisciplina = globalIndex === 0 || q.id_disciplina !== questoes[globalIndex - 1].id_disciplina;
 
     return (
-      <div key={q.id} className="print-question" style={{ marginBottom: 16, breakInside: 'auto' }}>
+      <div key={q.id} className="print-question" style={{ marginBottom: 32, breakInside: 'auto' }}>
         {isNewDisciplina && q.simulados_disciplinas?.nome && (
           <div 
             style={{

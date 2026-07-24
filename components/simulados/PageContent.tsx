@@ -890,15 +890,15 @@ export function PageContent({
                         </div>
                         
                         {/* Old button removed */}
-                        {q.tipo_questao === 'descritiva' && (
+                        {q.tipo_questao === 'descritiva' && (block.linhasResposta !== undefined ? block.linhasResposta : 5) > 0 && (
                           block.estiloEspaco === 'pautado' ? (
                             <div style={{ marginTop: 16, width: '100%', display: 'flex', flexDirection: 'column' }}>
-                              {Array.from({ length: block.linhasResposta || 5 }).map((_, i) => (
+                              {Array.from({ length: block.linhasResposta }).map((_, i) => (
                                 <div key={i} style={{ height: 28, borderBottom: '1px solid #000' }} />
                               ))}
                             </div>
                           ) : (
-                            <div style={{ marginTop: 16, width: '100%', height: ((block.linhasResposta || 5) * 28) }} />
+                            <div style={{ marginTop: 16, width: '100%', height: (block.linhasResposta * 28) }} />
                           )
                         )}
                       </div>

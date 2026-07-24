@@ -101,7 +101,8 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
 
         const matchLinhas = finalHtml.match(/<meta name="linhas_resposta" content="(.*?)">/)
         if (matchLinhas) {
-          setLinhasResposta(parseInt(matchLinhas[1], 10) || 5)
+          const p = parseInt(matchLinhas[1], 10)
+          setLinhasResposta(!isNaN(p) ? p : 5)
           finalHtml = finalHtml.replace(matchLinhas[0], '').trim()
           setTipoQuestao('descritiva')
         } else if (questao?.tipo_questao === 'descritiva') {
@@ -817,7 +818,7 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))' }}>
                       <label style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Tamanho (em linhas):</label>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {[3, 5, 10, 15, 20, 25, 30].map(n => (
+                        {(estiloEspaco === 'em_branco' ? [0, 1, 3, 5, 10, 15, 20, 25, 30] : [3, 5, 10, 15, 20, 25, 30]).map(n => (
                           <button
                             key={n}
                             type="button"
@@ -876,18 +877,24 @@ export function ProvaQuestaoFormModal({ provaId, questao, defaultProfessorId, de
                   </div>
                 ) : (
                   <div>
-                    {estiloEspaco === 'pautado' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '12px 16px', background: 'white' }}>
-                        {Array.from({ length: linhasResposta }).map((_, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', height: 24, width: '100%' }}>
-                            <span style={{ width: 20, fontSize: 10, color: '#a1a1aa', textAlign: 'right', paddingRight: 6, userSelect: 'none' }}>{i + 1}</span>
-                            <div style={{ flex: 1, height: '100%', borderBottom: '1px solid #e2e8f0' }} />
-                          </div>
-                        ))}
-                      </div>
+                    {linhasResposta > 0 ? (
+                      estiloEspaco === 'pautado' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '12px 16px', background: 'white' }}>
+                          {Array.from({ length: linhasResposta }).map((_, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', height: 24, width: '100%' }}>
+                              <span style={{ width: 20, fontSize: 10, color: '#a1a1aa', textAlign: 'right', paddingRight: 6, userSelect: 'none' }}>{i + 1}</span>
+                              <div style={{ flex: 1, height: '100%', borderBottom: '1px solid #e2e8f0' }} />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ height: linhasResposta * 24, border: '1px dashed #cbd5e1', borderRadius: 8, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 12, fontStyle: 'italic' }}>
+                          Espaço em branco ({linhasResposta} {linhasResposta === 1 ? 'linha' : 'linhas'})
+                        </div>
+                      )
                     ) : (
-                      <div style={{ height: linhasResposta * 24, border: '1px dashed #cbd5e1', borderRadius: 8, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 12, fontStyle: 'italic' }}>
-                        Espaço em branco ({linhasResposta} linhas)
+                      <div style={{ border: '1px dashed #cbd5e1', borderRadius: 8, padding: 8, background: '#f8fafc', textAlign: 'center', color: '#64748b', fontSize: 11, fontStyle: 'italic' }}>
+                        Sem espaço extra (0 linhas)
                       </div>
                     )}
                   </div>

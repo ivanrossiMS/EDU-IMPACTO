@@ -16,7 +16,7 @@ export default function AdaptarSimuladoPage() {
   const [questoes, setQuestoes] = useState<any[]>([])
   const [requisicoes, setRequisicoes] = useState<any[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [fontSize, setFontSize] = useState<number>(16) // base font size in px
+  const [fontSize, setFontSize] = useState<number>(14) // base font size in px (default 14pt)
   const [columns, setColumns] = useState<number>(1) // Layout de colunas
   const [config, setConfig] = useState<any>(null)
 
@@ -29,7 +29,11 @@ export default function AdaptarSimuladoPage() {
 
       const { data: simData } = await supabase.from('simulados').select('*').eq('id', id).single()
       if (simData) {
-        setSimulado({ ...(simData as any), titulo: `${(simData as any).titulo} (Adaptado)` })
+        const s = simData as any
+        setSimulado({ ...s, titulo: `${s.titulo} (Adaptado)` })
+        if (s.config_estudio?.config_fonte_enunciado) {
+          setFontSize(s.config_estudio.config_fonte_enunciado)
+        }
       }
 
       const { data: reqs } = await supabase.from('simulados_requisicoes').select('*').eq('id_simulado', id).order('created_at', { ascending: true })

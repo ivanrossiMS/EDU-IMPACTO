@@ -191,7 +191,7 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
       html = html.replace(/<meta name="estilo_espaco" content=".*?">/g, '')
       
       if (updatedQ.tipo_questao === 'descritiva') {
-         html += `<meta name="linhas_resposta" content="${updatedQ.linhas_resposta || 5}">`
+         html += `<meta name="linhas_resposta" content="${updatedQ.linhas_resposta !== undefined ? updatedQ.linhas_resposta : 5}">`
          html += `<meta name="estilo_espaco" content="${updatedQ.estilo_espaco || 'em_branco'}">`
       }
       
@@ -510,24 +510,27 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                             {q.tipo_questao === 'descritiva' && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 16, borderTop: '1px solid hsl(var(--border-subtle))' }}>
                                 <label style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>Tamanho (em linhas):</label>
-                                <div style={{ display: 'flex', gap: 6 }}>
-                                  {[3, 5, 10, 15, 20, 25, 30].map(n => (
-                                    <button
-                                      key={n}
-                                      onClick={() => !readOnly && updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', linhas_resposta: n })}
-                                      style={{
-                                        width: 32, height: 32, borderRadius: 8, border: '1px solid',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, cursor: readOnly ? 'default' : 'pointer',
-                                        background: (q.linhas_resposta || 5) === n ? '#8b5cf6' : 'transparent',
-                                        color: (q.linhas_resposta || 5) === n ? 'white' : 'hsl(var(--text-secondary))',
-                                        borderColor: (q.linhas_resposta || 5) === n ? '#8b5cf6' : 'hsl(var(--border-subtle))',
-                                        transition: 'all 0.2s',
-                                        opacity: readOnly && (q.linhas_resposta || 5) !== n ? 0.5 : 1
-                                      }}
-                                    >
-                                      {n}
-                                    </button>
-                                  ))}
+                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                  {[0, 1, 3, 5, 10, 15, 20, 25, 30].map(n => {
+                                    const isSelected = (q.linhas_resposta !== undefined ? q.linhas_resposta : 5) === n;
+                                    return (
+                                      <button
+                                        key={n}
+                                        onClick={() => !readOnly && updateQuestaoDescritiva(qIdx, { tipo_questao: 'descritiva', linhas_resposta: n })}
+                                        style={{
+                                          width: 32, height: 32, borderRadius: 8, border: '1px solid',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, cursor: readOnly ? 'default' : 'pointer',
+                                          background: isSelected ? '#8b5cf6' : 'transparent',
+                                          color: isSelected ? 'white' : 'hsl(var(--text-secondary))',
+                                          borderColor: isSelected ? '#8b5cf6' : 'hsl(var(--border-subtle))',
+                                          transition: 'all 0.2s',
+                                          opacity: readOnly && !isSelected ? 0.5 : 1
+                                        }}
+                                      >
+                                        {n}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}

@@ -42,12 +42,33 @@ function formatName(fullName: string) {
   return assembled
 }
 
+export interface ObservacaoItem {
+  id: string
+  texto: string
+  dataHora: string
+  categoria: 'geral' | 'pedagogica' | 'comportamental' | 'saude' | 'financeira' | 'responsaveis'
+  autor?: string
+  editadoEm?: string
+}
+
 export default function AlunosPage() {
   const { cfgNiveisEnsino, cfgCalendarioLetivo, logSystemAction } = useData()
   const queryClient = useQueryClient()
   
   const [busca, setBusca] = useState('')
   const [todasTurmas, setTodasTurmas] = useState<any[]>([])
+
+  // State for Observacoes Tab
+  const [novaObsTexto, setNovaObsTexto] = useState('')
+  const [novaObsDataHora, setNovaObsDataHora] = useState(() => {
+    const now = new Date()
+    const tzOffset = now.getTimezoneOffset() * 60000
+    return new Date(now.getTime() - tzOffset).toISOString().slice(0, 16)
+  })
+  const [novaObsCategoria, setNovaObsCategoria] = useState<'geral' | 'pedagogica' | 'comportamental' | 'saude' | 'financeira' | 'responsaveis'>('geral')
+  const [editingObsId, setEditingObsId] = useState<string | null>(null)
+  const [buscaObsText, setBuscaObsText] = useState('')
+  const [filtroObsCategoria, setFiltroObsCategoria] = useState<string>('todas')
   const [segmentoSelecionado, setSegmentoSelecionado] = useState('')
   const [editingAlunoId, setEditingAlunoId] = useState<string | null>(null)
   const [mostrarFormResponsavel, setMostrarFormResponsavel] = useState(false)
@@ -736,8 +757,104 @@ export default function AlunosPage() {
       isOutro: false,
       proibido: false
     }],
-    historicoTurmas: [] as any[]
+    historicoTurmas: [] as any[],
+    observacoes: [] as ObservacaoItem[]
   })
+
+  const formatDateTimePtBr = (dtStr: string) => {
+    if (!dtStr) return ''
+    try {
+      const d = new Date(dtStr)
+      if (isNaN(d.getTime())) return dtStr
+      const day = String(d.getDate()).padStart(2, '0')
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const year = d.getFullYear()
+      const hours = String(d.getHours()).padStart(2, '0')
+      const minutes = String(d.getMinutes()).padStart(2, '0')
+      return `${day}/${month}/${year} às ${hours}:${minutes}`
+    } catch (e) {
+      return dtStr
+    }
+  }
+
+  const resetObsInput = () => {
+    setNovaObsTexto('')
+    const now = new Date()
+    const tzOffset = now.getTimezoneOffset() * 60000
+    setNovaObsDataHora(new Date(now.getTime() - tzOffset).toISOString().slice(0, 16))
+    setNovaObsCategoria('geral')
+    setEditingObsId(null)
+  }
+
+  const handleAdicionarObservacao = () => {
+    if (!novaObsTexto.trim()) {
+      alert('Por favor, digite o texto da observação.')
+      return
+    }
+    const newObs: ObservacaoItem = {
+      id: `obs_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      texto: novaObsTexto.trim(),
+      dataHora: novaObsDataHora || new Date().toISOString(),
+      categoria: novaObsCategoria,
+      autor: 'Usuário'
+    }
+    setFormData(prev => ({
+      ...prev,
+      observacoes: [newObs, ...(prev.observacoes || [])]
+    }))
+    resetObsInput()
+  }
+
+  const handleSalvarEdicaoObservacao = () => {
+    if (!editingObsId || !novaObsTexto.trim()) return
+    setFormData(prev => ({
+      ...prev,
+      observacoes: (prev.observacoes || []).map(obs => {
+        if (obs.id === editingObsId) {
+          return {
+            ...obs,
+            texto: novaObsTexto.trim(),
+            dataHora: novaObsDataHora,
+            categoria: novaObsCategoria,
+            editadoEm: new Date().toISOString()
+          }
+        }
+        return obs
+      })
+    }))
+    resetObsInput()
+  }
+
+  const handleIniciarEdicaoObservacao = (obs: ObservacaoItem) => {
+    setEditingObsId(obs.id)
+    setNovaObsTexto(obs.texto)
+    if (obs.dataHora) {
+      try {
+        const d = new Date(obs.dataHora)
+        if (!isNaN(d.getTime())) {
+          const tzOffset = d.getTimezoneOffset() * 60000
+          setNovaObsDataHora(new Date(d.getTime() - tzOffset).toISOString().slice(0, 16))
+        } else {
+          setNovaObsDataHora(obs.dataHora)
+        }
+      } catch {
+        setNovaObsDataHora(obs.dataHora)
+      }
+    }
+    setNovaObsCategoria(obs.categoria || 'geral')
+  }
+
+  const handleRemoverObservacao = (obsId: string) => {
+    if (confirm('Deseja realmente remover esta observação?')) {
+      setFormData(prev => ({
+        ...prev,
+        observacoes: (prev.observacoes || []).filter(o => o.id !== obsId)
+      }))
+      if (editingObsId === obsId) {
+        resetObsInput()
+      }
+    }
+  }
 
   const handleInputChange = (section: string, field: string, value: any, index?: number) => {
     setFormData(prev => {
@@ -809,8 +926,12 @@ export default function AlunosPage() {
       responsaveis: [{
         id: randCode, nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: randCode, codigoAluno: '', rfid: '', parentesco: '', diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], isFinanceiro: false, isPedagogico: false, isOutro: false, proibido: false
       }],
-      historicoTurmas: []
+      historicoTurmas: [],
+      observacoes: []
     })
+    resetObsInput()
+    setBuscaObsText('')
+    setFiltroObsCategoria('todas')
     setEditingAlunoId(null)
     setMostrarFormResponsavel(false)
     setIsModalOpen(true)
@@ -889,12 +1010,18 @@ export default function AlunosPage() {
       return
     }
 
+    const obsCompilada = (formData.observacoes || [])
+      .map(o => `[${formatDateTimePtBr(o.dataHora)}] [${(o.categoria || 'geral').toUpperCase()}]: ${o.texto}`)
+      .join('\n\n')
+
     const newAluno = {
       id: editingAlunoId || `TEMP-${Date.now()}`,
       ...formData.aluno,
       responsavel: formData.responsaveis[0] || null,
       responsaveis: formData.responsaveis,
-      historicoTurmas: formData.historicoTurmas
+      historicoTurmas: formData.historicoTurmas,
+      observacoes: formData.observacoes || [],
+      obs: obsCompilada
     }
     
     const method = editingAlunoId ? 'PUT' : 'POST'
@@ -940,6 +1067,21 @@ export default function AlunosPage() {
     const segmento = turmaDoAluno?.dados?.segmento || ''
     setSegmentoSelecionado(segmento)
 
+    const rawObs = aluno.observacoes || aluno.dados?.observacoes || []
+    let obsList: ObservacaoItem[] = Array.isArray(rawObs) ? rawObs : []
+    if (obsList.length === 0) {
+      const legacyObsText = aluno.obs || aluno.dados?.obs
+      if (typeof legacyObsText === 'string' && legacyObsText.trim()) {
+        obsList = [{
+          id: `obs-legacy-${Date.now()}`,
+          texto: legacyObsText.trim(),
+          dataHora: aluno.created_at || new Date().toISOString(),
+          categoria: 'geral',
+          autor: 'Sistema (Migrado)'
+        }]
+      }
+    }
+
     setFormData({
       aluno: {
         codigo: aluno.matricula || aluno.codigo || '',
@@ -970,8 +1112,12 @@ export default function AlunosPage() {
             segmento: segmento,
             serieTurma: turmaDoAluno?.id || aluno.turma || '',
             status: 'Matriculado'
-          }] : [])
+          }] : []),
+      observacoes: obsList
     })
+    resetObsInput()
+    setBuscaObsText('')
+    setFiltroObsCategoria('todas')
     setEditingAlunoId(aluno.id)
     setMostrarFormResponsavel(!!aluno.responsavel)
     setIsModalOpen(true)
@@ -1872,7 +2018,7 @@ export default function AlunosPage() {
             </div>
 
             {/* Modal Tabs */}
-            <div style={{ background: 'transparent', padding: '12px 32px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 8 }}>
+            <div style={{ background: 'transparent', padding: '12px 32px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 8, overflowX: 'auto' }}>
               <button className={`tab-btn ${activeTab === 'aluno' ? 'active' : ''}`} onClick={() => setActiveTab('aluno')}>
                 <Users size={14} /> Dados do Aluno
               </button>
@@ -1881,6 +2027,14 @@ export default function AlunosPage() {
               </button>
               <button className={`tab-btn ${activeTab === 'turma' ? 'active' : ''}`} onClick={() => setActiveTab('turma')}>
                 <Tag size={14} /> Vínculo de Turma
+              </button>
+              <button className={`tab-btn ${activeTab === 'observacoes' ? 'active' : ''}`} onClick={() => setActiveTab('observacoes')}>
+                <FileText size={14} /> Observações
+                {(formData.observacoes?.length || 0) > 0 && (
+                  <span style={{ marginLeft: 6, background: activeTab === 'observacoes' ? '#fff' : '#3b82f6', color: activeTab === 'observacoes' ? '#1d4ed8' : '#fff', fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 10 }}>
+                    {formData.observacoes.length}
+                  </span>
+                )}
               </button>
             </div>
 
@@ -2606,6 +2760,274 @@ export default function AlunosPage() {
                 </div>
               )}
 
+              {/* TAB: OBSERVAÇÕES */}
+              {activeTab === 'observacoes' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  {/* Header info */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(59, 130, 246, 0.05)', padding: '16px 20px', borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.15)' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                      <FileText size={18} />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', margin: 0 }}>Central de Anotações & Histórico de Observações</h3>
+                      <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0 0' }}>Cadastre observações pedagógicas, comportamentais, de saúde ou gerais com carimbo oficial de data e horário.</p>
+                    </div>
+                  </div>
+
+                  {/* Form Card for Adding / Editing Observation */}
+                  <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Sparkles size={14} color="#3b82f6" /> {editingObsId ? 'Editar Observação' : 'Nova Observação'}
+                      </label>
+                      {editingObsId && (
+                        <button onClick={resetObsInput} style={{ fontSize: 11, fontWeight: 700, color: '#64748b', background: '#f1f5f9', border: 'none', padding: '4px 10px', borderRadius: 12, cursor: 'pointer' }}>
+                          Cancelar Edição
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Textarea */}
+                    <div>
+                      <textarea
+                        className="form-input"
+                        rows={3}
+                        style={{ width: '100%', resize: 'vertical', padding: '12px 14px', fontSize: 13, minHeight: 80, lineHeight: 1.5 }}
+                        placeholder="Digite os detalhes da observação sobre o aluno..."
+                        value={novaObsTexto}
+                        onChange={e => setNovaObsTexto(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Inputs Grid: Date/Time + Category */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, alignItems: 'end' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
+                          <Clock size={12} style={{ display: 'inline', marginRight: 4 }} /> Data e Horário de Inserção *
+                        </label>
+                        <input
+                          type="datetime-local"
+                          className="form-input"
+                          style={{ fontSize: 13, height: 42 }}
+                          value={novaObsDataHora}
+                          onChange={e => setNovaObsDataHora(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>
+                          Categoria da Anotação
+                        </label>
+                        <select
+                          className="form-input"
+                          style={{ fontSize: 13, height: 42 }}
+                          value={novaObsCategoria}
+                          onChange={e => setNovaObsCategoria(e.target.value as any)}
+                        >
+                          <option value="geral">📌 Geral</option>
+                          <option value="pedagogica">🎓 Pedagógica</option>
+                          <option value="comportamental">⚠️ Comportamental</option>
+                          <option value="saude">🏥 Saúde</option>
+                          <option value="financeira">💳 Financeira</option>
+                          <option value="responsaveis">👨‍👩‍👧‍👦 Responsáveis</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 4 }}>
+                      {editingObsId ? (
+                        <button
+                          type="button"
+                          onClick={handleSalvarEdicaoObservacao}
+                          className="neo-btn neo-btn-primary"
+                          style={{ height: 40, padding: '0 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <Check size={16} /> Salvar Alteração
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleAdicionarObservacao}
+                          className="neo-btn neo-btn-primary"
+                          style={{ height: 40, padding: '0 20px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+                        >
+                          <Plus size={16} /> Adicionar Observação
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Filter & Timeline Section */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                      <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        Histórico Registrado
+                        <span style={{ background: '#e2e8f0', color: '#475569', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10 }}>
+                          {formData.observacoes?.length || 0}
+                        </span>
+                      </h4>
+
+                      {/* Search inside notes */}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ position: 'relative', width: 180 }}>
+                          <SearchIcon size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                          <input
+                            className="form-input"
+                            style={{ paddingLeft: 30, height: 34, fontSize: 12 }}
+                            placeholder="Buscar anotações..."
+                            value={buscaObsText}
+                            onChange={e => setBuscaObsText(e.target.value)}
+                          />
+                        </div>
+
+                        {/* Category filter tabs */}
+                        <div style={{ display: 'flex', gap: 4, background: '#f1f5f9', padding: 3, borderRadius: 8 }}>
+                          {['todas', 'geral', 'pedagogica', 'comportamental', 'saude', 'financeira', 'responsaveis'].map(cat => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => setFiltroObsCategoria(cat)}
+                              style={{
+                                padding: '3px 8px',
+                                borderRadius: 6,
+                                fontSize: 11,
+                                fontWeight: 700,
+                                border: 'none',
+                                background: filtroObsCategoria === cat ? '#fff' : 'transparent',
+                                color: filtroObsCategoria === cat ? '#1d4ed8' : '#64748b',
+                                cursor: 'pointer',
+                                boxShadow: filtroObsCategoria === cat ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                textTransform: 'capitalize'
+                              }}
+                            >
+                              {cat === 'todas' ? 'Todas' : cat === 'responsaveis' ? 'Responsáveis' : cat}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Timeline Notes List */}
+                    {(() => {
+                      const filtradas = (formData.observacoes || [])
+                        .filter(obs => {
+                          if (filtroObsCategoria !== 'todas' && obs.categoria !== filtroObsCategoria) return false
+                          if (buscaObsText.trim()) {
+                            const q = buscaObsText.toLowerCase()
+                            return obs.texto.toLowerCase().includes(q) || (obs.autor && obs.autor.toLowerCase().includes(q))
+                          }
+                          return true
+                        })
+                        .sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime())
+
+                      if (filtradas.length === 0) {
+                        return (
+                          <div style={{ padding: '36px 20px', background: '#f8fafc', border: '2px dashed #e2e8f0', borderRadius: 16, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4338ca', marginBottom: 12 }}>
+                              <FileText size={22} />
+                            </div>
+                            <p style={{ fontSize: 14, fontWeight: 700, color: '#334155', margin: 0 }}>Nenhuma observação encontrada</p>
+                            <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }}>
+                              {formData.observacoes?.length > 0 ? 'Nenhum resultado corresponde aos filtros selecionados.' : 'Cadastre a primeira anotação utilizando o formulário acima.'}
+                            </p>
+                          </div>
+                        )
+                      }
+
+                      const CAT_CONFIG: Record<string, { label: string, color: string, bg: string, border: string }> = {
+                        geral: { label: 'Geral', color: '#1d4ed8', bg: '#dbeafe', border: '#bfdbfe' },
+                        pedagogica: { label: 'Pedagógica', color: '#7e22ce', bg: '#f3e8ff', border: '#e9d5ff' },
+                        comportamental: { label: 'Comportamental', color: '#b45309', bg: '#fef3c7', border: '#fde68a' },
+                        saude: { label: 'Saúde', color: '#047857', bg: '#d1fae5', border: '#a7f3d0' },
+                        financeira: { label: 'Financeira', color: '#be123c', bg: '#ffe4e6', border: '#fecdd3' },
+                        responsaveis: { label: 'Responsáveis', color: '#0284c7', bg: '#e0f2fe', border: '#bae6fd' }
+                      }
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {filtradas.map(obs => {
+                            const conf = CAT_CONFIG[obs.categoria || 'geral'] || CAT_CONFIG.geral
+                            return (
+                              <div
+                                key={obs.id}
+                                style={{
+                                  background: '#fff',
+                                  border: '1px solid #e2e8f0',
+                                  borderLeft: `4px solid ${conf.color}`,
+                                  borderRadius: 12,
+                                  padding: 16,
+                                  boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                                  transition: 'all 0.2s',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 8
+                                }}
+                              >
+                                {/* Note Header */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <span
+                                      style={{
+                                        background: conf.bg,
+                                        color: conf.color,
+                                        border: `1px solid ${conf.border}`,
+                                        fontSize: 10,
+                                        fontWeight: 800,
+                                        padding: '2px 8px',
+                                        borderRadius: 6,
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.4px'
+                                      }}
+                                    >
+                                      {conf.label}
+                                    </span>
+                                    <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                      <Clock size={12} color="#64748b" /> {formatDateTimePtBr(obs.dataHora)}
+                                    </span>
+                                  </div>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleIniciarEdicaoObservacao(obs)}
+                                      style={{ padding: 6, borderRadius: 6, border: 'none', background: '#f1f5f9', color: '#2563eb', cursor: 'pointer' }}
+                                      title="Editar observação"
+                                    >
+                                      <Edit size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoverObservacao(obs.id)}
+                                      style={{ padding: 6, borderRadius: 6, border: 'none', background: '#fef2f2', color: '#ef4444', cursor: 'pointer' }}
+                                      title="Remover observação"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Note Body */}
+                                <p style={{ fontSize: 13, color: '#1e293b', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                  {obs.texto}
+                                </p>
+
+                                {/* Footer metadata */}
+                                {obs.editadoEm && (
+                                  <div style={{ fontSize: 10, color: '#94a3b8', fontStyle: 'italic', alignSelf: 'flex-end', marginTop: 2 }}>
+                                    Editado em: {formatDateTimePtBr(obs.editadoEm)}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
+
             </div>
 
             {/* Modal Footer */}
@@ -2614,58 +3036,58 @@ export default function AlunosPage() {
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'aluno' ? '#1d4ed8' : '#e2e8f0' }}></span>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'responsavel' ? '#1d4ed8' : '#e2e8f0' }}></span>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'turma' ? '#1d4ed8' : '#e2e8f0' }}></span>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeTab === 'observacoes' ? '#1d4ed8' : '#e2e8f0' }}></span>
               </div>
               
               <div style={{ display: 'flex', gap: 12 }}>
                 <button onClick={toggleModal} className="neo-btn neo-btn-secondary" style={{ padding: '10px 20px', fontSize: 13 }}>
                   Cancelar
                 </button>
-                {activeTab !== 'turma' ? (
+                {activeTab !== 'observacoes' ? (
                   <button 
                     className="neo-btn neo-btn-primary" 
                     style={{ padding: '10px 20px', fontSize: 13 }}
                     onClick={() => {
-                      const nextTab = activeTab === 'aluno' ? 'responsavel' : 'turma';
+                      const nextTab = activeTab === 'aluno' ? 'responsavel' : activeTab === 'responsavel' ? 'turma' : 'observacoes';
                       setActiveTab(nextTab);
                       if (nextTab === 'responsavel') setMostrarFormResponsavel(true);
                     }}
                   >
                     Próximo Passo
                   </button>
-                ) : (
-                  <button 
-                    onClick={handleSave} 
-                    className="neo-btn neo-btn-primary" 
-                    disabled={isSubmitting}
-                    style={{ 
-                      padding: '10px 24px', 
-                      fontSize: 13, 
-                      background: isSubmitting ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
-                      boxShadow: isSubmitting ? '0 0 15px rgba(16, 185, 129, 0.6)' : '0 4px 12px rgba(16, 185, 129, 0.25)',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      pointerEvents: isSubmitting ? 'none' : 'auto',
-                      transition: 'all 0.3s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8
-                    }}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                        <span>Concluindo...</span>
-                        <style>{`
-                          @keyframes spin { 100% { transform: rotate(360deg); } }
-                        `}</style>
-                      </>
-                    ) : (
-                      <>
-                        <Check size={16} /> Finalizar Cadastro
-                      </>
-                    )}
-                  </button>
-                )}
+                ) : null}
+                <button 
+                  onClick={handleSave} 
+                  className="neo-btn neo-btn-primary" 
+                  disabled={isSubmitting}
+                  style={{ 
+                    padding: '10px 24px', 
+                    fontSize: 13, 
+                    background: isSubmitting ? 'linear-gradient(135deg, #059669 0%, #047857 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', 
+                    boxShadow: isSubmitting ? '0 0 15px rgba(16, 185, 129, 0.6)' : '0 4px 12px rgba(16, 185, 129, 0.25)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    pointerEvents: isSubmitting ? 'none' : 'auto',
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8
+                  }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Concluindo...</span>
+                      <style>{`
+                        @keyframes spin { 100% { transform: rotate(360deg); } }
+                      `}</style>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={16} /> Finalizar Cadastro
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
