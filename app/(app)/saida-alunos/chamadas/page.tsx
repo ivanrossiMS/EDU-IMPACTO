@@ -782,12 +782,10 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     return activeCalls
       .filter(c => c.status === 'special_auth')
       .map(c => {
-        const cTime = new Date(c.calledAt).getTime()
-        // Uma autorização especial só é marcada como saída confirmada se houver uma confirmação APÓS a data do lançamento especial
+        // Encontra a chamada confirmada do aluno para refletir o status de saída no card de Autorização Especial
         const pickUpCall = activeCalls.find(ac =>
           ac.studentId != null && String(ac.studentId) === String(c.studentId) &&
-          ac.status === 'confirmed' &&
-          new Date(ac.confirmedAt || ac.calledAt).getTime() >= cTime - 5000 // tolerância de 5s
+          ac.status === 'confirmed'
         )
         return {
           id: c.id,
@@ -800,7 +798,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           date: c.calledAt.split('T')[0],
           time: new Date(c.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
           confirmedOut: !!pickUpCall,
-          confirmedAt: pickUpCall ? new Date(pickUpCall.confirmedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : undefined
+          confirmedAt: pickUpCall && pickUpCall.confirmedAt 
+            ? new Date(pickUpCall.confirmedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+            : undefined
         }
       })
   }, [activeCalls])
