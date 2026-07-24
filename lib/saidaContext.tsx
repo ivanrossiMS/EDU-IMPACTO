@@ -239,7 +239,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 // Protect confirmed students from being set back to waiting/called via DB triggers/inserts unless isRevert is set
                 const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed') : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
-                  return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId) ? { ...c, status: 'confirmed' } : c)
+                  return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
                 }
                 const idx = arr.findIndex(c => c.id === call.id)
                 if (idx >= 0) {
@@ -256,7 +256,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 const arr = prev || []
                 const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed') : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
-                  return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId) ? { ...c, status: 'confirmed' } : c)
+                  return arr.map(c => (c.studentId != null && String(c.studentId) === callStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
                 }
                 const idx = arr.findIndex(c => c.id === call.id)
                 if (idx >= 0) {
@@ -285,7 +285,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 const arr = prev || []
                 const isAlreadyConfirmed = dataStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === dataStudentId && c.status === 'confirmed') : false
                 if (isAlreadyConfirmed && data.status !== 'confirmed' && !data.isRevert) {
-                  return arr.map(c => (c.studentId != null && String(c.studentId) === dataStudentId) ? { ...c, status: 'confirmed' } : c)
+                  return arr.map(c => (c.studentId != null && String(c.studentId) === dataStudentId && c.status !== 'special_auth') ? { ...c, status: 'confirmed' } : c)
                 }
                 const idx = arr.findIndex(c => c.id === data.id)
                 if (idx >= 0) {
@@ -296,7 +296,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 return [data, ...arr]
               })
             } else if (event === 'CONFIRM_PICKUP') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => (c.id === data.callId || (dataStudentId && c.studentId != null && String(c.studentId) === dataStudentId)) ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
+              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => ((c.id === data.callId || (dataStudentId && c.studentId != null && String(c.studentId) === dataStudentId)) && c.status !== 'special_auth') ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
             } else if (event === 'CANCEL_CALL') {
               setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
             } else if (event === 'RECALL_STUDENT') {
