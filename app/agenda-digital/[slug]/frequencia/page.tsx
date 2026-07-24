@@ -91,9 +91,9 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
 
   // Fallback para eventos de portaria
   const { data: eventosPortaria = [] } = useApiQuery<any[]>(
-    ['portaria-eventos-aluno', resolvedParams.slug],
+    ['portaria-eventos-aluno', resolvedParams.slug, aluno?.id, aluno?.matricula],
     '/api/portaria/eventos',
-    { aluno_id: resolvedParams.slug },
+    { aluno_id: aluno?.id || resolvedParams.slug, matricula: aluno?.matricula || resolvedParams.slug },
     { enabled: !!resolvedParams.slug }
   )
 
@@ -137,18 +137,32 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   }, [frequenciasDb, resolvedParams.slug]);
 
   const entradaCatracaMap = useMemo(() => {
-    const map: Record<string, string> = {}
+    const map: Record<string, { hora: string; dispositivo?: string }> = {}
     if (!eventosPortaria || !Array.isArray(eventosPortaria)) return map
-    const sorted = [...eventosPortaria].sort((a, b) => (a.data_hora || '').localeCompare(b.data_hora || ''))
+    
+    // Filtra apenas eventos com status de sucesso (ou sem status negativo)
+    const validEvents = eventosPortaria.filter(e => e.data_hora && (e.status === 'sucesso' || !e.status))
+    const sorted = [...validEvents].sort((a, b) => (a.data_hora || '').localeCompare(b.data_hora || ''))
+
     sorted.forEach(e => {
       if (!e.data_hora) return
-      const datePart = e.data_hora.slice(0, 10)
-      if (!map[datePart]) {
-        try {
-          const dateObj = new Date(e.data_hora)
-          map[datePart] = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-        } catch {
-          map[datePart] = e.data_hora.slice(11, 16)
+      let datePart = ''
+      let timePart = ''
+
+      // Extração direta de string para evitar alterações de fuso horário local
+      if (e.data_hora.includes('T') || e.data_hora.includes(' ')) {
+        const parts = e.data_hora.split(/[T ]/)
+        datePart = parts[0]
+        timePart = parts[1]?.slice(0, 5) || ''
+      } else {
+        datePart = e.data_hora.slice(0, 10)
+        timePart = e.data_hora.slice(11, 16)
+      }
+
+      if (datePart && !map[datePart]) {
+        map[datePart] = {
+          hora: timePart,
+          dispositivo: e.dispositivo_nome || 'Portaria iDFace'
         }
       }
     })
@@ -156,8 +170,17 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   }, [eventosPortaria])
 
   const historicoReal = useMemo(() => {
-    const list: Array<{ data: string; dateObj: Date; status: 'P' | 'F' | 'J' | 'A'; horaRegistro?: string; registradoPor?: string }> = []
+    const list: Array<{ 
+      data: string; 
+      dateObj: Date; 
+      status: 'P' | 'F' | 'J' | 'A'; 
+      horaRegistro?: string; 
+      registradoPor?: string;
+      horaCatraca?: string;
+    }> = []
     
+    const datesProcessed = new Set<string>()
+
     ;(frequenciasDb || []).forEach(f => {
       let status: 'P' | 'F' | 'J' | 'A' = 'P'
       
@@ -167,20 +190,40 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
         status = 'F'
       }
 
-      // Add UTC time hack so dates don't shift timezone locally
       const d = new Date(f.data + 'T12:00:00Z')
+      datesProcessed.add(f.data)
+
+      const catracaInfo = entradaCatracaMap[f.data]
 
       list.push({
         data: f.data,
         dateObj: d,
         status,
         horaRegistro: f.horaRegistro || f.dados?.horaRegistro,
-        registradoPor: f.registradoPor || f.dados?.registradoPor
+        registradoPor: f.registradoPor || f.dados?.registradoPor,
+        horaCatraca: catracaInfo?.hora
       })
+    })
+
+    // Caso o aluno tenha passado na catraca mas não haja registro no banco de frequências diárias,
+    // inclui a presença confirmada automaticamente a partir da catraca iDFace
+    Object.keys(entradaCatracaMap).forEach(dateStr => {
+      if (!datesProcessed.has(dateStr)) {
+        const catracaInfo = entradaCatracaMap[dateStr]
+        const d = new Date(dateStr + 'T12:00:00Z')
+        list.push({
+          data: dateStr,
+          dateObj: d,
+          status: 'P',
+          horaRegistro: catracaInfo.hora,
+          registradoPor: 'Catraca iDFace',
+          horaCatraca: catracaInfo.hora
+        })
+      }
     })
     
     return list.sort((a, b) => b.data.localeCompare(a.data))
-  }, [frequenciasDb])
+  }, [frequenciasDb, entradaCatracaMap])
 
   // Aggregate stats
   const totalAulas = historicoReal.length
@@ -340,12 +383,26 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
             let border = '1px solid #f8fafc'
 
             if (isCurrMonth && (dayRecords.length > 0 || hasSaida)) {
-              if (hasPresenca || hasJustificada || hasFalta) {
+              if (hasFalta && !hasPresenca) {
+                // Vermelho para Faltas
+                bgLight = '#fef2f2'
+                bgDot = '#ef4444'
+                textColor = '#991b1b'
+                border = '1px solid #fecaca'
+              } else if (hasJustificada && !hasPresenca) {
+                // Amarelo/Laranja para Justificadas
+                bgLight = '#fef3c7'
+                bgDot = '#f59e0b'
+                textColor = '#b45309'
+                border = '1px solid #fde68a'
+              } else if (hasPresenca) {
+                // Verde para Presenças
                 bgLight = '#f0fdf4'
                 bgDot = '#16a34a'
                 textColor = '#166534'
                 border = '1px solid #dcfce7'
               } else if (hasSaida) {
+                // Roxo para Saídas
                 bgLight = '#fdf4ff'
                 bgDot = '#c026d3'
                 textColor = '#86198f'
@@ -388,18 +445,22 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           })}
         </div>
 
-        <div style={{ display: 'flex', gap: 32, marginTop: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 20, height: 20, borderRadius: 6, background: '#f0fdf4', border: '1px solid #dcfce7' }} />
-            <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Entradas/Faltas</span>
+        <div style={{ display: 'flex', gap: 24, marginTop: 32, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 18, height: 18, borderRadius: 6, background: '#f0fdf4', border: '1px solid #dcfce7' }} />
+            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Presenças</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 20, height: 20, borderRadius: 6, background: '#fdf4ff', border: '1px solid #fce7f3' }} />
-            <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Saídas</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 18, height: 18, borderRadius: 6, background: '#fef2f2', border: '1px solid #fecaca' }} />
+            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Faltas</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 20, height: 20, borderRadius: 6, border: '2px solid #e0e7ff', background: '#fff' }} />
-            <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Dia selecionado</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 18, height: 18, borderRadius: 6, background: '#fdf4ff', border: '1px solid #fce7f3' }} />
+            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Saídas</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 18, height: 18, borderRadius: 6, border: '2px solid #4f46e5', background: '#fff' }} />
+            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Dia selecionado</span>
           </div>
         </div>
       </motion.div>
@@ -438,8 +499,9 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
                     const isPresenca = h.status === 'P'
                     const isFaltaJustificada = h.status === 'J'
                     
-                    const entradaTime = h.horaRegistro || entradaCatracaMap[h.data]
-                    const isIdFace = (h.registradoPor && h.registradoPor.toLowerCase().includes('idface')) || entradaTime
+                    const catracaInfo = entradaCatracaMap[h.data]
+                    const entradaTime = h.horaRegistro || h.horaCatraca || catracaInfo?.hora
+                    const isIdFace = (h.registradoPor && h.registradoPor.toLowerCase().includes('idface')) || !!entradaTime
                     
                     return (
                       <div 
@@ -464,13 +526,13 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
                                {isPresenca ? 'Presença Confirmada' : isFaltaJustificada ? 'Ausência Justificada' : 'Falta Registrada'}
                              </div>
                              <div style={{ display: 'flex', gap: 12 }}>                               
-                               {isIdFace ? (
+                               {isIdFace && entradaTime ? (
                                  <span style={{ 
                                    display: 'flex', alignItems: 'center', gap: 6, 
                                    fontSize: 13, fontWeight: 800, color: '#0284c7', 
                                    background: '#e0f2fe', padding: '6px 14px', borderRadius: 20
                                  }}>
-                                   <Clock size={16} strokeWidth={2.5} /> ID Face: {entradaTime?.slice(0,5)}h
+                                   <Clock size={16} strokeWidth={2.5} /> ID Face: {entradaTime.slice(0,5)}h
                                  </span>
                                ) : (
                                  <span style={{ 

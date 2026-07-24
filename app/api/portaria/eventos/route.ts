@@ -41,13 +41,58 @@ export async function GET(req: NextRequest) {
       dataFimVal = todayStr + (dataFimVal.startsWith('T') ? dataFimVal : 'T' + dataFimVal)
     }
 
+    const matricula = url.searchParams.get('matricula')
+
     let query = supabase
       .from('portaria_eventos')
       .select('id, data_hora, user_id_equipamento, aluno_id, aluno_nome, dispositivo_nome, status, confianca, payload_raw')
       .order('data_hora', { ascending: false })
       .limit(limit)
 
-    if (aluno_id) query = query.eq('aluno_id', aluno_id)
+    if (aluno_id || matricula) {
+      const searchTarget = (aluno_id || matricula || '').trim()
+
+      if (searchTarget) {
+        const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(searchTarget)
+        let alunoObj: { id: string; matricula: string } | null = null
+
+        if (isUuid) {
+          const { data } = await supabase
+            .from('alunos')
+            .select('id, matricula')
+            .eq('id', searchTarget)
+            .maybeSingle()
+          alunoObj = data
+        } else {
+          const { data } = await supabase
+            .from('alunos')
+            .select('id, matricula')
+            .eq('matricula', searchTarget)
+            .maybeSingle()
+          alunoObj = data
+        }
+
+        const targets = new Set<string>()
+        targets.add(searchTarget)
+        if (alunoObj?.id) targets.add(String(alunoObj.id))
+        if (alunoObj?.matricula) targets.add(String(alunoObj.matricula))
+
+        const orConditions: string[] = []
+        targets.forEach(t => {
+          if (/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(t)) {
+            orConditions.push(`aluno_id.eq.${t}`)
+          } else {
+            orConditions.push(`user_id_equipamento.eq.${t}`)
+            orConditions.push(`aluno_id.eq.${t}`)
+          }
+        })
+
+        if (orConditions.length > 0) {
+          query = query.or(orConditions.join(','))
+        }
+      }
+    }
+
     if (dispositivo_id) query = query.eq('dispositivo_id', dispositivo_id)
     if (status) query = query.eq('status', status)
     if (dataInicioVal) query = query.gte('data_hora', dataInicioVal)
