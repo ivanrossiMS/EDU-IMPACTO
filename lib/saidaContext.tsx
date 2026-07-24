@@ -687,7 +687,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     )
 
     if (existingWaiting) {
-      const matchingCalls = activeCalls.filter(c => c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled')
+      const matchingCalls = activeCalls.filter(c => c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled' && c.status !== 'special_auth')
       const updatedCalls = matchingCalls.map(c => ({
         ...c,
         guardianId: 'sozinho',
@@ -697,7 +697,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       }))
       const primaryUpdated = updatedCalls.find(c => c.id === existingWaiting.id) || updatedCalls[0]
 
-      setActiveCallsLocal?.(prev => (prev || []).map(c => (c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled') ? { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', confirmedAt: currentNow } : c))
+      setActiveCallsLocal?.(prev => (prev || []).map(c => (c.studentId != null && String(c.studentId) === sIdStr && c.status !== 'cancelled' && c.status !== 'special_auth') ? { ...c, guardianId: 'sozinho', guardianName: 'Saiu Sozinho', status: 'confirmed', confirmedAt: currentNow } : c))
       invalidateCache('saida/calls')
       updatedCalls.forEach(uCall => persistSingleCall(uCall))
       emit('CONFIRM_PICKUP', { callId: existingWaiting.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })

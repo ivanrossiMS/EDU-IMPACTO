@@ -340,12 +340,12 @@ export function useSupabaseCollection<T>(
   const setLocalWrapped = useCallback((valOrFn: any) => {
     setState((prev: any) => {
       const safePrev = prev !== undefined && prev !== null ? prev : initialValueRef.current;
-      if (typeof valOrFn === 'function') {
-        return valOrFn(safePrev);
-      }
-      return valOrFn;
+      const next = typeof valOrFn === 'function' ? valOrFn(safePrev) : valOrFn;
+      latestState.current = next;
+      setCacheEntry(endpoint, next);
+      return next;
     });
-  }, []);
+  }, [endpoint]);
 
   const returnedState = state !== undefined && state !== null ? state : initialValueRef.current;
   return [returnedState, set, { loading, error, setLocal: setLocalWrapped }]
