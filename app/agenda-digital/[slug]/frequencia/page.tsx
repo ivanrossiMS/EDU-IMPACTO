@@ -2,7 +2,8 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { motion, AnimatePresence } from 'framer-motion'
 import React, { useState, useMemo, use } from 'react'
-import { CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Loader2, GraduationCap, Info, LogOut, Lock } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { CheckCircle2, AlertTriangle, AlertCircle, FileText, Activity, Clock, ShieldCheck, ChevronRight, ChevronLeft, Calendar as CalendarIcon, Loader2, GraduationCap, Info, LogOut, Lock, X } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
@@ -74,6 +75,23 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   // State for interactive calendar
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Trava a rolagem do body quando o modal estiver aberto
+  React.useEffect(() => {
+    if (selectedDate) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [selectedDate])
 
   // Reset states on student change
   React.useEffect(() => {
@@ -90,12 +108,19 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
   )
 
   // Fallback para eventos de portaria
-  const { data: eventosPortaria = [] } = useApiQuery<any[]>(
+  const { data: eventosPortariaRaw } = useApiQuery<any>(
     ['portaria-eventos-aluno', resolvedParams.slug, aluno?.id, aluno?.matricula],
     '/api/portaria/eventos',
     { aluno_id: aluno?.id || resolvedParams.slug, matricula: aluno?.matricula || resolvedParams.slug },
     { enabled: !!resolvedParams.slug }
   )
+
+  const eventosPortaria = useMemo(() => {
+    if (!eventosPortariaRaw) return []
+    if (Array.isArray(eventosPortariaRaw)) return eventosPortariaRaw
+    if (Array.isArray(eventosPortariaRaw.data)) return eventosPortariaRaw.data
+    return []
+  }, [eventosPortariaRaw])
 
   // Histórico de saídas confirmadas (painel chamadas)
   const { data: saidaCalls = [] } = useApiQuery<any[]>(
@@ -140,8 +165,13 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
     const map: Record<string, { hora: string; dispositivo?: string }> = {}
     if (!eventosPortaria || !Array.isArray(eventosPortaria)) return map
     
-    // Filtra apenas eventos com status de sucesso (ou sem status negativo)
-    const validEvents = eventosPortaria.filter(e => e.data_hora && (e.status === 'sucesso' || !e.status))
+    // Filtra apenas eventos com status de sucesso/liberado (case-insensitive)
+    const validEvents = eventosPortaria.filter(e => {
+      if (!e || !e.data_hora) return false
+      if (!e.status) return true
+      const s = String(e.status).toLowerCase().trim()
+      return s === 'sucesso' || s === 'liberado' || s === 'autorizado' || s === 'ok' || s === 'permitido' || s === 'entrada'
+    })
     const sorted = [...validEvents].sort((a, b) => (a.data_hora || '').localeCompare(b.data_hora || ''))
 
     sorted.forEach(e => {
@@ -465,165 +495,6 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
         </div>
       </motion.div>
 
-      {/* Painel de Detalhes do Dia */}
-      <AnimatePresence mode="wait">
-        {selectedDate && (
-          <motion.div 
-            key={selectedDate.toString()}
-            initial={{ opacity: 0, height: 0, y: -20 }}
-            animate={{ opacity: 1, height: 'auto', y: 0 }}
-            exit={{ opacity: 0, height: 0, y: -20 }}
-            transition={{ type: "spring", stiffness: 300, damping: 26 }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div style={{ background: '#fff', borderRadius: 24, boxShadow: '0 10px 40px rgba(0,0,0,0.05)', overflow: 'hidden', marginBottom: 32, padding: '32px 40px' }}>
-              <h3 style={{ fontSize: 20, fontWeight: 900, margin: 0, color: '#0f172a', marginBottom: 40, letterSpacing: '-0.02em' }}>
-                Lançamento: {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
-              </h3>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                {selectedRecords.length === 0 && selectedSaidaCalls.length === 0 ? (
-                  <div style={{ padding: '40px 24px', textAlign: 'center' }}>
-                    <Activity size={40} color="#e2e8f0" style={{ margin: '0 auto 12px' }} />
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#64748b' }}>Nenhum lançamento neste dia</div>
-                    <div style={{ fontSize: 14, color: '#94a3b8', marginTop: 4, fontWeight: 500 }}>
-                      {isFuture(selectedDate) ? 'Data futura ou feriado.' : 'Não há registros de presença, falta ou saída cadastrados.'}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* Vertical Timeline Line */}
-                    <div style={{ position: 'absolute', left: 24, top: 24, bottom: 24, width: 2, background: '#f1f5f9', zIndex: 0 }} />
-
-                    {selectedRecords.map((h, i) => {
-                    const isPresenca = h.status === 'P'
-                    const isFaltaJustificada = h.status === 'J'
-                    
-                    const catracaInfo = entradaCatracaMap[h.data]
-                    const entradaTime = h.horaRegistro || h.horaCatraca || catracaInfo?.hora
-                    const isIdFace = (h.registradoPor && h.registradoPor.toLowerCase().includes('idface')) || !!entradaTime
-                    
-                    return (
-                      <div 
-                        key={i} 
-                        className="ad-freq-hist-item" 
-                        style={{ 
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
-                          marginBottom: (i === selectedRecords.length - 1 && selectedSaidaCalls.length === 0) ? 0 : 40, 
-                          position: 'relative', zIndex: 1 
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-                           <div style={{ 
-                             background: isPresenca ? '#dcfce7' : isFaltaJustificada ? '#eff6ff' : '#fef2f2', 
-                             color: isPresenca ? '#16a34a' : isFaltaJustificada ? '#3b82f6' : '#ef4444', 
-                             width: 50, height: 50, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                           }}>
-                             {isPresenca ? <CheckCircle2 size={26} strokeWidth={3} /> : isFaltaJustificada ? <FileText size={26} strokeWidth={3} /> : <AlertTriangle size={26} strokeWidth={3} />}
-                           </div>
-                           <div>
-                             <div style={{ fontWeight: 900, fontSize: 18, color: '#0f172a', marginBottom: 10 }}>
-                               {isPresenca ? 'Presença Confirmada' : isFaltaJustificada ? 'Ausência Justificada' : 'Falta Registrada'}
-                             </div>
-                             <div style={{ display: 'flex', gap: 12 }}>                               
-                               {isIdFace && entradaTime ? (
-                                 <span style={{ 
-                                   display: 'flex', alignItems: 'center', gap: 6, 
-                                   fontSize: 13, fontWeight: 800, color: '#0284c7', 
-                                   background: '#e0f2fe', padding: '6px 14px', borderRadius: 20
-                                 }}>
-                                   <Clock size={16} strokeWidth={2.5} /> ID Face: {entradaTime.slice(0,5)}h
-                                 </span>
-                               ) : (
-                                 <span style={{ 
-                                   display: 'flex', alignItems: 'center', gap: 6, 
-                                   fontSize: 13, fontWeight: 800, color: '#64748b', 
-                                   background: '#f1f5f9', padding: '6px 14px', borderRadius: 20
-                                 }}>
-                                   <Clock size={16} strokeWidth={2.5} /> Lançamento Manual
-                                 </span>
-                               )}
-                             </div>
-                           </div>
-                        </div>
-                        <div className="ad-freq-hist-badge" style={{
-                          padding: '10px 20px', borderRadius: 12, fontSize: 15, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.5,
-                          background: isPresenca ? '#dcfce7' : isFaltaJustificada ? '#dbeafe' : '#fee2e2',
-                          color: isPresenca ? '#166534' : isFaltaJustificada ? '#1e40af' : '#991b1b'
-                        }}>
-                          {isPresenca ? 'Presente' : isFaltaJustificada ? 'Justificada' : 'Injustificada'}
-                        </div>
-                      </div>
-                    )
-                  })}
-
-                  {/* Saída Confirmada Cards */}
-                  {selectedSaidaCalls.map((call, i) => {
-                    const confirmedTime = call.confirmedAt 
-                      ? new Date(call.confirmedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
-                      : ''
-
-                    return (
-                      <div 
-                        key={`saida-${i}`} 
-                        className="ad-freq-hist-item" 
-                        style={{ 
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
-                          marginBottom: i === selectedSaidaCalls.length - 1 ? 0 : 40,
-                          position: 'relative', zIndex: 1
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-                           <div style={{ 
-                             background: 'linear-gradient(135deg, #a855f7 0%, #d946ef 100%)', 
-                             color: '#fff', 
-                             width: 50, height: 50, borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                             boxShadow: '0 8px 20px rgba(217, 70, 239, 0.3)'
-                           }}>
-                             <LogOut size={26} strokeWidth={2.5} />
-                           </div>
-                           <div>
-                             <div style={{ fontWeight: 900, fontSize: 18, color: '#0f172a', marginBottom: 10 }}>
-                               Saída Confirmada
-                             </div>
-                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>                               
-                               <span style={{ 
-                                 display: 'flex', alignItems: 'center', gap: 6, 
-                                 fontSize: 13, fontWeight: 800, color: '#c026d3', 
-                                 background: '#fdf4ff', padding: '6px 14px', borderRadius: 20
-                               }}>
-                                 <Clock size={16} strokeWidth={2.5} /> {confirmedTime}
-                               </span>
-                               {call.guardianName && (
-                                 <span style={{ 
-                                   display: 'flex', alignItems: 'center', gap: 6, 
-                                   fontSize: 13, fontWeight: 800, color: '#64748b', 
-                                   background: '#f1f5f9', padding: '6px 14px', borderRadius: 20 
-                                 }}>
-                                   Por: {call.guardianName}
-                                 </span>
-                               )}
-                             </div>
-                           </div>
-                        </div>
-                        <div className="ad-freq-hist-badge" style={{
-                          padding: '10px 20px', borderRadius: 12, fontSize: 15, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.5,
-                          background: '#fdf4ff',
-                          color: '#c026d3'
-                        }}>
-                          Liberado
-                        </div>
-                      </div>
-                    )
-                  })}
-                  </>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header / Banner Premium Moved to Bottom */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -657,6 +528,267 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           </div>
         </div>
       </motion.div>
+
+      {/* ── MODAL ULTRA MODERNO CENTRALIZADO VIA PORTAL NO DOCUMENT.BODY ───────────────────────── */}
+      {mounted && selectedDate && createPortal(
+        <AnimatePresence>
+          {selectedDate && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedDate(null)}
+              style={{ 
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                width: '100vw', height: '100vh',
+                background: 'rgba(15, 23, 42, 0.65)', 
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                zIndex: 999999, 
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 20,
+                boxSizing: 'border-box'
+              }}
+            >
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                onClick={e => e.stopPropagation()}
+                style={{ 
+                  background: '#fff', 
+                  borderRadius: 28, 
+                  boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.35), 0 0 30px rgba(79, 70, 229, 0.1)', 
+                  width: '100%', maxWidth: 520,
+                  maxHeight: '85vh',
+                  display: 'flex', flexDirection: 'column',
+                  overflow: 'hidden',
+                  border: '1px solid rgba(226, 232, 240, 0.8)'
+                }}
+              >
+                {/* Header */}
+                <div style={{
+                  padding: '24px 28px',
+                  borderBottom: '1px solid #f1f5f9',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 42, height: 42, borderRadius: 14,
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #6d28d9 100%)',
+                      color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 8px 16px rgba(79, 70, 229, 0.25)'
+                    }}>
+                      <CalendarIcon size={20} strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', textTransform: 'capitalize' }}>
+                        {format(selectedDate, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                      </h3>
+                      <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                        Registro de Frequência do Aluno
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(null)}
+                    style={{
+                      width: 36, height: 36, borderRadius: '50%',
+                      background: '#e2e8f0', border: 'none', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#64748b', transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#cbd5e1'; e.currentTarget.style.color = '#0f172a' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#64748b' }}
+                  >
+                    <X size={18} strokeWidth={2.5} />
+                  </button>
+                </div>
+
+                {/* Body Content */}
+                <div style={{ padding: '20px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {selectedRecords.length === 0 && selectedSaidaCalls.length === 0 ? (
+                    <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                      <Activity size={44} color="#cbd5e1" style={{ margin: '0 auto 14px' }} />
+                      <div style={{ fontSize: 16, fontWeight: 800, color: '#475569' }}>Nenhum lançamento neste dia</div>
+                      <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, fontWeight: 500 }}>
+                        {isFuture(selectedDate) ? 'Data futura ou feriado.' : 'Não há registros de presença, falta ou saída cadastrados.'}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {selectedRecords.map((h, i) => {
+                        const isPresenca = h.status === 'P'
+                        const isFaltaJustificada = h.status === 'J'
+                        
+                        const catracaInfo = entradaCatracaMap[h.data]
+                        const entradaTime = h.horaRegistro || h.horaCatraca || catracaInfo?.hora
+                        const isIdFace = !!entradaTime || (h.registradoPor && (h.registradoPor.toLowerCase().includes('idface') || h.registradoPor.toLowerCase().includes('catraca')))
+                        
+                        return (
+                          <div 
+                            key={i} 
+                            style={{ 
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 20,
+                              padding: '16px 18px',
+                              display: 'flex', flexDirection: 'column',
+                              gap: 12,
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                 <div style={{ 
+                                   background: isPresenca ? '#dcfce7' : isFaltaJustificada ? '#eff6ff' : '#fef2f2', 
+                                   color: isPresenca ? '#16a34a' : isFaltaJustificada ? '#3b82f6' : '#ef4444', 
+                                   width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                   flexShrink: 0
+                                 }}>
+                                   {isPresenca ? <CheckCircle2 size={22} strokeWidth={3} /> : isFaltaJustificada ? <FileText size={22} strokeWidth={3} /> : <AlertTriangle size={22} strokeWidth={3} />}
+                                 </div>
+                                 <div style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>
+                                   {isPresenca ? 'Presença Confirmada' : isFaltaJustificada ? 'Ausência Justificada' : 'Falta Registrada'}
+                                 </div>
+                              </div>
+
+                              <div style={{
+                                padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.5,
+                                background: isPresenca ? '#dcfce7' : isFaltaJustificada ? '#dbeafe' : '#fee2e2',
+                                color: isPresenca ? '#166534' : isFaltaJustificada ? '#1e40af' : '#991b1b',
+                                flexShrink: 0
+                              }}>
+                                {isPresenca ? 'Presente' : isFaltaJustificada ? 'Justificada' : 'Injustificada'}
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 52 }}>                               
+                              {isIdFace && entradaTime ? (
+                                <span style={{ 
+                                  display: 'inline-flex', alignItems: 'center', gap: 5, 
+                                  fontSize: 12, fontWeight: 800, color: '#0284c7', 
+                                  background: '#e0f2fe', padding: '4px 12px', borderRadius: 20
+                                }}>
+                                  <Clock size={14} strokeWidth={2.5} /> ID Face: {entradaTime.slice(0,5)}h
+                                </span>
+                              ) : (
+                                <span style={{ 
+                                  display: 'inline-flex', alignItems: 'center', gap: 5, 
+                                  fontSize: 12, fontWeight: 800, color: '#64748b', 
+                                  background: '#e2e8f0', padding: '4px 12px', borderRadius: 20
+                                }}>
+                                  <Clock size={14} strokeWidth={2.5} /> Lançamento Manual
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+
+                      {/* Saída Confirmada Cards */}
+                      {selectedSaidaCalls.map((call, i) => {
+                        const confirmedTime = call.confirmedAt 
+                          ? new Date(call.confirmedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+                          : ''
+
+                        return (
+                          <div 
+                            key={`saida-${i}`} 
+                            style={{ 
+                              background: '#fdf4ff',
+                              border: '1px solid #fce7f3',
+                              borderRadius: 20,
+                              padding: '16px 18px',
+                              display: 'flex', flexDirection: 'column',
+                              gap: 12,
+                              boxShadow: '0 4px 12px rgba(192, 38, 211, 0.05)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                 <div style={{ 
+                                   background: 'linear-gradient(135deg, #a855f7 0%, #d946ef 100%)', 
+                                   color: '#fff', 
+                                   width: 40, height: 40, borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                   boxShadow: '0 6px 16px rgba(217, 70, 239, 0.3)',
+                                   flexShrink: 0
+                                 }}>
+                                   <LogOut size={20} strokeWidth={2.5} />
+                                 </div>
+                                 <div style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>
+                                   Saída Confirmada
+                                 </div>
+                              </div>
+
+                              <div style={{
+                                padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.5,
+                                background: '#fbcfe8',
+                                color: '#9d174d',
+                                flexShrink: 0
+                              }}>
+                                Liberado
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingLeft: 52 }}>                               
+                              <span style={{ 
+                                display: 'inline-flex', alignItems: 'center', gap: 5, 
+                                fontSize: 12, fontWeight: 800, color: '#c026d3', 
+                                background: '#fff', padding: '4px 12px', borderRadius: 20
+                              }}>
+                                <Clock size={14} strokeWidth={2.5} /> {confirmedTime}
+                              </span>
+                              {call.guardianName && (
+                                <span style={{ 
+                                  display: 'inline-flex', alignItems: 'center', gap: 5, 
+                                  fontSize: 12, fontWeight: 800, color: '#64748b', 
+                                  background: '#fff', padding: '4px 12px', borderRadius: 20 
+                                }}>
+                                  Por: {call.guardianName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div style={{
+                  padding: '16px 28px',
+                  borderTop: '1px solid #f1f5f9',
+                  background: '#f8fafc',
+                  display: 'flex', justifyContent: 'flex-end'
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(null)}
+                    style={{
+                      padding: '10px 24px', borderRadius: 12,
+                      background: '#0f172a', border: 'none',
+                      color: '#fff', fontWeight: 800, fontSize: 13,
+                      cursor: 'pointer', transition: 'all 0.2s',
+                      boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#1e293b' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#0f172a' }}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
 
     </div>
