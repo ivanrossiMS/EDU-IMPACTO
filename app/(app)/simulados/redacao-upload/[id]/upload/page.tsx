@@ -189,7 +189,7 @@ export default function UploadRedaçãoPage() {
 
       let updatePayload: any = {
         questoes_json: finalQToSave,
-        questoes_count: finalQToSave.length,
+        questoes_count: finalQToSave.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
         updated_at: new Date().toISOString(),
       }
 

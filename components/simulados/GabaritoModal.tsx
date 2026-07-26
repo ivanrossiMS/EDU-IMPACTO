@@ -174,7 +174,7 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
                     <Users size={14} /> <span>Turmas: {simulado?.turmas?.join(', ') || 'Geral'}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.length} Questões</span>
+                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.filter(q => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length} Questões</span>
                   </div>
                 </div>
               </div>
@@ -182,8 +182,9 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
               {/* Grid Moderno de Respostas Agrupadas por Disciplina */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {(() => {
-                  const grouped: Record<string, typeof questoes> = {}
-                  questoes.forEach(q => {
+                  const meQuestoes = questoes.filter(q => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio)
+                  const grouped: Record<string, typeof meQuestoes> = {}
+                  meQuestoes.forEach(q => {
                     const disc = q.simulados_disciplinas?.nome || 'Geral'
                     if (!grouped[disc]) grouped[disc] = []
                     grouped[disc].push(q)

@@ -879,7 +879,10 @@ export default function UploadProvasGerenciamentoPage() {
 
                                           // Requisition-specific question count ratio (e.g. 0/10)
                                           const reqUploadedCount = Array.isArray(prova.questoes_json)
-                                            ? prova.questoes_json.filter((q: any) => q.id_professor === req.id_professor || q.id_requisicao === req.id).length
+                                            ? prova.questoes_json.filter((q: any) => 
+                                                (q.id_professor === req.id_professor || q.id_requisicao === req.id) &&
+                                                q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio
+                                              ).length
                                             : 0
                                           const reqTotalRequested = req.qtd_questoes || 10
                                           const meQuestoesRatio = `${reqUploadedCount}/${reqTotalRequested}`
@@ -903,6 +906,7 @@ export default function UploadProvasGerenciamentoPage() {
                                           }
 
                                           const editUrl = `/simulados/provas-upload/${prova.id}/upload?req=${req.id}&prof=${req.id_professor || ''}`
+                                          const editConfigUrl = `/simulados/provas-upload/${prova.id}/editar`
 
                                           return (
                                             <tr key={`${prova.id}_${req.id || rIdx}`} className="table-row-hover" style={{ background: 'hsl(var(--bg-surface))' }}>
@@ -1008,8 +1012,8 @@ export default function UploadProvasGerenciamentoPage() {
                                               <td style={{ padding: '8px 4px', borderRadius: rIdx === rowSpanCount - 1 ? '0 12px 12px 0' : '0', borderRight: '1px solid hsl(var(--border-subtle))', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', textAlign: 'right', position: 'relative', overflow: 'visible', verticalAlign: 'middle' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }} className="action-menu-container">
                                                   
-                                                  {/* Botão Editar para esta disciplina/professor */}
-                                                  <Link href={editUrl} style={{ textDecoration: 'none' }}>
+                                                  {/* Botão Editar para esta prova -> edita configurações */}
+                                                  <Link href={editConfigUrl} style={{ textDecoration: 'none' }}>
                                                     <button 
                                                       style={{ 
                                                         display: 'inline-flex', alignItems: 'center', gap: 4, 
@@ -1018,7 +1022,7 @@ export default function UploadProvasGerenciamentoPage() {
                                                         background: 'rgba(59,130,246,0.05)', fontWeight: 700, fontSize: 12, 
                                                         cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap'
                                                       }}
-                                                      title={`Inserir/gerenciar questões de ${disciplinaNome} (${profName})`}
+                                                      title="Editar configurações da prova"
                                                     >
                                                       <Edit size={12} /> Editar
                                                     </button>
@@ -1068,6 +1072,14 @@ export default function UploadProvasGerenciamentoPage() {
                                                           <Link href={editUrl} style={{ textDecoration: 'none', outline: 'none' }}>
                                                             <div style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none' }} className="menu-item-hover">
                                                               <Eye size={15} color="#8b5cf6" /> Visualizar / Questões ({disciplinaNome})
+                                                            </div>
+                                                          </Link>
+                                                        </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <Link href={editConfigUrl} style={{ textDecoration: 'none', outline: 'none' }}>
+                                                            <div style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none' }} className="menu-item-hover">
+                                                              <Edit size={15} color="#ec4899" /> Editar Configurações
                                                             </div>
                                                           </Link>
                                                         </DropdownMenu.Item>
