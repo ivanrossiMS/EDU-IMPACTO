@@ -89,7 +89,8 @@ export default function AlunosPage() {
     riscoEvasao: 'todos',
     turno: 'todos',
     autorizadoSairSozinho: 'todos',
-    foto: 'todos'
+    foto: 'todos',
+    observacoes: 'todos'
   })
   
   // Sorting State
@@ -189,6 +190,7 @@ export default function AlunosPage() {
       if (filtrosAvancados.turno !== 'todos') activeFilters.turno = filtrosAvancados.turno
       if (filtrosAvancados.autorizadoSairSozinho !== 'todos') activeFilters.autorizadoSairSozinho = filtrosAvancados.autorizadoSairSozinho
       if (filtrosAvancados.foto !== 'todos') activeFilters.foto = filtrosAvancados.foto
+      if (filtrosAvancados.observacoes !== 'todos') activeFilters.observacoes = filtrosAvancados.observacoes
 
       const params = new URLSearchParams(activeFilters)
       
@@ -706,7 +708,8 @@ export default function AlunosPage() {
       ...(filtrosAvancados.riscoEvasao !== 'todos' ? { riscoEvasao: filtrosAvancados.riscoEvasao } : {}),
       ...(filtrosAvancados.turno !== 'todos' ? { turno: filtrosAvancados.turno } : {}),
       ...(filtrosAvancados.autorizadoSairSozinho !== 'todos' ? { autorizadoSairSozinho: filtrosAvancados.autorizadoSairSozinho } : {}),
-      ...(filtrosAvancados.foto !== 'todos' ? { foto: filtrosAvancados.foto } : {})
+      ...(filtrosAvancados.foto !== 'todos' ? { foto: filtrosAvancados.foto } : {}),
+      ...(filtrosAvancados.observacoes !== 'todos' ? { observacoes: filtrosAvancados.observacoes } : {})
     }
   )
 
@@ -1671,6 +1674,8 @@ export default function AlunosPage() {
               >
                 <option value="todos">Todos (Ativos)</option>
                 <option value="todos_com_inativos">Todos (Com inativos)</option>
+                <option value="com_observacoes">Com Observações (Lançadas)</option>
+                <option value="sem_observacoes">Sem Observações</option>
                 <option value="ativo">Apenas Ativos</option>
                 <option value="inativo">Apenas Inativos</option>
                 <option value="matriculado_vazio">Matriculado ou Vazio</option>
@@ -1753,167 +1758,210 @@ export default function AlunosPage() {
                   </td>
                 </tr>
               ) : (
-                alunosPaginados.map(aluno => (
-                <tr key={aluno.id} style={{ background: !(aluno.status === 'Ativo' || aluno.status === 'matriculado') ? '#fee2e2' : undefined }}>
-                  <td>
-                    <div style={{ 
-                      width: 36, 
-                      height: 36, 
-                      borderRadius: '50%', 
-                      background: aluno.foto ? `url(${aluno.foto}) center/cover no-repeat` : '#e2e8f0', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      fontSize: 12, 
-                      fontWeight: 700, 
-                      color: '#64748b' 
-                    }}>
-                      {!aluno.foto && aluno.nome.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
-                    </div>
-                  </td>
-                  <td style={{ fontWeight: 700, color: '#1e293b', fontSize: 12, whiteSpace: 'nowrap' }}>{aluno.matricula || aluno.codigo}</td>
-                  <td style={{ maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 13, lineHeight: 1.2 }}>{aluno.nome}</span>
-                      <span style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{aluno.email}</span>
-                    </div>
-                  </td>
-                  <td style={{ maxWidth: 220, whiteSpace: 'nowrap' }}>
-                    <div style={{ fontSize: 11, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 6, whiteSpace: 'nowrap' }}>
-                      {aluno.responsaveis && aluno.responsaveis.length > 0 
-                        ? aluno.responsaveis.map((r: any, idx: number) => (
-                            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                              <span style={{ fontWeight: 600, color: '#475569', lineHeight: 1.1 }} title={r.nome}>{formatName(r.nome)}</span>
-                              {r.parentesco && (
-                                <span style={{
-                                  padding: '2px 6px',
-                                  borderRadius: '6px',
-                                  fontSize: '9px',
-                                  fontWeight: 800,
-                                  textTransform: 'uppercase',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  background: r.parentesco === 'pai' 
-                                    ? 'rgba(59, 130, 246, 0.1)' 
-                                    : r.parentesco === 'mae' 
-                                      ? 'rgba(236, 72, 153, 0.1)' 
-                                      : 'rgba(139, 92, 246, 0.1)',
-                                  border: r.parentesco === 'pai' 
-                                    ? '1px solid rgba(59, 130, 246, 0.2)' 
-                                    : r.parentesco === 'mae' 
-                                      ? '1px solid rgba(236, 72, 153, 0.2)' 
-                                      : '1px solid rgba(139, 92, 246, 0.2)',
-                                  color: r.parentesco === 'pai' 
-                                    ? '#1d4ed8' 
-                                    : r.parentesco === 'mae' 
-                                      ? '#be185d' 
-                                      : '#6d28d9'
-                                }}>
-                                  {r.parentesco}
-                                </span>
-                              )}
-                            </div>
-                          ))
-                        : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                              <span style={{ fontWeight: 600, color: '#475569', lineHeight: 1.1 }} title={aluno.responsavel?.nome || (typeof aluno.responsavel === 'string' ? aluno.responsavel : 'Nenhum')}>
-                                {formatName(aluno.responsavel?.nome || (typeof aluno.responsavel === 'string' ? aluno.responsavel : 'Nenhum'))}
-                              </span>
-                              {aluno.responsavel?.parentesco && (
-                                <span style={{
-                                  padding: '2px 6px',
-                                  borderRadius: '6px',
-                                  fontSize: '9px',
-                                  fontWeight: 800,
-                                  textTransform: 'uppercase',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  background: aluno.responsavel.parentesco === 'pai' 
-                                    ? 'rgba(59, 130, 246, 0.1)' 
-                                    : aluno.responsavel.parentesco === 'mae' 
-                                      ? 'rgba(236, 72, 153, 0.1)' 
-                                      : 'rgba(139, 92, 246, 0.1)',
-                                  border: aluno.responsavel.parentesco === 'pai' 
-                                    ? '1px solid rgba(59, 130, 246, 0.2)' 
-                                    : aluno.responsavel.parentesco === 'mae' 
-                                      ? '1px solid rgba(236, 72, 153, 0.2)' 
-                                      : '1px solid rgba(139, 92, 246, 0.2)',
-                                  color: aluno.responsavel.parentesco === 'pai' 
-                                    ? '#1d4ed8' 
-                                    : aluno.responsavel.parentesco === 'mae' 
-                                      ? '#be185d' 
-                                      : '#6d28d9'
-                                }}>
-                                  {aluno.responsavel.parentesco}
-                                </span>
-                              )}
-                            </div>
-                          )
-                      }
-                    </div>
-                  </td>
-                  <td style={{ fontWeight: 600, color: '#1d4ed8', fontSize: 12, whiteSpace: 'nowrap' }}>
-                    {aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma}
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <span style={{ 
-                      padding: '4px 10px', 
-                      borderRadius: '20px', 
-                      fontSize: 10, 
-                      fontWeight: 700, 
-                      textTransform: 'uppercase',
-                      background: aluno.autorizadoSairSozinho ? '#dcfce7' : '#fee2e2',
-                      color: aluno.autorizadoSairSozinho ? '#166534' : '#991b1b'
-                    }}>
-                      {aluno.autorizadoSairSozinho ? 'Sim' : 'Não'}
-                    </span>
-                  </td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <span style={{ 
-                      padding: '4px 10px', 
-                      borderRadius: '20px', 
-                      fontSize: 10, 
-                      fontWeight: 700, 
-                      textTransform: 'uppercase',
-                      background: (aluno.status === 'Ativo' || aluno.status === 'matriculado') ? '#dcfce7' : '#fee2e2',
-                      color: (aluno.status === 'Ativo' || aluno.status === 'matriculado') ? '#166534' : '#991b1b'
-                    }}>
-                      {aluno.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
-                      {/* Toggle Status */}
-                      <button 
-                        onClick={() => toggleStatus(aluno)} 
-                        className="neo-btn neo-btn-secondary" 
-                        style={{ padding: '6px 8px', borderRadius: '8px' }} 
-                        title={(aluno.status === 'Ativo' || aluno.status === 'matriculado') ? 'Inativar' : 'Ativar'}
-                      >
-                        {(aluno.status === 'Ativo' || aluno.status === 'matriculado') ? <Shield size={13} color="#166534" /> : <Shield size={13} color="#94a3b8" />}
-                      </button>
-                      
-                      {/* Toggle Sair Sozinho */}
-                      <button 
-                        onClick={() => toggleSairSozinho(aluno)} 
-                        className="neo-btn neo-btn-secondary" 
-                        style={{ padding: '6px 8px', borderRadius: '8px' }} 
-                        title={aluno.autorizadoSairSozinho ? 'Revogar Saída' : 'Autorizar Saída'}
-                      >
-                        {aluno.autorizadoSairSozinho ? <DoorOpen size={13} color="#1d4ed8" /> : <DoorOpen size={13} color="#94a3b8" />}
-                      </button>
+                alunosPaginados.map(aluno => {
+                  const obsCount = (() => {
+                    const list = aluno.observacoes || aluno.dados?.observacoes || []
+                    if (Array.isArray(list) && list.length > 0) return list.length
+                    const legacy = aluno.obs || aluno.dados?.obs
+                    if (typeof legacy === 'string' && legacy.trim()) return 1
+                    return 0
+                  })()
 
-                      <button onClick={() => handleEdit(aluno)} className="neo-btn neo-btn-secondary" style={{ padding: '6px 8px', borderRadius: '8px' }} title="Editar">
-                        <Edit size={13} color="#3b82f6" />
-                      </button>
-                      
-                      <button onClick={() => handleDelete(aluno.id)} className="neo-btn neo-btn-secondary" style={{ padding: '6px 8px', borderRadius: '8px' }} title="Excluir">
-                        <Trash2 size={13} color="#dc2626" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                ))
+                  return (
+                    <tr key={aluno.id} style={{ background: !(aluno.status === 'Ativo' || aluno.status === 'matriculado') ? '#fee2e2' : undefined }}>
+                      <td style={{ padding: '4px 12px' }}>
+                        <div style={{ 
+                          width: 48, 
+                          height: 48, 
+                          borderRadius: '50%', 
+                          background: aluno.foto ? `url(${aluno.foto}) center/cover no-repeat` : '#e2e8f0', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          fontSize: 14, 
+                          fontWeight: 700, 
+                          color: '#64748b',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.08)'
+                        }}>
+                          {!aluno.foto && aluno.nome.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 700, color: '#1e293b', fontSize: 12, whiteSpace: 'nowrap' }}>{aluno.matricula || aluno.codigo}</td>
+                      <td style={{ maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 13, lineHeight: 1.2 }}>{aluno.nome}</span>
+                          <span style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{aluno.email}</span>
+                        </div>
+                      </td>
+                      <td style={{ maxWidth: 220, whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 11, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 6, whiteSpace: 'nowrap' }}>
+                          {aluno.responsaveis && aluno.responsaveis.length > 0 
+                            ? aluno.responsaveis.map((r: any, idx: number) => (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                  <span style={{ fontWeight: 600, color: '#475569', lineHeight: 1.1 }} title={r.nome}>{formatName(r.nome)}</span>
+                                  {r.parentesco && (
+                                    <span style={{
+                                      padding: '2px 6px',
+                                      borderRadius: '6px',
+                                      fontSize: '9px',
+                                      fontWeight: 800,
+                                      textTransform: 'uppercase',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      background: r.parentesco === 'pai' 
+                                        ? 'rgba(59, 130, 246, 0.1)' 
+                                        : r.parentesco === 'mae' 
+                                          ? 'rgba(236, 72, 153, 0.1)' 
+                                          : 'rgba(139, 92, 246, 0.1)',
+                                      border: r.parentesco === 'pai' 
+                                        ? '1px solid rgba(59, 130, 246, 0.2)' 
+                                        : r.parentesco === 'mae' 
+                                          ? '1px solid rgba(236, 72, 153, 0.2)' 
+                                          : '1px solid rgba(139, 92, 246, 0.2)',
+                                      color: r.parentesco === 'pai' 
+                                        ? '#1d4ed8' 
+                                        : r.parentesco === 'mae' 
+                                          ? '#be185d' 
+                                          : '#6d28d9'
+                                    }}>
+                                      {r.parentesco}
+                                    </span>
+                                  )}
+                                </div>
+                              ))
+                            : (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                  <span style={{ fontWeight: 600, color: '#475569', lineHeight: 1.1 }} title={aluno.responsavel?.nome || (typeof aluno.responsavel === 'string' ? aluno.responsavel : 'Nenhum')}>
+                                    {formatName(aluno.responsavel?.nome || (typeof aluno.responsavel === 'string' ? aluno.responsavel : 'Nenhum'))}
+                                  </span>
+                                  {aluno.responsavel?.parentesco && (
+                                    <span style={{
+                                      padding: '2px 6px',
+                                      borderRadius: '6px',
+                                      fontSize: '9px',
+                                      fontWeight: 800,
+                                      textTransform: 'uppercase',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      background: aluno.responsavel.parentesco === 'pai' 
+                                        ? 'rgba(59, 130, 246, 0.1)' 
+                                        : aluno.responsavel.parentesco === 'mae' 
+                                          ? 'rgba(236, 72, 153, 0.1)' 
+                                          : 'rgba(139, 92, 246, 0.1)',
+                                      border: aluno.responsavel.parentesco === 'pai' 
+                                        ? '1px solid rgba(59, 130, 246, 0.2)' 
+                                        : aluno.responsavel.parentesco === 'mae' 
+                                          ? '1px solid rgba(236, 72, 153, 0.2)' 
+                                          : '1px solid rgba(139, 92, 246, 0.2)',
+                                      color: aluno.responsavel.parentesco === 'pai' 
+                                        ? '#1d4ed8' 
+                                        : aluno.responsavel.parentesco === 'mae' 
+                                          ? '#be185d' 
+                                          : '#6d28d9'
+                                    }}>
+                                      {aluno.responsavel.parentesco}
+                                    </span>
+                                  )}
+                                </div>
+                              )
+                          }
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 600, color: '#1d4ed8', fontSize: 12, whiteSpace: 'nowrap' }}>
+                        {aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma}
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <span style={{ 
+                          padding: '4px 10px', 
+                          borderRadius: '20px', 
+                          fontSize: 10, 
+                          fontWeight: 700, 
+                          textTransform: 'uppercase',
+                          background: aluno.autorizadoSairSozinho ? '#dcfce7' : '#fee2e2',
+                          color: aluno.autorizadoSairSozinho ? '#166534' : '#991b1b'
+                        }}>
+                          {aluno.autorizadoSairSozinho ? 'Sim' : 'Não'}
+                        </span>
+                      </td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <span style={{ 
+                          padding: '4px 10px', 
+                          borderRadius: '20px', 
+                          fontSize: 10, 
+                          fontWeight: 700, 
+                          textTransform: 'uppercase',
+                          background: (aluno.status === 'Ativo' || aluno.status === 'matriculado') ? '#dcfce7' : '#fee2e2',
+                          color: (aluno.status === 'Ativo' || aluno.status === 'matriculado') ? '#166534' : '#991b1b'
+                        }}>
+                          {aluno.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', justifyContent: 'center', gap: 4 }}>
+                          {/* Observações Icon + Badge Numeral */}
+                          <button 
+                            onClick={() => {
+                              handleEdit(aluno);
+                              setActiveTab('observacoes');
+                            }} 
+                            className="neo-btn neo-btn-secondary" 
+                            style={{ 
+                              padding: '6px 8px', 
+                              borderRadius: '8px', 
+                              position: 'relative',
+                              background: obsCount > 0 ? 'rgba(59, 130, 246, 0.12)' : undefined,
+                              border: obsCount > 0 ? '1px solid rgba(59, 130, 246, 0.35)' : undefined
+                            }} 
+                            title={obsCount > 0 ? `${obsCount} Observação(ões) registrada(s)` : 'Adicionar Observação'}
+                          >
+                            <FileText size={13} color={obsCount > 0 ? '#1d4ed8' : '#94a3b8'} />
+                            {obsCount > 0 && (
+                              <span style={{ 
+                                position: 'absolute', 
+                                top: -5, 
+                                right: -5, 
+                                background: '#1d4ed8', 
+                                color: '#fff', 
+                                fontSize: 9, 
+                                fontWeight: 900, 
+                                minWidth: 15, 
+                                height: 15, 
+                                padding: '0 3px', 
+                                borderRadius: '10px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                boxShadow: '0 2px 5px rgba(29, 78, 216, 0.4)' 
+                              }}>
+                                {obsCount}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* Toggle Status */}
+                          <button 
+                            onClick={() => toggleStatus(aluno)} 
+                            className="neo-btn neo-btn-secondary" 
+                            style={{ padding: '6px 8px', borderRadius: '8px' }} 
+                            title={(aluno.status === 'Ativo' || aluno.status === 'matriculado') ? 'Inativar' : 'Ativar'}
+                          >
+                            {(aluno.status === 'Ativo' || aluno.status === 'matriculado') ? <Shield size={13} color="#166534" /> : <Shield size={13} color="#94a3b8" />}
+                          </button>
+                          
+
+
+                          <button onClick={() => handleEdit(aluno)} className="neo-btn neo-btn-secondary" style={{ padding: '6px 8px', borderRadius: '8px' }} title="Editar">
+                            <Edit size={13} color="#3b82f6" />
+                          </button>
+                          
+                          <button onClick={() => handleDelete(aluno.id)} className="neo-btn neo-btn-secondary" style={{ padding: '6px 8px', borderRadius: '8px' }} title="Excluir">
+                            <Trash2 size={13} color="#dc2626" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -3538,13 +3586,38 @@ export default function AlunosPage() {
                   })}
                 </div>
               </div>
+
+              {/* Observações Lançadas (Ocupa largura total) */}
+              <div className="filterCard-fa filterCardFull-fa">
+                <h4 className="text-[13px] font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2 mb-4">
+                  <FileText size={16} className="text-amber-500" /> Observações Lançadas
+                </h4>
+                <div className="optionGroup-fa">
+                  {[
+                    { val: 'todos', label: 'Todos' },
+                    { val: 'com_observacoes', label: 'Com Observações' },
+                    { val: 'sem_observacoes', label: 'Sem Observações' },
+                  ].map(item => {
+                    const isActive = filtrosAvancados.observacoes === item.val;
+                    return (
+                      <button
+                        key={item.val}
+                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, observacoes: item.val }))}
+                        className={`optionButton-fa ${isActive ? 'active' : ''}`}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
             <div className="modalFooter-fa">
               <button 
                 onClick={() => setFiltrosAvancados({
-                  dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos', foto: 'todos'
+                  dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos', foto: 'todos', observacoes: 'todos'
                 })}
                 className="flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[12px] text-[14px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 transition-colors"
               >

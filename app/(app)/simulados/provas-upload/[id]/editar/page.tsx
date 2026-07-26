@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { DEFAULT_PROVA_INSTRUCOES } from '@/lib/utils'
 
 export default function EditarProvaUploadPage() {
   const router = useRouter()
@@ -56,7 +57,7 @@ export default function EditarProvaUploadPage() {
           setDataAplicacao(provaData.data_aplicacao || '')
           setBimestreId(provaData.id_bimestre || '')
           setSeries(provaData.series || [])
-          setInstrucoes(provaData.instrucoes || '')
+          setInstrucoes(provaData.instrucoes || DEFAULT_PROVA_INSTRUCOES)
           setDataLimiteUpload(provaData.data_limite_upload || '')
           if (provaData.valor) setValor(provaData.valor.toString())
           
@@ -156,6 +157,7 @@ export default function EditarProvaUploadPage() {
         id_bimestre: bimestreId || null,
         series,
         valor: valor ? parseFloat(valor.replace(',', '.')) : null,
+        instrucoes: instrucoes.trim() || null,
         updated_at: new Date().toISOString(),
       }
 
@@ -259,11 +261,7 @@ export default function EditarProvaUploadPage() {
               <label style={labelStyle}>Título da Prova *</label>
               <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: Simulado Geral — 2º Bimestre 2025" style={inputStyle} />
             </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Instruções para os Professores</label>
-              <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: Instruções da coordenação para os professores" rows={3}
-                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
-            </div>
+
             <div>
               <label style={labelStyle}>Bimestre *</label>
               <select value={bimestreId} onChange={e => setBimestreId(e.target.value)} style={inputStyle}>
@@ -282,6 +280,16 @@ export default function EditarProvaUploadPage() {
             <div>
               <label style={labelStyle}>Prazo para Upload dos Professores</label>
               <input type="date" value={dataLimiteUpload} onChange={e => setDataLimiteUpload(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Instruções / Orientações para os Alunos</label>
+              <textarea
+                value={instrucoes}
+                onChange={e => setInstrucoes(e.target.value)}
+                placeholder="Ex: Preencha o cabeçalho completo, use caneta esferográfica azul ou preta, tempo limite: 4h..."
+                rows={3}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
             </div>
           </div>
         </div>

@@ -450,23 +450,7 @@ export default function UploadRedaçãoPage() {
       <div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 24 }}>
           
-          {redacao?.descricao && (
-            <motion.div 
-              animate={{ 
-                boxShadow: ['0 0 0px rgba(236, 72, 153, 0)', '0 0 30px rgba(236, 72, 153, 0.7)', '0 0 0px rgba(236, 72, 153, 0)'],
-                borderColor: ['rgba(236, 72, 153, 0.2)', 'rgba(236, 72, 153, 0.8)', 'rgba(236, 72, 153, 0.2)']
-              }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-              style={{ background: 'rgba(236, 72, 153, 0.08)', border: '1px solid rgba(236, 72, 153, 0.2)', borderRadius: 20, padding: 24, marginBottom: 24 }}
-            >
-              <h4 style={{ color: '#db2777', fontSize: 15, fontWeight: 700, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Sparkles size={16} /> Instruções para os Professores
-              </h4>
-              <p style={{ color: 'hsl(var(--text-primary))', fontSize: 13, margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                {redacao.descricao}
-              </p>
-            </motion.div>
-          )}
+
 
           <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24 }}>
             <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 15, fontWeight: 700, margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}>

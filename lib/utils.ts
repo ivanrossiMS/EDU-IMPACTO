@@ -5,6 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export const DEFAULT_PROVA_INSTRUCOES = `Atenção às orientações:
+• Deve ser realizada exclusivamente a caneta azul ou preta. • Preencha corretamente nome completo. • Não é permitido o uso de corretivo, celular ou outros dispositivos. • Respostas ilegíveis ou com rasuras poderão ser desconsideradas.`
+
 export function formatCurrency(value: number, currency = 'BRL'): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',

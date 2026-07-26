@@ -10,7 +10,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 
 export default function ADAdminPessoas() {
   const { turmas = [] } = useData();
-  const [alunos, setAlunos] = useSupabaseArray<any>('alunos');
+  const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos?limit=10000');
   const { adAlert, adConfirm } = useAgendaDigital()
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('todos')
@@ -24,7 +24,7 @@ export default function ADAdminPessoas() {
 
   // Force fresh data every time this page is opened (bust the stale cache)
   useEffect(() => {
-    invalidateCache('alunos')
+    invalidateCache('alunos?limit=10000')
   }, [])
 
   // Reset pagination to first page when any filters or search queries change
@@ -214,7 +214,16 @@ export default function ADAdminPessoas() {
                   </td>
                   <td style={{ padding: '16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'hsl(var(--text-secondary))' }}>
-                      <Smartphone size={14} /> 2 Logs ativos
+                      {(() => {
+                        const resps = responsaveisMap[a.id] || a.responsaveis || []
+                        const devCount = resps.length > 0 ? resps.length : (a.status === 'matriculado' || a.status === 'ativo' ? 1 : 0)
+                        return (
+                          <>
+                            <Smartphone size={14} />
+                            <span>{devCount === 0 ? 'Nenhum' : devCount === 1 ? '1 Dispositivo' : `${devCount} Dispositivos`}</span>
+                          </>
+                        )
+                      })()}
                     </div>
                   </td>
                   <td style={{ padding: '16px' }}>
@@ -254,11 +263,16 @@ export default function ADAdminPessoas() {
           </tbody>
         </table>
 
-        {filtered.length === 0 && (
+        {isAlunosLoading && (!alunos || alunos.length === 0) ? (
+          <div style={{ padding: 60, textAlign: 'center', color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Loader2 size={36} className="animate-spin" style={{ marginBottom: 16, opacity: 0.6 }} />
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: 'hsl(var(--text-main))' }}>Carregando pessoas vinculadas...</h3>
+          </div>
+        ) : filtered.length === 0 && (
           <div style={{ padding: 60, textAlign: 'center', color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <User size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
-            <h3 style={{ fontSize: 18, fontWeight: 600, color: 'hsl(var(--text-main))', marginBottom: 8 }}>Nenhum responsavel encontrado</h3>
-            <p style={{ maxWidth: 400 }}>Voce ainda nao conectou o ERP a Agenda Digital ou nao populou alunos no sistema principal.</p>
+            <h3 style={{ fontSize: 18, fontWeight: 600, color: 'hsl(var(--text-main))', marginBottom: 8 }}>Nenhum responsável encontrado</h3>
+            <p style={{ maxWidth: 400 }}>Você ainda não conectou o ERP à Agenda Digital ou não populou alunos no sistema principal.</p>
           </div>
         )}
 

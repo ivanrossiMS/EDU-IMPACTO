@@ -67,7 +67,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(result, {
       headers: {
-        'Cache-Control': 'public, max-age=60, stale-while-revalidate=600'
+        'Cache-Control': 'no-cache, no-store, must-revalidate'
       }
     })
   }
@@ -78,7 +78,7 @@ export async function GET(request: Request) {
     const cached = globalCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       return NextResponse.json({ valor: cached.value }, {
-        headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600' }
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
       })
     }
 
@@ -91,7 +91,7 @@ export async function GET(request: Request) {
 
     globalCache.set(cacheKey, { value: data?.valor ?? null, timestamp: Date.now() });
     return NextResponse.json({ valor: data?.valor ?? null }, {
-      headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600' }
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
     })
   }
 
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const supabase = await createProtectedClient();
+  const supabase = getAdminClient();
   try {
     const { chave, valor } = await request.json()
     if (!chave) return NextResponse.json({ error: 'chave required' }, { status: 400 })
@@ -118,6 +118,10 @@ export async function POST(request: Request) {
       .select().single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    
+    // Invalida o cache em memória do servidor ao atualizar qualquer chave
+    globalCache.clear();
+
     return NextResponse.json(data)
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })

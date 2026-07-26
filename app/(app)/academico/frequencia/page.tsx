@@ -8,7 +8,7 @@ import { useEnsalamento } from '@/lib/useEnsalamento'
 import {
   ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
   AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info,
-  Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw
+  Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw, User
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
@@ -257,6 +257,26 @@ function renderRegrasModal(isOpen: boolean, onClose: () => void) {
   );
 }
 
+function formatHoraCatraca(dataHoraStr: string | null): string | null {
+  if (!dataHoraStr) return null;
+  const s = String(dataHoraStr).trim();
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+    return s.slice(0, 5);
+  }
+  try {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).format(d);
+    }
+  } catch {}
+  return s.length >= 5 ? s.slice(0, 5) : null;
+}
+
 function getTempoEntrada(horaRegistro: string | null, segment: string, turno: string = 'Matutino'): string | null {
   if (!horaRegistro) return null;
   const parts = horaRegistro.split(':');
@@ -274,8 +294,23 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
+const MESES_ANO = [
+  { value: '01', label: 'Janeiro' },
+  { value: '02', label: 'Fevereiro' },
+  { value: '03', label: 'Março' },
+  { value: '04', label: 'Abril' },
+  { value: '05', label: 'Maio' },
+  { value: '06', label: 'Junho' },
+  { value: '07', label: 'Julho' },
+  { value: '08', label: 'Agosto' },
+  { value: '09', label: 'Setembro' },
+  { value: '10', label: 'Outubro' },
+  { value: '11', label: 'Novembro' },
+  { value: '12', label: 'Dezembro' }
+]
+
 export default function FrequenciaPage() {
-  const { turmas = [], setFrequencias, cfgCalendarioLetivo = [], cfgNiveisEnsino = [] } = useData()
+  const { turmas = [], frequencias: contextFreqs = [], setFrequencias, cfgCalendarioLetivo = [], cfgNiveisEnsino = [] } = useData()
   
   const { data: apiResponse, isLoading: loadingAlunos, isFetching: fetchingAlunos } = useApiQuery<{data: any[], meta: any}>(
     ['alunos-core-frequencia'], 
@@ -286,8 +321,59 @@ export default function FrequenciaPage() {
 
   const { data: allFreqs, isLoading: loadingAllFreqs, isFetching: fetchingAllFreqs, refetch: refetchAllFreqs } = useApiQuery<any[]>(
     ['all-frequencias'],
-    '/api/academico/frequencias'
+    '/api/academico/frequencias',
+    { limit: 10000 },
+    { noCache: true }
   )
+
+  // Eventos de acesso de portaria (Catraca)
+  const { data: portariaEventsResponse } = useApiQuery<any>(
+    ['portaria-eventos-relatorio'],
+    '/api/portaria/eventos',
+    { limit: 5000 },
+    { noCache: true }
+  )
+
+  const portariaEventsList = useMemo(() => {
+    if (!portariaEventsResponse) return []
+    if (Array.isArray(portariaEventsResponse)) return portariaEventsResponse
+    if (Array.isArray(portariaEventsResponse.data)) return portariaEventsResponse.data
+    return []
+  }, [portariaEventsResponse])
+
+  // Mesclar registros do Context com os carregados via API
+  const combinedFreqs = useMemo(() => {
+    const map = new Map<string, any>()
+    ;(contextFreqs || []).forEach(f => {
+      const aId = String((f as any).aluno_id || (f as any).alunoId || (f as any).aluno || '')
+      const dt = String(f.data || '').slice(0, 10)
+      if (aId && dt) map.set(`${aId}_${dt}`, f)
+    })
+    ;(allFreqs || []).forEach(f => {
+      const aId = String((f as any).aluno_id || (f as any).alunoId || (f as any).aluno || '')
+      const dt = String(f.data || '').slice(0, 10)
+      if (aId && dt) map.set(`${aId}_${dt}`, f)
+    })
+    return Array.from(map.values())
+  }, [contextFreqs, allFreqs])
+
+  const isSameDay = useCallback((fData: any, targetDayStr: string): boolean => {
+    if (!fData || !targetDayStr) return false
+    const s = String(fData)
+    if (s.startsWith(targetDayStr)) return true
+    if (s.split('T')[0] === targetDayStr) return true
+    if (s.slice(0, 10) === targetDayStr) return true
+    try {
+      const d = new Date(fData)
+      if (!isNaN(d.getTime())) {
+        const yyyy = d.getFullYear()
+        const mm = String(d.getMonth() + 1).padStart(2, '0')
+        const dd = String(d.getDate()).padStart(2, '0')
+        if (`${yyyy}-${mm}-${dd}` === targetDayStr) return true
+      }
+    } catch {}
+    return false
+  }, [])
 
   const [turmaSel, setTurmaSel] = useState<string|null>(null)
   const [showRegrasModal, setShowRegrasModal] = useState(false)
@@ -296,10 +382,22 @@ export default function FrequenciaPage() {
   const [buscaRelatorio, setBuscaRelatorio] = useState('')
   const [turmasExpandidas, setTurmasExpandidas] = useState<Record<string, boolean>>({})
 
-  // Filtros do modal de relatório
+  // Filtros avançados do modal de relatório (Modos: por_turma | aluno_individual)
+  const [relatorioModo, setRelatorioModo] = useState<'por_turma' | 'aluno_individual'>('por_turma')
+  const [relatorioTipoData, setRelatorioTipoData] = useState<'especifica' | 'intervalo'>('intervalo')
+  const [relatorioDataInicio, setRelatorioDataInicio] = useState(todayStr())
+  const [relatorioDataFim, setRelatorioDataFim] = useState(todayStr())
   const [relatorioAno, setRelatorioAno] = useState('')
-  const [relatorioData, setRelatorioData] = useState(todayStr())
+  const [relatorioMes, setRelatorioMes] = useState('')
+  const [relatorioSegmento, setRelatorioSegmento] = useState('')
   const [relatorioTurno, setRelatorioTurno] = useState('')
+  const [relatorioStatus, setRelatorioStatus] = useState('')
+  const [relatorioTurmasSel, setRelatorioTurmasSel] = useState<string[]>([])
+  const [relatorioTurmaFiltroIndividual, setRelatorioTurmaFiltroIndividual] = useState<string>('')
+  const [relatorioAlunoId, setRelatorioAlunoId] = useState<string>('')
+  const [buscaAlunoRelatorio, setBuscaAlunoRelatorio] = useState('')
+  const [relatorioOrdenacao, setRelatorioOrdenacao] = useState<'nome_asc' | 'nome_desc' | 'turma_asc' | 'frequencia_asc' | 'frequencia_desc' | 'faltas_desc' | 'id_asc'>('nome_asc')
+  const [alunosExpandidosRelatorio, setAlunosExpandidosRelatorio] = useState<Record<string, boolean>>({})
 
   // Modal Registro Manual
   const [showRegistroManualModal, setShowRegistroManualModal] = useState(false)
@@ -964,93 +1062,595 @@ export default function FrequenciaPage() {
     }
   }
 
-  // Abertura do Modal de Relatório com expansão padrão das turmas
-  const handleOpenRelatorio = () => {
-    setTurmasExpandidas({})
-    setRelatorioAno(filtroAno)
-    setRelatorioData(dataSel)
-    setRelatorioTurno('')
-    setShowRelatorioModal(true)
+  // Helper para gerar intervalo de datas YYYY-MM-DD
+  const getDatesInRange = useCallback((startDateStr: string, endDateStr: string): string[] => {
+    const dates: string[] = []
+    if (!startDateStr || !endDateStr) return [startDateStr || todayStr()]
+    let curr = new Date(startDateStr + 'T00:00:00')
+    const end = new Date(endDateStr + 'T00:00:00')
+    if (isNaN(curr.getTime()) || isNaN(end.getTime())) return [startDateStr]
+    if (curr > end) {
+      const temp = curr
+      curr = end
+    }
+    while (curr <= end) {
+      const yyyy = curr.getFullYear()
+      const mm = String(curr.getMonth() + 1).padStart(2, '0')
+      const dd = String(curr.getDate()).padStart(2, '0')
+      dates.push(`${yyyy}-${mm}-${dd}`)
+      curr.setDate(curr.getDate() + 1)
+    }
+    return dates.length > 0 ? dates : [startDateStr]
+  }, [])
+
+  // Helper para obter o dia da semana abreviado em Português
+  const getWeekdayName = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr + 'T00:00:00')
+      const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+      return days[d.getDay()] || ''
+    } catch {
+      return ''
+    }
   }
 
-  const toggleTurmaExpandida = (key: string) => {
-    setTurmasExpandidas(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }))
+  // Cálculo e agregação de relatórios com datas completas
+  const reportDataFiltered = useMemo(() => {
+    const targetDates = relatorioTipoData === 'intervalo'
+      ? getDatesInRange(relatorioDataInicio, relatorioDataFim)
+      : [relatorioDataInicio]
+
+    // Alunos filtrados por segmento, ano e turno
+    let candidateStudents = alunos.filter((aluno: any) => {
+      const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma)
+      if (!tObj) return false
+      
+      const matchAno = !relatorioAno || relatorioAno === 'todos' || String(tObj.ano) === relatorioAno
+      const matchSegmento = !relatorioSegmento || (tObj as any).dados?.segmento === relatorioSegmento
+      const matchTurno = !relatorioTurno || tObj.turno === relatorioTurno
+      
+      return matchAno && matchSegmento && matchTurno
+    })
+
+    // Filtros por Modo
+    if (relatorioModo === 'por_turma' && relatorioTurmasSel.length > 0) {
+      candidateStudents = candidateStudents.filter((a: any) => 
+        relatorioTurmasSel.includes(String(a.turma)) || 
+        turmas.some(t => relatorioTurmasSel.includes(String(t.id)) && t.nome === a.turma)
+      )
+    } else if (relatorioModo === 'aluno_individual') {
+      if (relatorioAlunoId) {
+        candidateStudents = candidateStudents.filter((a: any) => String(a.id) === String(relatorioAlunoId))
+      } else {
+        // Se nenhum aluno selecionado ainda no modo individual, pega os primeiros para preview
+        candidateStudents = candidateStudents.slice(0, 1)
+      }
+    }
+
+    // Busca rápida por texto
+    if (buscaRelatorio) {
+      const term = buscaRelatorio.toLowerCase()
+      candidateStudents = candidateStudents.filter((a: any) => 
+        a.nome.toLowerCase().includes(term) || 
+        String(a.id).toLowerCase().includes(term) ||
+        String(a.turma).toLowerCase().includes(term)
+      )
+    }
+
+    const result: any[] = []
+
+    candidateStudents.forEach((aluno: any) => {
+      const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma)
+      if (!tObj) return
+      
+      const schedule = getTurmaSchedule(tObj)
+      let totalContabilizados = 0
+      let faltasContabilizadas = 0
+      let justificadasContabilizadas = 0
+      let presencasContabilizadas = 0
+      let totalFaltasTotais = 0
+      let totalFaltasParciais = 0
+      let totalSemRegistro = 0
+
+      let diasPresentes = 0
+      let diasFaltantes = 0
+      let diasJustificados = 0
+      let diasComChamada = 0
+
+      const dailyBreakdown: any[] = []
+
+      targetDates.forEach(dia => {
+        const freqRecord = combinedFreqs.find(f => 
+          String(f.aluno_id || f.alunoId) === String(aluno.id) && isSameDay(f.data, dia)
+        )
+
+        let tempos: Record<string, PresStatus> = {}
+        const dayOfWeek = new Date(dia + 'T00:00:00').getDay()
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+        const isRealRecordedDay = !!freqRecord
+
+        if (freqRecord) {
+          diasComChamada++
+          if (freqRecord.tempos) {
+            tempos = { ...freqRecord.tempos }
+          } else {
+            const overallStatus: PresStatus = freqRecord.justificativa === 'Justificada' ? 'J' : (freqRecord.presente ? 'P' : 'F')
+            schedule.tempos.forEach(t => tempos[t.id] = overallStatus)
+          }
+        } else {
+          schedule.tempos.forEach(t => tempos[t.id] = '-')
+        }
+
+        const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+        
+        const temposFaltosos: string[] = []
+        const temposSemReg: string[] = []
+        schedule.tempos.forEach(t => {
+          if (calc.temposEfetivos[t.id] === 'F') temposFaltosos.push(t.id)
+          if (calc.temposEfetivos[t.id] === '-') temposSemReg.push(t.id)
+        })
+
+        const isInfantilOuFundI = schedule.segmento === 'Educação Infantil' || schedule.segmento === 'Ensino Fundamental I'
+        let faltasStr = 'Presente'
+
+        if (freqRecord) {
+          if (calc.justificativa === 'Justificada') {
+            faltasStr = 'Ausência Justificada'
+            justificadasContabilizadas += calc.justificadasContabilizadas
+            diasJustificados++
+          } else if (temposFaltosos.length > 0) {
+            const isFaltaTotal = isInfantilOuFundI ? !calc.presente : temposFaltosos.length === schedule.tempos.length
+            if (isFaltaTotal) {
+              faltasStr = 'Falta Total'
+              totalFaltasTotais++
+            } else {
+              faltasStr = `Falta Parcial (${temposFaltosos.map(i => `${i}ºT`).join(', ')})`
+              totalFaltasParciais++
+            }
+            faltasContabilizadas += calc.faltasContabilizadas
+            diasFaltantes++
+          } else {
+            faltasStr = 'Presente'
+            diasPresentes++
+          }
+
+          totalContabilizados += calc.totalTemposContabilizados
+          presencasContabilizadas += (calc.totalTemposContabilizados - calc.faltasContabilizadas)
+        } else {
+          totalSemRegistro++
+          if (isWeekend) {
+            faltasStr = 'Final de Semana'
+          } else {
+            faltasStr = 'Sem Registro'
+          }
+        }
+
+        const [y, m, d] = dia.split('-')
+        const dataFormatada = `${d}/${m}/${y}`
+        const diaSemana = getWeekdayName(dia)
+        
+        let rawHora = freqRecord?.dados?.horaRegistro || 
+                      freqRecord?.horaRegistro || 
+                      freqRecord?.dados?.horaCatraca || 
+                      freqRecord?.horaCatraca || 
+                      freqRecord?.hora || 
+                      freqRecord?.dados?.hora || 
+                      null
+
+        if (!rawHora && portariaEventsList.length > 0) {
+          const ev = portariaEventsList.find((e: any) => 
+            String(e.aluno_id || e.alunoId || e.user_id_equipamento || '') === String(aluno.id) &&
+            isSameDay(e.data_hora || e.created_at || e.data, dia)
+          )
+          if (ev) {
+            rawHora = ev.data_hora || ev.created_at || ev.data
+          }
+        }
+
+        const horaRegistro = formatHoraCatraca(rawHora)
+
+        dailyBreakdown.push({
+          data: dia,
+          dataFormatada: `${dataFormatada} (${diaSemana})`,
+          presente: isRealRecordedDay ? calc.presente : false,
+          justificativa: calc.justificativa,
+          temposEfetivos: calc.temposEfetivos,
+          faltasStr,
+          temposFaltosos,
+          temposSemReg,
+          horaRegistro,
+          temRegistro: isRealRecordedDay
+        })
+      })
+
+      const hasChamadas = diasComChamada > 0 && totalContabilizados > 0
+      const pctFrequencia = hasChamadas
+        ? Math.round((presencasContabilizadas / totalContabilizados) * 100) 
+        : null
+
+      const isCritico = pctFrequencia !== null && pctFrequencia < freqMinima
+      const hasFaltasInPeriod = (totalFaltasTotais + totalFaltasParciais) > 0
+
+      // Filtro de Status
+      if (relatorioStatus === 'faltantes' && !hasFaltasInPeriod) return
+      if (relatorioStatus === 'presentes' && hasFaltasInPeriod) return
+      if (relatorioStatus === 'justificados' && justificadasContabilizadas === 0) return
+
+      result.push({
+        id: aluno.id,
+        nome: aluno.nome,
+        turmaId: aluno.turma,
+        turmaNome: tObj.nome,
+        anoLetivo: String(tObj.ano || ''),
+        turno: aluno.turno || tObj.turno || 'N/A',
+        segmento: schedule.segmento,
+        responsavel_telefone: aluno.responsavel_telefone || aluno.telefone || '',
+        pctFrequencia,
+        hasChamadas,
+        diasComChamada,
+        diasPresentes,
+        diasFaltantes,
+        diasJustificados,
+        totalContabilizados,
+        presencasContabilizadas,
+        faltasContabilizadas,
+        justificadasContabilizadas,
+        totalFaltasTotais,
+        totalFaltasParciais,
+        totalSemRegistro,
+        isCritico,
+        dailyBreakdown
+      })
+    })
+
+    // Ordenação dinâmica
+    result.sort((a, b) => {
+      if (relatorioOrdenacao === 'nome_desc') {
+        return b.nome.localeCompare(a.nome, 'pt-BR')
+      }
+      if (relatorioOrdenacao === 'turma_asc') {
+        const compTurma = a.turmaNome.localeCompare(b.turmaNome, 'pt-BR')
+        return compTurma !== 0 ? compTurma : a.nome.localeCompare(b.nome, 'pt-BR')
+      }
+      if (relatorioOrdenacao === 'frequencia_asc') {
+        const compFreq = a.pctFrequencia - b.pctFrequencia
+        return compFreq !== 0 ? compFreq : a.nome.localeCompare(b.nome, 'pt-BR')
+      }
+      if (relatorioOrdenacao === 'frequencia_desc') {
+        const compFreq = b.pctFrequencia - a.pctFrequencia
+        return compFreq !== 0 ? compFreq : a.nome.localeCompare(b.nome, 'pt-BR')
+      }
+      if (relatorioOrdenacao === 'faltas_desc') {
+        const totalFaltasA = a.totalFaltasTotais + a.totalFaltasParciais
+        const totalFaltasB = b.totalFaltasTotais + b.totalFaltasParciais
+        const compFaltas = totalFaltasB - totalFaltasA
+        return compFaltas !== 0 ? compFaltas : a.nome.localeCompare(b.nome, 'pt-BR')
+      }
+      if (relatorioOrdenacao === 'id_asc') {
+        return String(a.id).localeCompare(String(b.id), 'pt-BR', { numeric: true })
+      }
+      return a.nome.localeCompare(b.nome, 'pt-BR')
+    })
+
+    return result
+  }, [
+    alunos, turmas, combinedFreqs, portariaEventsList, relatorioTipoData, relatorioDataInicio, relatorioDataFim,
+    relatorioAno, relatorioSegmento, relatorioTurno, relatorioStatus, relatorioModo,
+    relatorioTurmasSel, relatorioAlunoId, buscaRelatorio, relatorioOrdenacao, freqMinima, getDatesInRange, isSameDay
+  ])
+
+  // Estatísticas calculadas do relatório ativo
+  const reportStats = useMemo(() => {
+    const totalAlunos = reportDataFiltered.length
+    if (totalAlunos === 0) return { totalAlunos: 0, mediaPresenca: null, totalFaltas: 0, totalJustificadas: 0, totalTemposFalta: 0 }
+
+    const alunosComChamada = reportDataFiltered.filter(a => a.hasChamadas)
+    const somaPct = alunosComChamada.reduce((acc, a) => acc + (a.pctFrequencia || 0), 0)
+    const mediaPresenca = alunosComChamada.length > 0 ? Math.round(somaPct / alunosComChamada.length) : null
+    const totalFaltas = reportDataFiltered.reduce((acc, a) => acc + (a.totalFaltasTotais + a.totalFaltasParciais), 0)
+    const totalTemposFalta = reportDataFiltered.reduce((acc, a) => acc + a.faltasContabilizadas, 0)
+    const totalJustificadas = reportDataFiltered.reduce((acc, a) => acc + a.justificadasContabilizadas, 0)
+
+    return { totalAlunos, mediaPresenca, totalFaltas, totalJustificadas, totalTemposFalta }
+  }, [reportDataFiltered])
+
+  // Impressão Avançada (PDF) com histórico de datas completas
+  const handlePrintRelatorioAvancado = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    const periodoText = relatorioTipoData === 'intervalo'
+      ? `Período: ${new Date(relatorioDataInicio + 'T00:00:00').toLocaleDateString('pt-BR')} até ${new Date(relatorioDataFim + 'T00:00:00').toLocaleDateString('pt-BR')}`
+      : `Data: ${new Date(relatorioDataInicio + 'T00:00:00').toLocaleDateString('pt-BR')}`
+
+    const tituloModo = relatorioModo === 'aluno_individual'
+      ? 'FICHA INDIVIDUAL DE ASSIDUIDADE E FREQUÊNCIA DO ALUNO'
+      : 'RELATÓRIO DE FREQUÊNCIA POR TURMA(S)'
+
+    let contentHtml = ''
+
+    if (relatorioModo === 'aluno_individual' && reportDataFiltered.length > 0) {
+      const a = reportDataFiltered[0]
+      contentHtml = `
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 20px;">
+          <div style="font-size: 16px; font-weight: 900; color: #0f172a;">${a.nome}</div>
+          <div style="font-size: 12px; color: #475569; margin-top: 4px;">
+            <strong>Matrícula:</strong> #${a.id} &nbsp;|&nbsp;
+            <strong>Turma:</strong> ${a.turmaNome} &nbsp;|&nbsp;
+            <strong>Segmento:</strong> ${a.segmento} &nbsp;|&nbsp;
+            <strong>Turno:</strong> ${a.turno}
+          </div>
+          <div style="margin-top: 8px; font-size: 12px; font-weight: 800; color: #1e293b; background: #fff; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+            <strong>Frequência Acumulada:</strong> ${a.pctFrequencia !== null ? `${a.pctFrequencia}%` : 'Sem chamadas no período'} &nbsp;|&nbsp;
+            <span style="color: #15803d;">✓ ${a.diasPresentes} Dias Presentes</span> &nbsp;|&nbsp;
+            <span style="color: #b91c1c;">✕ ${a.diasFaltantes} Dias com Falta</span> &nbsp;|&nbsp;
+            <span style="color: #b45309;">⏱ ${a.faltasContabilizadas} Tempos de Falta</span>
+          </div>
+        </div>
+
+        <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 24px; text-transform: uppercase;">Histórico Completo por Data no Período:</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 140px;">Data</th>
+              <th style="width: 140px;">Status no Dia</th>
+              <th>Detalhamento dos Tempos de Aula</th>
+              <th style="width: 130px; text-align: center;">Horário Entrada</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${a.dailyBreakdown.map((d: any) => `
+              <tr>
+                <td style="font-weight: 700;">${d.dataFormatada}</td>
+                <td>
+                  <span style="font-weight: 800; color: ${
+                    d.faltasStr.includes('Falta Total') ? '#dc2626' :
+                    d.faltasStr.includes('Parcial') ? '#d97706' :
+                    d.faltasStr.includes('Justificada') ? '#b45309' :
+                    d.faltasStr.includes('Sem Registro') ? '#64748b' : '#16a34a'
+                  };">
+                    ${d.faltasStr}
+                  </span>
+                </td>
+                <td>
+                  ${Object.entries(d.temposEfetivos).map(([tId, status]) => `
+                    <span style="display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: 800; border-radius: 4px; margin-right: 4px; background: ${
+                      status === 'P' ? '#dcfce7; color: #15803d;' :
+                      status === 'F' ? '#fee2e2; color: #b91c1c;' :
+                      status === 'J' ? '#fef3c7; color: #b45309;' : '#f1f5f9; color: #64748b;'
+                    }">
+                      ${tId}ºT: ${status}
+                    </span>
+                  `).join('')}
+                </td>
+                <td style="text-align: center; font-size: 11px; font-weight: 700; color: #475569;">
+                  ${d.horaRegistro ? d.horaRegistro : '—'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `
+    } else {
+      contentHtml = `
+        <table>
+          <thead>
+            <tr>
+              <th>Matrícula</th>
+              <th>Nome do Aluno</th>
+              <th>Turma</th>
+              <th>Frequência</th>
+              <th>Dias Presentes</th>
+              <th>Dias c/ Falta</th>
+              <th>Tempos Falta</th>
+              <th>Telefone Responsável</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${reportDataFiltered.map((a: any) => `
+              <tr>
+                <td>#${a.id}</td>
+                <td style="font-weight: 700;">${a.nome}</td>
+                <td>${a.turmaNome}</td>
+                <td style="font-weight: 800; color: ${a.pctFrequencia === null ? '#64748b' : (a.pctFrequencia < 75 ? '#dc2626' : '#16a34a')};">
+                  ${a.pctFrequencia !== null ? `${a.pctFrequencia}%` : 'Sem Registro'}
+                </td>
+                <td style="color: #15803d; font-weight: 700;">${a.diasPresentes}</td>
+                <td style="color: ${a.diasFaltantes > 0 ? '#dc2626' : '#64748b'}; font-weight: 700;">${a.diasFaltantes}</td>
+                <td style="color: ${a.faltasContabilizadas > 0 ? '#b45309' : '#64748b'}; font-weight: 700;">${a.faltasContabilizadas}</td>
+                <td>${a.responsavel_telefone || '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${tituloModo}</title>
+          <style>
+            body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #0f172a; padding: 20px; font-size: 12px; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; }
+            .title { font-size: 16px; font-weight: 900; margin: 0; text-transform: uppercase; letter-spacing: -0.3px; }
+            .meta { font-size: 11px; color: #64748b; margin-top: 4px; }
+            .logo { font-size: 16px; font-weight: 900; color: #2563eb; }
+            .sublogo { font-size: 10px; font-weight: 700; color: #64748b; }
+            
+            .stats-bar { display: flex; gap: 12px; margin-bottom: 16px; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0; }
+            .stat-card { flex: 1; text-align: center; }
+            .stat-val { font-size: 16px; font-weight: 900; }
+            .stat-lbl { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th { background: #f1f5f9; padding: 8px 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #475569; border: 1px solid #e2e8f0; text-align: left; }
+            td { padding: 8px 10px; border: 1px solid #e2e8f0; font-size: 11px; }
+
+            .signature-row { display: flex; justify-content: space-between; margin-top: 40px; gap: 20px; page-break-inside: avoid; }
+            .signature-box { flex: 1; border-top: 1px solid #94a3b8; text-align: center; padding-top: 6px; font-size: 10px; color: #475569; font-weight: 600; }
+            .footer { margin-top: 30px; text-align: center; font-size: 9px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+
+            @media print {
+              body { padding: 0; }
+              @page { margin: 1cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">${tituloModo}</h1>
+              <div class="meta">${periodoText} | Gerado em ${new Date().toLocaleString('pt-BR')}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="logo">COLÉGIO IMPACTO</div>
+              <div class="sublogo">SISTEMA EDU-IMPACTO</div>
+            </div>
+          </div>
+
+          <div class="stats-bar">
+            <div class="stat-card">
+              <div class="stat-val">${reportStats.totalAlunos}</div>
+              <div class="stat-lbl">Alunos no Escopo</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" style="color: ${reportStats.mediaPresenca === null ? '#64748b' : (reportStats.mediaPresenca < 75 ? '#dc2626' : '#16a34a')};">
+                ${reportStats.mediaPresenca !== null ? `${reportStats.mediaPresenca}%` : 'Sem Registros'}
+              </div>
+              <div class="stat-lbl">Presença Média</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" style="color: #dc2626;">${reportStats.totalFaltas} dias (${reportStats.totalTemposFalta} tempos)</div>
+              <div class="stat-lbl">Total Faltas</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" style="color: #d97706;">${reportStats.totalJustificadas}</div>
+              <div class="stat-lbl">Justificadas</div>
+            </div>
+          </div>
+
+          ${contentHtml || '<div style="text-align: center; padding: 24px; color: #64748b;">Nenhum registro encontrado.</div>'}
+
+          <div class="signature-row">
+            <div class="signature-box">Responsável do Aluno</div>
+            <div class="signature-box">Coordenação Pedagógica</div>
+            <div class="signature-box">Direção Geral</div>
+          </div>
+
+          <div class="footer">
+            Documento emitido digitalmente pelo ERP EDU-IMPACTO.
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            }
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
   }
 
-  // Render do modal de relatório de ausências
+  // Exportação Excel / CSV Avançada com Datas Completas
+  const handleExportCSVAvancado = () => {
+    const headers = ['Matrícula', 'Nome do Aluno', 'Turma', 'Segmento', 'Turno', 'Data', 'Dia da Semana', 'Status no Dia', 'Tempos de Aula', 'Horário Catraca', 'Dias Presentes', 'Dias com Falta', 'Tempos de Falta', 'Frequência Acumulada (%)', 'Telefone Responsável']
+    
+    const rows: any[] = []
+
+    reportDataFiltered.forEach(a => {
+      a.dailyBreakdown.forEach((d: any) => {
+        const temposStr = Object.entries(d.temposEfetivos).map(([tId, st]) => `${tId}ºT:${st}`).join(' ')
+        rows.push([
+          a.id,
+          a.nome,
+          a.turmaNome,
+          a.segmento,
+          a.turno,
+          d.data,
+          getWeekdayName(d.data),
+          d.faltasStr,
+          temposStr,
+          d.horaRegistro || 'Sem Registro',
+          a.diasPresentes,
+          a.diasFaltantes,
+          a.faltasContabilizadas,
+          a.pctFrequencia !== null ? `${a.pctFrequencia}%` : 'Sem Chamadas',
+          a.responsavel_telefone || 'Não informado'
+        ])
+      })
+    })
+
+    let csvContent = '\ufeff' // UTF-8 BOM para Excel em PT-BR
+    csvContent += headers.join(';') + '\n'
+    rows.forEach(r => {
+      csvContent += r.map((val: any) => `"${String(val).replace(/"/g, '""')}"`).join(';') + '\n'
+    })
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `relatorio_frequencia_${relatorioModo}_${relatorioDataInicio}_completo.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  // Render do Modal de Relatórios Avançados (Foco: Por Turma e Aluno Individual)
   const renderRelatorioModal = () => {
     if (!showRelatorioModal) return null
 
-    const allAbsentees = getAbsenteesList(relatorioData)
-    
-    // Filtrar a lista de ausências com base na busca dentro do modal e novos filtros
-    const filteredAbsentees = allAbsentees.filter(a => {
-      const matchBusca = a.nome.toLowerCase().includes(buscaRelatorio.toLowerCase()) ||
-                         a.id.toLowerCase().includes(buscaRelatorio.toLowerCase()) ||
-                         a.turmaNome.toLowerCase().includes(buscaRelatorio.toLowerCase())
-      
-      const matchAno = !relatorioAno || a.anoLetivo === relatorioAno
-      const matchTurno = !relatorioTurno || a.turno === relatorioTurno
-      
-      return matchBusca && matchAno && matchTurno
+    let alunosParaBuscaIndividual = alunos.filter((aluno: any) => {
+      const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma)
+      if (relatorioAno && tObj && String(tObj.ano) !== relatorioAno) return false
+      if (relatorioTurmaFiltroIndividual) {
+        const isMatchId = String(aluno.turma) === String(relatorioTurmaFiltroIndividual)
+        const isMatchNome = tObj && String(tObj.id) === String(relatorioTurmaFiltroIndividual)
+        if (!isMatchId && !isMatchNome) return false
+      }
+      return true
     })
 
-    const totalFaltasTotal = filteredAbsentees.filter(a => a.faltasStr === 'Falta Total').length
-    const totalFaltasParcial = filteredAbsentees.length - totalFaltasTotal
-    const scopeName = turmaObj ? `Turma ${turmaObj.nome}` : 'Geral (Toda Escola)'
-    const formattedDate = new Date(relatorioData + 'T00:00:00').toLocaleDateString('pt-BR')
+    if (buscaAlunoRelatorio) {
+      const term = buscaAlunoRelatorio.toLowerCase()
+      alunosParaBuscaIndividual = alunosParaBuscaIndividual.filter((a: any) =>
+        a.nome.toLowerCase().includes(term) ||
+        String(a.id).toLowerCase().includes(term)
+      )
+    }
+
+    const alunoSelObj = relatorioAlunoId ? alunos.find((a: any) => String(a.id) === String(relatorioAlunoId)) : null
 
     return (
       <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(15, 23, 42, 0.55)',
-        backdropFilter: 'blur(8px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        padding: '20px',
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
+        zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
         animation: 'fadeIn 0.2s ease-out'
       }}>
         <div style={{
-          background: '#fff',
-          borderRadius: '24px',
-          maxWidth: '850px',
-          width: '100%',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 40px rgba(37, 99, 235, 0.05)',
-          border: '1px solid #e2e8f0',
-          overflow: 'hidden',
-          animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-          display: 'flex',
-          flexDirection: 'column',
-          maxHeight: '90vh'
+          background: '#fff', borderRadius: '20px', maxWidth: '1180px', width: '100%', maxHeight: '95vh',
+          display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)', overflow: 'hidden'
         }}>
-          {/* Header do Modal */}
+          {/* Header Superior do Modal */}
           <div style={{
-            padding: '24px 32px',
-            borderBottom: '1px solid #f1f5f9',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)'
+            padding: '14px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#fff'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: '#ef4444', color: '#fff', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Users size={20} />
+              <div style={{ background: 'rgba(37, 99, 235, 0.2)', color: '#60a5fa', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(96, 165, 250, 0.3)' }}>
+                <FileText size={18} />
               </div>
               <div>
-                <h3 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: '18px', color: '#0f172a' }}>
-                  Relatório de Alunos Faltantes
-                </h3>
-                <p style={{ margin: 0, fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
-                  Visualização de faltas em tempo real • {scopeName} • {formattedDate}
+                <h2 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: 800, color: '#fff', letterSpacing: '-0.3px' }}>
+                  Central de Relatórios de Frequência
+                </h2>
+                <p style={{ margin: '1px 0 0 0', fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                  Relatórios detalhados com histórico completo de datas por turma e aluno individual
                 </p>
               </div>
             </div>
@@ -1059,421 +1659,784 @@ export default function FrequenciaPage() {
                 setShowRelatorioModal(false)
                 setBuscaRelatorio('')
               }}
-              style={{
-                border: 'none',
-                background: 'none',
-                color: '#64748b',
-                cursor: 'pointer',
-                padding: '6px',
-                borderRadius: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'background 0.2s'
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-              onMouseLeave={e => e.currentTarget.style.background = 'none'}
+              style={{ background: 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', padding: '6px', borderRadius: '8px', color: '#cbd5e1', transition: 'all 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
 
-          {/* Cards de Métricas Rápidas */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', padding: '24px 32px 0 32px' }}>
-            <div style={{ background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '16px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <span style={{ fontSize: '11px', color: '#991b1b', fontWeight: 700, textTransform: 'uppercase' }}>Faltas Registradas</span>
-                <h4 style={{ margin: '2px 0 0 0', fontSize: '20px', fontWeight: 900, color: '#991b1b', fontFamily: 'Outfit, sans-serif' }}>{filteredAbsentees.length}</h4>
-              </div>
-              <div style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <AlertCircle size={18} />
-              </div>
-            </div>
-            <div style={{ background: '#fff1f2', border: '1px solid #ffe4e6', borderRadius: '16px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <span style={{ fontSize: '11px', color: '#be123c', fontWeight: 700, textTransform: 'uppercase' }}>Falta Total (Dia Todo)</span>
-                <h4 style={{ margin: '2px 0 0 0', fontSize: '20px', fontWeight: 900, color: '#be123c', fontFamily: 'Outfit, sans-serif' }}>{totalFaltasTotal}</h4>
-              </div>
-              <div style={{ background: 'rgba(225, 29, 72, 0.1)', color: '#e11d48', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <XCircle size={18} />
-              </div>
-            </div>
-            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '16px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <span style={{ fontSize: '11px', color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Falta Parcial (Tempos)</span>
-                <h4 style={{ margin: '2px 0 0 0', fontSize: '20px', fontWeight: 900, color: '#92400e', fontFamily: 'Outfit, sans-serif' }}>{totalFaltasParcial}</h4>
-              </div>
-              <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Info size={18} />
-              </div>
-            </div>
+          {/* Abas dos 2 Modos: Por Turma(s) vs Aluno Individual */}
+          <div style={{ padding: '8px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => setRelatorioModo('por_turma')}
+              style={{
+                padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s',
+                background: relatorioModo === 'por_turma' ? '#2563eb' : '#fff',
+                color: relatorioModo === 'por_turma' ? '#fff' : '#64748b',
+                boxShadow: relatorioModo === 'por_turma' ? '0 4px 12px rgba(37, 99, 235, 0.25)' : '0 1px 3px rgba(0,0,0,0.05)',
+                border: relatorioModo === 'por_turma' ? 'none' : '1px solid #e2e8f0'
+              }}
+            >
+              <BookOpen size={15} />
+              <span>Relatório por Turma(s)</span>
+            </button>
+
+            <button
+              onClick={() => setRelatorioModo('aluno_individual')}
+              style={{
+                padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s',
+                background: relatorioModo === 'aluno_individual' ? '#2563eb' : '#fff',
+                color: relatorioModo === 'aluno_individual' ? '#fff' : '#64748b',
+                boxShadow: relatorioModo === 'aluno_individual' ? '0 4px 12px rgba(37, 99, 235, 0.25)' : '0 1px 3px rgba(0,0,0,0.05)',
+                border: relatorioModo === 'aluno_individual' ? 'none' : '1px solid #e2e8f0'
+              }}
+            >
+              <User size={15} />
+              <span>Relatório Individual do Aluno</span>
+            </button>
           </div>
 
-          {/* Barra de Filtros Interna */}
-          <div style={{ padding: '12px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Painel de Filtros e Seleção (Design Enxuto) */}
+          <div style={{ padding: '12px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '10px', background: '#fff' }}>
             
-            {/* Top Row: All Filters */}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
+            {/* Linha 1: Mês, Ano Letivo, Período e Intervalo de Datas */}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               
-              <select
-                className="form-input"
-                style={{ width: '100px', height: '34px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
-                value={relatorioAno}
-                onChange={e => setRelatorioAno(e.target.value)}
-              >
-                <option value="">Anos</option>
-                {anosDisponiveis.map(ano => (
-                  <option key={ano} value={ano}>{ano}</option>
-                ))}
-              </select>
-
-              <input
-                type="date"
-                className="form-input"
-                style={{ width: '120px', height: '34px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
-                value={relatorioData}
-                onChange={e => setRelatorioData(e.target.value)}
-              />
-
-              <select
-                className="form-input"
-                style={{ width: '110px', height: '34px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
-                value={relatorioTurno}
-                onChange={e => setRelatorioTurno(e.target.value)}
-              >
-                <option value="">Turnos</option>
-                <option value="Matutino">Matutino</option>
-                <option value="Vespertino">Vespertino</option>
-                <option value="Noturno">Noturno</option>
-                <option value="Integral">Integral</option>
-              </select>
-
-              <div style={{ position: 'relative', flex: 1 }}>
-                <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                <input
+              {/* Seleção do Mês */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Mês</span>
+                <select
                   className="form-input"
-                  style={{ paddingLeft: '30px', height: '34px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '12px', width: '100%', margin: 0 }}
-                  placeholder="Buscar aluno, ID ou turma..."
-                  value={buscaRelatorio}
-                  onChange={e => setBuscaRelatorio(e.target.value)}
-                />
+                  style={{ width: '125px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
+                  value={relatorioMes}
+                  onChange={e => {
+                    const m = e.target.value
+                    setRelatorioMes(m)
+                    if (m) {
+                      setRelatorioTipoData('intervalo')
+                      const yr = relatorioAno || new Date().getFullYear().toString()
+                      const lastDay = new Date(parseInt(yr, 10), parseInt(m, 10), 0).getDate()
+                      setRelatorioDataInicio(`${yr}-${m}-01`)
+                      setRelatorioDataFim(`${yr}-${m}-${String(lastDay).padStart(2, '0')}`)
+                    }
+                  }}
+                >
+                  <option value="">Selecione Mês</option>
+                  {MESES_ANO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
               </div>
 
-            </div>
+              {/* Seleção do Ano Letivo */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Ano</span>
+                <select
+                  className="form-input"
+                  style={{ width: '95px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
+                  value={relatorioAno}
+                  onChange={e => {
+                    const a = e.target.value
+                    setRelatorioAno(a)
+                    if (relatorioMes && a) {
+                      const lastDay = new Date(parseInt(a, 10), parseInt(relatorioMes, 10), 0).getDate()
+                      setRelatorioDataInicio(`${a}-${relatorioMes}-01`)
+                      setRelatorioDataFim(`${a}-${relatorioMes}-${String(lastDay).padStart(2, '0')}`)
+                    }
+                  }}
+                >
+                  <option value="">Ano</option>
+                  {anosDisponiveis.map(ano => <option key={ano} value={ano}>{ano}</option>)}
+                </select>
+              </div>
 
-            {/* Bottom Row: Actions & Info */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {/* Tipo de Período */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Modo Datas</span>
+                <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px', border: '1px solid #e2e8f0', height: '32px', alignItems: 'center' }}>
+                  <button
+                    onClick={() => {
+                      setRelatorioTipoData('especifica')
+                      setRelatorioMes('')
+                    }}
+                    style={{
+                      padding: '3px 8px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      background: relatorioTipoData === 'especifica' ? '#fff' : 'transparent',
+                      color: relatorioTipoData === 'especifica' ? '#0f172a' : '#64748b',
+                      boxShadow: relatorioTipoData === 'especifica' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                    }}
+                  >
+                    Específica
+                  </button>
+                  <button
+                    onClick={() => setRelatorioTipoData('intervalo')}
+                    style={{
+                      padding: '3px 8px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      background: relatorioTipoData === 'intervalo' ? '#fff' : 'transparent',
+                      color: relatorioTipoData === 'intervalo' ? '#0f172a' : '#64748b',
+                      boxShadow: relatorioTipoData === 'intervalo' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                    }}
+                  >
+                    Intervalo
+                  </button>
+                </div>
+              </div>
+
+              {/* Inputs de Data */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Período</span>
+                {relatorioTipoData === 'especifica' ? (
+                  <input
+                    type="date"
+                    className="form-input"
+                    style={{ width: '130px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 600 }}
+                    value={relatorioDataInicio}
+                    onChange={e => {
+                      setRelatorioDataInicio(e.target.value)
+                      setRelatorioDataFim(e.target.value)
+                    }}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>De:</span>
+                    <input
+                      type="date"
+                      className="form-input"
+                      style={{ width: '125px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
+                      value={relatorioDataInicio}
+                      onChange={e => {
+                        setRelatorioDataInicio(e.target.value)
+                        setRelatorioMes('')
+                      }}
+                    />
+                    <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Até:</span>
+                    <input
+                      type="date"
+                      className="form-input"
+                      style={{ width: '125px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
+                      value={relatorioDataFim}
+                      onChange={e => {
+                        setRelatorioDataFim(e.target.value)
+                        setRelatorioMes('')
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Atalhos Rápidos */}
+              <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto', alignSelf: 'flex-end' }}>
                 <button
                   onClick={() => {
-                    const groupedKeys = Object.keys(filteredAbsentees.reduce((acc: Record<string, any>, student) => {
-                      acc[student.turmaNome] = true
-                      return acc
-                    }, {}))
-                    const next: Record<string, boolean> = {}
-                    groupedKeys.forEach(k => {
-                      next[k] = true
-                    })
-                    setTurmasExpandidas(next)
+                    setRelatorioTipoData('especifica')
+                    setRelatorioMes('')
+                    setRelatorioDataInicio(todayStr())
+                    setRelatorioDataFim(todayStr())
                   }}
-                  style={{ fontSize: '11px', fontWeight: 700, padding: '6px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', color: '#475569', transition: 'all 0.2s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                  style={{ fontSize: '11px', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '5px', cursor: 'pointer', color: '#475569' }}
                 >
-                  Expandir Todas
+                  Hoje
                 </button>
                 <button
-                  onClick={() => setTurmasExpandidas({})}
-                  style={{ fontSize: '11px', fontWeight: 700, padding: '6px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', color: '#475569', transition: 'all 0.2s' }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+                  onClick={() => {
+                    setRelatorioTipoData('intervalo')
+                    const now = new Date()
+                    const m = String(now.getMonth() + 1).padStart(2, '0')
+                    setRelatorioMes(m)
+                    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+                    setRelatorioDataInicio(`${firstDay.getFullYear()}-${m}-01`)
+                    setRelatorioDataFim(todayStr())
+                  }}
+                  style={{ fontSize: '11px', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '5px', cursor: 'pointer', color: '#475569' }}
                 >
-                  Recolher Todas
+                  Este Mês
                 </button>
-              </div>
-              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
-                Exibindo {filteredAbsentees.length} de {allAbsentees.length} registros
+                <button
+                  onClick={() => {
+                    setRelatorioTipoData('intervalo')
+                    setRelatorioMes('')
+                    const now = new Date()
+                    const past = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+                    setRelatorioDataInicio(`${past.getFullYear()}-${String(past.getMonth()+1).padStart(2,'0')}-${String(past.getDate()).padStart(2,'0')}`)
+                    setRelatorioDataFim(todayStr())
+                  }}
+                  style={{ fontSize: '11px', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '5px', cursor: 'pointer', color: '#475569' }}
+                >
+                  Últimos 30 dias
+                </button>
               </div>
             </div>
 
+            {/* Controles do Modo: Relatório por Turma(s) */}
+            {relatorioModo === 'por_turma' && (
+              <>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select
+                    className="form-input"
+                    style={{ width: '200px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
+                    value=""
+                    onChange={e => {
+                      const val = e.target.value
+                      if (val === 'ALL') {
+                        setRelatorioTurmasSel(turmas.map(t => String(t.id)))
+                      } else if (val === 'NONE') {
+                        setRelatorioTurmasSel([])
+                      } else if (val) {
+                        setRelatorioTurmasSel(prev => prev.includes(val) ? prev.filter(id => id !== val) : [...prev, val])
+                      }
+                    }}
+                  >
+                    <option value="">-- Selecionar Turma --</option>
+                    <option value="ALL">✅ Selecionar Todas</option>
+                    <option value="NONE">❌ Desmarcar Todas</option>
+                    {turmas.filter(t => !relatorioAno || String(t.ano) === relatorioAno).map(t => {
+                      const isSel = relatorioTurmasSel.includes(String(t.id))
+                      return (
+                        <option key={t.id} value={String(t.id)}>
+                          {isSel ? '✓ ' : ''}{t.nome} ({t.turno})
+                        </option>
+                      )
+                    })}
+                  </select>
+
+                  <select
+                    className="form-input"
+                    style={{ width: '150px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '11px', fontWeight: 600 }}
+                    value={relatorioSegmento}
+                    onChange={e => setRelatorioSegmento(e.target.value)}
+                  >
+                    <option value="">Todos Segmentos</option>
+                    {cfgNiveisEnsino?.map((n: any) => (
+                      <option key={n.id} value={n.nome}>{n.nome}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    className="form-input"
+                    style={{ width: '120px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '11px', fontWeight: 600 }}
+                    value={relatorioTurno}
+                    onChange={e => setRelatorioTurno(e.target.value)}
+                  >
+                    <option value="">Todos Turnos</option>
+                    <option value="Matutino">Matutino</option>
+                    <option value="Vespertino">Vespertino</option>
+                    <option value="Noturno">Noturno</option>
+                    <option value="Integral">Integral</option>
+                  </select>
+
+                  <select
+                    className="form-input"
+                    style={{ width: '130px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '11px', fontWeight: 600 }}
+                    value={relatorioStatus}
+                    onChange={e => setRelatorioStatus(e.target.value)}
+                  >
+                    <option value="">Todos os Status</option>
+                    <option value="faltantes">Apenas Faltantes</option>
+                    <option value="presentes">Apenas Presentes</option>
+                    <option value="justificados">Ausências Justificadas</option>
+                  </select>
+
+                  <select
+                    className="form-input"
+                    style={{ width: '160px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, color: '#1e293b' }}
+                    value={relatorioOrdenacao}
+                    onChange={e => setRelatorioOrdenacao(e.target.value as any)}
+                  >
+                    <option value="nome_asc">Ordenar: Nome (A - Z)</option>
+                    <option value="nome_desc">Ordenar: Nome (Z - A)</option>
+                    <option value="turma_asc">Ordenar: Turma (A - Z)</option>
+                    <option value="frequencia_asc">Ordenar: % Frequência (Menor)</option>
+                    <option value="frequencia_desc">Ordenar: % Frequência (Maior)</option>
+                    <option value="faltas_desc">Ordenar: Mais Faltas</option>
+                    <option value="id_asc">Ordenar: Matrícula / ID</option>
+                  </select>
+
+                  <div style={{ position: 'relative', flex: 1, minWidth: '160px' }}>
+                    <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      className="form-input"
+                      style={{ paddingLeft: '28px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '11px', width: '100%' }}
+                      placeholder="Filtrar aluno ou turma..."
+                      value={buscaRelatorio}
+                      onChange={e => setBuscaRelatorio(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>Turmas Selecionadas ({relatorioTurmasSel.length === 0 ? 'Todas' : relatorioTurmasSel.length}):</span>
+                  <button
+                    onClick={() => {
+                      if (relatorioTurmasSel.length === turmas.length) {
+                        setRelatorioTurmasSel([])
+                      } else {
+                        setRelatorioTurmasSel(turmas.map(t => String(t.id)))
+                      }
+                    }}
+                    style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    {relatorioTurmasSel.length === turmas.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
+                  </button>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '50px', overflowY: 'auto', flex: 1 }}>
+                    {turmas.filter(t => !relatorioAno || String(t.ano) === relatorioAno).map(t => {
+                      const isSelected = relatorioTurmasSel.includes(String(t.id))
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            const tIdStr = String(t.id)
+                            if (isSelected) {
+                              setRelatorioTurmasSel(prev => prev.filter(id => id !== tIdStr))
+                            } else {
+                              setRelatorioTurmasSel(prev => [...prev, tIdStr])
+                            }
+                          }}
+                          style={{
+                            fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', cursor: 'pointer',
+                            background: isSelected ? '#2563eb' : '#fff',
+                            color: isSelected ? '#fff' : '#475569',
+                            border: isSelected ? '1px solid #1d4ed8' : '1px solid #cbd5e1'
+                          }}
+                        >
+                          {t.nome}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Controles do Modo: Relatório Individual do Aluno (Design 100% Focado no Aluno e Enxuto) */}
+            {relatorioModo === 'aluno_individual' && (
+              <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', width: '240px' }}>
+                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Buscar por Nome/Matrícula</span>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      className="form-input"
+                      style={{ paddingLeft: '28px', height: '32px', borderRadius: '6px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '11px', width: '100%' }}
+                      placeholder="Nome ou matrícula..."
+                      value={buscaAlunoRelatorio}
+                      onChange={e => setBuscaAlunoRelatorio(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ flex: 1, minWidth: '260px' }}>
+                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Selecionar Aluno ({alunosParaBuscaIndividual.length})</span>
+                  <select
+                    className="form-input"
+                    style={{ width: '100%', height: '32px', borderRadius: '6px', background: '#fff', border: '1px solid #7dd3fc', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
+                    value={relatorioAlunoId}
+                    onChange={e => setRelatorioAlunoId(e.target.value)}
+                  >
+                    <option value="">-- Selecione o Aluno para a Ficha Individual --</option>
+                    {alunosParaBuscaIndividual.slice(0, 300).map((a: any) => (
+                      <option key={a.id} value={a.id}>
+                        {a.nome} (Matrícula: #{a.id} - Turma: {a.turma})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {alunoSelObj && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #7dd3fc', alignSelf: 'flex-end', height: '32px' }}>
+                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800 }}>
+                      {getInitials(alunoSelObj.nome)}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#0369a1', lineHeight: '1.2' }}>{alunoSelObj.nome}</div>
+                      <div style={{ fontSize: '9px', color: '#64748b', lineHeight: '1' }}>#{alunoSelObj.id} • {alunoSelObj.turma}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
 
-          {/* Tabela / Lista de Faltantes Agrupada por Turma */}
-          <div style={{ padding: '20px 32px', overflowY: 'auto', flex: 1 }}>
-            {filteredAbsentees.length === 0 ? (
+          {/* Área de Resumo & Conteúdo do Relatório */}
+          <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
+            
+            {/* Cards de Métricas Gerais do Período */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#e0f2fe', color: '#0369a1', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Users size={16} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Alunos no Escopo</div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>{reportStats.totalAlunos}</div>
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#dcfce7', color: '#15803d', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CheckCircle size={16} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Frequência Média</div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: reportStats.mediaPresenca === null ? '#64748b' : (reportStats.mediaPresenca < 75 ? '#dc2626' : '#16a34a') }}>
+                    {reportStats.mediaPresenca !== null ? `${reportStats.mediaPresenca}%` : 'Sem registros'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#fee2e2', color: '#b91c1c', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <XCircle size={16} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Faltas (Dias / Tempos)</div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#b91c1c' }}>
+                    {reportStats.totalFaltas} dias ({reportStats.totalTemposFalta} tempos)
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ background: '#fef3c7', color: '#b45309', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Justificativas</div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#b45309' }}>{reportStats.totalJustificadas}</div>
+                </div>
+              </div>
+            </div>
+
+            {reportDataFiltered.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748b' }}>
                 <Users size={48} style={{ color: '#cbd5e1', marginBottom: '12px' }} />
-                <p style={{ margin: 0, fontWeight: 600, fontSize: '15px' }}>Nenhum aluno faltoso encontrado.</p>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>Todos os alunos estão presentes ou não há registros na data selecionada.</p>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#334155' }}>Nenhum registro encontrado.</p>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>Selecione um aluno ou ajuste os filtros para visualizar as datas completas.</p>
               </div>
-            ) : (
-              Object.entries(
-                filteredAbsentees.reduce((acc: Record<string, typeof filteredAbsentees>, student) => {
-                  const key = student.turmaNome
-                  if (!acc[key]) acc[key] = []
-                  acc[key].push(student)
-                  return acc
-                }, {})
-              ).map(([turmaKey, students]) => {
-                const firstStudent = students[0]
-                const turmaNome = firstStudent.turmaNome
-                const turno = firstStudent.turno
-                const segmento = firstStudent.segmento
-                const isExpanded = !!turmasExpandidas[turmaKey]
-                
-                return (
-                  <div key={turmaKey} style={{ marginBottom: '12px', border: '1px solid #e2e8f0', borderRadius: '14px', overflow: 'hidden', background: '#fff', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                    {/* Header da Turma */}
-                    <div 
-                      onClick={() => toggleTurmaExpandida(turmaKey)}
-                      style={{ 
-                        padding: '12px 16px', 
-                        background: isExpanded ? '#f8fafc' : '#fff', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between', 
-                        cursor: 'pointer', 
-                        borderBottom: isExpanded ? '1px solid #e2e8f0' : 'none',
-                        transition: 'background 0.2s',
-                        userSelect: 'none',
-                        gap: '12px',
-                        flexWrap: 'wrap'
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc' }}
-                      onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = '#fff' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        {isExpanded ? <ChevronDown size={18} style={{ color: '#475569' }} /> : <ChevronRight size={18} style={{ color: '#475569' }} />}
-                        <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{turmaNome}</span>
-                        <span style={{ padding: '3px 8px', background: '#e0f2fe', color: '#0369a1', borderRadius: '6px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>
-                          {turno}
-                        </span>
-                        <span style={{ padding: '3px 8px', background: '#f1f5f9', color: '#475569', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>
-                          {segmento}
-                        </span>
+            ) : relatorioModo === 'aluno_individual' ? (
+              // VISÃO INDIVIDUAL DO ALUNO COM DATAS COMPLETAS
+              <div>
+                {reportDataFiltered.map((a: any) => (
+                  <div key={a.id} style={{ borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', background: '#fff' }}>
+                    {/* Header do Aluno Individual */}
+                    <div style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: a.pctFrequencia === null ? '#f1f5f9' : (a.isCritico ? '#fee2e2' : '#dcfce7'), color: a.pctFrequencia === null ? '#64748b' : (a.isCritico ? '#dc2626' : '#15803d'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 900, border: '1px solid rgba(0,0,0,0.05)' }}>
+                          {getInitials(a.nome)}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            Matrícula: #{a.id} • Turma: <strong>{a.turmaNome}</strong> ({a.segmento} - {a.turno})
+                          </div>
+                          
+                          {/* Badges de Resumo do Período */}
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 800, background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #bbf7d0' }}>
+                              ✓ {a.diasPresentes} dia{a.diasPresentes !== 1 ? 's' : ''} presente{a.diasPresentes !== 1 ? 's' : ''}
+                            </span>
+                            <span style={{ fontSize: '11px', fontWeight: 800, background: a.diasFaltantes > 0 ? '#fee2e2' : '#f1f5f9', color: a.diasFaltantes > 0 ? '#b91c1c' : '#64748b', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', border: a.diasFaltantes > 0 ? '1px solid #fecaca' : '1px solid #e2e8f0' }}>
+                              ✕ {a.diasFaltantes} dia{a.diasFaltantes !== 1 ? 's' : ''} com falta
+                            </span>
+                            <span style={{ fontSize: '11px', fontWeight: 800, background: a.faltasContabilizadas > 0 ? '#fef3c7' : '#f1f5f9', color: a.faltasContabilizadas > 0 ? '#b45309' : '#64748b', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', border: a.faltasContabilizadas > 0 ? '1px solid #fde68a' : '1px solid #e2e8f0' }}>
+                              ⏱ {a.faltasContabilizadas} tempo{a.faltasContabilizadas !== 1 ? 's' : ''} de falta
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', background: '#f8fafc', padding: '4px 10px', borderRadius: '20px', border: '1px solid #cbd5e1' }}>
-                          {students.length} {students.length === 1 ? 'pendência' : 'pendências'}
-                        </span>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Frequência no Período</div>
+                          {a.pctFrequencia !== null ? (
+                            <div style={{ fontSize: '22px', fontWeight: 900, color: a.pctFrequencia < 75 ? '#dc2626' : '#16a34a' }}>
+                              {a.pctFrequencia}%
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', background: '#f1f5f9', padding: '3px 8px', borderRadius: '6px', marginTop: '2px', border: '1px solid #e2e8f0' }}>
+                              Sem chamadas no período
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleSendWhatsApp(a)}
+                          style={{ padding: '8px 14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          WhatsApp
+                        </button>
                       </div>
                     </div>
 
-                    {/* Alunos Faltantes da Turma (Accordion Content) */}
-                    {isExpanded && (
-                      <div style={{ background: '#fff' }}>
-                        {/* Table Header Fictício no topo do Accordion para alinhamento */}
-                        <div style={{ display: 'flex', width: '100%', padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', gap: '16px' }}>
-                          <div style={{ width: '40%', fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Aluno</div>
-                          <div style={{ width: '25%', fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Tipo de Falta</div>
-                          <div style={{ width: '20%', fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Acesso</div>
-                          <div style={{ width: '15%', fontSize: '11px', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', textAlign: 'right' }}>Ações</div>
+                    {/* Tabela com as Datas Completas do Período */}
+                    <div style={{ padding: '0' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
+                            <th style={{ padding: '10px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Data & Dia da Semana</th>
+                            <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Status do Dia</th>
+                            <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Detalhamento por Tempo</th>
+                            <th style={{ padding: '10px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Entrada (Catraca)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {a.dailyBreakdown.map((d: any) => (
+                            <tr key={d.data} style={{ borderBottom: '1px solid #f1f5f9', background: '#fff' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                              <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+                                {d.dataFormatada}
+                              </td>
+                              <td style={{ padding: '12px 14px' }}>
+                                <span style={{
+                                  padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 800,
+                                  background: d.faltasStr.includes('Falta Total') ? '#fee2e2' :
+                                              d.faltasStr.includes('Parcial') ? '#fef3c7' :
+                                              d.faltasStr.includes('Justificada') ? '#fde68a' :
+                                              d.faltasStr.includes('Sem Registro') ? '#f1f5f9' : '#dcfce7',
+                                  color: d.faltasStr.includes('Falta Total') ? '#b91c1c' :
+                                         d.faltasStr.includes('Parcial') ? '#b45309' :
+                                         d.faltasStr.includes('Justificada') ? '#92400e' :
+                                         d.faltasStr.includes('Sem Registro') ? '#64748b' : '#15803d'
+                                }}>
+                                  {d.faltasStr}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 14px' }}>
+                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                  {Object.entries(d.temposEfetivos).map(([tId, status]) => {
+                                    const cfg = S_CONFIG[status as PresStatus] || { bg: '#f1f5f9', color: '#64748b', label: '-' }
+                                    return (
+                                      <div key={tId} style={{ padding: '2px 8px', borderRadius: '6px', background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border || 'transparent'}`, fontSize: '11px', fontWeight: 800 }}>
+                                        {tId}ºT: {cfg.label}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                                {d.horaRegistro ? (
+                                  <span style={{ padding: '3px 8px', background: '#e0f2fe', color: '#0369a1', borderRadius: '6px', fontWeight: 800 }}>
+                                    {d.horaRegistro}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // VISÃO POR TURMA(S) COM ACCORDEÃO DE DATAS COMPLETAS
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                    Alunos no Período ({reportDataFiltered.length})
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => {
+                        const allExp: Record<string, boolean> = {}
+                        reportDataFiltered.forEach(a => allExp[a.id] = true)
+                        setAlunosExpandidosRelatorio(allExp)
+                      }}
+                      style={{ fontSize: '11px', fontWeight: 700, padding: '4px 10px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      Expandir Todas as Datas
+                    </button>
+                    <button
+                      onClick={() => setAlunosExpandidosRelatorio({})}
+                      style={{ fontSize: '11px', fontWeight: 700, padding: '4px 10px', background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      Recolher Todas
+                    </button>
+                  </div>
+                </div>
+
+                {reportDataFiltered.map((a: any) => {
+                  const isExpanded = !!alunosExpandidosRelatorio[a.id]
+                  return (
+                    <div key={a.id} style={{ borderRadius: '14px', border: '1px solid #e2e8f0', overflow: 'hidden', background: '#fff' }}>
+                      {/* Linha Resumo do Aluno */}
+                      <div
+                        onClick={() => setAlunosExpandidosRelatorio(prev => ({ ...prev, [a.id]: !prev[a.id] }))}
+                        style={{ padding: '12px 18px', background: isExpanded ? '#f8fafc' : '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', transition: 'background 0.2s' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: a.isCritico ? '#fee2e2' : '#e0f2fe', color: a.isCritico ? '#dc2626' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800 }}>
+                            {getInitials(a.nome)}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
+                            <div style={{ fontSize: '11px', color: '#64748b' }}>
+                              Matrícula: #{a.id} • Turma: <strong>{a.turmaNome}</strong> ({a.turno})
+                            </div>
+                          </div>
                         </div>
 
-                        {students.map((student, idx) => {
-                          const isTotal = student.faltasStr === 'Falta Total'
-                          const isSemRegistro = student.faltasStr === 'Sem Registro'
-                          
-                          let bgAvatar = isSemRegistro ? '#f1f5f9' : (isTotal ? '#fee2e2' : '#fef3c7')
-                          let textAvatar = isSemRegistro ? '#475569' : (isTotal ? '#ef4444' : '#d97706')
-                          
-                          let bgBadge = isSemRegistro ? '#f1f5f9' : (isTotal ? '#fee2e2' : '#fef3c7')
-                          let textBadge = isSemRegistro ? '#475569' : (isTotal ? '#991b1b' : '#92400e')
-                          let borderBadge = isSemRegistro ? '#cbd5e1' : (isTotal ? '#fecaca' : '#fde68a')
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>Frequência</span>
+                            {a.pctFrequencia !== null ? (
+                              <span style={{
+                                padding: '2px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 800,
+                                background: a.pctFrequencia < 75 ? '#fee2e2' : '#dcfce7',
+                                color: a.pctFrequencia < 75 ? '#b91c1c' : '#15803d'
+                              }}>
+                                {a.pctFrequencia}%
+                              </span>
+                            ) : (
+                              <span style={{ padding: '2px 6px', borderRadius: '6px', fontSize: '10px', fontWeight: 700, background: '#f1f5f9', color: '#64748b' }}>
+                                Sem Reg.
+                              </span>
+                            )}
+                          </div>
 
-                          return (
-                            <div 
-                              key={student.id} 
-                              style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                width: '100%', 
-                                padding: '12px 16px', 
-                                borderBottom: idx === students.length - 1 ? 'none' : '1px solid #f1f5f9',
-                                gap: '16px'
-                              }}
-                            >
-                              {/* Aluno Avatar e Informações */}
-                              <div style={{ width: '40%', display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                                <div style={{ 
-                                  width: '32px', 
-                                  height: '32px', 
-                                  borderRadius: '50%', 
-                                  background: bgAvatar, 
-                                  color: textAvatar, 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center',
-                                  fontSize: '11px',
-                                  fontWeight: 800,
-                                  flexShrink: 0
-                                }}>
-                                  {getInitials(student.nome)}
-                                </div>
-                                <div style={{ minWidth: 0, textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={student.nome}>
-                                    {student.nome}
-                                  </div>
-                                  <div style={{ fontSize: '11px', color: '#64748b' }}>Matrícula: #{student.id}</div>
-                                </div>
-                              </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>Presenças</span>
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#15803d' }}>
+                              {a.diasPresentes}d
+                            </span>
+                          </div>
 
-                              {/* Tipo de Falta */}
-                              <div style={{ width: '25%', display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-                                <span style={{
-                                  alignSelf: 'flex-start',
-                                  padding: '3px 8px',
-                                  borderRadius: '6px',
-                                  fontSize: '11px',
-                                  fontWeight: 800,
-                                  background: bgBadge,
-                                  color: textBadge,
-                                  border: `1px solid ${borderBadge}`,
-                                  whiteSpace: 'nowrap'
-                                }}>
-                                  {student.faltasStr}
-                                </span>
-                                {student.temposFalta && student.temposFalta.length > 0 && !isTotal && (
-                                  <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 500 }}>
-                                    Tempos: {student.temposFalta.join(', ')}º
-                                  </span>
-                                )}
-                              </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>Dias Falta</span>
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: a.diasFaltantes > 0 ? '#dc2626' : '#64748b' }}>
+                              {a.diasFaltantes}d
+                            </span>
+                          </div>
 
-                              {/* Registro de Catraca / Entrada */}
-                              <div style={{ width: '20%', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
-                                {student.horaRegistro ? (
-                                  <>
-                                    <span style={{ fontSize: '12px', color: '#0f172a', fontWeight: 700 }}>
-                                      Entrada: {student.horaRegistro}
-                                    </span>
-                                    {(() => {
-                                      const tempoEntrada = getTempoEntrada(student.horaRegistro, student.segmento, student.turno)
-                                      return tempoEntrada ? (
-                                        <span style={{ fontSize: '10px', color: '#10b981', fontWeight: 800, textTransform: 'uppercase' }}>
-                                          Entrou no {tempoEntrada}
-                                        </span>
-                                      ) : null
-                                    })()}
-                                  </>
-                                ) : (
-                                  <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
-                                    Sem Registro (Catraca)
-                                  </span>
-                                )}
-                              </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>Tempos Falta</span>
+                            <span style={{ fontSize: '12px', fontWeight: 800, color: a.faltasContabilizadas > 0 ? '#b45309' : '#64748b' }}>
+                              {a.faltasContabilizadas}T
+                            </span>
+                          </div>
 
-                              {/* Ações */}
-                              <div style={{ width: '15%', display: 'flex', justifyContent: 'flex-end', minWidth: 0 }}>
-                                <button
-                                  onClick={() => handleSendWhatsApp(student)}
-                                  title="Notificar Responsável via WhatsApp"
-                                  style={{
-                                    border: 'none',
-                                    background: '#22c55e',
-                                    color: '#fff',
-                                    borderRadius: '8px',
-                                    padding: '6px 12px',
-                                    fontSize: '11px',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    boxShadow: '0 2px 4px rgba(34, 197, 94, 0.2)',
-                                    transition: 'transform 0.15s',
-                                    whiteSpace: 'nowrap'
-                                  }}
-                                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                                >
-                                  <span>WhatsApp</span>
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        })}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setAlunosExpandidosRelatorio(prev => ({ ...prev, [a.id]: !prev[a.id] }))
+                            }}
+                            style={{ padding: '6px 12px', background: isExpanded ? '#2563eb' : '#f1f5f9', color: isExpanded ? '#fff' : '#3b82f6', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <span>{isExpanded ? 'Ocultar Datas' : `Ver Datas (${a.dailyBreakdown.length})`}</span>
+                            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </button>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                )
-              })
+
+                      {/* Conteúdo Expandido: Tabela de Datas Completas */}
+                      {isExpanded && (
+                        <div style={{ padding: '12px 18px 16px 18px', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
+                          <h5 style={{ margin: '0 0 10px 0', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Detalhamento Completo por Data:
+                          </h5>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', background: '#fff', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                            <thead>
+                              <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
+                                <th style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Data</th>
+                                <th style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Status no Dia</th>
+                                <th style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Tempos de Aula</th>
+                                <th style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Catraca</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {a.dailyBreakdown.map((d: any) => (
+                                <tr key={d.data} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                  <td style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+                                    {d.dataFormatada}
+                                  </td>
+                                  <td style={{ padding: '8px 12px' }}>
+                                    <span style={{
+                                      padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800,
+                                      background: d.faltasStr.includes('Falta Total') ? '#fee2e2' :
+                                                  d.faltasStr.includes('Parcial') ? '#fef3c7' :
+                                                  d.faltasStr.includes('Justificada') ? '#fde68a' :
+                                                  d.faltasStr.includes('Sem Registro') ? '#f1f5f9' : '#dcfce7',
+                                      color: d.faltasStr.includes('Falta Total') ? '#b91c1c' :
+                                             d.faltasStr.includes('Parcial') ? '#b45309' :
+                                             d.faltasStr.includes('Justificada') ? '#92400e' :
+                                             d.faltasStr.includes('Sem Registro') ? '#64748b' : '#15803d'
+                                    }}>
+                                      {d.faltasStr}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '8px 12px' }}>
+                                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                      {Object.entries(d.temposEfetivos).map(([tId, status]) => {
+                                        const cfg = S_CONFIG[status as PresStatus] || { bg: '#f1f5f9', color: '#64748b', label: '-' }
+                                        return (
+                                          <div key={tId} style={{ padding: '1px 6px', borderRadius: '4px', background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border || 'transparent'}`, fontSize: '10px', fontWeight: 800 }}>
+                                            {tId}ºT: {cfg.label}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#475569' }}>
+                                    {d.horaRegistro || '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
 
+          {/* Footer do Modal com Botões de Ação */}
           <div style={{
-            padding: '20px 32px',
-            borderTop: '1px solid #f1f5f9',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            background: '#f8fafc'
+            padding: '16px 28px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc'
           }}>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
               <button
-                onClick={() => handlePrintRelatorio(filteredAbsentees, relatorioData)}
+                onClick={handlePrintRelatorioAvancado}
                 style={{
-                  padding: '10px 18px',
-                  background: '#fff',
-                  color: '#334155',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '10px',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'background 0.2s'
+                  padding: '10px 20px', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '10px',
+                  fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s'
                 }}
                 onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
                 onMouseLeave={e => e.currentTarget.style.background = '#fff'}
               >
-                <Printer size={15} />
-                <span>Imprimir PDF</span>
+                <Printer size={16} />
+                <span>Imprimir / PDF</span>
               </button>
+
               <button
-                onClick={() => handleExportar(filteredAbsentees, relatorioData)}
+                onClick={handleExportCSVAvancado}
                 style={{
-                  padding: '10px 18px',
-                  background: '#fff',
-                  color: '#334155',
-                  border: '1px solid #cbd5e1',
-                  borderRadius: '10px',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  transition: 'background 0.2s'
+                  padding: '10px 20px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '10px',
+                  fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                  boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)', transition: 'all 0.2s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'none'}
               >
-                <Download size={15} />
-                <span>Exportar CSV</span>
+                <Download size={16} />
+                <span>Exportar Excel / CSV</span>
               </button>
             </div>
-            
+
             <button
               onClick={() => {
                 setShowRelatorioModal(false)
                 setBuscaRelatorio('')
               }}
               style={{
-                padding: '10px 24px',
-                background: '#0f172a',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '10px',
-                fontWeight: 700,
-                fontSize: '13px',
-                cursor: 'pointer',
-                transition: 'background 0.2s'
+                padding: '10px 24px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '10px',
+                fontWeight: 700, fontSize: '13px', cursor: 'pointer'
               }}
-              onMouseEnter={e => e.currentTarget.style.background = '#1e293b'}
-              onMouseLeave={e => e.currentTarget.style.background = '#0f172a'}
             >
               Fechar
             </button>
@@ -1867,6 +2830,36 @@ export default function FrequenciaPage() {
           </div>
           
           <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => setShowRelatorioModal(true)}
+              style={{
+                height: '42px',
+                padding: '0 18px',
+                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.35)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'none'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.25)'
+              }}
+            >
+              <FileText size={18} />
+              <span>Relatórios</span>
+            </button>
             <button
               onClick={() => setShowAcessosModal(true)}
               style={{
@@ -2386,17 +3379,7 @@ export default function FrequenciaPage() {
           </div>
         </div>
 
-        {/* Ações da Turma */}
-        <div style={{ display: 'flex', gap: '8px' }}>
 
-          <button 
-            onClick={() => handleExportar()}
-            style={{ height: '42px', padding: '0 12px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
-          >
-            <Download size={14} />
-            <span>Exportar</span>
-          </button>
-        </div>
 
         {/* Legenda Premium */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: '#f8fafc', padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>

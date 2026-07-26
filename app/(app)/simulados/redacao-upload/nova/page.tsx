@@ -229,11 +229,7 @@ export default function NovaRedaçãoUploadPage() {
               <label style={labelStyle}>Título da Redação *</label>
               <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: Simulado Geral — 2º Bimestre 2025" style={inputStyle} />
             </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Instruções para os Professores</label>
-              <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: Instruções da coordenação para os professores" rows={3}
-                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
-            </div>
+
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={labelStyle}>Orientações para os Alunos</label>
               <textarea value={orientacoesAlunos} onChange={e => setOrientacoesAlunos(e.target.value)} placeholder="Ex: Preencha o cabeçalho, use caneta azul ou preta..." rows={3}

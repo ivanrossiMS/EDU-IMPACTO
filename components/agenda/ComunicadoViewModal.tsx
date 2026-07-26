@@ -1106,7 +1106,7 @@ export function ComunicadoViewModal({
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                                 {isFromResponsavel && (
                                   <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
-                                    Enviado por: {msg.remetente_nome} &bull;
+                                    Enviado por: <span style={{ fontWeight: 600, color: '#475569' }}>{msg.remetente_nome}</span> &bull;
                                   </span>
                                 )}
                                 <span style={{ fontSize: 12, color: '#94a3b8' }}>{msgTimeStr}</span>
@@ -1220,97 +1220,103 @@ export function ComunicadoViewModal({
           {/* ACTIONS FOOTER */}
           {(onEdit || onDelete || onForward) && (
             <div style={{
-              background: 'rgba(255, 255, 255, 0.85)',
+              background: 'rgba(255, 255, 255, 0.95)',
               backdropFilter: 'blur(24px)',
               WebkitBackdropFilter: 'blur(24px)',
               borderTop: '1px solid rgba(226, 232, 240, 0.7)',
-              padding: '20px 32px',
-              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+              padding: '12px 14px',
+              paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
               position: 'sticky',
               bottom: 0,
               zIndex: 20,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              gap: 16,
+              justifyContent: 'space-between',
+              gap: 8,
               boxShadow: '0 -10px 40px -10px rgba(0,0,0,0.06)'
             }}>
               {onForward && (
                 <motion.button 
-                  whileHover={{ scale: 1.03, y: -2 }}
+                  whileHover={{ scale: 1.02, y: -1 }}
                   whileTap={{ scale: 0.96 }}
                   onClick={(e: any) => { e.stopPropagation(); onForward(comunicado); }} 
                   style={{ 
                     flex: 1, 
+                    minWidth: 0,
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
-                    gap: 10, 
-                    padding: '16px 24px', 
-                    borderRadius: 20, 
+                    gap: 6, 
+                    padding: '12px 8px', 
+                    borderRadius: 16, 
                     border: '1px solid rgba(99, 102, 241, 0.2)', 
                     background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
                     color: '#ffffff', 
-                    fontSize: 16, 
+                    fontSize: 14, 
                     fontWeight: 700, 
+                    whiteSpace: 'nowrap',
                     cursor: 'pointer',
-                    boxShadow: '0 10px 25px -8px rgba(79, 70, 229, 0.6)',
+                    boxShadow: '0 8px 20px -6px rgba(79, 70, 229, 0.5)',
                     textShadow: '0 1px 2px rgba(0,0,0,0.1)'
                   }}
                 >
-                  <Send size={20} style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }} />
-                  Encaminhar
+                  <Send size={17} style={{ flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }} />
+                  <span>Encaminhar</span>
                 </motion.button>
               )}
               {onEdit && (
                 <motion.button 
-                  whileHover={{ scale: 1.03, y: -2, background: '#f8fafc' }}
+                  whileHover={{ scale: 1.02, y: -1, background: '#f8fafc' }}
                   whileTap={{ scale: 0.96 }}
                   onClick={(e: any) => { e.stopPropagation(); onEdit(comunicado); }} 
                   style={{ 
                     flex: 1, 
+                    minWidth: 0,
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
-                    gap: 10, 
-                    padding: '16px 24px', 
-                    borderRadius: 20, 
+                    gap: 6, 
+                    padding: '12px 8px', 
+                    borderRadius: 16, 
                     border: '1px solid #e2e8f0', 
                     background: '#ffffff', 
                     color: '#475569', 
-                    fontSize: 16, 
+                    fontSize: 14, 
                     fontWeight: 700, 
+                    whiteSpace: 'nowrap',
                     cursor: 'pointer',
-                    boxShadow: '0 6px 16px -4px rgba(0,0,0,0.05)'
+                    boxShadow: '0 4px 12px -4px rgba(0,0,0,0.05)'
                   }}
                 >
-                  <Edit2 size={20} />
-                  Editar
+                  <Edit2 size={17} style={{ flexShrink: 0 }} />
+                  <span>Editar</span>
                 </motion.button>
               )}
               {onDelete && (
                 <motion.button 
-                  whileHover={{ scale: 1.03, y: -2, background: '#fef2f2', borderColor: '#fecaca' }}
+                  whileHover={{ scale: 1.02, y: -1, background: '#fef2f2', borderColor: '#fecaca' }}
                   whileTap={{ scale: 0.96 }}
                   onClick={(e: any) => { e.stopPropagation(); onDelete(comunicado.id); }} 
                   style={{ 
                     flex: 1, 
+                    minWidth: 0,
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
-                    gap: 10, 
-                    padding: '16px 24px', 
-                    borderRadius: 20, 
+                    gap: 6, 
+                    padding: '12px 8px', 
+                    borderRadius: 16, 
                     border: '1px solid transparent', 
                     background: 'rgba(239, 68, 68, 0.08)', 
                     color: '#ef4444', 
-                    fontSize: 16, 
+                    fontSize: 14, 
                     fontWeight: 700, 
+                    whiteSpace: 'nowrap',
                     cursor: 'pointer'
                   }}
                 >
-                  <Trash2 size={20} />
-                  Excluir
+                  <Trash2 size={17} style={{ flexShrink: 0 }} />
+                  <span>Excluir</span>
                 </motion.button>
               )}
             </div>

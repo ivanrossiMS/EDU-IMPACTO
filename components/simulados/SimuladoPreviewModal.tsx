@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, Reorder } from 'framer-motion'
-import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, PenTool, FileText } from 'lucide-react'
+import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, PenTool, FileText, Maximize2 } from 'lucide-react'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
@@ -48,12 +48,17 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
     data: { label: "Data", x: 59.5, y: 11.4, fontSize: 8, width: 15, align: "left" },
     turma: { label: "Turma", x: 81.9, y: 11.4, fontSize: 8, width: 10, align: "left" },
     valor: { label: "Valor", x: 75.8, y: 16.5, fontSize: 8, width: 10, align: "left" },
-    nota: { label: "Nota", x: 75.8, y: 18.0, fontSize: 8, width: 10, align: "left" }
+    nota: { label: "Nota", x: 75.8, y: 18.0, fontSize: 8, width: 10, align: "left" },
+    orientacoes: { label: "Orientações Aluno", x: 60, y: 22.0, fontSize: 10, width: 35, align: "left", whiteSpace: "pre-wrap" }
   }
   const [headerLayout, setHeaderLayout] = useState<any>(() => {
-    const layout = config?.provas_header_layout || defaultHeaderLayout
+    let layout = simulado?.config_estudio?.header_layout || config?.provas_header_layout || defaultHeaderLayout
+    layout = { ...defaultHeaderLayout, ...layout }
     if (layout && layout.title) {
       layout.title.fontSize = 13
+    }
+    if (layout && layout.orientacoes) {
+      layout.orientacoes.whiteSpace = 'pre-wrap'
     }
     return layout
   })
@@ -71,7 +76,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         } catch (e) {}
       }
     }
-    return 0
+    return -25
   });
   const [rightMarginOffset, setRightMarginOffset] = useState<number>(() => {
     if (simulado?.config_estudio?.config_margin_right !== undefined) return simulado.config_estudio.config_margin_right
@@ -84,7 +89,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         } catch (e) {}
       }
     }
-    return 0
+    return -20
   });
   const [topMarginOffset, setTopMarginOffset] = useState<number>(() => {
     if (simulado?.config_estudio?.config_margin_top !== undefined) return simulado.config_estudio.config_margin_top
@@ -97,7 +102,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         } catch (e) {}
       }
     }
-    return 0
+    return -10
   });
   const [bottomMarginOffset, setBottomMarginOffset] = useState<number>(() => {
     if (simulado?.config_estudio?.config_margin_bottom !== undefined) return simulado.config_estudio.config_margin_bottom
@@ -110,7 +115,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         } catch (e) {}
       }
     }
-    return 0
+    return -90
   });
   const [adicionarPaginaRedacao, setAdicionarPaginaRedacao] = useState<boolean>(simulado?.config_estudio?.adicionar_pagina_redacao || false);
   const pageA4Ref = useRef<HTMLDivElement>(null)
@@ -179,6 +184,23 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         .eq('id', config.id)
       
       if (error) throw error
+
+      if (itemId) {
+        const updatedConfigEstudio = {
+          ...(simulado?.config_estudio || {}),
+          header_layout: headerLayout
+        }
+        if (simulado) simulado.config_estudio = updatedConfigEstudio;
+
+        await (supabase as any)
+          .from('provas_upload')
+          .update({
+            config_estudio: updatedConfigEstudio,
+            ...(simulado?.instrucoes !== undefined ? { instrucoes: simulado.instrucoes } : {}),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', itemId)
+      }
       
       // Update config in memory so it persists if the modal is closed and reopened without a full page reload
       if (config) {
@@ -465,26 +487,6 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                 {isEditHeaderMode ? (savingHeader ? 'Salvando...' : 'Sair Edição Cabeçalho') : 'Editar Cabeçalho'}
               </button>
 
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setShowMargins(!showMargins)}
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: showMargins ? '#fcd34d' : '#fef3c7', color: '#b45309', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
-                </button>
-                {showMargins && (
-                  <button
-                    onClick={handleSaveMargins}
-                    disabled={savingMargins}
-                    style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: savingMargins ? 'wait' : 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-                    title="Salvar margens para este simulado"
-                  >
-                    {savingMargins ? <Loader2 size={12} className="animate-spin" /> : null}
-                    Salvar Padrão
-                  </button>
-                )}
-              </div>
-
               {isEditHeaderMode && (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
@@ -501,6 +503,31 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                     Salvar Posições
                   </button>
                 </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
+              <Maximize2 size={16} color="#f59e0b" /> Margens
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setShowMargins(!showMargins)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: showMargins ? '#fcd34d' : '#fef3c7', color: '#b45309', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
+              </button>
+              {showMargins && (
+                <button
+                  onClick={handleSaveMargins}
+                  disabled={savingMargins}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: savingMargins ? 'wait' : 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                  title="Salvar margens para este simulado"
+                >
+                  {savingMargins ? <Loader2 size={12} className="animate-spin" /> : null}
+                  Salvar Padrão
+                </button>
               )}
             </div>
           </div>
@@ -670,7 +697,8 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                   config_margin_right: rightMarginOffset,
                   config_margin_top: topMarginOffset,
                   config_margin_bottom: bottomMarginOffset,
-                  adicionar_pagina_redacao: adicionarPaginaRedacao
+                  adicionar_pagina_redacao: adicionarPaginaRedacao,
+                  header_layout: headerLayout
                 })
                 onClose()
               }} 

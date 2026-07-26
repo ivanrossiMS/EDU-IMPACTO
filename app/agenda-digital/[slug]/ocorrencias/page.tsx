@@ -10,8 +10,23 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 
+import { EmptyStateCard } from '../../components/EmptyStateCard'
+
 export default function ADOcorrenciasPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital()
+
+  if (adConfig?.permissoes?.visualizarOcorrencias === false) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
+        <EmptyStateCard 
+          title="Acesso Restrito"
+          description="A visualização de ocorrências disciplinares está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica."
+          icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
+        />
+      </div>
+    )
+  }
+
   const { currentUser } = useApp()
   const searchParams = new URLSearchParams(window.location.search);
   const espelharRespId = searchParams.get('espelhar_responsavel');
@@ -65,21 +80,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
     }
   });
 
-  if (adConfig?.permissoes?.visualizarOcorrencias === false) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
-        <div style={{ background: '#fff', padding: 40, borderRadius: 32, textAlign: 'center', border: '1px solid #f1f5f9', boxShadow: '0 10px 40px rgba(0,0,0,0.03)', maxWidth: 500 }}>
-          <div style={{ width: 80, height: 80, borderRadius: 40, background: '#fee2e2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px auto' }}>
-            <AlertCircle size={40} />
-          </div>
-          <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 12 }}>Acesso Restrito</h3>
-          <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.6, margin: 0 }}>
-            A visualização de histórico comportamental e ocorrências está desativada para a sua conta ou suspensa temporariamente pela coordenação pedagógica.
-          </p>
-        </div>
-      </div>
-    )
-  }
+
 
   const ocorrenciasDoAluno = useMemo(() => {
     return ocorrencias

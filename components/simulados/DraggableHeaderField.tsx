@@ -5,13 +5,15 @@ export function DraggableHeaderField({
   field,
   isEditMode,
   onChange,
-  pageRef
+  pageRef,
+  onTextChange
 }: {
   fieldKey: string;
   field: any;
   isEditMode: boolean;
   onChange: (key: string, newField: any) => void;
   pageRef: React.RefObject<HTMLDivElement>;
+  onTextChange?: (newText: string) => void;
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -190,7 +192,32 @@ export function DraggableHeaderField({
           </div>
         </div>
       )}
-      {field.value}
+      {isEditMode && fieldKey === 'orientacoes' ? (
+        <textarea
+          value={field.value || ''}
+          onChange={(e) => onTextChange?.(e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
+          placeholder="Digite as instruções para os alunos..."
+          rows={3}
+          style={{
+            width: '100%',
+            background: 'rgba(255, 255, 255, 0.9)',
+            border: '1px solid #3b82f6',
+            borderRadius: 4,
+            fontSize: `${field.fontSize || 10}pt`,
+            fontFamily: 'inherit',
+            color: '#1f2937',
+            padding: '4px 6px',
+            outline: 'none',
+            resize: 'vertical',
+            boxSizing: 'border-box',
+            whiteSpace: 'pre-wrap',
+            cursor: 'text'
+          }}
+        />
+      ) : (
+        <div style={{ whiteSpace: field.whiteSpace || 'nowrap' }}>{field.value}</div>
+      )}
       {isEditMode && (
         <div
           onMouseDown={handleResizeMouseDown}

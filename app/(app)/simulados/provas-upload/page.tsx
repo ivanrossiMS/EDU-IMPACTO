@@ -836,7 +836,7 @@ export default function UploadProvasGerenciamentoPage() {
                     </div>
 
                     {/* Bottom Grid Section */}
-                    <div className="responsive-card-bottom-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                    <div className="responsive-card-bottom-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 16 }}>
                       {/* Box 1: Professor Responsável */}
                       <div style={{ border: '1px solid rgba(59,130,246,0.15)', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 16, background: 'rgba(59,130,246,0.03)' }}>
                         <div style={{ fontSize: 11, fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -917,16 +917,6 @@ export default function UploadProvasGerenciamentoPage() {
                         </div>
                       </div>
 
-                      {/* Box 2: Instruções */}
-                        <div className="neon-aura-purple-card" style={{ border: '1px solid rgba(139,92,246,0.15)', borderRadius: 12, padding: 16, background: 'rgba(139,92,246,0.03)', flex: 1 }}>
-                          <div style={{ fontSize: 11, fontWeight: 800, color: '#8b5cf6', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-                            <Info size={14} /> INSTRUÇÕES PARA OS PROFESSORES
-                          </div>
-                          <p style={{ margin: 0, fontSize: 13, color: 'hsl(var(--text-secondary))', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                            {prova.descricao || 'Nenhuma instrução informada.'}
-                          </p>
-                        </div>
-
                         {/* Box 3: Ações */}
                         <div style={{ border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, padding: 16, background: 'hsl(var(--bg-app))' }}>
                           <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', marginBottom: 12 }}>
@@ -955,20 +945,18 @@ export default function UploadProvasGerenciamentoPage() {
                               </motion.button>
                             </Link>
                             {isCoord && (
-                              <>
-                                <Link href={`/simulados/provas-upload/${prova.id}/editar`} style={{ textDecoration: 'none', display: 'block' }}>
-                                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(139,92,246,0.05)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                                    <Edit size={16} /> Editar
-                                  </motion.button>
-                                </Link>
+                              <Link href={`/simulados/provas-upload/${prova.id}/editar`} style={{ textDecoration: 'none', display: 'block' }}>
                                 <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                                  onClick={() => setDeleteConfirmId(prova.id)}
-                                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(239,68,68,0.05)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                                  <Trash2 size={16} /> Excluir
+                                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(139,92,246,0.05)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
+                                  <Edit size={16} /> Editar
                                 </motion.button>
-                              </>
+                              </Link>
                             )}
+                            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                              onClick={() => setDeleteConfirmId(prova.id)}
+                              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(239,68,68,0.05)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
+                              <Trash2 size={16} /> Excluir
+                            </motion.button>
                           </div>
                         </div>
                       </div>

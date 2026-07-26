@@ -21,6 +21,7 @@ import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
   const queryClient = useQueryClient()
   // removido const { fetchMomentos } = useAgendaDigital()
+  const { adConfig } = useAgendaDigital()
   const { aluno: contextAluno } = useSelectedStudent()
   const resolvedParams = useParams() as { slug: string }
   
@@ -65,6 +66,9 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const fetchMomentos = fetchMomentosData?.pages?.flat() || []
   const dataCtx = useData();
   const turmas = dataCtx?.turmas || [];
+
+  // Flag de permissão: se falso, esconde todos os comentários e o input
+  const canComment = adConfig?.permissoes?.comentariosMural !== false
 
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
@@ -783,14 +787,16 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                          />
                          <span style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{(m.likes || []).length}</span>
                        </div>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => { document.getElementById(`comment-input-${m.id}`)?.focus() }}>
-                         <MessageCircle size={20} color="#64748b" />
-                         <span style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{(m.comments || []).length}</span>
-                       </div>
+                       {canComment && (
+                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => { document.getElementById(`comment-input-${m.id}`)?.focus() }}>
+                           <MessageCircle size={20} color="#64748b" />
+                           <span style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>{(m.comments || []).length}</span>
+                         </div>
+                       )}
                     </div>
 
                     {/* Comentários Minimais */}
-                    {(m.comments || []).length > 0 && (
+                    {canComment && (m.comments || []).length > 0 && (
                       <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 110, overflowY: 'auto', paddingRight: 4, background: '#f8fafc', padding: 8, borderRadius: 10, border: '1px solid #f1f5f9' }}>
                         {(m.comments || []).map((c: any) => (
                           <div key={c.id} style={{ fontSize: 12, lineHeight: 1.4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -822,24 +828,26 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                       </div>
                     )}
 
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <input 
-                        id={`comment-input-${m.id}`}
-                        type="text" 
-                        value={commentInputs[m.id] || ''}
-                        onChange={e => setCommentInputs(p => ({ ...p, [m.id]: e.target.value }))}
-                        placeholder="Adicione um comentário..." 
-                        style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, outline: 'none', color: '#1e293b' }}
-                        onKeyDown={e => { if (e.key === 'Enter') handlePublishComment(m.id) }}
-                      />
-                      <button 
-                        onClick={() => handlePublishComment(m.id)}
-                        style={{ background: 'none', border: 'none', color: '#4f46e5', fontWeight: 700, cursor: 'pointer', fontSize: 13, opacity: commentInputs[m.id]?.trim() ? 1 : 0.5, transition: 'opacity 0.2s' }}
-                        disabled={!commentInputs[m.id]?.trim()}
-                      >
-                        Publicar
-                      </button>
-                    </div>
+                    {canComment && (
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #e2e8f0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input 
+                          id={`comment-input-${m.id}`}
+                          type="text" 
+                          value={commentInputs[m.id] || ''}
+                          onChange={e => setCommentInputs(p => ({ ...p, [m.id]: e.target.value }))}
+                          placeholder="Adicione um comentário..." 
+                          style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, outline: 'none', color: '#1e293b' }}
+                          onKeyDown={e => { if (e.key === 'Enter') handlePublishComment(m.id) }}
+                        />
+                        <button 
+                          onClick={() => handlePublishComment(m.id)}
+                          style={{ background: 'none', border: 'none', color: '#4f46e5', fontWeight: 700, cursor: 'pointer', fontSize: 13, opacity: commentInputs[m.id]?.trim() ? 1 : 0.5, transition: 'opacity 0.2s' }}
+                          disabled={!commentInputs[m.id]?.trim()}
+                        >
+                          Publicar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               );

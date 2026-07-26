@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { DEFAULT_PROVA_INSTRUCOES } from '@/lib/utils'
 
 export default function NovaProvaUploadPage() {
   const router = useRouter()
@@ -22,7 +23,7 @@ export default function NovaProvaUploadPage() {
   const [dataAplicacao, setDataAplicacao] = useState('')
   const [bimestreId, setBimestreId] = useState('')
   const [series, setSeries] = useState<string[]>([])
-  const [instrucoes, setInstrucoes] = useState('')
+  const [instrucoes, setInstrucoes] = useState(DEFAULT_PROVA_INSTRUCOES)
   const [dataLimiteUpload, setDataLimiteUpload] = useState('')
   const [valor, setValor] = useState('')
 
@@ -66,6 +67,7 @@ export default function NovaProvaUploadPage() {
           if (oldProva.series) setSeries(Array.isArray(oldProva.series) ? oldProva.series : [oldProva.series])
           if (oldProva.data_limite_upload) setDataLimiteUpload(oldProva.data_limite_upload)
           if (oldProva.valor) setValor(oldProva.valor.toString())
+          if (oldProva.instrucoes) setInstrucoes(oldProva.instrucoes)
           
           const { data: reqs } = await (supabase as any).from('provas_upload_requisicoes').select('*').eq('id_prova_upload', adaptarDe)
           if (reqs && reqs.length > 0) {
@@ -139,6 +141,7 @@ export default function NovaProvaUploadPage() {
         id_bimestre: bimestreId || null,
         series,
         valor: valor ? parseFloat(valor.replace(',', '.')) : null,
+        instrucoes: instrucoes.trim() || null,
         status: 'aguardando',
         questoes_count: 0,
         criado_por: currentUser?.id || null,
@@ -223,11 +226,7 @@ export default function NovaProvaUploadPage() {
               <label style={labelStyle}>Título da Prova *</label>
               <input type="text" value={titulo} onChange={e => setTitulo(e.target.value)} placeholder="Ex: Simulado Geral — 2º Bimestre 2025" style={inputStyle} />
             </div>
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={labelStyle}>Instruções para os Professores</label>
-              <textarea value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex: Instruções da coordenação para os professores" rows={3}
-                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
-            </div>
+
             <div>
               <label style={labelStyle}>Bimestre *</label>
               <select value={bimestreId} onChange={e => setBimestreId(e.target.value)} style={inputStyle}>
@@ -246,6 +245,16 @@ export default function NovaProvaUploadPage() {
             <div>
               <label style={labelStyle}>Prazo para Upload dos Professores</label>
               <input type="date" value={dataLimiteUpload} onChange={e => setDataLimiteUpload(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>Instruções / Orientações para os Alunos</label>
+              <textarea
+                value={instrucoes}
+                onChange={e => setInstrucoes(e.target.value)}
+                placeholder="Ex: Preencha o cabeçalho completo, use caneta esferográfica azul ou preta, tempo limite: 4h..."
+                rows={3}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
             </div>
           </div>
         </div>

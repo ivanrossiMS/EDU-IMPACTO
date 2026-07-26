@@ -77,6 +77,7 @@ export default function VerProvaUploadPage() {
     try {
       let updatePayload: any = {
         questoes_json: updatedQuestoes || questoes,
+        ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {}),
         updated_at: new Date().toISOString()
       }
       if (config_estudio) {
@@ -84,9 +85,11 @@ export default function VerProvaUploadPage() {
       }
       const { error } = await (supabase as any).from('provas_upload').update(updatePayload).eq('id', provaId)
       if (error) throw error
-      if (config_estudio) {
-        setProva((prev: any) => ({ ...prev, config_estudio }))
-      }
+      setProva((prev: any) => ({
+        ...prev,
+        ...(config_estudio ? { config_estudio } : {}),
+        ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {})
+      }))
       setSuccessMessage('Alterações salvas com sucesso!')
       setSuccessModal(true)
       setShowPreview(false)
@@ -229,16 +232,7 @@ export default function VerProvaUploadPage() {
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 24 }}>
             
-            {prova?.descricao && (
-              <div style={{ background: 'rgba(236, 72, 153, 0.08)', border: '1px solid rgba(236, 72, 153, 0.2)', borderRadius: 20, padding: 24 }}>
-                <h4 style={{ color: '#ec4899', fontSize: 15, fontWeight: 700, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Sparkles size={16} /> Instruções para os Professores
-                </h4>
-                <p style={{ color: 'hsl(var(--text-primary))', fontSize: 13, margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                  {prova.descricao}
-                </p>
-              </div>
-            )}
+
 
             <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24 }}>
               <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 15, fontWeight: 700, margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}>

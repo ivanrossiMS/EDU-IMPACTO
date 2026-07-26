@@ -54,8 +54,13 @@ export async function GET(req: Request) {
       .range(from, to)
       .abortSignal(controller.signal)
 
+    const turma = (url.searchParams.get('turma') || '').trim()
+
     if (search) {
-      query = query.ilike('nome', `%${search}%`)
+      query = query.or(`nome.ilike.%${search}%,matricula.ilike.%${search}%`)
+    }
+    if (turma) {
+      query = query.eq('turma', turma)
     }
 
     let data: any, error: any, count: number | null

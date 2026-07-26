@@ -1112,14 +1112,14 @@ export default function ADAdminComunicados() {
               </div>
 
               {/* Footer Actions */}
-              <div style={{ padding: '20px 32px', background: 'hsl(var(--bg-overlay))', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 12 }}>
-                <button className="btn btn-secondary" style={{ flex: 1, gap: 8, height: 48 }} onClick={() => { openEdit(viewingCom); setViewingCom(null); }}>
-                  <MoreHorizontal size={18} /> Editar
+              <div style={{ padding: '12px 14px', background: 'hsl(var(--bg-overlay))', borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary" style={{ flex: 1, minWidth: 0, gap: 6, height: 44, padding: '0 8px', fontSize: 14, whiteSpace: 'nowrap' }} onClick={() => { openEdit(viewingCom); setViewingCom(null); }}>
+                  <MoreHorizontal size={17} style={{ flexShrink: 0 }} /> Editar
                 </button>
-                <button className="btn btn-secondary" style={{ flex: 1, gap: 8, height: 48 }} onClick={() => { handleReenviar(viewingCom); setViewingCom(null); }}>
-                  <SendIcon size={18} /> Encaminhar
+                <button className="btn btn-secondary" style={{ flex: 1, minWidth: 0, gap: 6, height: 44, padding: '0 8px', fontSize: 14, whiteSpace: 'nowrap' }} onClick={() => { handleReenviar(viewingCom); setViewingCom(null); }}>
+                  <SendIcon size={17} style={{ flexShrink: 0 }} /> Encaminhar
                 </button>
-                <button className="btn" style={{ flex: 1, gap: 8, height: 48, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }} onClick={() => {
+                <button className="btn" style={{ flex: 1, minWidth: 0, gap: 6, height: 44, padding: '0 8px', fontSize: 14, whiteSpace: 'nowrap', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }} onClick={() => {
                   adConfirm('Excluir este comunicado permanentemente?', 'Apagar', async () => {
                     try {
                       await fetch(`/api/comunicados?id=${viewingCom.id}`, { method: 'DELETE' });
@@ -1130,7 +1130,7 @@ export default function ADAdminComunicados() {
                     setViewingCom(null);
                   });
                 }}>
-                  <XCircle size={18} /> Apagar
+                  <XCircle size={17} style={{ flexShrink: 0 }} /> Apagar
                 </button>
               </div>
             </motion.div>

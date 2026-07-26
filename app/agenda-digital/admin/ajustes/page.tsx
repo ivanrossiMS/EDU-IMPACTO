@@ -100,17 +100,31 @@ export default function ADAdminAjustes() {
 
     // Push to global settings DB
     try {
-      await fetch('/api/configuracoes', {
-         method: 'POST', body: JSON.stringify({ chave: 'ad_config', valor: localConfig })
+      const resConfig = await fetch('/api/configuracoes', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ chave: 'ad_config', valor: localConfig })
       })
+      if (!resConfig.ok) {
+        const errJson = await resConfig.json().catch(() => ({}))
+        throw new Error(errJson.error || 'Erro ao salvar configurações')
+      }
+
       if (localBanner) {
-         await fetch('/api/configuracoes', {
-            method: 'POST', body: JSON.stringify({ chave: 'ad_banner', valor: localBanner })
+         const resBanner = await fetch('/api/configuracoes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chave: 'ad_banner', valor: localBanner })
          })
+         if (!resBanner.ok) {
+           const errJson = await resBanner.json().catch(() => ({}))
+           throw new Error(errJson.error || 'Erro ao salvar banner')
+         }
       }
       adAlert('Configurações e banner salvos com sucesso no sistema global para todos os usuários!', 'Sucesso')
-    } catch(e) {
-      adAlert('Salvo localmente, mas houve erro ao publicar na nuvem global.', 'Atenção')
+    } catch(e: any) {
+      console.error('Erro ao salvar configurações:', e)
+      adAlert(`Salvo localmente, mas houve erro ao publicar na nuvem global: ${e.message || ''}`, 'Atenção')
     }
   }
 
@@ -188,21 +202,7 @@ export default function ADAdminAjustes() {
                 </div>
 
                 <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  {/* 1. Chat */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Abrir novos chamados (Chat)</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Se desativado, os pais só poderão responder a mensagens iniciadas pela escola.</div>
-                    </div>
-                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
-                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.permissoes.chat} onChange={e => updatePerm('chat', e.target.checked)} />
-                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.chat ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
-                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.chat ? 'translateX(20px)' : 'none' }}></span>
-                       </span>
-                    </label>
-                  </div>
-
-                  {/* 2. Comentários Mural */}
+                  {/* 1. Comentários Mural */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 16 }}>Comentários no Mural (Momentos)</div>
@@ -216,7 +216,7 @@ export default function ADAdminAjustes() {
                     </label>
                   </div>
 
-                  {/* 3. Aniversariantes */}
+                  {/* 2. Aniversariantes */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Aniversariantes do Mês</div>
@@ -226,34 +226,6 @@ export default function ADAdminAjustes() {
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarAniversariantes} onChange={e => updatePerm('visualizarAniversariantes', e.target.checked)} />
                        <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.visualizarAniversariantes ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
                           <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.visualizarAniversariantes ? 'translateX(20px)' : 'none' }}></span>
-                       </span>
-                    </label>
-                  </div>
-
-                  {/* 4. Relatórios */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Relatórios de Rotina Diária</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita a visualização imediata do boletim pedagógico e rotina diária no app dos responsáveis.</div>
-                    </div>
-                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
-                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarRelatorios} onChange={e => updatePerm('visualizarRelatorios', e.target.checked)} />
-                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.visualizarRelatorios ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
-                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.visualizarRelatorios ? 'translateX(20px)' : 'none' }}></span>
-                       </span>
-                    </label>
-                  </div>
-
-                  {/* 5. Presença Eventos */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Confirmar Presença em Eventos</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita o botão para que os pais confirmem se o aluno comparecerá a eventos escolares (reuniões, excursões, festas).</div>
-                    </div>
-                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
-                       <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.confirmarPresencaEventos} onChange={e => updatePerm('confirmarPresencaEventos', e.target.checked)} />
-                       <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.permissoes.confirmarPresencaEventos ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
-                          <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.permissoes.confirmarPresencaEventos ? 'translateX(20px)' : 'none' }}></span>
                        </span>
                     </label>
                   </div>
@@ -391,28 +363,54 @@ export default function ADAdminAjustes() {
                      </label>
                    </div>
 
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
-                     <div>
-                       <div style={{ fontWeight: 600, fontSize: 16 }}>Novas Mensagens no Chat</div>
-                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Avisa a família imediatamente quando a escola responde ou abre um chamado.</div>
-                     </div>
-                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
-                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.notificacoes.pushMensagemChat} onChange={e => updateNotif('pushMensagemChat', e.target.checked)} />
-                        <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushMensagemChat ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
-                           <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushMensagemChat ? 'translateX(20px)' : 'none' }}></span>
-                        </span>
-                     </label>
-                   </div>
-
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Novos Relatórios/Rotinas</div>
-                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Envia notificação push imediata aos pais quando a rotina ou relatório diário do aluno for publicado.</div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Registro de Frequência / Faltas</div>
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Avisa o responsável imediatamente quando a chamada for realizada e houver presença ou falta registrada.</div>
                       </div>
-                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
-                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushRelatorios} onChange={e => updateNotif('pushRelatorios', e.target.checked)} />
-                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushRelatorios ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
-                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushRelatorios ? 'translateX(20px)' : 'none' }}></span>
+                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushFrequencia} onChange={e => updateNotif('pushFrequencia', e.target.checked)} />
+                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushFrequencia ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushFrequencia ? 'translateX(20px)' : 'none' }}></span>
+                         </span>
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Ocorrências Disciplinares</div>
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Envia um alerta push quando a coordenação pedagógica registrar uma ocorrência do aluno.</div>
+                      </div>
+                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushOcorrencias} onChange={e => updateNotif('pushOcorrencias', e.target.checked)} />
+                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushOcorrencias ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushOcorrencias ? 'translateX(20px)' : 'none' }}></span>
+                         </span>
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Lançamento de Boletim e Notas</div>
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Alerta os responsáveis quando novas notas ou o boletim escolar forem lançados no sistema.</div>
+                      </div>
+                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushNotas} onChange={e => updateNotif('pushNotas', e.target.checked)} />
+                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushNotas ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushNotas ? 'translateX(20px)' : 'none' }}></span>
+                         </span>
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Chamada de Portaria / Saída</div>
+                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Notifica a equipe e os responsáveis em tempo real durante a chamada de saída de alunos.</div>
+                      </div>
+                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
+                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushSaidaPortaria} onChange={e => updateNotif('pushSaidaPortaria', e.target.checked)} />
+                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushSaidaPortaria ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
+                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushSaidaPortaria ? 'translateX(20px)' : 'none' }}></span>
                          </span>
                       </label>
                     </div>
@@ -422,7 +420,7 @@ export default function ADAdminAjustes() {
                         <div style={{ fontWeight: 600, fontSize: 16 }}>Notificar em Alterações de Calendário</div>
                         <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Notifica os responsáveis em caso de alterações críticas de datas ou horários de eventos no calendário.</div>
                       </div>
-                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                      <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                          <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushAlteracaoCalendario} onChange={e => updateNotif('pushAlteracaoCalendario', e.target.checked)} />
                          <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushAlteracaoCalendario ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
                             <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushAlteracaoCalendario ? 'translateX(20px)' : 'none' }}></span>
@@ -547,7 +545,9 @@ export default function ADAdminAjustes() {
                onSave={(newConfig: any) => {
                  setAdConfig(newConfig)
                  fetch('/api/configuracoes', {
-                   method: 'POST', body: JSON.stringify({ chave: 'ad_config', valor: newConfig })
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ chave: 'ad_config', valor: newConfig })
                  }).catch(console.error)
                }}
              />

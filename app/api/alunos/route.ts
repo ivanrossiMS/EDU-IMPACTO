@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
     const page = parseInt(pageParam || '1')
     const lightweight = url.searchParams.get('lightweight') === 'true'
-    const requestedLimit = parseInt(limitParam || (all ? '10000' : '25'))
+    const requestedLimit = parseInt(limitParam || (all || !pageParam ? '10000' : '25'))
     // Aumentamos o limite para permitir 'Todos', já que o usuário possui a opção no frontend
     const limit = lightweight ? Math.min(requestedLimit, 10000) : Math.min(requestedLimit, 10000)
     const search = url.searchParams.get('search') || ''
@@ -39,6 +39,7 @@ export async function GET(request: Request) {
     const turno = url.searchParams.get('turno') || ''
     const autorizadoSairSozinho = url.searchParams.get('autorizadoSairSozinho') // 'true' | 'false' | null
     const foto = url.searchParams.get('foto') || 'todos'
+    const observacoesParam = url.searchParams.get('observacoes') || 'todos'
 
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -68,6 +69,16 @@ export async function GET(request: Request) {
         query = query.or('status.neq.inativo,status.is.null')
       }
       // Se tiver busca, 'todos' significa buscar também nos inativos para que a busca encontre o aluno
+    } else if (status === 'com_observacoes') {
+      if (!search) {
+        query = query.or('status.neq.inativo,status.is.null')
+      }
+      query = query.or('obs.neq."",dados->observacoes.neq.[]')
+    } else if (status === 'sem_observacoes') {
+      if (!search) {
+        query = query.or('status.neq.inativo,status.is.null')
+      }
+      query = query.or('obs.is.null,obs.eq.""').or('dados->observacoes.is.null,dados->observacoes.eq.[]')
     } else if (status === 'matriculado_vazio') {
       query = query.or('status.eq.MATRICULADO,status.eq.matriculado,status.is.null')
     } else if (status === 'pode_sair_sim') {
@@ -140,6 +151,12 @@ export async function GET(request: Request) {
       query = query.not('foto', 'is', null).neq('foto', '')
     } else if (foto === 'sem_foto') {
       query = query.or('foto.is.null,foto.eq.""')
+    }
+
+    if (observacoesParam === 'com_observacoes') {
+      query = query.or('obs.neq."",dados->observacoes.neq.[]')
+    } else if (observacoesParam === 'sem_observacoes') {
+      query = query.or('obs.is.null,obs.eq.""').or('dados->observacoes.is.null,dados->observacoes.eq.[]')
     }
 
     // Determine ordering column

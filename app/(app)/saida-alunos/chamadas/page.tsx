@@ -97,18 +97,18 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
   return (
     <div style={{
       position: 'relative',
-      borderRadius: 20,
+      borderRadius: 16,
       overflow: 'hidden',
       background: 'hsl(var(--bg-elevated))',
       border: `1px solid ${color}${isFinished ? '20' : '40'}`,
-      boxShadow: `0 8px 30px rgba(0,0,0,0.06), 0 0 15px ${color}${urgent ? '30' : '05'}`,
+      boxShadow: `0 6px 20px rgba(0,0,0,0.06), 0 0 12px ${color}${urgent ? '30' : '05'}`,
       display: 'flex',
       flexDirection: 'column',
-      opacity: isFinished ? 0.75 : 1,
+      opacity: isFinished ? 0.85 : 1,
       transition: 'all 0.3s cubic-bezier(0.2, 1, 0.2, 1)',
       animation: urgent ? 'cardFloatUrgent 4s ease-in-out infinite' : 'none',
-      minHeight: 320,
-      aspectRatio: '1 / 1.38',
+      minHeight: 220,
+      aspectRatio: '1 / 1.3',
     }}>
 
       {/* ── BACKGROUND PHOTO ─────────────────────────────────────── */}
@@ -125,7 +125,7 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
             width: '100%', height: '100%',
             background: `linear-gradient(135deg, ${color}80, ${color}30)`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 56, fontWeight: 900, color: '#fff',
+            fontSize: 42, fontWeight: 900, color: '#fff',
             letterSpacing: '-1px',
           }}>
             {initials}
@@ -141,28 +141,28 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
 
       {/* Floating Status Tag */}
         <div style={{
-          position: 'absolute', top: 12, left: 12,
-          padding: '6px 12px', borderRadius: 50,
+          position: 'absolute', top: 8, left: 8,
+          padding: '4px 8px', borderRadius: 50,
           background: color,
           display: 'flex', alignItems: 'center', gap: 4,
-          fontSize: 10, fontWeight: 900, color: '#fff',
+          fontSize: 9, fontWeight: 900, color: '#fff',
           textTransform: 'uppercase', letterSpacing: '0.05em',
-          boxShadow: `0 4px 16px ${color}80`,
+          boxShadow: `0 4px 12px ${color}80`,
           zIndex: 10,
         }}>
-          {isActive ? <Clock size={10} className={urgent ? 'tv-pulse-icon' : ''} /> : 
-           call.status === 'confirmed' ? <CheckCircle2 size={10} /> : <X size={10} />}
+          {isActive ? <Clock size={9} className={urgent ? 'tv-pulse-icon' : ''} /> : 
+           call.status === 'confirmed' ? <CheckCircle2 size={9} /> : <X size={9} />}
           {urgent ? 'ATRASADO' : meta.label}
         </div>
 
         {/* Live Timer (if active) */}
         {isActive && (
           <div style={{
-            position: 'absolute', top: 12, right: 12,
-            padding: '4px 10px', borderRadius: 50,
+            position: 'absolute', top: 8, right: 8,
+            padding: '3px 8px', borderRadius: 50,
             background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)',
             border: '1px solid rgba(255,255,255,0.1)',
-            fontSize: 10, fontWeight: 900, color: '#fff',
+            fontSize: 9, fontWeight: 900, color: '#fff',
             display: 'flex', alignItems: 'center', gap: 4, zIndex: 10,
           }}>
             {mins} MIN
@@ -171,33 +171,32 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
       {/* ── CONTENT AREA ─────────────────────────────────────────────────── */}
       <div style={{
         position: 'relative', zIndex: 5, marginTop: 'auto',
-        padding: '16px 20px 20px', display: 'flex', flexDirection: 'column',
+        padding: '12px 14px 14px', display: 'flex', flexDirection: 'column',
       }}>
         <div style={{
-          fontSize: 16, fontWeight: 900, color: '#fff',
-          lineHeight: 1.2, marginBottom: 4, textTransform: 'uppercase',
+          fontSize: 13.5, fontWeight: 900, color: '#fff',
+          lineHeight: 1.2, marginBottom: 3, textTransform: 'uppercase',
           fontFamily: 'Outfit, sans-serif', textShadow: '0 2px 8px rgba(0,0,0,0.8)',
-        }}>
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }} title={call.studentName}>
           {call.studentName}
         </div>
         
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 12, fontWeight: 800, color, textTransform: 'uppercase',
-          letterSpacing: '0.02em', marginBottom: 16,
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: 10.5, fontWeight: 800, color, textTransform: 'uppercase',
+          letterSpacing: '0.02em', marginBottom: 10,
         }}>
-          <GraduationCap size={12} />
+          <GraduationCap size={11} />
           {call.studentClass}
         </div>
-
-
 
         {/* Block Reason Banner */}
         {isBlocked && call.blockReason && (
           <div style={{
-            padding: '8px 12px', borderRadius: 8, marginBottom: 16,
+            padding: '6px 10px', borderRadius: 8, marginBottom: 10,
             background: `rgba(${call.blockType === 'proibido' ? '239,68,68' : '249,115,22'}, 0.15)`,
-            border: `1px solid ${color}40`, fontSize: 10, color: '#cbd5e1', lineHeight: 1.4,
+            border: `1px solid ${color}40`, fontSize: 9, color: '#cbd5e1', lineHeight: 1.3,
           }}>
             <strong style={{ color }}>{call.blockType === 'proibido' ? '🚫 PROIBIDO: ' : '📅 DIA RESTRITO: '}</strong>
             {call.blockReason}
@@ -206,16 +205,16 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
 
         {/* Footer info (Guardian & Time) */}
         <div style={{
-          borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, marginBottom: 14,
+          borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 8, marginBottom: 10,
           display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
         }}>
           {/* Left: Guardian */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0, paddingRight: 8 }}>
-            <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0, paddingRight: 6 }}>
+            <span style={{ fontSize: 8, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Responsável
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#f8fafc', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
-              <UserCheck size={12} color="#cbd5e1" style={{ flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#f8fafc', fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>
+              <UserCheck size={10} color="#cbd5e1" style={{ flexShrink: 0 }} />
               <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {call.guardianName || 'Não Informado'}
               </span>
@@ -223,14 +222,14 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
           </div>
           
           {/* Right: Times */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, fontSize: 10, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-               <Megaphone size={10} color={color} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, fontSize: 9, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+               <Megaphone size={9} color={color} />
                {fmtTime(call.calledAt)}
              </div>
              {call.confirmedAt && (
-               <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#10b981' }}>
-                 <CheckCircle2 size={10} />
+               <div style={{ display: 'flex', alignItems: 'center', gap: 3, color: '#10b981' }}>
+                 <CheckCircle2 size={9} />
                  {fmtTime(call.confirmedAt)}
                </div>
              )}
@@ -239,43 +238,43 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
 
         {/* ── ACTION BUTTONS ─────────────────────────────────────────────── */}
         {isActive && (
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
             <button className="btn-modern btn-chamar" onClick={handleRecall} disabled={recalling} style={{
-              flex: 1, height: 42, borderRadius: 12,
-              fontWeight: 800, fontSize: 11, cursor: recalling ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              flex: 1, height: 34, borderRadius: 10,
+              fontWeight: 800, fontSize: 10, cursor: recalling ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
               textTransform: 'uppercase',
             }}>
-              <Megaphone size={13}/> {recalling ? 'Chamando...' : 'CHAMAR ALUNO'}
+              <Megaphone size={11}/> {recalling ? 'Chamando...' : 'CHAMAR'}
             </button>
 
             <button className="btn-modern btn-confirmar" onClick={() => onConfirm(call.id)} style={{
-              flex: 1.5, height: 42, borderRadius: 12,
-              fontWeight: 800, fontSize: 12, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              flex: 1.4, height: 34, borderRadius: 10,
+              fontWeight: 800, fontSize: 10, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
               textTransform: 'uppercase',
             }}>
-              <CheckCircle2 size={13}/> Confirmar
+              <CheckCircle2 size={11}/> Confirmar
             </button>
 
             <button className="btn-modern btn-cancelar" onClick={() => onCancel(call.id)} style={{
-              width: 42, height: 42, flexShrink: 0, borderRadius: 12,
+              width: 34, height: 34, flexShrink: 0, borderRadius: 10,
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <X size={15}/>
+              <X size={13}/>
             </button>
           </div>
         )}
 
         {isFinished && (
           <button onClick={() => onRevert(call.id)} style={{
-            width: '100%', height: 42, borderRadius: 12,
+            width: '100%', height: 34, borderRadius: 10,
             background: 'hsl(var(--bg-overlay))', border: '1px solid hsl(var(--border-subtle))',
-            color: 'hsl(var(--text-muted))', fontWeight: 700, fontSize: 11, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            color: 'hsl(var(--text-muted))', fontWeight: 700, fontSize: 10, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
             transition: 'all 0.2s', textTransform: 'uppercase',
           }}>
-            <RotateCcw size={13}/> Reverter para Aguardando
+            <RotateCcw size={11}/> Reverter para Aguardando
           </button>
         )}
       </div>
@@ -710,11 +709,11 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
 function CallCardSkeleton() {
   return (
     <div className="skeleton-shimmer" style={{
-      borderRadius: 20,
+      borderRadius: 16,
       background: 'hsl(var(--bg-elevated))',
       border: '1px solid hsl(var(--border-subtle))',
-      minHeight: 320,
-      aspectRatio: '1 / 1.38',
+      minHeight: 220,
+      aspectRatio: '1 / 1.3',
       display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden'
@@ -768,6 +767,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
   const { addSpecialAuth, confirmSpecialExit, deleteCall, cancelCall, callStudent, confirmPickup, recallStudent, activeCalls = [] } = useSaida()
   const [todasTurmas] = useSupabaseArray<any>('turmas');
   const { currentUser } = useApp()
+  const isMobile = useIsMobile()
 
   // Form State
   const [search, setSearch] = useState('')
@@ -949,41 +949,42 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         📝 Autorização Especial do Dia
       </div>
 
-      {/* COMPACT SIDE-BY-SIDE GRID */}
+      {/* COMPACT SINGLE-ROW FORM GRID (SEARCH, AUTHORIZED PERSON, SUBMIT BUTTON) */}
       <div style={{
         display: 'flex',
-        flexWrap: 'wrap',
-        gap: 10,
+        alignItems: 'center',
+        gap: 8,
         marginBottom: 10,
+        flexWrap: isMobile ? 'wrap' : 'nowrap',
       }}>
         {/* COLUMN 1: STUDENT SEARCH OR SELECTION */}
-        <div style={{ flex: '1 1 200px', minWidth: 0, position: 'relative' }}>
+        <div style={{ flex: '1 1 150px', minWidth: 0, position: 'relative' }}>
           {!selectedStudent ? (
             <div style={{ position: 'relative' }}>
-              <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#d97706' }}/>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#d97706' }}/>
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Buscar aluno..."
                 className="form-input"
                 style={{
-                  width: '100%', padding: '10px 12px 10px 34px',
+                  width: '100%', padding: '8px 10px 8px 30px',
                   borderRadius: 12, border: '1px solid rgba(245, 158, 11, 0.45)',
-                  background: 'hsl(var(--bg-surface))', fontSize: 13,
+                  background: 'hsl(var(--bg-surface))', fontSize: 12,
                   color: 'hsl(var(--text-primary))', outline: 'none', boxSizing: 'border-box',
                   height: 38,
                 }}
               />
 
               {isSearching ? (
-                <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
+                <div style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center' }}>
                   <RefreshCw size={12} className="spin" color="#f59e0b" />
                 </div>
               ) : search.trim().length > 0 ? (
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSearch(''); }}
-                  style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#d97706' }}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#d97706' }}
                 >
                   <X size={14} />
                 </button>
@@ -1034,16 +1035,16 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           ) : (
             /* Selected Student Badge */
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '0 10px', borderRadius: 12, height: 38,
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '0 8px', borderRadius: 12, height: 38,
               background: 'hsl(var(--bg-surface))', border: '1.5px dashed rgba(245, 158, 11, 0.45)',
               position: 'relative', boxSizing: 'border-box',
               boxShadow: 'var(--shadow-sm)',
             }}>
               <div style={{
-                width: 24, height: 24, borderRadius: 6, overflow: 'hidden',
+                width: 22, height: 22, borderRadius: 6, overflow: 'hidden',
                 background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 10, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
+                fontSize: 9, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
               }}>
                 {selectedStudent.foto || selectedStudent.imagem1 ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -1053,10 +1054,10 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 11, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontWeight: 800, fontSize: 10.5, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {selectedStudent.nome}
                 </div>
-                <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', lineHeight: 1 }}>
+                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', lineHeight: 1 }}>
                   {selectedStudent.turmaNome || selectedStudent.turma}
                 </div>
               </div>
@@ -1065,7 +1066,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedStudent(null); }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'hsl(var(--text-muted))', display: 'flex', padding: 4,
+                  color: 'hsl(var(--text-muted))', display: 'flex', padding: 2,
                 }}
                 onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
                 onMouseLeave={e => e.currentTarget.style.color = 'hsl(var(--text-muted))'}
@@ -1077,7 +1078,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
 
         {/* COLUMN 2: AUTHORIZED PERSON */}
-        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+        <div style={{ flex: '1.1 1 160px', minWidth: 0 }}>
           <input
             value={authorizedPerson}
             onChange={e => setAuthorizedPerson(e.target.value)}
@@ -1085,7 +1086,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             disabled={!selectedStudent}
             className="form-input"
             style={{
-              width: '100%', padding: '10px 12px',
+              width: '100%', padding: '8px 10px',
               borderRadius: 12, border: '1px solid rgba(245, 158, 11, 0.45)',
               background: 'hsl(var(--bg-surface))', fontSize: 12,
               color: 'hsl(var(--text-primary))', outline: 'none', boxSizing: 'border-box',
@@ -1094,39 +1095,38 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
             }}
           />
         </div>
-      </div>
 
-      {/* SUBMIT BUTTON: LANÇAR AUTORIZAÇÃO */}
-      <button
-        type="button"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
-        disabled={!selectedStudent || !authorizedPerson.trim()}
-        style={{
-          width: '100%', height: 35, borderRadius: 12,
-          background: (!selectedStudent || !authorizedPerson.trim())
-            ? 'hsl(var(--bg-elevated))'
-            : 'linear-gradient(135deg, #f59e0b, #d97706)',
-          border: (!selectedStudent || !authorizedPerson.trim()) ? '1px solid hsl(var(--border-subtle))' : 'none',
-          color: (!selectedStudent || !authorizedPerson.trim()) ? 'hsl(var(--text-muted))' : '#fff',
-          fontWeight: 800, fontSize: 11, cursor: (!selectedStudent || !authorizedPerson.trim()) ? 'not-allowed' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          textTransform: 'uppercase', letterSpacing: '0.02em',
-          boxShadow: (!selectedStudent || !authorizedPerson.trim()) ? 'none' : '0 4px 12px rgba(245, 158, 11, 0.25)',
-          transition: 'all 0.2s',
-          marginBottom: 12,
-        }}
-        onMouseEnter={e => {
-          if (!selectedStudent || !authorizedPerson.trim()) return
-          e.currentTarget.style.filter = 'brightness(1.1)'
-          e.currentTarget.style.transform = 'translateY(-1px)'
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.filter = 'none'
-          e.currentTarget.style.transform = 'none'
-        }}
-      >
-        <CheckCircle2 size={13}/> Lançar Autorização Especial
-      </button>
+        {/* SUBMIT BUTTON: LANÇAR AUTORIZAÇÃO */}
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleConfirm(); }}
+          disabled={!selectedStudent || !authorizedPerson.trim()}
+          style={{
+            height: 38, padding: '0 14px', borderRadius: 12, flexShrink: 0,
+            background: (!selectedStudent || !authorizedPerson.trim())
+              ? 'hsl(var(--bg-elevated))'
+              : 'linear-gradient(135deg, #f59e0b, #d97706)',
+            border: (!selectedStudent || !authorizedPerson.trim()) ? '1px solid hsl(var(--border-subtle))' : 'none',
+            color: (!selectedStudent || !authorizedPerson.trim()) ? 'hsl(var(--text-muted))' : '#fff',
+            fontWeight: 800, fontSize: 11, cursor: (!selectedStudent || !authorizedPerson.trim()) ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap',
+            boxShadow: (!selectedStudent || !authorizedPerson.trim()) ? 'none' : '0 4px 12px rgba(245, 158, 11, 0.25)',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={e => {
+            if (!selectedStudent || !authorizedPerson.trim()) return
+            e.currentTarget.style.filter = 'brightness(1.1)'
+            e.currentTarget.style.transform = 'translateY(-1px)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.filter = 'none'
+            e.currentTarget.style.transform = 'none'
+          }}
+        >
+          <CheckCircle2 size={13}/> Lançar Autorização
+        </button>
+      </div>
 
       {/* TIMELINE LOG OF TODAY'S RELEASES */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -1136,8 +1136,11 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
 
         <div style={{
-          flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5,
-          maxHeight: 120, paddingRight: 4,
+          flex: 1, overflowY: 'auto',
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+          gap: 8,
+          maxHeight: 180, paddingRight: 4,
         }}>
           {launches.map(l => (
             <div
@@ -1182,65 +1185,114 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 )}
               </div>
               
-              {/* MICRO ACTION BUTTONS (CHAMAR, EXCLUIR) */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {/* 1. BUTTON: CALL / RECALL STUDENT */}
-                {(() => {
-                  const lStudentId = l.studentId ? String(l.studentId) : ''
-                  const isCalling = (activeCalls || []).some(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
-                  const btnColor = isCalling ? '#f59e0b' : '#818cf8'
-                  const btnBg = isCalling ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)'
-                  const btnHoverColor = '#fff'
-                  const btnHoverBg = isCalling ? '#f59e0b' : '#6366f1'
-                  const btnShadow = isCalling ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.4)'
+              {/* MICRO ACTION BUTTONS (STACKED: TOP LINE = CHAMAR + CONFIRMAR, BOTTOM LINE = EXCLUIR) */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
+                {/* LINE 1: CHAMAR & CONFIRMAR */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                  {/* 1. BUTTON: CALL / RECALL STUDENT */}
+                  {(() => {
+                    const lStudentId = l.studentId ? String(l.studentId) : ''
+                    const isCalling = (activeCalls || []).some(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
+                    const btnColor = isCalling ? '#f59e0b' : '#818cf8'
+                    const btnBg = isCalling ? 'rgba(245,158,11,0.12)' : 'rgba(99,102,241,0.12)'
+                    const btnHoverColor = '#fff'
+                    const btnHoverBg = isCalling ? '#f59e0b' : '#6366f1'
+                    const btnShadow = isCalling ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.4)'
 
-                  return (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
-                        if (existingCall) {
-                          recallStudent(existingCall.id, () => {})
-                          showToast(`Aluno ${l.studentName} chamado novamente!`, true)
-                        } else {
-                          callStudent(
-                            l.studentId,
-                            l.studentName,
-                            l.studentClass,
-                            'special-auth',
-                            l.authorizedPerson,
-                            'manual',
-                            undefined,
-                            l.studentPhoto
-                          )
-                          showToast(`Aluno ${l.studentName} chamado na TV!`, true)
-                        }
-                      }}
-                      title={isCalling ? "Aluno sendo chamado na TV. Clique para rechamar" : "Chamar Aluno na TV"}
-                      style={{
-                        background: btnBg, border: 'none', cursor: 'pointer',
-                        borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: btnColor, transition: 'all 0.2s', flexShrink: 0,
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.background = btnHoverBg
-                        e.currentTarget.style.color = btnHoverColor
-                        e.currentTarget.style.boxShadow = `0 0 8px ${btnShadow}`
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.background = btnBg
-                        e.currentTarget.style.color = btnColor
-                        e.currentTarget.style.boxShadow = 'none'
-                      }}
-                    >
-                      <Megaphone size={18} />
-                    </button>
-                  )
-                })()}
+                    return (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const existingCall = (activeCalls || []).find(c => c.studentId != null && String(c.studentId) === lStudentId && (c.status === 'waiting' || c.status === 'called'))
+                          if (existingCall) {
+                            recallStudent(existingCall.id, () => {})
+                            showToast(`Aluno ${l.studentName} chamado novamente!`, true)
+                          } else {
+                            callStudent(
+                              l.studentId,
+                              l.studentName,
+                              l.studentClass,
+                              'special-auth',
+                              l.authorizedPerson,
+                              'manual',
+                              undefined,
+                              l.studentPhoto
+                            )
+                            showToast(`Aluno ${l.studentName} chamado na TV!`, true)
+                          }
+                        }}
+                        title={isCalling ? "Aluno sendo chamado na TV. Clique para rechamar" : "Chamar Aluno na TV"}
+                        style={{
+                          background: btnBg, border: 'none', cursor: 'pointer',
+                          borderRadius: 6, width: 26, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: btnColor, transition: 'all 0.2s', flexShrink: 0,
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = btnHoverBg
+                          e.currentTarget.style.color = btnHoverColor
+                          e.currentTarget.style.boxShadow = `0 0 6px ${btnShadow}`
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = btnBg
+                          e.currentTarget.style.color = btnColor
+                          e.currentTarget.style.boxShadow = 'none'
+                        }}
+                      >
+                        <Megaphone size={13} />
+                      </button>
+                    )
+                  })()}
 
-                {/* 2. BUTTON: DELETE LAUNCH */}
+                  {/* 2. BUTTON: CONFIRM PICKUP / EXIT */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (l.confirmedOut) {
+                        showToast(`Saída de ${l.studentName} já foi confirmada!`, false)
+                        return
+                      }
+                      confirmSpecialExit(
+                        l.studentId,
+                        l.studentName,
+                        l.studentClass,
+                        l.authorizedPerson,
+                        l.studentPhoto
+                      )
+                      showToast(`Saída de ${l.studentName} confirmada!`, true)
+                    }}
+                    disabled={l.confirmedOut}
+                    title={l.confirmedOut ? `Saída confirmada às ${l.confirmedAt}` : "Confirmar Saída do Aluno"}
+                    style={{
+                      background: l.confirmedOut ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.12)',
+                      border: 'none',
+                      cursor: l.confirmedOut ? 'default' : 'pointer',
+                      borderRadius: 6, width: 26, height: 24,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#10b981', transition: 'all 0.2s', flexShrink: 0,
+                      opacity: l.confirmedOut ? 0.7 : 1,
+                    }}
+                    onMouseEnter={e => {
+                      if (l.confirmedOut) return
+                      e.currentTarget.style.background = '#10b981'
+                      e.currentTarget.style.color = '#fff'
+                      e.currentTarget.style.boxShadow = '0 0 6px rgba(16,185,129,0.4)'
+                    }}
+                    onMouseLeave={e => {
+                      if (l.confirmedOut) return
+                      e.currentTarget.style.background = 'rgba(16,185,129,0.12)'
+                      e.currentTarget.style.color = '#10b981'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  >
+                    <CheckCircle2 size={13} />
+                  </button>
+                </div>
+
+                {/* LINE 2: EXCLUIR */}
                 <button
                   type="button"
                   onClick={(e) => {
@@ -1249,22 +1301,22 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   }}
                   title="Excluir Autorização Especial"
                   style={{
-                    background: 'rgba(239,68,68,0.1)', border: 'none', cursor: 'pointer',
-                    borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(239,68,68,0.08)', border: 'none', cursor: 'pointer',
+                    borderRadius: 6, width: '100%', height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: '#ef4444', transition: 'all 0.2s', flexShrink: 0,
                   }}
                   onMouseEnter={e => {
                     e.currentTarget.style.background = '#ef4444'
                     e.currentTarget.style.color = '#fff'
-                    e.currentTarget.style.boxShadow = '0 0 8px rgba(239,68,68,0.4)'
+                    e.currentTarget.style.boxShadow = '0 0 6px rgba(239,68,68,0.4)'
                   }}
                   onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(239,68,68,0.1)'
+                    e.currentTarget.style.background = 'rgba(239,68,68,0.08)'
                     e.currentTarget.style.color = '#ef4444'
                     e.currentTarget.style.boxShadow = 'none'
                   }}
                 >
-                  <Trash2 size={18}/>
+                  <Trash2 size={13}/>
                 </button>
               </div>
             </div>
@@ -1369,6 +1421,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
 function ProibidosRetiradaCard() {
   const [restritos, setRestritos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const isMobile = useIsMobile()
 
   useEffect(() => {
     const fetchRestritos = async () => {
@@ -1391,15 +1444,22 @@ function ProibidosRetiradaCard() {
     <div style={{
       background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(220, 38, 38, 0.02) 100%)',
       border: '1px solid rgba(239, 68, 68, 0.3)',
-      borderRadius: 20, padding: '14px 18px',
+      borderRadius: 20, padding: '16px 20px',
       display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
       height: '100%',
     }}>
-      <div style={{ fontWeight: 900, fontSize: 13, color: '#ef4444', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        <span style={{ fontSize: 16 }}>🚫</span> Proibidos Retirada Hoje
+      <div style={{ fontWeight: 900, fontSize: 13, color: '#ef4444', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 16 }}>🚫</span> Proibidos Retirada Hoje
+        </div>
+        {restritos.length > 0 && (
+          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 800, border: '1px solid rgba(239, 68, 68, 0.25)' }}>
+            {restritos.length} {restritos.length === 1 ? 'aluno' : 'alunos'}
+          </span>
+        )}
       </div>
       
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 4, maxHeight: '250px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', maxHeight: 260, paddingRight: 4 }}>
         {loading ? (
           <div style={{ textAlign: 'center', color: '#ef4444', fontSize: 12, padding: '20px 0', opacity: 0.7 }}>Buscando restrições...</div>
         ) : restritos.length === 0 ? (
@@ -1407,62 +1467,68 @@ function ProibidosRetiradaCard() {
             Nenhuma restrição encontrada para hoje.
           </div>
         ) : (
-          restritos.map(aluno => (
-            <div key={aluno.id} style={{
-              background: 'hsl(var(--bg-surface))',
-              border: '1px solid rgba(239, 68, 68, 0.15)',
-              borderRadius: 12, padding: '8px 10px',
-              display: 'flex', alignItems: 'center', gap: 10,
-              boxShadow: 'var(--shadow-sm)'
-            }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 8, overflow: 'hidden',
-                background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 900, color: '#ef4444', flexShrink: 0,
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+            gap: 8,
+          }}>
+            {restritos.map(aluno => (
+              <div key={aluno.id} style={{
+                background: 'hsl(var(--bg-surface))',
+                border: '1px solid rgba(239, 68, 68, 0.15)',
+                borderRadius: 12, padding: '8px 10px',
+                display: 'flex', alignItems: 'center', gap: 10,
+                boxShadow: 'var(--shadow-sm)'
               }}>
-                {aluno.foto ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                ) : (
-                  aluno.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
-                )}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {aluno.nome}
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8, overflow: 'hidden',
+                  background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, fontWeight: 900, color: '#ef4444', flexShrink: 0,
+                }}>
+                  {aluno.foto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  ) : (
+                    aluno.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
+                  )}
                 </div>
-                {aluno.restritos.map((r: any, idx: number) => (
-                  <div key={idx} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                    <span style={{ 
-                      fontSize: 8, 
-                      fontWeight: 700, 
-                      padding: '2px 6px', 
-                      borderRadius: 4, 
-                      textTransform: 'uppercase',
-                      backgroundColor: 'rgba(156, 163, 175, 0.15)',
-                      color: '#6b7280',
-                      border: '1px solid rgba(156, 163, 175, 0.3)'
-                    }}>
-                      {r.parentesco ? r.parentesco : 'Resp.'}
-                    </span>
-                    <span style={{ fontWeight: 700, color: '#ef4444' }}>{r.nome}</span>
-                    <span style={{ 
-                      fontSize: 8, 
-                      fontWeight: 800, 
-                      padding: '2px 6px', 
-                      borderRadius: 4, 
-                      textTransform: 'uppercase',
-                      backgroundColor: r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(249, 115, 22, 0.1)',
-                      color: r.motivo === 'Proibido' ? '#ef4444' : '#f97316',
-                      border: `1px solid ${r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(249, 115, 22, 0.2)'}`
-                    }}>
-                      {r.motivo}
-                    </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {aluno.nome}
                   </div>
-                ))}
+                  {aluno.restritos.map((r: any, idx: number) => (
+                    <div key={idx} style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                      <span style={{ 
+                        fontSize: 8, 
+                        fontWeight: 700, 
+                        padding: '2px 6px', 
+                        borderRadius: 4, 
+                        textTransform: 'uppercase',
+                        backgroundColor: 'rgba(156, 163, 175, 0.15)',
+                        color: '#6b7280',
+                        border: '1px solid rgba(156, 163, 175, 0.3)'
+                      }}>
+                        {r.parentesco ? r.parentesco : 'Resp.'}
+                      </span>
+                      <span style={{ fontWeight: 700, color: '#ef4444' }}>{r.nome}</span>
+                      <span style={{ 
+                        fontSize: 8, 
+                        fontWeight: 800, 
+                        padding: '2px 6px', 
+                        borderRadius: 4, 
+                        textTransform: 'uppercase',
+                        backgroundColor: r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(249, 115, 22, 0.1)',
+                        color: r.motivo === 'Proibido' ? '#ef4444' : '#f97316',
+                        border: `1px solid ${r.motivo === 'Proibido' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(249, 115, 22, 0.2)'}`
+                      }}>
+                        {r.motivo}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </div>
@@ -1504,6 +1570,34 @@ function ChamadasContent() {
   const [studentSearch, setStudentSearch] = useState('')
   const [schoolResults, setSchoolResults] = useState<any[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [searchFocused, setSearchFocused] = useState(false)
+
+  const topSearchInputRef = useRef<HTMLInputElement>(null)
+  const searchContainerRef = useRef<HTMLDivElement>(null)
+
+  // Keyboard shortcut (Ctrl+K or Cmd+K) to focus top search bar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        topSearchInputRef.current?.focus()
+        setSearchFocused(true)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // Click outside listener to close search results dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchFocused(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const showToast = useCallback((msg: string, ok = true) => {
     setToast({ msg, ok })
@@ -1745,94 +1839,152 @@ function ChamadasContent() {
 
 
 
-      {/* ── TOP CONTAINERS GRID (SEARCH, PROIBIDOS & STICKER) ─────────────────── */}
+      {/* ── TOP BAR (CHARMAR ALUNO - MATCHING IMAGEM 2) ─────────────────── */}
+      <div
+        ref={searchContainerRef}
+        style={{
+          background: 'hsl(var(--bg-elevated))',
+          border: '1px solid hsl(var(--border-subtle))',
+          borderRadius: 20,
+          padding: '12px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          boxShadow: 'var(--shadow-sm)',
+          marginBottom: 20,
+          position: 'relative',
+        }}
+      >
+        {/* Left: Blue Megaphone Circle + Title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+          }}>
+            <Megaphone size={18} />
+          </div>
+          <span style={{
+            fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: 15,
+            color: '#2563eb', letterSpacing: '-0.01em', whiteSpace: 'nowrap',
+          }}>
+            Chamar aluno
+          </span>
+        </div>
+
+        {/* Middle: Search Input */}
+        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }}/>
+          <input
+            ref={topSearchInputRef}
+            value={studentSearch}
+            onChange={e => {
+              setStudentSearch(e.target.value)
+              setSearchFocused(true)
+            }}
+            onFocus={() => setSearchFocused(true)}
+            placeholder="Buscar aluno por nome (mínimo 3 letras)..."
+            style={{
+              width: '100%', padding: '10px 14px 10px 40px',
+              borderRadius: 14, border: '1px solid hsl(var(--border-subtle))',
+              background: 'hsl(var(--bg-surface))', fontSize: 13,
+              color: 'hsl(var(--text-primary))', outline: 'none', boxSizing: 'border-box',
+              transition: 'all 0.2s ease',
+              height: 42,
+            }}
+          />
+          {studentSearch && (
+            <button
+              onClick={() => { setStudentSearch(''); }}
+              style={{
+                position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'hsl(var(--text-muted))', padding: 4, display: 'flex', alignItems: 'center',
+              }}
+            >
+              <X size={15}/>
+            </button>
+          )}
+
+          {/* OVERLAY DROPDOWN FOR RESULTS */}
+          {searchFocused && studentSearch.trim().length > 0 && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
+              background: 'hsl(var(--bg-elevated))',
+              border: '1px solid hsl(var(--border-subtle))',
+              borderRadius: 20,
+              boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.25)',
+              zIndex: 1000,
+              maxHeight: '65vh', overflowY: 'auto',
+              display: 'flex', flexDirection: 'column',
+              padding: 6,
+            }}>
+              {studentSearch.trim().length < 3 && (
+                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
+                  Digite pelo menos 3 letras do nome do aluno.
+                </div>
+              )}
+              
+              {isSearching && (
+                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <RefreshCw size={14} className="spin" /> Buscando alunos...
+                </div>
+              )}
+
+              {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 8 }}>
+                  {schoolResults.map((a: any) => (
+                    <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
+                  ))}
+                </div>
+              )}
+              
+              {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length === 0 && (
+                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
+                  Nenhum aluno encontrado com esse nome.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Keyboard Shortcut Badge (Ctrl + K) */}
+        {!isMobile && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, userSelect: 'none' }}>
+            <kbd style={{
+              padding: '3px 7px', borderRadius: 6,
+              background: 'hsl(var(--bg-surface))',
+              border: '1px solid hsl(var(--border-subtle))',
+              fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+            }}>Ctrl</kbd>
+            <span style={{ color: 'hsl(var(--text-muted))', fontSize: 11, fontWeight: 600 }}>+</span>
+            <kbd style={{
+              padding: '3px 7px', borderRadius: 6,
+              background: 'hsl(var(--bg-surface))',
+              border: '1px solid hsl(var(--border-subtle))',
+              fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))',
+              fontFamily: 'system-ui, -apple-system, sans-serif',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+            }}>K</kbd>
+          </div>
+        )}
+      </div>
+
+      {/* ── 2 CARDS GRID (PROIBIDOS RETIRADA & AUTORIZAÇÃO ESPECIAL - 50% EACH) ── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.1fr)',
-        gap: 16,
+        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gap: 20,
         marginBottom: 28,
         alignItems: 'stretch',
       }}>
-        {/* ── SEARCH ─────────────────────────────────────────────────── */}
-        <div style={{
-          background: 'linear-gradient(135deg, rgba(6,182,212,0.06), rgba(99,102,241,0.03))',
-          border: '1px solid rgba(6,182,212,0.2)',
-          borderRadius: 20, padding: '14px 18px',
-          display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
-          height: '100%',
-        }}>
-          <div style={{ fontWeight: 900, fontSize: 13, color: '#06b6d4', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            <Search size={15} color="#06b6d4"/> Chamar Aluno
-          </div>
-          <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }}/>
-            <input
-              value={studentSearch}
-              onChange={e => setStudentSearch(e.target.value)}
-              placeholder="Buscar aluno por nome (mínimo 3 letras)..."
-              style={{
-                width: '100%', padding: '10px 12px 10px 34px',
-                borderRadius: 12, border: '1px solid hsl(var(--border-subtle))',
-                background: 'hsl(var(--bg-elevated))', fontSize: 13,
-                color: 'hsl(var(--text-base))', outline: 'none', boxSizing: 'border-box',
-                height: 38,
-              }}
-            />
-            {studentSearch && (
-              <button onClick={() => { setStudentSearch(''); }} style={{
-                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: 'hsl(var(--text-muted))', padding: 4, display: 'flex',
-              }}>
-                <X size={14}/>
-              </button>
-            )}
-            {/* OVERLAY DROPDOWN FOR RESULTS */}
-            {studentSearch.trim().length > 0 && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
-                background: 'hsl(var(--bg-elevated))',
-                border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 16,
-                boxShadow: 'var(--shadow-xl)',
-                zIndex: 100,
-                maxHeight: '60vh', overflowY: 'auto',
-                display: 'flex', flexDirection: 'column',
-              }}>
-                {studentSearch.trim().length > 0 && studentSearch.trim().length < 3 && (
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
-                    Digite pelo menos 3 letras do nome do aluno.
-                  </div>
-                )}
-                
-                {isSearching && (
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                    <RefreshCw size={14} className="spin" /> Buscando alunos...
-                  </div>
-                )}
-
-                {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
-                    {schoolResults.map((a: any) => (
-                      <StudentSearchRow key={a.id} student={a} activeCalls={activeCalls} onCall={handleCall} showToast={showToast}/>
-                    ))}
-                  </div>
-                )}
-                
-                {!isSearching && studentSearch.trim().length >= 3 && schoolResults.length === 0 && (
-                  <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px' }}>
-                    Nenhum aluno encontrado com esse nome.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── PROIBIDOS RETIRADA ────────────────────────────────────────── */}
+        {/* ── PROIBIDOS RETIRADA (50% WIDTH, INTERNAL 2-COLUMNS) ────────────── */}
         <ProibidosRetiradaCard />
 
-        {/* ── STICKER ────────────────────────────────────────────────── */}
+        {/* ── AUTORIZAÇÃO ESPECIAL DO DIA (50% WIDTH, INTERNAL 2-COLUMNS) ────── */}
         <SpecialExitSticker showToast={showToast} />
       </div>
 
@@ -1898,7 +2050,7 @@ function ChamadasContent() {
 
       {/* ── CALL GRID ────────────────────────────────────────────────── */}
       {isLoadingCalls ? (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(276px, 1fr))', gap: isMobile ? 12 : 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(195px, 1fr))', gap: isMobile ? 10 : 14 }}>
           <CallCardSkeleton />
           <CallCardSkeleton />
           <CallCardSkeleton />
@@ -1912,7 +2064,7 @@ function ChamadasContent() {
           <div>Nenhuma chamada {filter !== 'all' ? 'com este filtro' : 'registrada'}</div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(276px, 1fr))', gap: isMobile ? 12 : 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(195px, 1fr))', gap: isMobile ? 10 : 14 }}>
           {filtered.map(rawCall => {
             const turmaNome = (turmas || []).find((t: any) => String(t.id) === String(rawCall.studentClass))?.nome || rawCall.studentClass
             // Mutações ou clonagens seguras devem ser feitas antes, mas como `filtered` já mudou, o ideal é passar propriedades flat ou garantir que o objeto em si seja estável.

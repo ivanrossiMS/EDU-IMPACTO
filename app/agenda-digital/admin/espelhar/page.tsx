@@ -11,48 +11,85 @@ import { supabase } from '@/lib/supabase'
 
 export default function EspelharAgendaPage() {
   const router = useRouter()
-  const [turmasData, , { loading: loadingT }] = useSupabaseArray<any>('turmas')
-  const [alunosData, , { loading: loadingA }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradoresData, , { loading: loadingC }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
-
-  const loading = loadingA || loadingC || loadingT
-  const alunos = alunosData || []
-  const colaboradores = colaboradoresData || []
+  const [turmasData] = useSupabaseArray<any>('turmas')
   const turmas = turmasData || []
-
-  useEffect(() => {
-    console.log("DEBUG ESPELHAR", { alunosData, colaboradoresData, turmasData })
-  }, [alunosData, colaboradoresData, turmasData])
 
   const [activeTab, setActiveTab] = useState<'alunos' | 'colaboradores'>('alunos')
   const [search, setSearch] = useState('')
   const [filterTurma, setFilterTurma] = useState('')
 
+  const [alunos, setAlunos] = useState<any[]>([])
+  const [colaboradores, setColaboradores] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
   const [selectedAlunoForMirror, setSelectedAlunoForMirror] = useState<any>(null)
   const [modalResponsaveis, setModalResponsaveis] = useState<any[]>([])
   const [loadingResps, setLoadingResps] = useState(false)
 
-  const uniqueTurmas = Array.from(new Set((alunos || []).map(a => a.turma).filter(Boolean)))
+  const uniqueTurmas = Array.from(new Set((turmas || []).map((t: any) => t.id || t.codigo || t.nome).filter(Boolean)))
 
-  const filteredAlunos = (alunos || []).filter(aluno => {
-    if (search) {
-      const q = search.toLowerCase()
-      if (!String(aluno.nome || '').toLowerCase().includes(q) &&
-          !String(aluno.matricula || '').toLowerCase().includes(q)) {
-        return false
+  useEffect(() => {
+    const q = search.trim()
+
+    if (activeTab === 'alunos') {
+      if (q.length < 3 && !filterTurma) {
+        setAlunos([])
+        setLoading(false)
+        return
       }
-    }
-    if (filterTurma && aluno.turma !== filterTurma) return false
-    return true
-  })
 
-  const filteredColaboradores = (colaboradores || []).filter(colab => {
-    if (search) {
-      const q = search.toLowerCase()
-      return String(colab.nome || '').toLowerCase().includes(q)
+      setLoading(true)
+      const timeout = setTimeout(async () => {
+        try {
+          const params = new URLSearchParams()
+          if (q.length >= 3) params.set('search', q)
+          if (filterTurma) params.set('turma', filterTurma)
+          params.set('limit', '50')
+
+          const res = await fetch(`/api/alunos/lightweight?${params.toString()}`)
+          const json = await res.json()
+          setAlunos(json.data || [])
+        } catch (e) {
+          console.error("Erro ao buscar alunos:", e)
+          setAlunos([])
+        } finally {
+          setLoading(false)
+        }
+      }, 300)
+
+      return () => clearTimeout(timeout)
+    } else {
+      if (q.length < 3) {
+        setColaboradores([])
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      const timeout = setTimeout(async () => {
+        try {
+          const params = new URLSearchParams({
+            type: 'colaboradores',
+            search: q,
+            limit: '50'
+          })
+          const res = await fetch(`/api/configuracoes/usuarios?${params.toString()}`)
+          const json = await res.json()
+          setColaboradores(json.data || (Array.isArray(json) ? json : []))
+        } catch (e) {
+          console.error("Erro ao buscar colaboradores:", e)
+          setColaboradores([])
+        } finally {
+          setLoading(false)
+        }
+      }, 300)
+
+      return () => clearTimeout(timeout)
     }
-    return true
-  })
+  }, [search, filterTurma, activeTab])
+
+  const filteredAlunos = alunos
+  const filteredColaboradores = colaboradores
 
   const handleSelectAluno = async (aluno: any) => {
     setSelectedAlunoForMirror(aluno)
@@ -204,9 +241,19 @@ export default function EspelharAgendaPage() {
         filteredAlunos.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, background: '#ffffff', borderRadius: 20, border: '1px dashed rgba(0,0,0,0.1)' }}>
             <AlertCircle size={32} color="#cbd5e1" style={{ margin: '0 auto 12px' }} />
-            <div style={{ color: '#0f172a', fontWeight: 600 }}>Nenhum aluno encontrado</div>
+            <div style={{ color: '#0f172a', fontWeight: 600 }}>
+              {search.trim().length > 0 && search.trim().length < 3
+                ? 'Digite pelo menos 3 caracteres'
+                : (search || filterTurma)
+                  ? 'Nenhum aluno encontrado'
+                  : 'Digite o nome ou matrícula do aluno para buscar'}
+            </div>
             <div style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>
-              Tente alterar os filtros ou termo de busca.
+              {search.trim().length > 0 && search.trim().length < 3
+                ? 'A busca requer no mínimo 3 letras.'
+                : (search || filterTurma)
+                  ? 'Tente alterar os filtros ou termo de busca.'
+                  : 'Digite pelo menos 3 letras no campo de busca ou selecione uma turma.'}
             </div>
           </div>
         ) : (
@@ -281,7 +328,20 @@ export default function EspelharAgendaPage() {
         filteredColaboradores.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, background: '#ffffff', borderRadius: 20, border: '1px dashed rgba(0,0,0,0.1)' }}>
             <AlertCircle size={32} color="#cbd5e1" style={{ margin: '0 auto 12px' }} />
-            <div style={{ color: '#0f172a', fontWeight: 600 }}>Nenhum colaborador encontrado</div>
+            <div style={{ color: '#0f172a', fontWeight: 600 }}>
+              {search.trim().length > 0 && search.trim().length < 3
+                ? 'Digite pelo menos 3 caracteres'
+                : search
+                  ? 'Nenhum colaborador encontrado'
+                  : 'Digite o nome do colaborador para buscar'}
+            </div>
+            <div style={{ color: '#64748b', fontSize: 14, marginTop: 4 }}>
+              {search.trim().length > 0 && search.trim().length < 3
+                ? 'A busca requer no mínimo 3 letras.'
+                : search
+                  ? 'Tente alterar o termo de busca.'
+                  : 'Digite pelo menos 3 letras no campo de busca para listar a equipe.'}
+            </div>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>

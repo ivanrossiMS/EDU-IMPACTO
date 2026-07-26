@@ -316,8 +316,8 @@ export function PaginationEngine({
 
       const avail1El = shadow.querySelector('[data-measure-avail-1]');
       const availNEl = shadow.querySelector('[data-measure-avail-n]');
-      const avail1Px = (avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 42) * 3.7795) - (bottomMarginOffset || 0) - (topMarginOffset || 0);
-      const availNPx = (availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 42) * 3.7795) - (bottomMarginOffset || 0) - (topMarginOffset || 0);
+      const avail1Px = (avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 42) * 3.7795) - (bottomMarginOffset ?? -90) - (topMarginOffset ?? -10);
+      const availNPx = (availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 42) * 3.7795) - (bottomMarginOffset ?? -90) - (topMarginOffset ?? -10);
 
       const newPages: any[] = [];
       let currentCols: any[][] = Array.from({length: columns}, () => []);

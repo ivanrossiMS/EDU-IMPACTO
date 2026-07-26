@@ -2397,7 +2397,7 @@ export default function ADInnerLayout({
           {currentUser && currentUser.cargo !== 'Aluno' && (
             <div className="ad-right-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minWidth: '240px' }}>
               <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px', width: '100%' }}>
-                {adConfig?.permissoes?.chamadaAlunoPortaria !== false ? (
+                {adConfig?.permissoes?.chamadaAlunoPortaria !== false && (
                   <div style={{ flex: 1, minWidth: 0, display: 'flex' }}>
                     <StudentCallButton 
                       aluno={aluno} 
@@ -2413,10 +2413,6 @@ export default function ADInnerLayout({
                       }} 
                       meusAlunos={profileData?.meusAlunos || []}
                     />
-                  </div>
-                ) : (
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 74, background: 'rgba(0,0,0,0.02)', borderRadius: 24, border: '1px dashed rgba(0,0,0,0.05)' }}>
-                    <span style={{ fontSize: 13, color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Indisponível</span>
                   </div>
                 )}
                 

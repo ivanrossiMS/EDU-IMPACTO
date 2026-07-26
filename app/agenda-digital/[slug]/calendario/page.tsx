@@ -81,10 +81,12 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   const resolvedParams = useParams() as { slug: string }
   const { currentUser } = useApp()
   const { aluno } = useSelectedStudent()
+  const { adConfig } = useAgendaDigital()
   const searchParams = useSearchParams()
   const espelharRespId = searchParams?.get('espelhar_responsavel');
   const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
   const isMirroring = !!(espelharRespId || espelharAluno);
+  const showBirthdays = adConfig?.permissoes?.visualizarAniversariantes !== false;
 
   const rawTurma = aluno?.turma || 'Sem Turma'
   
@@ -477,67 +479,69 @@ export default function ADCalendarioPage({ params }: { params: any }) {
           </motion.div>
 
           {/* Birthdays and Upcoming Side-by-Side Panels */}
-          <div className="ad-calendar-bottom-panels" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div className="ad-calendar-bottom-panels" style={{ display: 'grid', gridTemplateColumns: showBirthdays ? '1fr 1fr' : '1fr', gap: 20 }}>
             
             {/* 🎉 Birthdays Panel */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
-              className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                  <Sparkles size={16} />
+            {showBirthdays && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
+                className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                    <Sparkles size={16} />
+                  </div>
+                  <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>Aniversários do Mês</span>
                 </div>
-                <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>Aniversários do Mês</span>
-              </div>
 
-              <div className="ad-calendar-inner-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-                {loadingNivers ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
-                ) : aniversariantes.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Ninguém este mês 🎈</div>
-                ) : (
-                  aniversariantes.map((p, idx) => (
-                    <motion.div 
-                      whileHover={{ x: 5 }}
-                      key={p.id || idx}
-                      style={{ 
-                        display: 'flex', gap: 14, alignItems: 'center', padding: '12px 16px', 
-                        borderRadius: 22, background: p.isProximo ? 'rgba(236, 72, 153, 0.04)' : '#f8fafc',
-                        border: p.isProximo ? '1.5px solid rgba(236, 72, 153, 0.15)' : '1.5px solid transparent',
-                        boxShadow: p.isProximo ? '0 8px 20px rgba(236, 72, 153, 0.05)' : 'none'
-                      }}
-                    >
-                      <div style={{ 
-                        width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
-                        background: p.foto ? `url(${p.foto}) center/cover` : '#fff',
-                        border: p.isProximo ? '2.5px solid #ec4899' : '2.5px solid #e2e8f0',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#64748b',
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
-                      }}>
-                        {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
-                      </div>
-                      
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'Outfit, sans-serif' }}>{p.nome}</div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>{p.tipo}</div>
-                      </div>
+                <div className="ad-calendar-inner-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+                  {loadingNivers ? (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
+                  ) : aniversariantes.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Ninguém este mês 🎈</div>
+                  ) : (
+                    aniversariantes.map((p, idx) => (
+                      <motion.div 
+                        whileHover={{ x: 5 }}
+                        key={p.id || idx}
+                        style={{ 
+                          display: 'flex', gap: 14, alignItems: 'center', padding: '12px 16px', 
+                          borderRadius: 22, background: p.isProximo ? 'rgba(236, 72, 153, 0.04)' : '#f8fafc',
+                          border: p.isProximo ? '1.5px solid rgba(236, 72, 153, 0.15)' : '1.5px solid transparent',
+                          boxShadow: p.isProximo ? '0 8px 20px rgba(236, 72, 153, 0.05)' : 'none'
+                        }}
+                      >
+                        <div style={{ 
+                          width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
+                          background: p.foto ? `url(${p.foto}) center/cover` : '#fff',
+                          border: p.isProximo ? '2.5px solid #ec4899' : '2.5px solid #e2e8f0',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#64748b',
+                          boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
+                        }}>
+                          {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
+                        </div>
+                        
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'Outfit, sans-serif' }}>{p.nome}</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>{p.tipo}</div>
+                        </div>
 
-                      <div style={{ 
-                        width: 54, height: 54, borderRadius: 18, flexShrink: 0,
-                        background: p.isProximo ? '#ec4899' : '#fff',
-                        border: p.isProximo ? 'none' : '1.5px solid #e2e8f0',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: p.isProximo ? '0 10px 20px rgba(236, 72, 153, 0.25)' : '0 4px 10px rgba(0,0,0,0.03)'
-                      }}>
-                        <span style={{ fontSize: 9, fontWeight: 900, color: p.isProximo ? 'rgba(255,255,255,0.8)' : '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>Dia</span>
-                        <span style={{ fontSize: 18, fontWeight: 900, color: p.isProximo ? '#fff' : '#1e293b', lineHeight: 1 }}>{p.dia}</span>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
-              </div>
-            </motion.div>
+                        <div style={{ 
+                          width: 54, height: 54, borderRadius: 18, flexShrink: 0,
+                          background: p.isProximo ? '#ec4899' : '#fff',
+                          border: p.isProximo ? 'none' : '1.5px solid #e2e8f0',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                          boxShadow: p.isProximo ? '0 10px 20px rgba(236, 72, 153, 0.25)' : '0 4px 10px rgba(0,0,0,0.03)'
+                        }}>
+                          <span style={{ fontSize: 9, fontWeight: 900, color: p.isProximo ? 'rgba(255,255,255,0.8)' : '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>Dia</span>
+                          <span style={{ fontSize: 18, fontWeight: 900, color: p.isProximo ? '#fff' : '#1e293b', lineHeight: 1 }}>{p.dia}</span>
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            )}
 
             {/* 📅 Upcoming Events Panel */}
             <motion.div 

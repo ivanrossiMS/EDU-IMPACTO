@@ -60,9 +60,13 @@ export interface ADConfig {
     pushMomentos: boolean
     pushFinanceiro: boolean
     pushCalendario: boolean
-    pushMensagemChat: boolean
-    pushRelatorios?: boolean
     pushAlteracaoCalendario?: boolean
+    pushFrequencia?: boolean
+    pushOcorrencias?: boolean
+    pushNotas?: boolean
+    pushSaidaPortaria?: boolean
+    pushMensagemChat?: boolean
+    pushRelatorios?: boolean
   }
   saudacao?: {
     ativa: boolean
@@ -125,9 +129,9 @@ const AgendaDigitalContext = createContext<ADContextState>({
   bannerUrl: null,
   setBannerUrl: () => {},
   adConfig: {
-    permissoes: { chat: true, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: true, confirmarPresencaEventos: true, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
+    permissoes: { chat: false, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Fora do horário amigão' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: true, pushRelatorios: true, pushAlteracaoCalendario: true },
+    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushMensagemChat: false, pushRelatorios: false, pushAlteracaoCalendario: true },
     saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
   },
   setAdConfig: () => {},
@@ -237,20 +241,53 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const isDataLoading = comunicadosLoading || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
   const [bannerUrl, setBannerUrlState] = useState<string | null>(null)
   const [adConfig, setAdConfig] = useState<ADConfig>({
-    permissoes: { chat: true, comentariosMural: false, visualizarAniversariantes: true, visualizarRelatorios: true, confirmarPresencaEventos: true, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
+    permissoes: { chat: false, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Olá!\nNosso horário de atendimento encerrou.' },
-    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: false, pushCalendario: true, pushMensagemChat: true, pushRelatorios: true, pushAlteracaoCalendario: true },
+    notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushAlteracaoCalendario: true, pushFrequencia: true, pushOcorrencias: true, pushNotas: true, pushSaidaPortaria: true, pushMensagemChat: false, pushRelatorios: false },
     saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
   })
 
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const res = await fetch('/api/configuracoes?chaves=ad_banner,ad_config')
+        const res = await fetch('/api/configuracoes?chaves=ad_banner,ad_config', { cache: 'no-store' })
         if (res.ok) {
           const db = await res.json()
           if (db.ad_banner) setBannerUrlState(db.ad_banner)
-          if (db.ad_config) setAdConfig(db.ad_config)
+          if (db.ad_config) {
+            // Force removed features to false, while ensuring defaults for active modules
+            const sanitizedConfig = {
+              ...db.ad_config,
+              permissoes: {
+                comentariosMural: true,
+                visualizarAniversariantes: true,
+                visualizarFinanceiro: true,
+                visualizarNotas: true,
+                visualizarFrequencia: true,
+                visualizarOcorrencias: true,
+                chamadaAlunoPortaria: true,
+                ...(db.ad_config.permissoes || {}),
+                chat: false,
+                visualizarRelatorios: false,
+                confirmarPresencaEventos: false,
+              },
+              notificacoes: {
+                pushComunicados: true,
+                pushMomentos: true,
+                pushFinanceiro: true,
+                pushCalendario: true,
+                pushAlteracaoCalendario: true,
+                pushFrequencia: true,
+                pushOcorrencias: true,
+                pushNotas: true,
+                pushSaidaPortaria: true,
+                ...(db.ad_config.notificacoes || {}),
+                pushMensagemChat: false,
+                pushRelatorios: false,
+              }
+            }
+            setAdConfig(sanitizedConfig)
+          }
         }
       } catch(e) {
         console.error('Erro ao carregar configurações da agenda:', e)

@@ -17,7 +17,10 @@ export async function GET(request: Request) {
   const alunoId = searchParams.get('aluno_id')
   const data = searchParams.get('data')
 
-  let query = supabase.from('frequencias').select('*').order('data', { ascending: false })
+  const limitParam = searchParams.get('limit')
+  const limit = limitParam ? parseInt(limitParam, 10) : 10000
+
+  let query = supabase.from('frequencias').select('*').order('data', { ascending: false }).limit(limit)
   if (turmaId) query = query.eq('turma_id', turmaId)
   if (alunoId) query = query.eq('aluno_id', alunoId)
   if (data) query = query.eq('data', data)

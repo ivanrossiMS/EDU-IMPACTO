@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, Reorder } from 'framer-motion'
-import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, FileText } from 'lucide-react'
+import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, FileText, Maximize2 } from 'lucide-react'
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
@@ -76,7 +76,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
         } catch (e) {}
       }
     }
-    return 0
+    return -25
   });
   const [rightMarginOffset, setRightMarginOffset] = useState<number>(() => {
     if ((prova as any)?.config_estudio?.config_margin_right !== undefined) return (prova as any).config_estudio.config_margin_right
@@ -89,7 +89,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
         } catch (e) {}
       }
     }
-    return 0
+    return -20
   });
   const [topMarginOffset, setTopMarginOffset] = useState<number>(() => {
     if ((prova as any)?.config_estudio?.config_margin_top !== undefined) return (prova as any).config_estudio.config_margin_top
@@ -102,7 +102,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
         } catch (e) {}
       }
     }
-    return 0
+    return -10
   });
   const [bottomMarginOffset, setBottomMarginOffset] = useState<number>(() => {
     if ((prova as any)?.config_estudio?.config_margin_bottom !== undefined) return (prova as any).config_estudio.config_margin_bottom
@@ -115,7 +115,7 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
         } catch (e) {}
       }
     }
-    return 0
+    return -90
   });
   const pageA4Ref = useRef<HTMLDivElement>(null)
   const [savingHeader, setSavingHeader] = useState(false)
@@ -448,26 +448,6 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
                 {isEditHeaderMode ? 'Sair Edição Cabeçalho' : 'Editar Cabeçalho'}
               </button>
 
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setShowMargins(!showMargins)}
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: showMargins ? '#fcd34d' : '#fef3c7', color: '#b45309', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
-                </button>
-                {showMargins && (
-                  <button
-                    onClick={handleSaveMargins}
-                    disabled={savingMargins}
-                    style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: savingMargins ? 'wait' : 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-                    title="Salvar margens para esta redação"
-                  >
-                    {savingMargins ? <Loader2 size={12} className="animate-spin" /> : null}
-                    Salvar Padrão
-                  </button>
-                )}
-              </div>
-
               {isEditHeaderMode && (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
@@ -484,6 +464,31 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
                     Salvar Posições
                   </button>
                 </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
+              <Maximize2 size={16} color="#f59e0b" /> Margens
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setShowMargins(!showMargins)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: showMargins ? '#fcd34d' : '#fef3c7', color: '#b45309', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
+              </button>
+              {showMargins && (
+                <button
+                  onClick={handleSaveMargins}
+                  disabled={savingMargins}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: savingMargins ? 'wait' : 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                  title="Salvar margens para esta redação"
+                >
+                  {savingMargins ? <Loader2 size={12} className="animate-spin" /> : null}
+                  Salvar Padrão
+                </button>
               )}
             </div>
           </div>

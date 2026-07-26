@@ -21,6 +21,7 @@ export type AgendaPushType =
   | 'ocorrencias'
   | 'notas'
   | 'cobrancas'
+  | 'saida'
 
 interface SendAgendaPushParams {
   type: AgendaPushType
@@ -104,6 +105,46 @@ export async function sendAgendaPushNotification({
     if (cleanTargetIds.length === 0) {
       console.log(`${logPrefix} Todos os IDs eram inválidos. Push ignorado.`)
       return { success: true, skipped: true, reason: 'invalid_target_ids' }
+    }
+
+    // ── Checagem de Configuração Global de Notificações Push ───────────────
+    try {
+      const { createClient } = await import('@supabase/supabase-js')
+      const supabaseService = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          auth: { persistSession: false, autoRefreshToken: false },
+          global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) }
+        }
+      )
+
+      const { data: configRow } = await supabaseService
+        .from('configuracoes')
+        .select('valor')
+        .eq('chave', 'ad_config')
+        .maybeSingle()
+
+      if (configRow?.valor?.notificacoes) {
+        const notifs = configRow.valor.notificacoes
+        const configMap: Record<string, boolean | undefined> = {
+          comunicados: notifs.pushComunicados,
+          momentos: notifs.pushMomentos,
+          calendario: notifs.pushCalendario,
+          frequencia: notifs.pushFrequencia,
+          ocorrencias: notifs.pushOcorrencias,
+          notas: notifs.pushNotas,
+          cobrancas: notifs.pushFinanceiro,
+          saida: notifs.pushSaidaPortaria,
+        }
+
+        if (configMap[type] === false) {
+          console.log(`${logPrefix} Push do tipo '${type}' está DESATIVADO nas configurações globais. Abortando envio.`)
+          return { success: true, skipped: true, reason: 'disabled_by_admin_config' }
+        }
+      }
+    } catch (configCheckError) {
+      console.warn(`${logPrefix} Aviso: erro ao consultar ad_config, prosseguindo envio:`, configCheckError)
     }
 
     // ── Barreira 1: Cache em memória (proteção intra-processo) ──────────────

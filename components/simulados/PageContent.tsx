@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { HtmlContent } from '../HtmlContent';
 import { DraggableHeaderField } from './DraggableHeaderField';
 import { parseEnunciadoParts, splitTextIntoChunks } from './PaginationEngine';
-import { formatProfessorHeaderName } from '@/lib/utils';
+import { formatProfessorHeaderName, DEFAULT_PROVA_INSTRUCOES } from '@/lib/utils';
 
 export function PageContent({ 
   page, 
@@ -26,10 +26,10 @@ export function PageContent({
   onEditAlternativaImage,
   onEditEnunciadoImage,
   showMargins,
-  topMarginOffset = 0, onTopMarginOffsetChange,
-  bottomMarginOffset = 0, onBottomMarginOffsetChange,
-  leftMarginOffset = 0, onLeftMarginOffsetChange,
-  rightMarginOffset = 0, onRightMarginOffsetChange,
+  topMarginOffset = -10, onTopMarginOffsetChange,
+  bottomMarginOffset = -90, onBottomMarginOffsetChange,
+  leftMarginOffset = -25, onLeftMarginOffsetChange,
+  rightMarginOffset = -20, onRightMarginOffsetChange,
   readOnly = false,
   totalPages = 0,
   adicionarPaginaRedacao = false
@@ -250,7 +250,7 @@ export function PageContent({
                 else if (key === 'turma') value = simulado?.formattedSeries || '';
                 else if (key === 'valor') value = simulado?.valor || '';
                 else if (key === 'nota') value = ''; // Nota fica em branco para o professor preencher à mão
-                else if (key === 'orientacoes') value = simulado?.instrucoes || '';
+                else if (key === 'orientacoes') value = simulado?.instrucoes || DEFAULT_PROVA_INSTRUCOES;
 
                 return (
                   <DraggableHeaderField
@@ -259,6 +259,11 @@ export function PageContent({
                     field={{ ...field, value }}
                     isEditMode={isEditHeaderMode}
                     onChange={onUpdateHeaderField}
+                    onTextChange={(newText) => {
+                      if (key === 'orientacoes' && simulado) {
+                        simulado.instrucoes = newText;
+                      }
+                    }}
                     pageRef={pageA4Ref}
                   />
                 );
@@ -410,10 +415,30 @@ export function PageContent({
                                 />
                               </div>
                             ) : group.type === 'lines' ? (
-                               <div key={`lines-${group.originalIndex}`} className="alt-hover-group" style={{ position: 'relative', marginTop: gIdx > 0 ? 8 : 0, width: '100%' }}>
-                                 {Array.from({ length: group.count }).map((_, i) => (
-                                   <div key={i} style={{ width: '100%', borderBottom: group.style === 'branco' ? 'none' : '1px solid #000', height: 28 }} />
-                                 ))}
+                                <div key={`lines-${group.originalIndex}`} className="alt-hover-group" style={{ position: 'relative', marginTop: gIdx > 0 ? 8 : 0, width: '100%' }}>
+                                  {Array.from({ length: group.count }).map((_, i) => (
+                                    <div key={i} style={{ position: 'relative', width: '100%', borderBottom: group.style === 'branco' ? 'none' : '1px solid #000', height: 28 }}>
+                                      {group.style !== 'branco' && (
+                                        <div style={{
+                                          position: 'absolute',
+                                          left: -38,
+                                          bottom: 0,
+                                          width: 28,
+                                          display: 'flex',
+                                          alignItems: 'flex-end',
+                                          justifyContent: 'flex-end',
+                                          paddingRight: 6,
+                                          fontSize: '9pt',
+                                          color: '#a1a1aa',
+                                          fontWeight: 500,
+                                          userSelect: 'none',
+                                          height: 28
+                                        }}>
+                                          {i + 1}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
                                  <div className="alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
                                    <button onClick={() => {
                                        const newFullHtml = parts.map((p: any, i: number) => {
@@ -894,7 +919,25 @@ export function PageContent({
                           block.estiloEspaco === 'pautado' ? (
                             <div style={{ marginTop: 16, width: '100%', display: 'flex', flexDirection: 'column' }}>
                               {Array.from({ length: block.linhasResposta }).map((_, i) => (
-                                <div key={i} style={{ height: 28, borderBottom: '1px solid #000' }} />
+                                <div key={i} style={{ position: 'relative', width: '100%', height: 28, borderBottom: '1px solid #000' }}>
+                                  <div style={{
+                                    position: 'absolute',
+                                    left: -38,
+                                    bottom: 0,
+                                    width: 28,
+                                    display: 'flex',
+                                    alignItems: 'flex-end',
+                                    justifyContent: 'flex-end',
+                                    paddingRight: 6,
+                                    fontSize: '9pt',
+                                    color: '#a1a1aa',
+                                    fontWeight: 500,
+                                    userSelect: 'none',
+                                    height: 28
+                                  }}>
+                                    {i + 1}
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           ) : (
@@ -1624,7 +1667,7 @@ export function PageContent({
           }}
         >
           <div style={{ width: '100%', height: 2, background: 'rgba(59, 130, 246, 0.5)', borderBottom: '1px dashed #3b82f6' }} />
-          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, top: 5 }}>
+          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, top: 5, pointerEvents: 'none', zIndex: 60 }}>
             Margem Superior ({topMarginOffset.toFixed(0)}px)
           </div>
         </div>
@@ -1655,7 +1698,7 @@ export function PageContent({
           }}
         >
           <div style={{ width: '100%', height: 2, background: 'rgba(59, 130, 246, 0.5)', borderBottom: '1px dashed #3b82f6' }} />
-          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, bottom: 5 }}>
+          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, bottom: 5, pointerEvents: 'none', zIndex: 60 }}>
             Margem Inferior ({bottomMarginOffset.toFixed(0)}px)
           </div>
         </div>
@@ -1686,7 +1729,7 @@ export function PageContent({
           }}
         >
           <div style={{ width: 2, height: '100%', background: 'rgba(59, 130, 246, 0.5)', borderRight: '1px dashed #3b82f6' }} />
-          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: 40, left: 10, whiteSpace: 'nowrap' }}>
+          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: pIndex === 0 ? 180 : 100, left: 12, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60 }}>
             Margem Esquerda ({leftMarginOffset.toFixed(0)}px)
           </div>
         </div>
@@ -1717,7 +1760,7 @@ export function PageContent({
           }}
         >
           <div style={{ width: 2, height: '100%', background: 'rgba(59, 130, 246, 0.5)', borderLeft: '1px dashed #3b82f6' }} />
-          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: 40, right: 10, whiteSpace: 'nowrap' }}>
+          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: pIndex === 0 ? 180 : 100, right: 12, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60 }}>
             Margem Direita ({rightMarginOffset.toFixed(0)}px)
           </div>
         </div>

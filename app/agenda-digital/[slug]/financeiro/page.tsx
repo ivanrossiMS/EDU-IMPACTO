@@ -9,6 +9,9 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 
+import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { EmptyStateCard } from '../../components/EmptyStateCard'
+
 const MOCK_DATA = [
   { id: '1', vencimento: '05/02/2026', fatura: 'Mensalidade', parcela: '1/11', competencia: 'Fev. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'Pago' },
   { id: '2', vencimento: '05/03/2026', fatura: 'Mensalidade', parcela: '2/11', competencia: 'Mar. 2026', aluno: 'Pedro B. Mello Henn', produto: 'Mensalidade - Ensino Médio', valor: 1290.50, situacao: 'Pago' },
@@ -21,6 +24,20 @@ const MOCK_DATA = [
 ]
 
 export default function ADFinanceiroPageMock() {
+  const { adConfig } = useAgendaDigital()
+
+  if (adConfig?.permissoes?.visualizarFinanceiro === false) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
+        <EmptyStateCard 
+          title="Acesso Restrito"
+          description="A visualização do painel financeiro está desativada para a sua conta ou suspensa pela instituição escolar. Para mais informações, entre em contato com o setor financeiro."
+          icon={<AlertCircle size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
+        />
+      </div>
+    )
+  }
+
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
