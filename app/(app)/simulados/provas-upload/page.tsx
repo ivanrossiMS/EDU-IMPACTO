@@ -867,7 +867,7 @@ export default function UploadProvasGerenciamentoPage() {
                                           status: prova.status
                                         }]
 
-                                        const isAdaptada = prova.titulo?.includes('ADAPTADO')
+                                        const isAdaptada = prova.titulo?.toUpperCase().includes('ADAPTAD') || Boolean(prova.eh_adaptada)
                                         const dateCriacaoStr = prova.created_at ? new Date(prova.created_at).toLocaleDateString('pt-BR') : ''
                                         const rowSpanCount = reqs.length
 
@@ -920,7 +920,7 @@ export default function UploadProvasGerenciamentoPage() {
                                                           {prova.titulo}
                                                         </span>
                                                         {isAdaptada && (
-                                                          <span style={{ padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 800, background: 'rgba(139,92,246,0.12)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.25)', flexShrink: 0 }}>
+                                                          <span className="badge-adaptada-neon-brown">
                                                             ADAPTADA
                                                           </span>
                                                         )}

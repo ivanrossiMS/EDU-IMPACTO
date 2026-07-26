@@ -540,6 +540,7 @@ export default function SimuladosDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {adminRecent.map((item) => {
                 const sColor = getStatusColor(item.status)
+                const isAdaptada = item.titulo?.toUpperCase().includes('ADAPTAD') || Boolean(item.eh_adaptada)
 
                 // Extrair séries
                 const rawSeries = item.series || item.serie || item.series_nomes || item.turmas
@@ -644,6 +645,11 @@ export default function SimuladosDashboard() {
                             }}>
                               {item.titulo}
                             </h3>
+                            {isAdaptada && (
+                              <span className="badge-adaptada-neon-brown">
+                                ADAPTADA
+                              </span>
+                            )}
                           </div>
 
                           {/* Séries, Disciplinas, Bimestre e Criador */}

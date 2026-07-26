@@ -858,7 +858,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                           status: simulado.status
                                         }]
 
-                                        const isAdaptada = simulado.titulo?.includes('ADAPTADO')
+                                        const isAdaptada = simulado.titulo?.toUpperCase().includes('ADAPTAD') || Boolean(simulado.eh_adaptada)
                                         const dateCriacaoStr = simulado.created_at ? new Date(simulado.created_at).toLocaleDateString('pt-BR') : ''
                                         const rowSpanCount = reqs.length
 
@@ -911,7 +911,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                           {simulado.titulo}
                                                         </span>
                                                         {isAdaptada && (
-                                                          <span style={{ padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 800, background: 'rgba(139,92,246,0.12)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.25)', flexShrink: 0 }}>
+                                                          <span className="badge-adaptada-neon-brown">
                                                             ADAPTADA
                                                           </span>
                                                         )}

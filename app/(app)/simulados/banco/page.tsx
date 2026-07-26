@@ -327,7 +327,7 @@ export default function BancoQuestoesPage() {
                               {item.nivel_dificuldade || 'MÉDIO'}
                             </div>
                             {item.eh_adaptada && (
-                              <div style={{ background: 'rgba(139,92,246,0.15)', color: '#8b5cf6', padding: '6px 14px', borderRadius: 100, fontSize: 11, fontWeight: 900, letterSpacing: '0.05em' }}>ADAPTADA</div>
+                              <div className="badge-adaptada-neon-brown" style={{ borderRadius: 100, padding: '5px 12px', fontSize: 11 }}>ADAPTADA</div>
                             )}
                             {isAiGenerated && (
                               <div style={{ background: 'linear-gradient(135deg, rgba(236,72,153,0.1), rgba(139,92,246,0.1))', border: '1px solid rgba(217,70,239,0.2)', color: '#d946ef', padding: '6px 14px', borderRadius: 100, fontSize: 11, fontWeight: 900, letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 4 }}>

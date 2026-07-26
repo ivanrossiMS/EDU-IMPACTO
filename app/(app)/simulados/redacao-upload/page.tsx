@@ -858,7 +858,7 @@ export default function UploadRedacoesGerenciamentoPage() {
                                           status: redacao.status
                                         }]
 
-                                        const isAdaptada = redacao.titulo?.includes('ADAPTADO')
+                                        const isAdaptada = redacao.titulo?.toUpperCase().includes('ADAPTAD') || Boolean(redacao.eh_adaptada)
                                         const dateCriacaoStr = redacao.created_at ? new Date(redacao.created_at).toLocaleDateString('pt-BR') : ''
                                         const rowSpanCount = reqs.length
 
@@ -911,7 +911,7 @@ export default function UploadRedacoesGerenciamentoPage() {
                                                           {redacao.titulo}
                                                         </span>
                                                         {isAdaptada && (
-                                                          <span style={{ padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 800, background: 'rgba(139,92,246,0.12)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.25)', flexShrink: 0 }}>
+                                                          <span className="badge-adaptada-neon-brown">
                                                             ADAPTADA
                                                           </span>
                                                         )}
