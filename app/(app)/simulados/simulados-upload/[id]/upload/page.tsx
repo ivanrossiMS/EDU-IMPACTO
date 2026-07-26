@@ -250,6 +250,25 @@ export default function UploadSimuladoPage() {
       <style>{`
         @keyframes spin { 100% { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes neonPulse {
+          0% {
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.6), 0 0 25px rgba(139, 92, 246, 0.35), inset 0 0 10px rgba(139, 92, 246, 0.15);
+            border-color: #8b5cf6;
+          }
+          50% {
+            box-shadow: 0 0 22px rgba(217, 70, 239, 0.95), 0 0 45px rgba(217, 70, 239, 0.55), inset 0 0 16px rgba(217, 70, 239, 0.25);
+            border-color: #d946ef;
+          }
+          100% {
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.6), 0 0 25px rgba(139, 92, 246, 0.35), inset 0 0 10px rgba(139, 92, 246, 0.15);
+            border-color: #8b5cf6;
+          }
+        }
+        .neon-active-card {
+          animation: neonPulse 1.8s infinite ease-in-out !important;
+          position: relative;
+          z-index: 2;
+        }
         .alt-row:hover { background: rgba(139,92,246,0.04) !important; }
         .questao-card:hover { border-color: rgba(139,92,246,0.3) !important; }
       `}</style>
@@ -485,10 +504,43 @@ export default function UploadSimuladoPage() {
                   resimuladodo: { color: '#ef4444', label: 'Resimuladodo' },
                 }
                 const rs = reqStatuses[req.status] || reqStatuses['pendente']
+                const activeReqParam = searchParams.get('req')
+                const activeProfParam = searchParams.get('prof')
+                const isShowAll = searchParams.get('all') === 'true'
+
+                const isCurrentActive = !isShowAll && (
+                  (activeReqParam && req.id === activeReqParam) ||
+                  (!activeReqParam && activeProfParam && req.id_professor === activeProfParam) ||
+                  (!activeReqParam && !activeProfParam && currentUser?.perfil === 'Professor' && req.id_professor === currentUser.id) ||
+                  (!activeReqParam && !activeProfParam && currentUser?.perfil !== 'Professor' && i === 0)
+                )
+
                 return (
-                  <div key={i} style={{ padding: '12px 14px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
+                  <div 
+                    key={i} 
+                    className={isCurrentActive ? 'neon-active-card' : ''}
+                    style={{ 
+                      padding: '12px 14px', 
+                      background: isCurrentActive ? 'linear-gradient(135deg, rgba(139,92,246,0.12), rgba(217,70,239,0.06))' : 'hsl(var(--bg-app))', 
+                      borderRadius: 12, 
+                      border: isCurrentActive ? '2px solid #8b5cf6' : '1px solid hsl(var(--border-subtle))',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>{req.disciplina_nome || 'Disciplina'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>{req.disciplina_nome || 'Disciplina'}</span>
+                        {isCurrentActive && (
+                          <span style={{ 
+                            padding: '2px 7px', borderRadius: 100, fontSize: 9, fontWeight: 800, 
+                            background: 'linear-gradient(135deg, #8b5cf6, #d946ef)', color: '#ffffff', 
+                            boxShadow: '0 0 10px rgba(217,70,239,0.6)', display: 'inline-flex', alignItems: 'center', gap: 4
+                          }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', boxShadow: '0 0 6px #fff' }} />
+                            ENVIANDO AGORA
+                          </span>
+                        )}
+                      </div>
                       <span style={{ padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 700, background: `${rs.color}15`, color: rs.color }}>{rs.label}</span>
                     </div>
                     <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>{req.professor_nome}</div>

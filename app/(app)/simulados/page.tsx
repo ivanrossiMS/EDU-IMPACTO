@@ -50,11 +50,27 @@ export default function SimuladosDashboard() {
           // ==============================
           
           // Buscar requisições pendentes do professor
-          const [resProvas, resSimulados, resRedacao] = await Promise.all([
+          const [resProvas, resSimulados, resRedacao, resBimestres] = await Promise.all([
             (supabase as any).from('provas_upload_requisicoes').select('*, provas_upload(*)').eq('id_professor', currentUser?.id),
             (supabase as any).from('simulados_upload_requisicoes').select('*, simulados_upload(*)').eq('id_professor', currentUser?.id),
-            (supabase as any).from('redacao_upload_requisicoes').select('*, redacao_upload(*)').eq('id_professor', currentUser?.id)
+            (supabase as any).from('redacao_upload_requisicoes').select('*, redacao_upload(*)').eq('id_professor', currentUser?.id),
+            (supabase as any).from('simulados_bimestres').select('id, nome')
           ])
+
+          const bimsMapProf: Record<string, string> = {}
+          if (resBimestres?.data) {
+            resBimestres.data.forEach((b: any) => {
+              if (b.id && b.nome) bimsMapProf[b.id] = b.nome
+            })
+          }
+
+          const extractBimestreProf = (item: any) => {
+            if (!item) return ''
+            if (item.id_bimestre && bimsMapProf[item.id_bimestre]) return bimsMapProf[item.id_bimestre]
+            if (typeof item.bimestre === 'string' && item.bimestre.trim()) return item.bimestre.trim()
+            if (item.bimestre_nome) return item.bimestre_nome
+            return ''
+          }
 
           const pReq = resProvas.data || []
           const sReq = resSimulados.data || []
@@ -81,6 +97,7 @@ export default function SimuladosDashboard() {
                 type: 'Prova',
                 title: r.provas_upload.titulo,
                 disciplina: r.disciplina_nome,
+                bimestre: extractBimestreProf(r.provas_upload),
                 prazo: r.provas_upload.data_limite_upload,
                 statusReq: r.status,
                 link: `/simulados/provas-upload/${r.provas_upload.id}/upload`,
@@ -98,6 +115,7 @@ export default function SimuladosDashboard() {
                 type: 'Simulado',
                 title: r.simulados_upload.titulo,
                 disciplina: r.disciplina_nome,
+                bimestre: extractBimestreProf(r.simulados_upload),
                 prazo: r.simulados_upload.data_limite_upload,
                 statusReq: r.status,
                 link: `/simulados/simulados-upload/${r.simulados_upload.id}/upload`,
@@ -115,6 +133,7 @@ export default function SimuladosDashboard() {
                 type: 'Redação',
                 title: r.redacao_upload.titulo,
                 disciplina: r.disciplina_nome,
+                bimestre: extractBimestreProf(r.redacao_upload),
                 prazo: r.redacao_upload.data_limite_upload,
                 statusReq: r.status,
                 link: `/simulados/redacao-upload/${r.redacao_upload.id}/upload`,
@@ -138,20 +157,36 @@ export default function SimuladosDashboard() {
           // VISÃO DO COORDENADOR
           // ==============================
           
-          const [resProvas, resSimulados, resRedacao] = await Promise.all([
+          const [resProvas, resSimulados, resRedacao, resBimestres] = await Promise.all([
             (supabase as any).from('provas_upload').select('*, provas_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10),
             (supabase as any).from('simulados_upload').select('*, simulados_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10),
-            (supabase as any).from('redacao_upload').select('*, redacao_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10)
+            (supabase as any).from('redacao_upload').select('*, redacao_upload_requisicoes(*)').order('created_at', { ascending: false }).limit(10),
+            (supabase as any).from('simulados_bimestres').select('id, nome')
           ])
 
-          let pData = (resProvas.data || []).map((p: any) => ({ ...p, status: getDerivedStatus(p, 'prova') }))
-          let sData = (resSimulados.data || []).map((s: any) => ({ ...s, status: getDerivedStatus(s, 'simulado') }))
-          let rData = (resRedacao.data || []).map((r: any) => ({ ...r, status: getDerivedStatus(r, 'redacao') }))
+          const bimsMapAdmin: Record<string, string> = {}
+          if (resBimestres?.data) {
+            resBimestres.data.forEach((b: any) => {
+              if (b.id && b.nome) bimsMapAdmin[b.id] = b.nome
+            })
+          }
+
+          const extractBimestreAdmin = (item: any) => {
+            if (!item) return ''
+            if (item.id_bimestre && bimsMapAdmin[item.id_bimestre]) return bimsMapAdmin[item.id_bimestre]
+            if (typeof item.bimestre === 'string' && item.bimestre.trim()) return item.bimestre.trim()
+            if (item.bimestre_nome) return item.bimestre_nome
+            return ''
+          }
+
+          let pData = (resProvas.data || []).map((p: any) => ({ ...p, status: getDerivedStatus(p, 'prova'), bimestre_nome: extractBimestreAdmin(p) }))
+          let sData = (resSimulados.data || []).map((s: any) => ({ ...s, status: getDerivedStatus(s, 'simulado'), bimestre_nome: extractBimestreAdmin(s) }))
+          let rData = (resRedacao.data || []).map((r: any) => ({ ...r, status: getDerivedStatus(r, 'redacao'), bimestre_nome: extractBimestreAdmin(r) }))
 
           // Fetch users for criado_por
           const allUserIds = Array.from(new Set([
             ...pData.map((p: any) => p.criado_por),
-            ...sData.map((s: any) => s.criado_por),
+            ...sData.map((p: any) => p.criado_por),
             ...rData.map((r: any) => r.criado_por)
           ].filter(Boolean)));
           
@@ -343,6 +378,11 @@ export default function SimuladosDashboard() {
                           <h3 style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 4px' }}>{task.title}</h3>
                           <div className="task-feed-card-info" style={{ display: 'flex', alignItems: 'center', gap: 16, color: 'hsl(var(--text-secondary))', fontSize: 13, fontWeight: 500, flexWrap: 'wrap' }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><BookMarked size={14} /> {task.disciplina}</span>
+                            {task.bimestre && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#d97706', fontWeight: 600 }}>
+                                <Calendar size={14} /> {task.bimestre}
+                              </span>
+                            )}
                             <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: task.prazo && new Date(task.prazo) < new Date() ? '#ef4444' : 'inherit' }}>
                               <Calendar size={14} /> Prazo: {task.prazo ? task.prazo.split('-').reverse().join('/') : 'N/A'}
                             </span>
@@ -398,6 +438,24 @@ export default function SimuladosDashboard() {
             justify-content: center !important;
             gap: 6px !important;
             text-align: center !important;
+          }
+        }
+        @media (max-width: 900px) {
+          .eval-list-item {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 14px !important;
+          }
+          .eval-list-middle {
+            width: 100% !important;
+            justify-content: space-between !important;
+            border-top: 1px dashed hsl(var(--border-subtle)) !important;
+            padding-top: 12px !important;
+            flex-wrap: wrap !important;
+          }
+          .eval-list-right {
+            width: 100% !important;
+            justify-content: space-between !important;
           }
         }
       `}</style>
@@ -479,7 +537,7 @@ export default function SimuladosDashboard() {
               <p style={{ color: 'hsl(var(--text-secondary))', margin: 0 }}>Crie uma nova prova ou simulado para começar.</p>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {adminRecent.map((item) => {
                 const sColor = getStatusColor(item.status)
 
@@ -505,6 +563,9 @@ export default function SimuladosDashboard() {
                 }
                 const disciplinasText = Array.from(discSet).filter(Boolean).join(', ')
 
+                // Extrair bimestre
+                const bimestreText = item.bimestre_nome || item.bimestre || (item.simulados_bimestres && item.simulados_bimestres.nome) || ''
+
                 // Extrair datas de criação e envio
                 const dataCriacao = item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : null
                 const reqsWithEnvio = (reqs || []).filter((r: any) => r.enviado_em || r.status === 'enviado' || r.status === 'aprovado' || r.status === 'concluido')
@@ -521,76 +582,168 @@ export default function SimuladosDashboard() {
 
                 return (
                   <Link href={item.link} key={`${item.type}-${item.id}`} style={{ textDecoration: 'none' }}>
-                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      style={{ background: 'hsl(var(--bg-surface))', border: `1px solid ${item.color}30`, borderRadius: 20, padding: 20, display: 'flex', flexDirection: 'column', gap: 16, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
-                      
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div style={{ width: 40, height: 40, borderRadius: 10, background: `linear-gradient(135deg, ${item.color}20, ${item.color}05)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <item.icon size={20} color={item.color} />
-                          </div>
-                          <div>
-                            <span style={{ fontSize: 11, fontWeight: 800, color: item.color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.type}</span>
-                            <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
-                              {new Date(item.created_at).toLocaleDateString('pt-BR')}
-                            </div>
-                          </div>
+                    <motion.div 
+                      whileHover={{ scale: 1.005, x: 4 }} 
+                      whileTap={{ scale: 0.995 }}
+                      className="eval-list-item"
+                      style={{ 
+                        background: 'hsl(var(--bg-surface))', 
+                        border: `1px solid ${item.color}25`, 
+                        borderRadius: 18, 
+                        padding: '16px 20px', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        gap: 20, 
+                        cursor: 'pointer', 
+                        transition: 'all 0.2s', 
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.03)' 
+                      }}
+                    >
+                      {/* Esquerda: Ícone + Título + Badges de Série, Disciplina, Bimestre + Criador */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0 }}>
+                        <div style={{ 
+                          width: 44, 
+                          height: 44, 
+                          borderRadius: 14, 
+                          background: `linear-gradient(135deg, ${item.color}20, ${item.color}05)`, 
+                          border: `1px solid ${item.color}30`,
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          flexShrink: 0 
+                        }}>
+                          <item.icon size={22} color={item.color} />
                         </div>
-                        <div style={{ background: sColor.b, color: sColor.c, padding: '4px 12px', borderRadius: 100, fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-                          {sColor.l}
-                        </div>
-                      </div>
 
-                      <div>
-                        <h3 style={{ fontSize: 16, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 10px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.titulo}
-                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1 }}>
+                          {/* Tipo e Título */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                            <span style={{ 
+                              fontSize: 10, 
+                              fontWeight: 800, 
+                              color: item.color, 
+                              background: `${item.color}15`, 
+                              border: `1px solid ${item.color}30`,
+                              padding: '2px 8px', 
+                              borderRadius: 6, 
+                              textTransform: 'uppercase', 
+                              letterSpacing: '0.05em',
+                              flexShrink: 0
+                            }}>
+                              {item.type}
+                            </span>
+                            <h3 style={{ 
+                              fontSize: 16, 
+                              fontWeight: 800, 
+                              color: 'hsl(var(--text-primary))', 
+                              margin: 0, 
+                              whiteSpace: 'nowrap', 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis' 
+                            }}>
+                              {item.titulo}
+                            </h3>
+                          </div>
 
-                        {/* Badges de Série e Disciplina */}
-                        {(seriesText || disciplinasText) && (
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                          {/* Séries, Disciplinas, Bimestre e Criador */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             {seriesText && (
                               <span style={{ 
-                                display: 'inline-flex', alignItems: 'center', gap: 5, 
-                                fontSize: 11, fontWeight: 800, color: '#8b5cf6', 
-                                background: 'rgba(139, 92, 246, 0.12)', border: '1px solid rgba(139, 92, 246, 0.2)',
-                                padding: '4px 10px', borderRadius: 8 
+                                display: 'inline-flex', alignItems: 'center', gap: 4, 
+                                fontSize: 11, fontWeight: 700, color: '#8b5cf6', 
+                                background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.2)',
+                                padding: '2px 8px', borderRadius: 6 
                               }}>
-                                <GraduationCap size={13} strokeWidth={2.5} /> {seriesText}
+                                <GraduationCap size={12} strokeWidth={2.5} /> {seriesText}
                               </span>
                             )}
 
                             {disciplinasText && (
                               <span style={{ 
-                                display: 'inline-flex', alignItems: 'center', gap: 5, 
-                                fontSize: 11, fontWeight: 800, color: '#0284c7', 
-                                background: 'rgba(2, 132, 199, 0.12)', border: '1px solid rgba(2, 132, 199, 0.2)',
-                                padding: '4px 10px', borderRadius: 8 
+                                display: 'inline-flex', alignItems: 'center', gap: 4, 
+                                fontSize: 11, fontWeight: 700, color: '#0284c7', 
+                                background: 'rgba(2, 132, 199, 0.1)', border: '1px solid rgba(2, 132, 199, 0.2)',
+                                padding: '2px 8px', borderRadius: 6 
                               }}>
-                                <BookOpen size={13} strokeWidth={2.5} /> {disciplinasText}
+                                <BookOpen size={12} strokeWidth={2.5} /> {disciplinasText}
+                              </span>
+                            )}
+
+                            {bimestreText && (
+                              <span style={{ 
+                                display: 'inline-flex', alignItems: 'center', gap: 4, 
+                                fontSize: 11, fontWeight: 700, color: '#d97706', 
+                                background: 'rgba(217, 119, 6, 0.1)', border: '1px solid rgba(217, 119, 6, 0.2)',
+                                padding: '2px 8px', borderRadius: 6 
+                              }}>
+                                <Calendar size={12} strokeWidth={2.5} /> {bimestreText}
+                              </span>
+                            )}
+
+                            {item.criado_por_nome && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 600 }}>
+                                <User size={12} color="#3b82f6" /> {item.criado_por_nome}
                               </span>
                             )}
                           </div>
-                        )}
-
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600 }}>
-                          {dataCriacao && (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#8b5cf6' }}>
-                              <Calendar size={13} /> Criada: {dataCriacao}
-                            </span>
-                          )}
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: dataEnvio ? '#10b981' : '#f59e0b' }}>
-                            <Upload size={13} /> Envio: {dataEnvio || 'Pendente'}
-                          </span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Calendar size={13} /> Aplicação: {item.data_aplicacao ? item.data_aplicacao.split('-').reverse().join('/') : 'Não definida'}
-                          </span>
                         </div>
-                        {item.criado_por_nome && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#3b82f6', fontSize: 12, fontWeight: 600, marginTop: 6 }}>
-                            <User size={14} /> Criado por: {item.criado_por_nome}
+                      </div>
+
+                      {/* Centro: Datas de Criada, Envio e Aplicação */}
+                      <div className="eval-list-middle" style={{ display: 'flex', alignItems: 'center', gap: 20, color: 'hsl(var(--text-secondary))', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                        {dataCriacao && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontSize: 10, color: 'hsl(var(--text-secondary))', opacity: 0.7, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Criada</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#8b5cf6', fontWeight: 700 }}>
+                              <Calendar size={13} /> {dataCriacao}
+                            </span>
                           </div>
                         )}
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 10, color: 'hsl(var(--text-secondary))', opacity: 0.7, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Envio</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: dataEnvio ? '#10b981' : '#f59e0b', fontWeight: 700 }}>
+                            <Upload size={13} /> {dataEnvio || 'Pendente'}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 10, color: 'hsl(var(--text-secondary))', opacity: 0.7, textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.03em' }}>Aplicação</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>
+                            <Calendar size={13} /> {item.data_aplicacao ? item.data_aplicacao.split('-').reverse().join('/') : 'Não definida'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Direita: Status + Seta */}
+                      <div className="eval-list-right" style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                        <div style={{ 
+                          background: sColor.b, 
+                          color: sColor.c, 
+                          padding: '6px 14px', 
+                          borderRadius: 100, 
+                          fontSize: 11, 
+                          fontWeight: 800, 
+                          textTransform: 'uppercase', 
+                          letterSpacing: '0.02em',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {sColor.l}
+                        </div>
+                        <div style={{ 
+                          width: 34, 
+                          height: 34, 
+                          borderRadius: 10, 
+                          background: 'rgba(139,92,246,0.1)', 
+                          color: '#8b5cf6', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          flexShrink: 0 
+                        }}>
+                          <ArrowRight size={18} />
+                        </div>
                       </div>
 
                     </motion.div>
