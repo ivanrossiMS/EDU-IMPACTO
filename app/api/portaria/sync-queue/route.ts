@@ -199,6 +199,12 @@ export async function DELETE(req: NextRequest) {
   if (errorResponse) return errorResponse
 
   try {
+    const { searchParams } = new URL(req.url)
+    if (searchParams.get('clear_all') === 'true') {
+      const { error: delErr } = await supabase.from('portaria_sync').delete().eq('status', 'pendente')
+      if (delErr) throw delErr
+      return NextResponse.json({ success: true, message: 'Fila de pendências limpa com sucesso!' })
+    }
     // 1. Buscar todos os dispositivos iDFace
     const { data: devices, error: devErr } = await supabase.from('portaria_dispositivos').select('id')
     if (devErr) throw devErr

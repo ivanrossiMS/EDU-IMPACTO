@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import {
   Settings, Save, RefreshCw, CheckCircle, XCircle, Clock, Shield, Users,
-  Camera, Activity, Lock, Key, CalendarRange, ShieldAlert, Check, Trash2
+  Camera, Activity, Lock, Key, CalendarRange, ShieldAlert, Check, Trash2,
+  Eye, Search, X, User
 } from 'lucide-react'
 import { SyncAcessosModal } from '@/components/portaria/SyncAcessosModal'
 
@@ -108,6 +109,47 @@ export default function PortariaConfigPage() {
       setTimeout(() => setToast(null), 4000)
     }
   }
+
+  const [showQueueModal, setShowQueueModal] = useState(false)
+  const [queueSearch, setQueueSearch] = useState('')
+  const [clearingQueue, setClearingQueue] = useState(false)
+
+  // Fetch pending queue full details when modal is open
+  const { data: queueDetails, isLoading: loadingQueueDetails, refetch: refetchQueueDetails } = useApiQuery<any>(
+    ['portaria-sync-queue-details', showQueueModal ? 'open' : 'closed'],
+    '/api/portaria/sync-queue',
+    { limit: 500 },
+    { enabled: showQueueModal, staleTime: 5000 }
+  )
+
+  const handleClearQueue = async () => {
+    if (!confirm('Deseja realmente limpar toda a fila de pendências de envio?')) return
+    setClearingQueue(true)
+    try {
+      const res = await fetch('/api/portaria/sync-queue?clear_all=true', { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao limpar fila')
+      setToast({ msg: '🗑️ Fila de pendências limpa com sucesso!', type: 'success' })
+      refetchQueue()
+      refetchQueueDetails()
+    } catch (err: any) {
+      setToast({ msg: err.message, type: 'error' })
+    } finally {
+      setClearingQueue(false)
+      setTimeout(() => setToast(null), 4000)
+    }
+  }
+
+  const filteredQueueItems = (queueDetails?.pendentes || []).filter((item: any) => {
+    if (!queueSearch.trim()) return true
+    const term = queueSearch.toLowerCase()
+    return (
+      (item.nome && item.nome.toLowerCase().includes(term)) ||
+      (item.aluno_id && String(item.aluno_id).toLowerCase().includes(term)) ||
+      (item.numeric_id && String(item.numeric_id).includes(term)) ||
+      (item.dispositivo_id && String(item.dispositivo_id).toLowerCase().includes(term))
+    )
+  })
 
   useEffect(() => {
     if (configRes) {
@@ -406,13 +448,23 @@ export default function PortariaConfigPage() {
                 border: '1px solid hsl(var(--border-subtle))', fontSize: 12
               }}>
                 <span style={{ fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Pendências na Fila de Envio:</span>
-                <span style={{
-                  fontWeight: 900, fontSize: 13,
-                  color: pendingQueueCount > 0 ? '#f59e0b' : '#10b981',
-                  background: pendingQueueCount > 0 ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)',
-                  padding: '2px 8px', borderRadius: 6
-                }}>
-                  {pendingQueueCount > 0 ? `${pendingQueueCount} aguardando envio` : '✅ 100% Sincronizado'}
+                <span
+                  onClick={() => setShowQueueModal(true)}
+                  title="Clique para ver os detalhes de cada ação pendente"
+                  style={{
+                    fontWeight: 900, fontSize: 13,
+                    color: pendingQueueCount > 0 ? '#f59e0b' : '#10b981',
+                    background: pendingQueueCount > 0 ? 'rgba(245,158,11,0.12)' : 'rgba(16,185,129,0.12)',
+                    border: `1px solid ${pendingQueueCount > 0 ? 'rgba(245,158,11,0.3)' : 'rgba(16,185,129,0.3)'}`,
+                    padding: '4px 10px', borderRadius: 8,
+                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+                    transition: 'transform 0.15s, background 0.15s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none' }}
+                >
+                  <Eye size={13} />
+                  {pendingQueueCount > 0 ? `${pendingQueueCount} aguardando envio (Clique para ver)` : '✅ 100% Sincronizado'}
                 </span>
               </div>
 
@@ -901,6 +953,179 @@ export default function PortariaConfigPage() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhes da Fila de Envio */}
+      {showQueueModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)',
+          zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+        }}>
+          <div style={{
+            background: 'hsl(var(--bg-card))', border: '1px solid hsl(var(--border-subtle))',
+            borderRadius: 20, width: '100%', maxWidth: 820, maxHeight: '85vh',
+            display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'hsl(var(--bg-elevated))'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 12, background: 'rgba(245,158,11,0.12)',
+                  border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#f59e0b'
+                }}>
+                  <Eye size={20} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))' }}>
+                    Fila de Pendências de Sincronização
+                  </h3>
+                  <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: '2px 0 0 0' }}>
+                    {pendingQueueCount} ações aguardando transmissão para as catracas iDFace
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowQueueModal(false)}
+                style={{
+                  background: 'none', border: 'none', color: 'hsl(var(--text-muted))',
+                  cursor: 'pointer', padding: 6, borderRadius: 8
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Subheader com Filtros e Ações */}
+            <div style={{
+              padding: '12px 24px', borderBottom: '1px solid hsl(var(--border-subtle))',
+              display: 'flex', alignItems: 'center', gap: 12, background: 'hsl(var(--bg-base))'
+            }}>
+              <div style={{
+                flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))',
+                borderRadius: 10, padding: '8px 12px'
+              }}>
+                <Search size={14} style={{ color: 'hsl(var(--text-muted))' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome do aluno, matrícula ou leitor..."
+                  value={queueSearch}
+                  onChange={e => setQueueSearch(e.target.value)}
+                  style={{
+                    background: 'none', border: 'none', outline: 'none',
+                    fontSize: 12, color: 'hsl(var(--text-primary))', width: '100%'
+                  }}
+                />
+              </div>
+
+              <button
+                onClick={handleClearQueue}
+                disabled={clearingQueue || !pendingQueueCount}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700,
+                  background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
+                  color: '#f43f5e', cursor: 'pointer', opacity: clearingQueue || !pendingQueueCount ? 0.5 : 1
+                }}
+              >
+                {clearingQueue ? <Activity size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={13} />}
+                Limpar Fila
+              </button>
+            </div>
+
+            {/* Conteúdo da Fila */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+              {loadingQueueDetails ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 10, color: 'hsl(var(--text-muted))', fontSize: 13 }}>
+                  <Activity size={18} style={{ animation: 'spin 1s linear infinite' }} /> Carregando detalhes da fila...
+                </div>
+              ) : filteredQueueItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
+                  Nenhum item pendente encontrado na fila de transmissão.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {filteredQueueItems.map((item: any, idx: number) => (
+                    <div key={idx} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '12px 16px', borderRadius: 12, background: 'hsl(var(--bg-base))',
+                      border: '1px solid hsl(var(--border-subtle))', gap: 12
+                    }}>
+                      {/* Aluno info */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 220, flex: 1 }}>
+                        <div style={{
+                          width: 38, height: 38, borderRadius: '50%', background: 'hsl(var(--bg-elevated))',
+                          border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                        }}>
+                          {item.foto ? (
+                            <img src={item.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <User size={16} style={{ color: 'hsl(var(--text-muted))' }} />
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                            {item.nome || `Aluno ID ${item.aluno_id}`}
+                          </div>
+                          <div style={{ fontSize: 10.5, color: 'hsl(var(--text-muted))' }}>
+                            Matrícula / ID: <strong style={{ color: ACCENT }}>{item.numeric_id || item.aluno_id}</strong>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Catraca */}
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', textAlign: 'center', minWidth: 160 }}>
+                        <div style={{ fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Leitor iDFace</div>
+                        <div style={{ fontFamily: 'monospace', fontSize: 10 }}>{item.dispositivo_id}</div>
+                      </div>
+
+                      {/* Ação */}
+                      <div style={{ minWidth: 170, textAlign: 'right' }}>
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 800, padding: '3px 8px', borderRadius: 6,
+                          background: item.acao === 'delete' ? 'rgba(244,63,94,0.1)' : 'rgba(16,185,129,0.1)',
+                          color: item.acao === 'delete' ? '#f43f5e' : '#10b981',
+                          border: `1px solid ${item.acao === 'delete' ? 'rgba(244,63,94,0.3)' : 'rgba(16,185,129,0.3)'}`
+                        }}>
+                          {item.acao === 'delete' ? '🔴 Excluir do Leitor' : '🟢 Adicionar / Atualizar'}
+                        </span>
+                        <div style={{ fontSize: 9.5, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
+                          {item.erro_detalhe || 'Agendado'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '14px 24px', borderTop: '1px solid hsl(var(--border-subtle))',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              background: 'hsl(var(--bg-elevated))', fontSize: 11, color: 'hsl(var(--text-muted))'
+            }}>
+              <span>Exibindo até 500 pendências recentes</span>
+              <button
+                onClick={() => setShowQueueModal(false)}
+                style={{
+                  padding: '8px 18px', borderRadius: 10, background: ACCENT,
+                  border: 'none', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
