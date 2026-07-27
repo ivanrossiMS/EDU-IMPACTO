@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { syncPhotoFromDeviceToStudent } from '@/lib/portariaSync'
 import { getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
-import { sendPushNotification } from '@/lib/server/pushService'
+import { isValidStudentPhoto } from '@/lib/utils'
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
@@ -342,12 +342,85 @@ export async function POST(req: Request) {
       }
     }
 
-    // Atualizar última comunicação do dispositivo
+    const actions: any[] = []
+
+    // Atualizar última comunicação do dispositivo e verificar pendências na fila de envio
     if (dispositivoId && dispositivoId !== 'unknown') {
       await supabase.from('portaria_dispositivos').update({
         status: 'online',
         ultima_comunicacao: new Date().toISOString(),
       }).eq('id', dispositivoId)
+
+      // Buscar até 10 pendências na fila para este dispositivo especificamente
+      const { data: pendingRows } = await supabase
+        .from('portaria_sync')
+        .select('aluno_id, status, erro_detalhe')
+        .eq('dispositivo_id', dispositivoId)
+        .eq('status', 'pendente')
+        .order('updated_at', { ascending: true })
+        .limit(10)
+
+      if (pendingRows && pendingRows.length > 0) {
+        const alunoIds = pendingRows.map(r => r.aluno_id)
+        const { data: alunos } = await supabase
+          .from('alunos')
+          .select('id, nome, codigo, matricula, foto, status')
+          .in('id', alunoIds)
+
+        const alunosMap = new Map((alunos || []).map(a => [a.id, a]))
+
+        for (const row of pendingRows) {
+          const aluno = alunosMap.get(row.aluno_id)
+          const numId = parseInt(aluno?.codigo || aluno?.matricula || row.aluno_id, 10)
+
+          if (!isNaN(numId) && numId > 0) {
+            if (aluno && aluno.status !== 'inativo') {
+              actions.push({
+                action: 'user',
+                parameters: {
+                  id: numId,
+                  name: aluno.nome ? aluno.nome.substring(0, 30) : `Aluno ${numId}`,
+                  registration: String(numId)
+                }
+              })
+
+              if (aluno.foto && isValidStudentPhoto(aluno.foto) && aluno.foto.startsWith('data:image')) {
+                const base64Data = aluno.foto.replace(/^data:image\/\w+;base64,/, '')
+                actions.push({
+                  action: 'user_image',
+                  parameters: {
+                    user_id: numId,
+                    image: base64Data
+                  }
+                })
+              }
+            } else {
+              actions.push({
+                action: 'destroy',
+                parameters: {
+                  object: 'users',
+                  where: { users: { id: numId } }
+                }
+              })
+            }
+          }
+
+          // Marcar pendência como sincronizada
+          await supabase
+            .from('portaria_sync')
+            .update({
+              status: 'sincronizado',
+              ultima_sync: new Date().toISOString(),
+              erro_detalhe: null,
+              updated_at: new Date().toISOString()
+            })
+            .match({ aluno_id: row.aluno_id, dispositivo_id: dispositivoId })
+        }
+      }
+    }
+
+    if (actions.length > 0) {
+      return NextResponse.json({ actions })
     }
 
     return NextResponse.json({ status: 'ok', evento: eventStatus })
