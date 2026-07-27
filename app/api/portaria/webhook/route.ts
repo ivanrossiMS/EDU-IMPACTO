@@ -53,7 +53,11 @@ export async function POST(req: Request) {
     let userId = payload.user_id || payload.userId || payload.id || ''
     let eventTimeRaw = payload.time || payload.timestamp || ''
     let eventType = payload.event_type || payload.type || 'entrada'
-    let deviceSerial = payload.device_id || payload.serial || ''
+
+    let deviceSerial =
+      payload.device_id || payload.serial || payload.deviceId || payload.idface_serial ||
+      searchParams.get('device_id') || searchParams.get('deviceId') || searchParams.get('serial') ||
+      req.headers.get('x-device-id') || req.headers.get('device-id') || req.headers.get('device_id') || req.headers.get('x-serial') || ''
 
     if (payload.object_changes && Array.isArray(payload.object_changes) && payload.object_changes.length > 0) {
       const change = payload.object_changes[0]
@@ -345,20 +349,26 @@ export async function POST(req: Request) {
     const actions: any[] = []
 
     // Atualizar última comunicação do dispositivo e verificar pendências na fila de envio
-    if (dispositivoId && dispositivoId !== 'unknown') {
-      await supabase.from('portaria_dispositivos').update({
-        status: 'online',
-        ultima_comunicacao: new Date().toISOString(),
-      }).eq('id', dispositivoId)
+    if (dispositivoId) {
+      if (dispositivoId !== 'unknown') {
+        await supabase.from('portaria_dispositivos').update({
+          status: 'online',
+          ultima_comunicacao: new Date().toISOString(),
+        }).eq('id', dispositivoId)
+      }
 
-      // Buscar até 10 pendências na fila para este dispositivo especificamente
-      const { data: pendingRows } = await supabase
+      // Buscar até 15 pendências na fila para este dispositivo especificamente ou globais
+      let syncQuery = supabase
         .from('portaria_sync')
-        .select('aluno_id, status, erro_detalhe')
-        .eq('dispositivo_id', dispositivoId)
+        .select('aluno_id, dispositivo_id, status, erro_detalhe')
         .eq('status', 'pendente')
         .order('updated_at', { ascending: true })
-        .limit(10)
+
+      if (dispositivoId !== 'unknown') {
+        syncQuery = syncQuery.eq('dispositivo_id', dispositivoId)
+      }
+
+      const { data: pendingRows } = await syncQuery.limit(15)
 
       if (pendingRows && pendingRows.length > 0) {
         const alunoIds = pendingRows.map(r => r.aluno_id)
