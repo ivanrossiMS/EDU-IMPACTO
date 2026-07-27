@@ -18,10 +18,11 @@ export async function POST(req: NextRequest) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
+  let targetDeviceId = ''
   try {
     const body = await req.json().catch(() => ({}))
     const { dispositivo_id, comando } = body
-    let targetDeviceId = dispositivo_id
+    targetDeviceId = dispositivo_id || ''
 
     if (!targetDeviceId) {
       return NextResponse.json({ error: 'dispositivo_id é obrigatório.' }, { status: 400 })
@@ -189,9 +190,18 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error('[iDFace Command Error]', err.message)
     const errMsg = err.message || ''
+
+    let deviceIp = ''
+    try {
+      if (targetDeviceId) {
+        const { data: dev } = await supabase.from('portaria_dispositivos').select('ip').eq('id', targetDeviceId).maybeSingle()
+        if (dev?.ip) deviceIp = dev.ip
+      }
+    } catch { /* ignore */ }
+
     if (errMsg.includes('timeout') || errMsg.includes('ECONNREFUSED') || errMsg.includes('fetch failed') || errMsg.includes('aborted')) {
       return NextResponse.json({
-        error: `O ERP está rodando ONLINE na nuvem e o IP (${device?.ip || '192.168.x.x'}) é um IP privado da rede local da escola. Para configurar o Webhook automaticamente, basta rodar o script 'Sincronizar_Catraca.py' 1 vez no computador da escola, ou cadastrar a URL 'https://impacto-edu.net/api/portaria/webhook' no menu do iDFace.`
+        error: `O ERP está rodando ONLINE na nuvem e o IP (${deviceIp || '192.168.x.x'}) é um IP privado da rede local da escola. Para configurar o Webhook automaticamente, basta rodar o script 'Sincronizar_Catraca.py' 1 vez no computador da escola, ou cadastrar a URL 'https://impacto-edu.net/api/portaria/webhook' no menu do iDFace.`
       }, { status: 400 })
     }
     return NextResponse.json({ error: `Erro ao executar comando: ${err.message}` }, { status: 500 })
