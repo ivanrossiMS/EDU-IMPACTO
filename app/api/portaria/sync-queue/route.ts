@@ -18,20 +18,19 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from('portaria_sync')
-      .select('aluno_id, dispositivo_id, status, erro_detalhe, updated_at')
+      .select('aluno_id, dispositivo_id, status, erro_detalhe, updated_at', { count: 'exact' })
       .eq('status', 'pendente')
       .order('updated_at', { ascending: true })
-      .limit(limitParam)
 
     if (dispositivoId) {
       query = query.eq('dispositivo_id', dispositivoId)
     }
 
-    const { data: pendingRows, error: pendingErr } = await query
+    const { data: pendingRows, error: pendingErr, count } = await query.limit(limitParam)
     if (pendingErr) throw pendingErr
 
     if (!pendingRows || pendingRows.length === 0) {
-      return NextResponse.json({ pendentes: [], total: 0 })
+      return NextResponse.json({ pendentes: [], total: count || 0 })
     }
 
     const alunoIds = Array.from(new Set(pendingRows.map(r => r.aluno_id)))
@@ -73,7 +72,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       pendentes: result,
-      total: result.length
+      total: count ?? result.length
     })
   } catch (err: any) {
     console.error('[Sync Queue GET Error]', err.message)
