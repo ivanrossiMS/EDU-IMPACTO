@@ -30,6 +30,7 @@ const PUBLIC_PATHS = [
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
   '/api/portaria/webhook', // catraca iDFace — recebe push dos dispositivos (auth por token próprio)
+  '/api/portaria/sync-queue', // fila de sincronização para catracas/daemon local
   '/api/academico/totem-frequencia', // catraca/totem — auth por token próprio (API_TOTEM_SECRET)
   '/api/saida/config',  // TV e tablet precisam acessar sem redirect
   '/api/saida/calls',   // TV e tablet precisam acessar sem redirect

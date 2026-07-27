@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useApiQuery } from '@/hooks/useApi'
 import {
   Settings, Save, RefreshCw, CheckCircle, XCircle, Clock, Shield, Users,
-  Camera, Activity, Lock, Key, CalendarRange, ShieldAlert, Check
+  Camera, Activity, Lock, Key, CalendarRange, ShieldAlert, Check, Trash2
 } from 'lucide-react'
 import { SyncAcessosModal } from '@/components/portaria/SyncAcessosModal'
 
@@ -85,6 +85,26 @@ export default function PortariaConfigPage() {
       setToast({ msg: err.message, type: 'error' })
     } finally {
       setSyncingQueueAll(false)
+      setTimeout(() => setToast(null), 4000)
+    }
+  }
+
+  const [purgingInactives, setPurgingInactives] = useState(false)
+
+  const handlePurgeInactiveStudents = async () => {
+    setPurgingInactives(true)
+    try {
+      const res = await fetch('/api/portaria/sync-queue', {
+        method: 'DELETE'
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao agendar exclusão de inativos')
+      setToast({ msg: `🗑️ ${data.message || 'Alunos inativos e removidos enfileirados para exclusão das catracas!'}`, type: 'success' })
+      refetchQueue()
+    } catch (err: any) {
+      setToast({ msg: err.message, type: 'error' })
+    } finally {
+      setPurgingInactives(false)
       setTimeout(() => setToast(null), 4000)
     }
   }
@@ -416,6 +436,29 @@ export default function PortariaConfigPage() {
                   <RefreshCw size={15} />
                 )}
                 ⚡ Sincronizar Todos os Alunos com Catracas Agora
+              </button>
+
+              <button
+                onClick={handlePurgeInactiveStudents}
+                disabled={purgingInactives}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700,
+                  background: 'rgba(244,63,94,0.08)',
+                  border: '1px solid rgba(244,63,94,0.3)',
+                  color: '#f43f5e', cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  opacity: purgingInactives ? 0.6 : 1,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(244,63,94,0.15)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(244,63,94,0.08)' }}
+              >
+                {purgingInactives ? (
+                  <Activity size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <Trash2 size={15} />
+                )}
+                🗑️ Excluir Alunos Inativos e Removidos das Catracas
               </button>
 
               <div style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '8px 0' }} />

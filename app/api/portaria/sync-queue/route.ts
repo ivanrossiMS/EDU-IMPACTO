@@ -189,3 +189,87 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
+
+/**
+ * DELETE /api/portaria/sync-queue
+ * Enfileira a exclusão de TODOS os alunos inativos, cancelados ou removidos das catracas.
+ */
+export async function DELETE(req: NextRequest) {
+  const { user, errorResponse } = await requireAuth()
+  if (errorResponse) return errorResponse
+
+  try {
+    // 1. Buscar todos os dispositivos iDFace
+    const { data: devices, error: devErr } = await supabase.from('portaria_dispositivos').select('id')
+    if (devErr) throw devErr
+
+    if (!devices || devices.length === 0) {
+      return NextResponse.json({ error: 'Nenhum dispositivo cadastrado' }, { status: 400 })
+    }
+
+    // 2. Buscar alunos inativos ou desativados
+    const { data: inativos } = await supabase
+      .from('alunos')
+      .select('id, matricula')
+      .not('status', 'in', '("matriculado","cursando","ativo","Cursando","Matriculado","Ativo")')
+
+    // 3. Buscar pendências ou registros no sync de alunos que não existem mais
+    const { data: syncRows } = await supabase.from('portaria_sync').select('aluno_id')
+    const { data: allAlunos } = await supabase.from('alunos').select('id, matricula')
+
+    const existingStudentIds = new Set<string>()
+    for (const a of allAlunos || []) {
+      existingStudentIds.add(String(a.id))
+      if (a.matricula) existingStudentIds.add(String(a.matricula))
+    }
+
+    const targetStudentIds = new Set<string>()
+    for (const i of inativos || []) {
+      targetStudentIds.add(String(i.id))
+      if (i.matricula) targetStudentIds.add(String(i.matricula))
+    }
+
+    for (const row of syncRows || []) {
+      if (!existingStudentIds.has(String(row.aluno_id))) {
+        targetStudentIds.add(String(row.aluno_id))
+      }
+    }
+
+    if (targetStudentIds.size === 0) {
+      return NextResponse.json({ message: 'Nenhum aluno inativo ou removido encontrado para exclusão', count: 0 })
+    }
+
+    // 4. Gerar entradas de exclusão pendente
+    const rowsToSync: any[] = []
+    const now = new Date().toISOString()
+
+    for (const id of Array.from(targetStudentIds)) {
+      for (const dev of devices) {
+        rowsToSync.push({
+          aluno_id: id,
+          dispositivo_id: dev.id,
+          status: 'pendente',
+          erro_detalhe: 'Exclusão de inativo/removido solicitada pelo administrador',
+          updated_at: now
+        })
+      }
+    }
+
+    // Upsert em lotes de 200
+    const chunkSize = 200
+    for (let i = 0; i < rowsToSync.length; i += chunkSize) {
+      const chunk = rowsToSync.slice(i, i + chunkSize)
+      const { error: upsertErr } = await supabase.from('portaria_sync').upsert(chunk, { onConflict: 'aluno_id,dispositivo_id' })
+      if (upsertErr) console.error('[Purge Queue Enqueue Error]', upsertErr.message)
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `${targetStudentIds.size} alunos inativos/removidos enfileirados para exclusão das catracas com sucesso!`,
+      total_operacoes: rowsToSync.length
+    })
+  } catch (err: any) {
+    console.error('[Sync Queue DELETE Error]', err.message)
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
