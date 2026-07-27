@@ -217,7 +217,7 @@ export async function DELETE(req: NextRequest) {
     const { data: inativos } = await supabase
       .from('alunos')
       .select('id, matricula')
-      .not('status', 'in', '("matriculado","cursando","ativo","Cursando","Matriculado","Ativo")')
+      .not('status', 'in', '(matriculado,cursando,ativo,Cursando,Matriculado,Ativo)')
 
     // 3. Buscar pendências ou registros no sync de alunos que não existem mais
     const { data: syncRows } = await supabase.from('portaria_sync').select('aluno_id')
