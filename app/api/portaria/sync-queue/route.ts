@@ -213,31 +213,49 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Nenhum dispositivo cadastrado' }, { status: 400 })
     }
 
-    // 2. Buscar alunos inativos ou desativados
+    // 2. Buscar TODOS os alunos ativos no ERP (matrículas e IDs)
+    const { data: ativos } = await supabase
+      .from('alunos')
+      .select('id, matricula')
+      .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
+
+    const activeIds = new Set<string>()
+    for (const a of ativos || []) {
+      if (a.id) activeIds.add(String(a.id))
+      if (a.matricula) activeIds.add(String(a.matricula))
+    }
+
+    // 3. Buscar TODOS os alunos inativos no ERP
     const { data: inativos } = await supabase
       .from('alunos')
       .select('id, matricula')
       .not('status', 'in', '(matriculado,cursando,ativo,Cursando,Matriculado,Ativo)')
 
-    // 3. Buscar pendências ou registros no sync de alunos que não existem mais
+    // 4. Buscar histórico de registros em portaria_sync e portaria_eventos
     const { data: syncRows } = await supabase.from('portaria_sync').select('aluno_id')
-    const { data: allAlunos } = await supabase.from('alunos').select('id, matricula')
-
-    const existingStudentIds = new Set<string>()
-    for (const a of allAlunos || []) {
-      existingStudentIds.add(String(a.id))
-      if (a.matricula) existingStudentIds.add(String(a.matricula))
-    }
+    const { data: eventRows } = await supabase.from('portaria_eventos').select('aluno_id, user_id_equipamento').limit(1000)
 
     const targetStudentIds = new Set<string>()
+
+    // Adicionar inativos explícitos do ERP
     for (const i of inativos || []) {
-      targetStudentIds.add(String(i.id))
+      if (i.id) targetStudentIds.add(String(i.id))
       if (i.matricula) targetStudentIds.add(String(i.matricula))
     }
 
-    for (const row of syncRows || []) {
-      if (!existingStudentIds.has(String(row.aluno_id))) {
-        targetStudentIds.add(String(row.aluno_id))
+    // Adicionar IDs presentes no sync que não estão ativos no ERP
+    for (const s of syncRows || []) {
+      const idStr = String(s.aluno_id || '').trim()
+      if (idStr && !activeIds.has(idStr)) {
+        targetStudentIds.add(idStr)
+      }
+    }
+
+    // Adicionar IDs presentes nos eventos que não estão ativos no ERP
+    for (const e of eventRows || []) {
+      const idStr = String(e.user_id_equipamento || e.aluno_id || '').trim()
+      if (idStr && !activeIds.has(idStr)) {
+        targetStudentIds.add(idStr)
       }
     }
 
