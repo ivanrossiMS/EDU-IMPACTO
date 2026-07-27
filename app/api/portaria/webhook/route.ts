@@ -362,16 +362,21 @@ export async function POST(req: Request) {
 
       if (pendingRows && pendingRows.length > 0) {
         const alunoIds = pendingRows.map(r => r.aluno_id)
+        const filterParts = alunoIds.map(id => `id.eq.${id},matricula.eq.${id}`).join(',')
         const { data: alunos } = await supabase
           .from('alunos')
-          .select('id, nome, codigo, matricula, foto, status')
-          .in('id', alunoIds)
+          .select('id, nome, matricula, foto, status')
+          .or(filterParts)
 
-        const alunosMap = new Map((alunos || []).map(a => [a.id, a]))
+        const alunosMap = new Map()
+        for (const a of alunos || []) {
+          alunosMap.set(String(a.id), a)
+          if (a.matricula) alunosMap.set(String(a.matricula), a)
+        }
 
         for (const row of pendingRows) {
           const aluno = alunosMap.get(row.aluno_id)
-          const numId = parseInt(aluno?.codigo || aluno?.matricula || row.aluno_id, 10)
+          const numId = parseInt(aluno?.matricula || row.aluno_id, 10)
 
           if (!isNaN(numId) && numId > 0) {
             if (aluno && aluno.status !== 'inativo') {

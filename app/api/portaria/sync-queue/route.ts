@@ -35,15 +35,20 @@ export async function GET(req: NextRequest) {
 
     const alunoIds = Array.from(new Set(pendingRows.map(r => r.aluno_id)))
 
-    // Buscar dados dos alunos correspondentes às pendências
+    // Buscar dados dos alunos correspondentes às pendências (procurando por id ou matricula)
+    const filterParts = alunoIds.map(id => `id.eq.${id},matricula.eq.${id}`).join(',')
     const { data: alunos, error: alunosErr } = await supabase
       .from('alunos')
       .select('id, nome, matricula, foto, status')
-      .in('id', alunoIds)
+      .or(filterParts)
 
     if (alunosErr) throw alunosErr
 
-    const alunosMap = new Map((alunos || []).map(a => [a.id, a]))
+    const alunosMap = new Map()
+    for (const a of alunos || []) {
+      alunosMap.set(String(a.id), a)
+      if (a.matricula) alunosMap.set(String(a.matricula), a)
+    }
 
     const result = pendingRows.map(row => {
       const a = alunosMap.get(row.aluno_id)
@@ -54,8 +59,8 @@ export async function GET(req: NextRequest) {
         acao = 'delete'
       }
 
-      const codigo = a?.matricula || ''
-      const numericId = parseInt(codigo.replace(/\D/g, ''), 10)
+      const codigo = a?.codigo || a?.matricula || row.aluno_id || ''
+      const numericId = parseInt(String(codigo).replace(/\D/g, ''), 10)
 
       return {
         aluno_id: row.aluno_id,

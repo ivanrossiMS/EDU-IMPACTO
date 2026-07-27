@@ -89,8 +89,8 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
     // ─── CASO: CRIAÇÃO OU ATUALIZAÇÃO ───────────────────────────────────────────
     const { data: student } = await supabase
       .from('alunos')
-      .select('id, nome, matricula, foto, status')
-      .eq('id', studentId)
+      .select('id, nome, codigo, matricula, foto, status')
+      .or(`id.eq.${studentId},codigo.eq.${studentId},matricula.eq.${studentId}`)
       .maybeSingle()
 
     if (!student) {
@@ -109,7 +109,7 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       return
     }
 
-    const codigo = student.matricula
+    const codigo = student.codigo || student.matricula || student.id
     if (!codigo) {
       console.log(`[Portaria Sync] Aluno ${student.nome} está sem número de matrícula. Sincronização cancelada.`)
       return
