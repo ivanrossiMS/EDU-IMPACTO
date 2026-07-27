@@ -156,18 +156,20 @@ export async function POST(req: NextRequest) {
         }
 
         if (!activeSuccess) {
-          // Se o ping direto não respondeu, verifica se mandou sinal passivo recente (últimos 15 min)
+          // Se o ping direto não respondeu (nuvem ➔ LAN), verifica se a catraca enviou sinal recente
           const lastComm = device.ultima_comunicacao ? new Date(device.ultima_comunicacao) : null
           const now = new Date()
+          // 24h de janela passiva para considerar online
+          const isRecent = lastComm && (now.getTime() - lastComm.getTime() < 24 * 60 * 60 * 1000)
 
-          if (lastComm && (now.getTime() - lastComm.getTime() < 15 * 60 * 1000)) {
+          if (isRecent) {
             result = {
               online: true,
-              info: { serial: device.id, msg: 'Ping Passivo: Catraca enviou sinal recente ao sistema' }
+              info: { serial: device.id, msg: `Ping Passivo OK: Catraca respondeu via nuvem recentemente (${lastComm?.toLocaleTimeString('pt-BR')})` }
             }
           } else {
             return NextResponse.json({
-              error: `Dispositivo sem comunicação no momento (IP ${device.ip}:${port} inacessível e sem sinal recente). Verifique se a catraca está ligada.`
+              error: `A catraca '${device.nome}' (${device.ip}) ainda não salvou a conexão iDCloud para 'impacto-edu.net'. Na aba do navegador com o IP ${device.ip}, coloque 'Modo iDCloud' em 'Personalizado', defina o servidor como 'impacto-edu.net' e clique em Salvar.`
             }, { status: 400 })
           }
         }
