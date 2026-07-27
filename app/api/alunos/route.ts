@@ -280,40 +280,50 @@ export async function GET(request: Request) {
       })
     }
 
-    const allStudentRefs = students.flatMap((s: any) => [
+    const allStudentRefs = Array.from(new Set(students.flatMap((s: any) => [
       s.id, 
       s.matricula, 
       s.dados?.codigo, 
       s.matricula ? String(s.matricula) : null, 
       s.dados?.codigo ? String(s.dados?.codigo) : null
-    ]).filter(Boolean)
+    ]).filter(Boolean).map(r => String(r).trim())))
 
-    // 2. Busca os vínculos apenas para os alunos da página
-    const { data: links, error: linksError } = await supabase
-      .from('aluno_responsavel')
-      .select('*')
-      .in('aluno_id', allStudentRefs)
-      .limit(20000)
+    // 2. Busca os vínculos em lotes (chunked) para evitar limite de 1000 linhas e estouro de URL no PostgREST
+    const links: any[] = []
+    const chunkSize = 150
+    for (let i = 0; i < allStudentRefs.length; i += chunkSize) {
+      const chunk = allStudentRefs.slice(i, i + chunkSize)
+      const { data: chunkLinks, error: linksError } = await supabase
+        .from('aluno_responsavel')
+        .select('*')
+        .in('aluno_id', chunk)
+        .limit(10000)
 
-    if (linksError) {
-      console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Links): ${linksError.message}\n`)
+      if (linksError) {
+        console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Links Chunk ${i}): ${linksError.message}\n`)
+      } else if (chunkLinks) {
+        links.push(...chunkLinks)
+      }
     }
 
-    // 2.5 Busca os dados dos responsáveis manualmente para evitar erro de ambiguidade no join
-    const respIds = links?.map((l: any) => l.responsavel_id).filter(Boolean) || []
+    // 2.5 Busca os dados dos responsáveis manualmente em lotes
+    const respIds = Array.from(new Set((links || []).map((l: any) => String(l.responsavel_id).trim()).filter(Boolean)))
     let responsaveis: any[] = []
     
     if (respIds.length > 0) {
-      const { data: respData, error: respError } = await supabase
-        .from('responsaveis')
-        .select('*')
-        .in('id', respIds)
-        .limit(20000)
-        
-      if (respError) {
-        console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis): ${respError.message}\n`)
-      } else {
-        responsaveis = respData || []
+      for (let i = 0; i < respIds.length; i += chunkSize) {
+        const chunk = respIds.slice(i, i + chunkSize)
+        const { data: chunkResps, error: respError } = await supabase
+          .from('responsaveis')
+          .select('*')
+          .in('id', chunk)
+          .limit(10000)
+
+        if (respError) {
+          console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis Chunk ${i}): ${respError.message}\n`)
+        } else if (chunkResps) {
+          responsaveis.push(...chunkResps)
+        }
       }
     }
 
@@ -353,11 +363,11 @@ export async function GET(request: Request) {
         student.dados?.codigo, 
         student.matricula ? String(student.matricula) : null, 
         student.dados?.codigo ? String(student.dados?.codigo) : null
-      ].filter(Boolean)
+      ].filter(Boolean).map(r => String(r).trim())
       
-      const linkedResponsaveis = links?.filter((l: any) => studentRefs.includes(l.aluno_id))
+      const linkedResponsaveis = links?.filter((l: any) => studentRefs.includes(String(l.aluno_id).trim()))
         .map((l: any) => {
-          const resp = responsaveis.find((r: any) => r.id === l.responsavel_id) || {}
+          const resp = responsaveis.find((r: any) => String(r.id).trim() === String(l.responsavel_id).trim()) || {}
           return {
             ...resp,
             parentesco: l.parentesco,
@@ -370,6 +380,32 @@ export async function GET(request: Request) {
         }).filter((r: any) => r.id) || []
 
       const fallbackResponsaveis = student.dados?.responsaveis || []
+      
+      let finalResponsaveis = linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis
+      if (finalResponsaveis.length === 0) {
+        const candidateText = (student.responsavel || student.responsavel_financeiro || student.responsavel_pedagogico || '').trim()
+        if (candidateText && candidateText.toLowerCase() !== 'none' && candidateText.toLowerCase() !== 'nenhum') {
+          const matchedResp = responsaveis.find((r: any) => r.nome && r.nome.trim().toLowerCase() === candidateText.toLowerCase())
+          if (matchedResp) {
+            finalResponsaveis = [{
+              ...matchedResp,
+              parentesco: 'mae',
+              isFinanceiro: true,
+              isPedagogico: true,
+              isOutro: false
+            }]
+          } else {
+            finalResponsaveis = [{
+              id: '',
+              nome: candidateText,
+              parentesco: 'mae',
+              isFinanceiro: true,
+              isPedagogico: true,
+              isOutro: false
+            }]
+          }
+        }
+      }
 
       const studentTurma = student.turma
       const tObj = turmasData?.find((t: any) =>
@@ -386,7 +422,7 @@ export async function GET(request: Request) {
         ...(student.dados || {}), // Spread JSONB data
         foto: resolvedFoto, // Garantir que foto resolvida estritamente sobrescreva qualquer dado inconsistente
         created_at: student.created_at, // Restore to ensure it's not overwritten
-        responsaveis: linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis,
+        responsaveis: finalResponsaveis,
         turma_nome: tObj?.nome || student.turma || '',
         turma_segmento: tObj?.dados?.segmento || student.segmento || student.dados?.segmento || '',
         turma_anoLetivo: tObj?.ano !== undefined ? String(tObj.ano) : (student.anoLetivo || student.ano_letivo || student.dados?.anoLetivo || '')
@@ -827,53 +863,62 @@ export async function PUT(request: Request) {
       if (linkError) throw new Error(`Erro ao vincular responsável ${resp.nome} ao aluno: ${linkError.message}`)
     }
 
-    // 3. Desvincular responsáveis que foram removidos
-    const { data: currentLinks, error: fetchLinksError } = await supabase
-      .from('aluno_responsavel')
-      .select('responsavel_id')
-      .eq('aluno_id', savedStudent.id)
+    // 3. Desvincular responsáveis que foram removidos (apenas se salvou responsáveis com sucesso nesta requisição)
+    if (savedRespIds.length > 0) {
+      const studentRefs = [
+        savedStudent.id,
+        savedStudent.matricula,
+        savedStudent.dados?.codigo
+      ].filter(Boolean).map(r => String(r).trim())
 
-    if (fetchLinksError) throw fetchLinksError
-
-    const linksToDelete = (currentLinks || [])
-      .map((l: any) => l.responsavel_id)
-      .filter((id: string) => !savedRespIds.includes(id))
-
-    if (linksToDelete.length > 0) {
-      // Deleta os vínculos na tabela aluno_responsavel
-      const { error: unlinkError } = await supabase
+      const { data: currentLinks, error: fetchLinksError } = await supabase
         .from('aluno_responsavel')
-        .delete()
-        .eq('aluno_id', savedStudent.id)
-        .in('responsavel_id', linksToDelete)
-      
-      if (unlinkError) throw unlinkError
+        .select('responsavel_id')
+        .in('aluno_id', studentRefs)
 
-      // Remove os registros órfãos da tabela de responsáveis para manter a integridade dos dados
-      for (const respId of linksToDelete) {
-        const { data: otherLinks } = await supabase
-          .from('aluno_responsavel')
-          .select('aluno_id')
-          .eq('responsavel_id', respId)
+      if (!fetchLinksError && currentLinks) {
+        const savedRespIdsClean = savedRespIds.map(s => String(s).trim())
+        const linksToDelete = currentLinks
+          .map((l: any) => String(l.responsavel_id).trim())
+          .filter((id: string) => !savedRespIdsClean.includes(id))
 
-        if (!otherLinks || otherLinks.length === 0) {
-          const { data: guardian } = await supabase
-            .from('responsaveis')
-            .select('*')
-            .eq('id', respId)
-            .maybeSingle()
+        if (linksToDelete.length > 0) {
+          // Deleta os vínculos na tabela aluno_responsavel
+          const { error: unlinkError } = await supabase
+            .from('aluno_responsavel')
+            .delete()
+            .in('aluno_id', studentRefs)
+            .in('responsavel_id', linksToDelete)
+          
+          if (unlinkError) console.error('[Unlink Error]', unlinkError.message)
 
-          if (guardian) {
-            const guardianEmail = (guardian.email || '').trim().toLowerCase()
-            
-            // Delete from public.responsaveis
-            await supabase.from('responsaveis').delete().eq('id', respId)
+          // Remove os registros órfãos da tabela de responsáveis para manter a integridade dos dados
+          for (const respId of linksToDelete) {
+            const { data: otherLinks } = await supabase
+              .from('aluno_responsavel')
+              .select('aluno_id')
+              .eq('responsavel_id', respId)
 
-            // Delete from public.system_users
-            if (guardianEmail) {
-              await supabase.from('system_users').delete().eq('email', guardianEmail)
+            if (!otherLinks || otherLinks.length === 0) {
+              const { data: guardian } = await supabase
+                .from('responsaveis')
+                .select('*')
+                .eq('id', respId)
+                .maybeSingle()
+
+              if (guardian) {
+                const guardianEmail = (guardian.email || '').trim().toLowerCase()
+                
+                // Delete from public.responsaveis
+                await supabase.from('responsaveis').delete().eq('id', respId)
+
+                // Delete from public.system_users
+                if (guardianEmail) {
+                  await supabase.from('system_users').delete().eq('email', guardianEmail)
+                }
+                await supabase.from('system_users').delete().filter('dados->>responsavel_id', 'eq', respId)
+              }
             }
-            await supabase.from('system_users').delete().filter('dados->>responsavel_id', 'eq', respId)
           }
         }
       }

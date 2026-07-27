@@ -32,7 +32,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       student.dados?.codigo,
       student.matricula ? String(student.matricula) : null,
       student.dados?.codigo ? String(student.dados?.codigo) : null,
-    ].filter(Boolean)
+    ].filter(Boolean).map(r => String(r).trim())
 
     // Fetch the links for this student
     const { data: links } = await supabase
@@ -54,9 +54,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       }
     }
 
-    const linkedResponsaveis = (links || []).filter((l: any) => studentRefs.includes(l.aluno_id))
+    const linkedResponsaveis = (links || []).filter((l: any) => studentRefs.includes(String(l.aluno_id).trim()))
       .map((l: any) => {
-        const resp = responsaveis.find((r: any) => r.id === l.responsavel_id) || {}
+        const resp = responsaveis.find((r: any) => String(r.id).trim() === String(l.responsavel_id).trim()) || {}
         return {
           ...resp,
           parentesco: l.parentesco,
@@ -72,10 +72,41 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
     const fallbackResponsaveis = student.dados?.responsaveis || []
 
+    let finalResponsaveis = linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis
+    if (finalResponsaveis.length === 0) {
+      const candidateText = (student.responsavel || student.responsavel_financeiro || student.responsavel_pedagogico || '').trim()
+      if (candidateText && candidateText.toLowerCase() !== 'none' && candidateText.toLowerCase() !== 'nenhum') {
+        const { data: matchedResp } = await supabase
+          .from('responsaveis')
+          .select('*')
+          .ilike('nome', candidateText)
+          .maybeSingle()
+
+        if (matchedResp) {
+          finalResponsaveis = [{
+            ...matchedResp,
+            parentesco: 'mae',
+            isFinanceiro: true,
+            isPedagogico: true,
+            isOutro: false
+          }]
+        } else {
+          finalResponsaveis = [{
+            id: '',
+            nome: candidateText,
+            parentesco: 'mae',
+            isFinanceiro: true,
+            isPedagogico: true,
+            isOutro: false
+          }]
+        }
+      }
+    }
+
     const formattedStudent = {
       ...student,
       ...(student.dados || {}),
-      responsaveis: linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis,
+      responsaveis: finalResponsaveis,
     }
 
     return NextResponse.json({ data: formattedStudent })

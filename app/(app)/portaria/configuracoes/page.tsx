@@ -39,6 +39,7 @@ export default function PortariaConfigPage() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [syncingPhotos, setSyncingPhotos] = useState(false)
+  const [syncingQueueAll, setSyncingQueueAll] = useState(false)
   const [showAcessosModal, setShowAcessosModal] = useState(false)
 
   const [showSyncModal, setShowSyncModal] = useState(false)
@@ -59,6 +60,34 @@ export default function PortariaConfigPage() {
     { chave: 'portaria_config' },
     { staleTime: 60000 }
   )
+
+  // Fetch pending queue count
+  const { data: queueData, refetch: refetchQueue } = useApiQuery<any>(
+    ['portaria-sync-queue-count'],
+    '/api/portaria/sync-queue',
+    { limit: 1 },
+    { staleTime: 10000 }
+  )
+
+  const pendingQueueCount = queueData?.total ?? 0
+
+  const handleEnqueueAllStudents = async () => {
+    setSyncingQueueAll(true)
+    try {
+      const res = await fetch('/api/portaria/sync-queue', {
+        method: 'PUT'
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Erro ao agendar sincronização global')
+      setToast({ msg: data.message || 'Todos os alunos ativos foram enfileirados para as catracas com sucesso!', type: 'success' })
+      refetchQueue()
+    } catch (err: any) {
+      setToast({ msg: err.message, type: 'error' })
+    } finally {
+      setSyncingQueueAll(false)
+      setTimeout(() => setToast(null), 4000)
+    }
+  }
 
   useEffect(() => {
     if (configRes) {
@@ -346,6 +375,51 @@ export default function PortariaConfigPage() {
               flexDirection: 'column',
               gap: 12
             }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>📤 Sincronização Bidirecional (ERP ➔ Catracas)</div>
+              <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: 0, lineHeight: 1.5 }}>
+                Transmitir e atualizar todo o cadastro de alunos ativos, matrículas e fotos do ERP online para a memória interna de todas as catracas iDFace.
+              </p>
+
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 14px', borderRadius: 12, background: 'hsl(var(--bg-base))',
+                border: '1px solid hsl(var(--border-subtle))', fontSize: 12
+              }}>
+                <span style={{ fontWeight: 600, color: 'hsl(var(--text-muted))' }}>Pendências na Fila de Envio:</span>
+                <span style={{
+                  fontWeight: 900, fontSize: 13,
+                  color: pendingQueueCount > 0 ? '#f59e0b' : '#10b981',
+                  background: pendingQueueCount > 0 ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)',
+                  padding: '2px 8px', borderRadius: 6
+                }}>
+                  {pendingQueueCount > 0 ? `${pendingQueueCount} aguardando envio` : '✅ 100% Sincronizado'}
+                </span>
+              </div>
+
+              <button
+                onClick={handleEnqueueAllStudents}
+                disabled={syncingQueueAll}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '12px 20px', borderRadius: 12, fontSize: 13, fontWeight: 700,
+                  background: `linear-gradient(135deg, ${ACCENT}, #0891b2)`,
+                  border: 'none',
+                  color: '#fff', cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: `0 4px 15px ${ACCENT}25`,
+                  opacity: syncingQueueAll ? 0.6 : 1,
+                }}
+              >
+                {syncingQueueAll ? (
+                  <Activity size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <RefreshCw size={15} />
+                )}
+                ⚡ Sincronizar Todos os Alunos com Catracas Agora
+              </button>
+
+              <div style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '8px 0' }} />
+
               <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>📥 Sincronização Unidirecional (Catraca ➔ ERP)</div>
               <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: 0, lineHeight: 1.5 }}>
                 Baixa as fotos faciais cadastradas diretamente na memória física da catraca iDFace e as salva no cadastro dos respectivos alunos no ERP.

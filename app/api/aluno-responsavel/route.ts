@@ -93,7 +93,7 @@ export async function GET(request: Request) {
         const studentId = refsMap[l.aluno_id] || l.aluno_id
         if (!map[studentId]) map[studentId] = []
         
-        const resp = (respData || []).find((r: any) => r.id === l.responsavel_id) || {}
+        const resp = (respData || []).find((r: any) => String(r.id).trim() === String(l.responsavel_id).trim()) || {}
         map[studentId].push({
           ...resp,
           parentesco: l.parentesco,
@@ -114,10 +114,11 @@ export async function GET(request: Request) {
     }
 
     // If single ID requested (legacy logic for the modal)
+    const refsStr = refs.map(r => String(r).trim())
     const responsaveis = links
-      .filter((l: any) => refs.includes(l.aluno_id))
+      .filter((l: any) => refsStr.includes(String(l.aluno_id).trim()))
       .map((l: any) => {
-        const resp = (respData || []).find((r: any) => r.id === l.responsavel_id) || {}
+        const resp = (respData || []).find((r: any) => String(r.id).trim() === String(l.responsavel_id).trim()) || {}
         return {
           ...resp,
           parentesco: l.parentesco,

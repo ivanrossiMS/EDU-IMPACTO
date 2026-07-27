@@ -13,7 +13,7 @@ const supabase = createClient(
  */
 export async function syncStudentToDevices(studentId: string, actionType: 'create' | 'update' | 'delete') {
   try {
-    console.log(`[Portaria Sync] Iniciando tarefa em lote para Aluno: ${studentId}, Ação: ${actionType}`)
+    console.log(`[Portaria Sync] Iniciando tarefa para Aluno: ${studentId}, Ação: ${actionType}`)
 
     // 1. Buscar configurações ativas da portaria
     const { data: configRes } = await supabase
@@ -25,25 +25,24 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
     const config = configRes?.valor || {}
 
     // Respeitar os toggles da página de configurações
-    if (actionType === 'create' && !config.sync_automatica_novos_alunos) {
-      console.log('[Portaria Sync] Cadastro automático desativado nas configurações. Ignorando.')
+    if (actionType === 'create' && config.sync_automatica_novos_alunos === false) {
+      console.log('[Portaria Sync] Cadastro automático de novos alunos desativado nas configurações. Ignorando.')
       return
     }
 
-    // 2. Buscar todos os dispositivos iDFace cadastrados e online
+    // 2. Buscar todos os dispositivos iDFace cadastrados
     const { data: devices } = await supabase
       .from('portaria_dispositivos')
       .select('*')
-      .eq('status', 'online')
 
     if (!devices || devices.length === 0) {
-      console.log('[Portaria Sync] Nenhum dispositivo iDFace online cadastrado para sincronizar.')
+      console.log('[Portaria Sync] Nenhum dispositivo iDFace cadastrado para sincronizar.')
       return
     }
 
     // ─── CASO: DELEÇÃO ──────────────────────────────────────────────────────────
     if (actionType === 'delete') {
-      if (!config.remover_inativos_automaticamente) {
+      if (config.remover_inativos_automaticamente === false) {
         console.log('[Portaria Sync] Remoção automática desativada nas configurações. Ignorando.')
         return
       }
@@ -52,6 +51,15 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       if (isNaN(numericId)) return
 
       await Promise.allSettled(devices.map(async (dev) => {
+        // Marcar como pendente para este leitor
+        await supabase.from('portaria_sync').upsert({
+          aluno_id: studentId,
+          dispositivo_id: dev.id,
+          status: 'pendente',
+          erro_detalhe: 'Remoção de inativo pendente de envio para o leitor',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'aluno_id,dispositivo_id' })
+
         try {
           const client = new ControliDClient({
             ip: dev.ip,
@@ -62,8 +70,17 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
 
           await client.deleteUser(numericId)
           console.log(`✅ [Portaria Sync] Removido ID ${numericId} do leitor "${dev.nome}"`)
+          
+          await supabase.from('portaria_sync').upsert({
+            aluno_id: studentId,
+            dispositivo_id: dev.id,
+            status: 'sincronizado',
+            ultima_sync: new Date().toISOString(),
+            erro_detalhe: '',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'aluno_id,dispositivo_id' })
         } catch (err: any) {
-          console.error(`❌ [Portaria Sync] Erro ao remover do leitor "${dev.nome}":`, err.message)
+          console.log(`ℹ️ [Portaria Sync] Enfileirado para envio local no leitor "${dev.nome}": ${err.message}`)
         }
       }))
       return
@@ -85,7 +102,7 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
 
     // Se o aluno foi alterado para inativo, e a remoção automática está ativa: exclui do leitor
     if (!isStudentActive) {
-      if (config.remover_inativos_automaticamente) {
+      if (config.remover_inativos_automaticamente !== false) {
         console.log(`[Portaria Sync] Aluno ${student.nome} está inativo (${student.status}). Removendo do hardware.`)
         await syncStudentToDevices(studentId, 'delete')
       }
@@ -104,7 +121,20 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       return
     }
 
+    const hasValidPhoto = isValidStudentPhoto(student.foto)
+
     await Promise.allSettled(devices.map(async (dev) => {
+      // 1. Enfileirar como 'pendente' no banco online (para que a catraca/script local busque)
+      await supabase.from('portaria_sync').upsert({
+        aluno_id: student.id,
+        dispositivo_id: dev.id,
+        status: 'pendente',
+        foto_enviada: false,
+        erro_detalhe: 'Aguardando sincronização com a catraca local',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'aluno_id,dispositivo_id' })
+
+      // 2. Tentar sincronização direta (se a catraca for diretamente acessível por IP/VPN)
       try {
         const client = new ControliDClient({
           ip: dev.ip,
@@ -115,19 +145,33 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
 
         // Cadastrar/atualizar cadastro básico do usuário no leitor
         await client.createUser(numericId, student.nome, codigo)
-        console.log(`✅ [Portaria Sync] Cadastro básico de "${student.nome}" sincronizado em "${dev.nome}"`)
+        console.log(`✅ [Portaria Sync Direto] Cadastro básico de "${student.nome}" enviado para "${dev.nome}"`)
 
+        let fotoEnviada = false
         // Enviar/atualizar foto facial se a opção estiver ativa
-        if (config.reenviar_foto_ao_atualizar && isValidStudentPhoto(student.foto)) {
+        if (config.reenviar_foto_ao_atualizar !== false && hasValidPhoto) {
           try {
             await client.setUserImage(numericId, student.foto!)
-            console.log(`📸 [Portaria Sync] Foto facial de "${student.nome}" atualizada em "${dev.nome}"`)
+            fotoEnviada = true
+            console.log(`📸 [Portaria Sync Direto] Foto facial de "${student.nome}" enviada para "${dev.nome}"`)
           } catch (photoErr: any) {
-            console.warn(`⚠️ [Portaria Sync] Foto falhou para "${student.nome}" em "${dev.nome}":`, photoErr.message)
+            console.warn(`⚠️ [Portaria Sync Direto] Foto falhou para "${student.nome}" em "${dev.nome}":`, photoErr.message)
           }
         }
+
+        // Marcar como sincronizado com sucesso
+        await supabase.from('portaria_sync').upsert({
+          aluno_id: student.id,
+          dispositivo_id: dev.id,
+          status: 'sincronizado',
+          ultima_sync: new Date().toISOString(),
+          foto_enviada: fotoEnviada,
+          erro_detalhe: '',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'aluno_id,dispositivo_id' })
+
       } catch (err: any) {
-        console.error(`❌ [Portaria Sync] Falha ao sincronizar com "${dev.nome}":`, err.message)
+        console.log(`ℹ️ [Portaria Sync Queue] Aluno "${student.nome}" retido na fila online (Pendente para "${dev.nome}")`)
       }
     }))
   } catch (err: any) {

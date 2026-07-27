@@ -1097,17 +1097,54 @@ export default function AlunosPage() {
         autorizadoSairSozinho: aluno.autorizadoSairSozinho || false,
         foto: aluno.foto || null
       },
-      responsaveis: (aluno.responsaveis 
-        ? aluno.responsaveis 
-        : (aluno.responsavel 
-            ? [typeof aluno.responsavel === 'string' ? { nome: aluno.responsavel } : aluno.responsavel] 
-            : [{ id: '', nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: '', codigoAluno: '', rfid: '', parentesco: '' }]
-          )
-      ).map((r: any) => ({ 
-        id: '', nome: '', dataNasc: '', email: '', telefone: '', profissao: '', codigo: '', codigoAluno: '', rfid: '', parentesco: '', 
-        ...r, 
-        diasAcesso: r.diasAcesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'] 
-      })),
+      responsaveis: (() => {
+        const rawResps = (Array.isArray(aluno.responsaveis) && aluno.responsaveis.length > 0)
+          ? aluno.responsaveis
+          : (aluno.responsavel
+              ? [typeof aluno.responsavel === 'string' ? { nome: aluno.responsavel } : aluno.responsavel]
+              : []
+            );
+        if (rawResps.length === 0) {
+          const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
+          return [{
+            id: randCode,
+            codigo: randCode,
+            nome: '',
+            dataNasc: '',
+            email: '',
+            telefone: '',
+            profissao: '',
+            codigoAluno: '',
+            rfid: '',
+            parentesco: '',
+            diasAcesso: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'],
+            isFinanceiro: false,
+            isPedagogico: false,
+            isOutro: false,
+            proibido: false
+          }];
+        }
+        return rawResps.map((r: any) => {
+          const respId = String(r.id || r.codigo || Math.floor(1000000 + Math.random() * 9000000)).trim();
+          return {
+            id: respId,
+            codigo: respId,
+            nome: r.nome || '',
+            dataNasc: r.dataNasc || r.data_nasc || '',
+            email: r.email || '',
+            telefone: r.telefone || r.celular || '',
+            profissao: r.profissao || '',
+            codigoAluno: r.codigoAluno || '',
+            rfid: r.rfid || '',
+            parentesco: r.parentesco || '',
+            isFinanceiro: r.isFinanceiro ?? r.resp_financeiro ?? false,
+            isPedagogico: r.isPedagogico ?? r.resp_pedagogico ?? false,
+            isOutro: r.isOutro ?? r.resp_outro ?? false,
+            proibido: r.proibido === true,
+            diasAcesso: r.diasAcesso || r.dias_acesso || ['Seg', 'Ter', 'Qua', 'Qui', 'Sex']
+          };
+        });
+      })(),
       historicoTurmas: (aluno.dados?.historicoTurmas && aluno.dados.historicoTurmas.length > 0) 
         ? aluno.dados.historicoTurmas 
         : (aluno.turma ? [{

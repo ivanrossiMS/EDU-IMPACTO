@@ -53,35 +53,46 @@ export async function GET(request: Request) {
       return NextResponse.json({ data: [], total: 0, page, limit })
     }
 
-    // Buscar vínculos para estes responsáveis
-    const respIds = responsaveisData.map((r: any) => r.id)
-    
-    const { data: linksData, error: linksError } = await supabase
-      .from('aluno_responsavel')
-      .select('*')
-      .in('responsavel_id', respIds)
-        
-    if (linksError) {
-      const path = require('path')
-      console.error(`[${new Date().toISOString()}] Error Responsáveis GET (Links): ${linksError.message}\n`)
-    }
-    const links = linksError ? [] : (linksData || [])
+    // Buscar vínculos em lotes para estes responsáveis
+    const respIds = Array.from(new Set(responsaveisData.map((r: any) => String(r.id).trim()).filter(Boolean)))
+    const links: any[] = []
+    const chunkSize = 150
 
-    // Busca os dados dos alunos manualmente para evitar erro de ambiguidade no join
-    const studentIds = links.map((l: any) => l.aluno_id).filter(Boolean)
+    if (respIds.length > 0) {
+      for (let i = 0; i < respIds.length; i += chunkSize) {
+        const chunk = respIds.slice(i, i + chunkSize)
+        const { data: chunkLinks, error: linksError } = await supabase
+          .from('aluno_responsavel')
+          .select('*')
+          .in('responsavel_id', chunk)
+          .limit(10000)
+            
+        if (linksError) {
+          console.error(`[${new Date().toISOString()}] Error Responsáveis GET (Links Chunk ${i}): ${linksError.message}\n`)
+        } else if (chunkLinks) {
+          links.push(...chunkLinks)
+        }
+      }
+    }
+
+    // Busca os dados dos alunos manualmente em lotes
+    const studentIds = Array.from(new Set(links.map((l: any) => String(l.aluno_id).trim()).filter(Boolean)))
     let students: any[] = []
     
     if (studentIds.length > 0) {
-      const { data: studentData, error: studentError } = await supabase
-        .from('alunos')
-        .select('*')
-        .in('id', studentIds)
-        
-      if (studentError) {
-        const path = require('path')
-        console.error(`[${new Date().toISOString()}] Error Responsáveis GET (Alunos): ${studentError.message}\n`)
-      } else {
-        students = studentData || []
+      for (let i = 0; i < studentIds.length; i += chunkSize) {
+        const chunk = studentIds.slice(i, i + chunkSize)
+        const { data: chunkStudents, error: studentError } = await supabase
+          .from('alunos')
+          .select('*')
+          .in('id', chunk)
+          .limit(10000)
+          
+        if (studentError) {
+          console.error(`[${new Date().toISOString()}] Error Responsáveis GET (Alunos Chunk ${i}): ${studentError.message}\n`)
+        } else if (chunkStudents) {
+          students.push(...chunkStudents)
+        }
       }
     }
 
@@ -174,12 +185,12 @@ export async function POST(request: Request) {
     let links: any[] = []
     if (alunos_vinculados && Array.isArray(alunos_vinculados)) {
       links = alunos_vinculados.map((v: any) => ({
-        aluno_id: v.id || v.aluno_id,
-        responsavel_id: data.id,
-        parentesco: v.parentesco,
-        resp_pedagogico: v.resp_pedagogico,
-        resp_financeiro: v.resp_financeiro,
-        resp_outro: v.resp_outro
+        aluno_id: String(v.aluno_id || v.id).trim(),
+        responsavel_id: String(data.id).trim(),
+        parentesco: v.parentesco || 'mae',
+        resp_pedagogico: v.resp_pedagogico ?? true,
+        resp_financeiro: v.resp_financeiro ?? true,
+        resp_outro: v.resp_outro ?? false
       }))
       
       if (links.length > 0) {
@@ -252,12 +263,12 @@ export async function PUT(request: Request) {
       await supabase.from('aluno_responsavel').delete().eq('responsavel_id', data.id)
       
       links = alunos_vinculados.map((v: any) => ({
-        aluno_id: v.id || v.aluno_id,
-        responsavel_id: data.id,
-        parentesco: v.parentesco,
-        resp_pedagogico: v.resp_pedagogico,
-        resp_financeiro: v.resp_financeiro,
-        resp_outro: v.resp_outro
+        aluno_id: String(v.aluno_id || v.id).trim(),
+        responsavel_id: String(data.id).trim(),
+        parentesco: v.parentesco || 'mae',
+        resp_pedagogico: v.resp_pedagogico ?? true,
+        resp_financeiro: v.resp_financeiro ?? true,
+        resp_outro: v.resp_outro ?? false
       }))
       
       if (links.length > 0) {

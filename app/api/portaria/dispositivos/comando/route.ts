@@ -188,6 +188,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, result })
   } catch (err: any) {
     console.error('[iDFace Command Error]', err.message)
+    const errMsg = err.message || ''
+    if (errMsg.includes('timeout') || errMsg.includes('ECONNREFUSED') || errMsg.includes('fetch failed') || errMsg.includes('aborted')) {
+      return NextResponse.json({
+        error: `O ERP está rodando ONLINE na nuvem e o IP (${device?.ip || '192.168.x.x'}) é um IP privado da rede local da escola. Para configurar o Webhook automaticamente, basta rodar o script 'Sincronizar_Catraca.py' 1 vez no computador da escola, ou cadastrar a URL 'https://impacto-edu.net/api/portaria/webhook' no menu do iDFace.`
+      }, { status: 400 })
+    }
     return NextResponse.json({ error: `Erro ao executar comando: ${err.message}` }, { status: 500 })
   }
 }

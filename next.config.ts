@@ -96,6 +96,17 @@ const nextConfig: NextConfig = {
     return headersConfig;
   },
 
+  // ── Rewrites para Catracas iDFace (Modo iDCloud Personalizado) ───
+  async rewrites() {
+    return [
+      { source: '/push.fcgi', destination: '/api/portaria/webhook' },
+      { source: '/idcloud.fcgi', destination: '/api/portaria/webhook' },
+      { source: '/push', destination: '/api/portaria/webhook' },
+      { source: '/idcloud', destination: '/api/portaria/webhook' },
+      { source: '/get_actions.fcgi', destination: '/api/portaria/webhook' },
+      { source: '/set_result.fcgi', destination: '/api/portaria/webhook' },
+    ];
+  },
 };
 
 export default nextConfig;

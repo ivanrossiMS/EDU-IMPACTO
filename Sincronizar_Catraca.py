@@ -177,11 +177,115 @@ def formatar_hora(ts):
     return datetime.fromtimestamp(ts, timezone.utc).strftime("%H:%M:%S") if ts else "?"
 
 
+def processar_fila_pendencias_erp(cats_conectadas):
+    """
+    Busca alterações pendentes no ERP online (cadastros, fotos, deleções)
+    e aplica diretamente nas catracas físicas na rede local.
+    """
+    url_queue = f"{NETLIFY_URL}/api/portaria/sync-queue"
+    print(f"\n  📥  VERIFICANDO FILA DE ALTERAÇÕES DO ERP ({url_queue})…")
+
+    try:
+        req = urllib.request.Request(url_queue, method="GET")
+        req.add_header("User-Agent", "Mozilla/5.0 (EduImpacto Local Sync Daemon)")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        
+        pendentes = data.get("pendentes", [])
+        if not pendentes:
+            print("     ✅ Nenhuma alteração pendente vinda do ERP.")
+            return
+
+        print(f"     📦 {len(pendentes)} alteração(ões) pendente(s) encontrada(s) no ERP online!")
+
+        for p in pendentes:
+            aluno_id = p.get("aluno_id")
+            disp_id  = p.get("dispositivo_id")
+            numeric_id = p.get("numeric_id")
+            nome = p.get("nome", "")
+            matricula = p.get("matricula", "")
+            foto = p.get("foto")
+            acao = p.get("acao", "update")
+
+            if not numeric_id:
+                print(f"     ⚠️ Pulo do aluno {nome}: Sem ID numérico de matrícula.")
+                continue
+
+            # Determinar quais catracas devem receber essa atualização
+            alvos = cats_conectadas
+            if disp_id:
+                alvos = [c for c in cats_conectadas if c["cat"]["ip"] == disp_id or c["cat"].get("id") == disp_id or disp_id in c["cat"].get("nome", "")]
+                if not alvos:
+                    alvos = cats_conectadas
+
+            for alvo in alvos:
+                cat_nome = alvo["cat"]["nome"]
+                base_url = alvo["base_url"]
+                session  = alvo["session"]
+                dev_ip   = alvo["cat"]["ip"]
+
+                try:
+                    if acao == "delete":
+                        # Deletar usuário da catraca
+                        post_json(f"{base_url}/destroy_objects.fcgi",
+                                  {"object": "users", "where": {"users": {"id": numeric_id}}},
+                                  cookie=session)
+                        print(f"     🗑️  [Catraca {cat_nome}] Aluno '{nome}' (ID {numeric_id}) removido da memória flash.")
+                    else:
+                        # Criar / Atualizar usuário
+                        post_json(f"{base_url}/modify_objects.fcgi",
+                                  {
+                                      "object": "users",
+                                      "values": {"name": nome, "registration": matricula},
+                                      "where":  {"users": {"id": numeric_id}}
+                                  },
+                                  cookie=session)
+                        
+                        # Tentar criar se não existia
+                        post_json(f"{base_url}/add_objects.fcgi",
+                                  {"object": "users", "values": [{"id": numeric_id, "name": nome, "registration": matricula}]},
+                                  cookie=session)
+
+                        print(f"     👤 [Catraca {cat_nome}] Dados de '{nome}' (ID {numeric_id}) atualizados.")
+
+                        # Enviar foto se presente
+                        foto_enviada = False
+                        if foto and isinstance(foto, str) and len(foto) > 50:
+                            try:
+                                # Trata base64
+                                clean_b64 = foto.split(',')[-1] if ',' in foto else foto
+                                post_json(f"{base_url}/set_user_image.fcgi",
+                                          {"user_id": numeric_id, "image": clean_b64},
+                                          cookie=session)
+                                foto_enviada = True
+                                print(f"     📸 [Catraca {cat_nome}] Foto de '{nome}' transmitida com sucesso.")
+                            except Exception as fe:
+                                print(f"     ⚠️  [Catraca {cat_nome}] Foto falhou para '{nome}': {fe}")
+
+                    # Notificar o servidor online que o item foi sincronizado com sucesso nesta catraca
+                    post_json(url_queue, {
+                        "aluno_id": aluno_id,
+                        "dispositivo_id": disp_id or dev_ip,
+                        "status": "sincronizado",
+                        "foto_enviada": foto_enviada if acao != "delete" else False
+                    })
+                except Exception as ex:
+                    print(f"     ❌ [Catraca {cat_nome}] Falha ao processar {nome}: {ex}")
+                    post_json(url_queue, {
+                        "aluno_id": aluno_id,
+                        "dispositivo_id": disp_id or dev_ip,
+                        "status": "erro",
+                        "erro_detalhe": str(ex)[:200]
+                    })
+    except Exception as e:
+        print(f"     ⚠️ Falha ao verificar fila de pendências no ERP: {e}")
+
+
 def main():
     hoje_str = date.today().strftime("%d/%m/%Y")
     print()
     print("  ══════════════════════════════════════════════════")
-    print("   🔄  SINCRONIZAÇÃO CATRACA → SISTEMA")
+    print("   🔄  SINCRONIZAÇÃO BIDIRECIONAL (CATRACA ⇄ ERP)")
     print(f"   {hoje_str}")
     print("  ══════════════════════════════════════════════════")
 
@@ -195,6 +299,7 @@ def main():
 
     total_enviados = 0
     total_erros    = 0
+    cats_conectadas = []
 
     for cat in CATRACAS:
         print(f"\n  📡 {cat['nome']} ({cat['ip']}:{cat['porta']})")
@@ -207,6 +312,7 @@ def main():
 
         proto = "HTTPS" if base_url.startswith("https") else "HTTP"
         print(f"     ✅ Conectado via {proto} (sessão: {session[:12]}…)")
+        cats_conectadas.append({"cat": cat, "base_url": base_url, "session": session})
 
         # Configura o monitor automaticamente
         ok_monitor = configurar_monitor(base_url, session)
@@ -224,7 +330,6 @@ def main():
         unicos = {}
         for l in reconhecidos:
             uid = str(l.get("user_id", ""))
-            # Se não tá no dicionário, adiciona. Se tiver, substitui apenas se o tempo for MENOR (mais cedo)
             if uid not in unicos or l.get("time", 0) < unicos[uid].get("time", 0):
                 unicos[uid] = l
         
@@ -241,14 +346,12 @@ def main():
             print(f"     ℹ️  Todos os alunos de hoje já foram sincronizados anteriormente.")
             continue
 
-        # Abre o arquivo de cache uma vez para evitar PermissionError do Windows (Antivírus/Defender)
         cache_f = None
         try:
             cache_f = open(cache_file, "a")
         except Exception as e:
-            print(f"     ⚠️  Aviso: Não foi possível abrir o arquivo de cache '{cache_file}' ({e}). O script continuará sem salvar cache em disco.")
+            print(f"     ⚠️  Aviso: Não foi possível abrir cache ({e}).")
 
-        # Envia cada reconhecimento para o webhook
         ok = 0
         falhas = 0
         for log in novos_para_enviar:
@@ -264,8 +367,8 @@ def main():
                         try:
                             cache_f.write(uid + "\n")
                             cache_f.flush()
-                        except Exception as write_err:
-                            pass # Ignora erro de escrita se o arquivo for bloqueado durante a execução
+                        except Exception:
+                            pass
                     ja_sincronizados.add(uid)
                 else:
                     print(f"     ⚠️  Aluno {uid:<6} às {hora}  [{status}]")
@@ -284,22 +387,19 @@ def main():
         total_erros    += falhas
         print(f"     ─── {ok} enviados, {falhas} erros ───")
 
+    # 📥 SEGUNDA ETAPA: PROCESSAR ALTERAÇÕES PENDENTES DO ERP → CATRACAS
+    if cats_conectadas:
+        processar_fila_pendencias_erp(cats_conectadas)
+
     print()
     print("  ══════════════════════════════════════════════════")
-    print(f"   ✅ Presenças enviadas: {total_enviados}")
+    print(f"   ✅ Presenças enviadas ao ERP: {total_enviados}")
     if total_erros:
-        print(f"   ⚠️  Erros:            {total_erros}")
+        print(f"   ⚠️  Erros de conexão:          {total_erros}")
     print("  ══════════════════════════════════════════════════")
-
-    if total_enviados > 0:
-        print()
-        print("  Verifique em: Acadêmico > Frequência")
-    elif total_erros == 0:
-        print()
-        print("  Nenhum aluno identificado ainda.")
-        print("  Rode novamente quando os alunos começarem a chegar.")
     print()
 
 
 if __name__ == "__main__":
     main()
+
