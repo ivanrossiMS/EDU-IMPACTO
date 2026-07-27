@@ -194,6 +194,7 @@ export default function UploadSimuladosGerenciamentoPage() {
   const [sortOrders, setSortOrders] = useState<Record<string, string>>({})
 
   const [selectedAnoLetivo, setSelectedAnoLetivo] = useState<string | null>(null)
+  const [showAnoModal, setShowAnoModal] = useState(true)
   const [isClient, setIsClient] = useState(false)
 
   const [page, setPage] = useState(1)
@@ -220,8 +221,7 @@ export default function UploadSimuladosGerenciamentoPage() {
 
   useEffect(() => {
     setIsClient(true)
-    const saved = sessionStorage.getItem('selectedAnoLetivo')
-    if (saved) setSelectedAnoLetivo(saved)
+    setShowAnoModal(true)
   }, [])
 
   useEffect(() => {
@@ -504,10 +504,25 @@ export default function UploadSimuladosGerenciamentoPage() {
 
   return (
     <>
-      {!selectedAnoLetivo && <AnoLetivoModal onSelect={(ano) => { setSelectedAnoLetivo(ano); sessionStorage.setItem('selectedAnoLetivo', ano) }} />}
+      {showAnoModal && (
+        <AnoLetivoModal 
+          onSelect={(ano, bimId) => { 
+            setSelectedAnoLetivo(ano); 
+            sessionStorage.setItem('selectedAnoLetivo', ano);
+            if (bimId && bimId !== 'todos') {
+              setFilterBimestre(bimId);
+              sessionStorage.setItem('selectedBimestre', bimId);
+            } else {
+              setFilterBimestre('todos');
+              sessionStorage.setItem('selectedBimestre', 'todos');
+            }
+            setShowAnoModal(false);
+          }} 
+        />
+      )}
       {gabaritoModalId && <GabaritoSimuladoModal simuladoUploadId={gabaritoModalId} onClose={() => setGabaritoModalId(null)} />}
 
-      <div className="simulados-upload-container" style={{ padding: '32px 40px', maxWidth: 1280, margin: '0 auto', display: selectedAnoLetivo ? 'block' : 'none' }}>
+      <div className="simulados-upload-container" style={{ padding: '32px 40px', maxWidth: 1280, margin: '0 auto', display: selectedAnoLetivo && !showAnoModal ? 'block' : 'none' }}>
       
       <style>{`
         .table-row-hover {
@@ -590,9 +605,18 @@ export default function UploadSimuladosGerenciamentoPage() {
             <select
               value={selectedAnoLetivo || ''}
               onChange={e => {
-                setSelectedAnoLetivo(e.target.value);
-                sessionStorage.setItem('selectedAnoLetivo', e.target.value);
-                setFilterBimestre('todos');
+                const newAno = e.target.value;
+                setSelectedAnoLetivo(newAno);
+                sessionStorage.setItem('selectedAnoLetivo', newAno);
+                const newYearBims = bimestres.filter(b => String(b.ano_letivo) === newAno || (!b.ano_letivo && b.nome?.includes(newAno)));
+                const lastBim = newYearBims.length > 0 ? newYearBims[newYearBims.length - 1] : null;
+                if (lastBim) {
+                  setFilterBimestre(lastBim.id);
+                  sessionStorage.setItem('selectedBimestre', lastBim.id);
+                } else {
+                  setFilterBimestre('todos');
+                  sessionStorage.setItem('selectedBimestre', 'todos');
+                }
               }}
               style={{ width: '100%', padding: '12px 32px 12px 16px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
             >
@@ -607,7 +631,10 @@ export default function UploadSimuladosGerenciamentoPage() {
           <div style={{ position: 'relative' }}>
             <select
               value={filterBimestre}
-              onChange={e => setFilterBimestre(e.target.value)}
+              onChange={e => {
+                setFilterBimestre(e.target.value);
+                sessionStorage.setItem('selectedBimestre', e.target.value);
+              }}
               style={{ width: '100%', padding: '12px 32px 12px 16px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
             >
               <option value="todos">Todos os bimestres</option>
