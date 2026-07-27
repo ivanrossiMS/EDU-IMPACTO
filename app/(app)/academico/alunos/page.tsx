@@ -16,7 +16,8 @@ import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
-import { formatPhone } from '@/lib/utils'
+import { formatPhone, isValidStudentPhoto } from '@/lib/utils'
+
 function formatName(fullName: string) {
   if (!fullName) return ''
   const parts = fullName.trim().split(/\s+/)
@@ -1770,22 +1771,28 @@ export default function AlunosPage() {
                   return (
                     <tr key={aluno.id} style={{ background: !(aluno.status === 'Ativo' || aluno.status === 'matriculado') ? '#fee2e2' : undefined }}>
                       <td style={{ padding: '4px 12px' }}>
-                        <div style={{ 
-                          width: 48, 
-                          height: 48, 
-                          borderRadius: '50%', 
-                          background: aluno.foto ? `url(${aluno.foto}) center/cover no-repeat` : '#e2e8f0', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          fontSize: 14, 
-                          fontWeight: 700, 
-                          color: '#64748b',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.08)'
-                        }}>
-                          {!aluno.foto && aluno.nome.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
-                        </div>
+                        {(() => {
+                          const hasValidFoto = isValidStudentPhoto(aluno.foto)
+                          return (
+                            <div style={{ 
+                              width: 48, 
+                              height: 48, 
+                              borderRadius: '50%', 
+                              background: hasValidFoto ? `url(${aluno.foto}) center/cover no-repeat` : '#e2e8f0', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              fontSize: 14, 
+                              fontWeight: 700, 
+                              color: '#64748b',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.08)'
+                            }}>
+                              {!hasValidFoto && aluno.nome.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                            </div>
+                          )
+                        })()}
                       </td>
+
                       <td style={{ fontWeight: 700, color: '#1e293b', fontSize: 12, whiteSpace: 'nowrap' }}>{aluno.matricula || aluno.codigo}</td>
                       <td style={{ maxWidth: 180, whiteSpace: 'normal', wordBreak: 'break-word' }}>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -2097,15 +2104,16 @@ export default function AlunosPage() {
                    <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
                     <div 
                       onClick={() => document.getElementById('foto-aluno-input')?.click()}
-                      style={{ width: 80, height: 80, borderRadius: '20px', background: formData.aluno.foto ? `url(${formData.aluno.foto}) center/cover` : 'rgba(248, 250, 252, 0.8)', border: '2px dashed #cbd5e1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#3b82f6', transition: 'all 0.2s' }}
+                      style={{ width: 80, height: 80, borderRadius: '20px', background: isValidStudentPhoto(formData.aluno.foto) ? `url(${formData.aluno.foto}) center/cover` : 'rgba(248, 250, 252, 0.8)', border: '2px dashed #cbd5e1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#3b82f6', transition: 'all 0.2s' }}
                     >
-                      {!formData.aluno.foto && (
+                      {!isValidStudentPhoto(formData.aluno.foto) && (
                         <>
                           <Camera size={24} />
                           <span style={{ fontSize: 10, marginTop: 4, fontWeight: 700 }}>Adicionar Foto</span>
                         </>
                       )}
                     </div>
+
                     <div>
                       <p style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: 0 }}>Foto do Aluno</p>
                       <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 8px 0' }}>PNG, JPG ou WEBP. Máx 2MB.</p>
@@ -3616,9 +3624,12 @@ export default function AlunosPage() {
             {/* Footer */}
             <div className="modalFooter-fa">
               <button 
-                onClick={() => setFiltrosAvancados({
-                  dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos', foto: 'todos', observacoes: 'todos'
-                })}
+                onClick={() => {
+                  setFiltrosAvancados({
+                    dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos', foto: 'todos', observacoes: 'todos'
+                  })
+                  setPaginaAtual(1)
+                }}
                 className="flex items-center justify-center gap-2 min-h-[44px] px-5 rounded-[12px] text-[14px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 transition-colors"
               >
                 Limpar Filtros
@@ -3631,7 +3642,10 @@ export default function AlunosPage() {
                   Cancelar
                 </button>
                 <button 
-                  onClick={() => setIsFiltrosAvancadosModalOpen(false)}
+                  onClick={() => {
+                    setPaginaAtual(1)
+                    setIsFiltrosAvancadosModalOpen(false)
+                  }}
                   className="min-h-[44px] px-8 rounded-[12px] font-bold text-[14px] bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all flex items-center justify-center gap-2"
                 >
                   <Check size={18} strokeWidth={2.5} />

@@ -217,3 +217,24 @@ export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redaca
   // Se todos enviaram mas ainda não foram todos aprovados, então está em revisão
   return 'em_revisao'
 }
+
+/**
+ * Valida se a string fornecida representa uma foto de aluno válida (base64 ou URL real).
+ * Rejeita strings vazias, base64 vazios ("data:image/jpeg;base64,"), respostas JSON de erro da catraca e avatares SVG mockados.
+ */
+export function isValidStudentPhoto(foto: string | null | undefined): boolean {
+  if (!foto || typeof foto !== 'string') return false
+  const trimmed = foto.trim()
+  if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined' || trimmed === '""') return false
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/') || trimmed.startsWith('blob:')) {
+    return true
+  }
+  if (trimmed === 'data:image/jpeg;base64,') return false
+  if (trimmed.startsWith('data:image/svg+xml')) return false
+  // Rejeita JSONs de erro da catraca codificados em base64 (começam com ey... {"... ou e3... {})
+  if (trimmed.startsWith('data:image/jpeg;base64,ey') || trimmed.startsWith('data:image/jpeg;base64,e3')) return false
+  if (trimmed.startsWith('data:image/png;base64,ey') || trimmed.startsWith('data:image/png;base64,e3')) return false
+  if (trimmed.length < 200) return false
+  return true
+}
+

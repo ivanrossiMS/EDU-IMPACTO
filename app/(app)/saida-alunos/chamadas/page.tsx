@@ -1139,25 +1139,27 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
           flex: 1, overflowY: 'auto',
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+          alignContent: 'start',
+          alignItems: 'start',
           gap: 8,
-          maxHeight: 180, paddingRight: 4,
+          maxHeight: 260, paddingRight: 4,
         }}>
           {launches.map(l => (
             <div
               key={l.id}
               style={{
-                background: l.confirmedOut ? 'rgba(16,185,129,0.1)' : 'hsl(var(--bg-surface))', 
+                background: l.confirmedOut ? 'rgba(16,185,129,0.08)' : 'hsl(var(--bg-surface))', 
                 border: l.confirmedOut ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.22)',
-                borderRadius: 10, padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8,
+                borderRadius: 12, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
                 boxShadow: 'var(--shadow-sm)',
                 transition: 'all 0.3s'
               }}
             >
               <div style={{
-                width: 22, height: 22, borderRadius: 5, overflow: 'hidden',
+                width: 28, height: 28, borderRadius: 6, overflow: 'hidden',
                 background: l.confirmedOut ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.12)', 
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 9, fontWeight: 900, color: l.confirmedOut ? '#10b981' : '#f59e0b', flexShrink: 0,
+                fontSize: 10, fontWeight: 900, color: l.confirmedOut ? '#10b981' : '#f59e0b', flexShrink: 0,
               }}>
                 {l.studentPhoto ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -1167,19 +1169,19 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 )}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 800, fontSize: 10.5, color: 'hsl(var(--text-primary))', lineHeight: 1.2 }}>
+                <div style={{ fontWeight: 800, fontSize: 11, color: 'hsl(var(--text-primary))', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {l.studentName}
                 </div>
-                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.3 }}>
+                <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   retirado por: <span style={{ color: l.confirmedOut ? '#10b981' : '#d97706', fontWeight: 700 }}>{l.authorizedPerson}</span>
                 </div>
-                <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500 }}>
+                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500 }}>
                   <span>{l.time}</span>
                   <span>·</span>
                   <span>por: <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>{l.loggedBy}</span></span>
                 </div>
                 {l.confirmedOut && (
-                  <div style={{ fontSize: 9, color: '#10b981', fontWeight: 800, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ fontSize: 8.5, color: '#10b981', fontWeight: 800, marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }}>
                     <CheckCircle2 size={10} /> Confirmada saída às {l.confirmedAt}
                   </div>
                 )}

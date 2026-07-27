@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
+import { isValidStudentPhoto } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
+
 
 // Shared global state for progress tracking
 declare global {
@@ -61,57 +63,65 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // 1. Buscar primeiro leitor iDFace online
-    const { data: device } = await supabase
+    // 1. Buscar todos os leitores iDFace online
+    const { data: devices } = await supabase
       .from('portaria_dispositivos')
       .select('*')
       .eq('status', 'online')
-      .limit(1)
-      .maybeSingle()
 
-    if (!device) {
+    if (!devices || devices.length === 0) {
       return NextResponse.json(
         { error: 'Nenhum leitor online encontrado. Certifique-se de que a catraca está ativa.' },
         { status: 400 }
       )
     }
 
-    // 2. Inicializar cliente e buscar usuários cadastrados na catraca
-    const client = new ControliDClient({
-      ip: device.ip,
-      port: device.porta || 80,
-      login: device.configuracao?.login || 'admin',
-      password: device.configuracao?.password || 'admin'
-    })
-
-    let usersRes: any
+    // 2. Inicializar clientes e buscar usuários cadastrados em TODAS as catracas ativas
+    let deviceUsers: any[] = []
     let isSimulated = false
+    let primaryClient: ControliDClient | null = null
 
-    try {
-      usersRes = await client.loadUsers()
-    } catch (err: any) {
-      console.warn(`[Sync Fotos] Conexão física com leitor iDFace falhou. Ativando Modo Simulado de Portaria. Detalhe: ${err.message}`)
+    for (const dev of devices) {
+      const client = new ControliDClient({
+        ip: dev.ip,
+        port: dev.porta || 80,
+        login: dev.configuracao?.login || 'admin',
+        password: dev.configuracao?.password || 'admin'
+      })
+      if (!primaryClient) primaryClient = client
+
+      try {
+        const usersRes = await client.loadUsers()
+        const list = Array.isArray(usersRes)
+          ? usersRes
+          : Array.isArray(usersRes?.users)
+          ? usersRes.users
+          : []
+
+        list.forEach((u: any) => {
+          deviceUsers.push({ ...u, _client: client })
+        })
+      } catch (err: any) {
+        console.warn(`[Sync Fotos] Falha na conexão com leitor iDFace (${dev.nome} / ${dev.ip}): ${err.message}`)
+      }
+    }
+
+    // Se a conexão física com todas as catracas falhar, ativa o Modo Simulado com a base completa do ERP
+    if (deviceUsers.length === 0) {
+      console.warn(`[Sync Fotos] Nenhuma catraca respondeu fisicamente. Ativando Modo Simulado com base de alunos do ERP.`)
       isSimulated = true
       
       const { data: allActiveStudents } = await supabase
         .from('alunos')
-        .select('matricula, nome')
+        .select('id, matricula, nome')
         .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
 
-      usersRes = {
-        users: (allActiveStudents || []).map((s, idx) => ({
-          id: idx + 1,
-          name: s.nome,
-          registration: s.matricula || String(idx + 1)
-        }))
-      }
+      deviceUsers = (allActiveStudents || []).map((s) => ({
+        id: s.id,
+        name: s.nome,
+        registration: s.matricula || String(s.id)
+      }))
     }
-
-    const deviceUsers = Array.isArray(usersRes)
-      ? usersRes
-      : Array.isArray(usersRes?.users)
-      ? usersRes.users
-      : []
 
     if (deviceUsers.length === 0) {
       return NextResponse.json({
@@ -137,19 +147,25 @@ export async function POST(req: Request) {
       })
     }
 
+    // Função de correspondência inteligente entre ERP e Catraca (Matrícula, ID ou Nome)
+    const isStudentMatch = (student: any, u: any) => {
+      const dReg = u.registration ? String(u.registration).trim() : null;
+      const dId = u.id ? String(u.id).trim() : null;
+      const dName = u.name ? String(u.name).trim().toLowerCase() : null;
+      const sMat = student.matricula ? String(student.matricula).trim() : null;
+      const sId = student.id ? String(student.id).trim() : null;
+      const sName = student.nome ? String(student.nome).trim().toLowerCase() : null;
+      
+      return (dReg && sMat && dReg === sMat) ||
+             (dId && sMat && dId === sMat) ||
+             (dId && sId && dId === sId) ||
+             (dReg && sId && dReg === sId) ||
+             (dName && sName && dName === sName);
+    };
+
     // Filtrar apenas alunos que possuem correspondência na catraca
     const students = activeStudents.filter(student => {
-      return deviceUsers.some((u: any) => {
-        const dReg = u.registration ? String(u.registration) : null;
-        const dId = u.id ? String(u.id) : null;
-        const sMat = student.matricula ? String(student.matricula) : null;
-        const sId = student.id ? String(student.id) : null;
-        
-        return (dReg && sMat && dReg === sMat) ||
-               (dId && sMat && dId === sMat) ||
-               (dId && sId && dId === sId) ||
-               (dReg && sId && dReg === sId);
-      });
+      return deviceUsers.some((u: any) => isStudentMatch(student, u));
     });
 
     if (students.length === 0) {
@@ -163,12 +179,26 @@ export async function POST(req: Request) {
 
     const mode = url.searchParams.get('mode') || 'only_missing'
 
-    // Identificar alunos sem foto (sem foto cadastrada, string menor que 50 bytes, ou avatar SVG simulado)
-    const studentsWithoutPhoto = students.filter(s => 
-      !s.foto || 
-      s.foto.length < 50 || 
-      s.foto.startsWith('data:image/svg+xml')
-    )
+    // Limpar automaticamente dados de foto corrompidos/inválidos no banco para que não interfiram
+    const corruptedStudentIds = students
+      .filter(s => s.foto && !isValidStudentPhoto(s.foto))
+      .map(s => s.id)
+
+    if (corruptedStudentIds.length > 0) {
+      console.log(`[Sync Fotos] Limpando ${corruptedStudentIds.length} foto(s) corrompida(s) no banco...`)
+      await supabase
+        .from('alunos')
+        .update({ foto: null })
+        .in('id', corruptedStudentIds)
+      
+      // Atualizar lista em memória para refletir a limpeza
+      students.forEach(s => {
+        if (corruptedStudentIds.includes(s.id)) s.foto = null
+      })
+    }
+
+    // Identificar alunos sem foto válida
+    const studentsWithoutPhoto = students.filter(s => !isValidStudentPhoto(s.foto))
 
     // Definir alunos alvos com base no modo selecionado
     const targetStudents = mode === 'all' ? students : studentsWithoutPhoto
@@ -203,44 +233,50 @@ export async function POST(req: Request) {
       let processedCount = 0
 
       for (const student of targetStudents) {
-        const deviceUser = deviceUsers.find((u: any) => {
-          const dReg = u.registration ? String(u.registration) : null;
-          const dId = u.id ? String(u.id) : null;
-          const sMat = student.matricula ? String(student.matricula) : null;
-          const sId = student.id ? String(student.id) : null;
-          
-          return (dReg && sMat && dReg === sMat) ||
-                 (dId && sMat && dId === sMat) ||
-                 (dId && sId && dId === sId) ||
-                 (dReg && sId && dReg === sId);
-        });
+        // Encontrar TODOS os registros do aluno entre todas as catracas
+        const matches = deviceUsers.filter((u: any) => isStudentMatch(student, u));
 
-        if (!deviceUser) {
+        if (matches.length === 0) {
           processedCount++
           if (globalThis.idfaceSyncProgress) globalThis.idfaceSyncProgress.processed = processedCount
           continue
         }
-        
-        const deviceId = deviceUser.id
 
-        try {
-          // Se for modo simulado, gera uma foto fake em base64 e salva
-          const base64Image = isSimulated
-            ? `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100%" height="100%" fill="%236366f1"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="14">${student.nome.slice(0, 2).toUpperCase()}</text></svg>`
-            : await client.getUserImage(deviceId)
+        // Ordenar os registros priorizando catracas que possuem foto registrada (image_timestamp > 0)
+        matches.sort((a: any, b: any) => (b.image_timestamp || 0) - (a.image_timestamp || 0))
 
-          if (base64Image && base64Image.length > 50) {
-            await supabase
-              .from('alunos')
-              .update({
-                foto: base64Image,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', student.id)
-            console.log(`[Sync Massivo de Fotos] Sucesso para: ${student.nome}`)
+        let downloadedPhoto: string | null = null
+
+        for (const deviceUser of matches) {
+          const deviceId = deviceUser.id
+          const activeClient = deviceUser._client || primaryClient
+
+          try {
+            // Se for modo simulado, gera uma foto fake em base64 e salva
+            const base64Image = isSimulated || !activeClient
+              ? `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100%" height="100%" fill="%236366f1"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="14">${student.nome.slice(0, 2).toUpperCase()}</text></svg>`
+              : await activeClient.getUserImage(deviceId)
+
+            if (base64Image && isValidStudentPhoto(base64Image)) {
+              downloadedPhoto = base64Image
+              break
+            }
+          } catch (photoErr: any) {
+            console.warn(`[Sync Massivo de Fotos] Falha na catraca para ${student.nome}:`, photoErr.message)
           }
-        } catch (photoErr: any) {
-          console.warn(`[Sync Massivo de Fotos] Falha para ${student.nome}:`, photoErr.message)
+        }
+
+        if (downloadedPhoto && isValidStudentPhoto(downloadedPhoto)) {
+          await supabase
+            .from('alunos')
+            .update({
+              foto: downloadedPhoto,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', student.id)
+          console.log(`[Sync Massivo de Fotos] Sucesso para: ${student.nome}`)
+        } else {
+          console.warn(`[Sync Massivo de Fotos] Foto indisponível ou sem imagem em todas as catracas para: ${student.nome}`)
         }
 
         processedCount++

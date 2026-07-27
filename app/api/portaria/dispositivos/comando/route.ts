@@ -46,37 +46,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Endereço IP do dispositivo não configurado.' }, { status: 400 })
     }
 
-    const isLocal = isLocalIp(device.ip)
+    const port = device.porta || 80
 
-    // Se a catraca está na rede local, comandos remotos não funcionam pela nuvem (Netlify).
-    if (isLocal) {
-      if (comando === 'ping') {
-        // Ping passivo: checa apenas se mandou evento recente (últimos 15 min)
-        const lastComm = device.ultima_comunicacao ? new Date(device.ultima_comunicacao) : null
-        const now = new Date()
-        
-        if (lastComm && (now.getTime() - lastComm.getTime() < 15 * 60 * 1000)) {
-          return NextResponse.json({ 
-            success: true, 
-            result: { online: true, info: { serial: device.id, msg: 'Ping Passivo: Catraca enviou sinal há pouco tempo' } } 
-          })
-        } else {
-          return NextResponse.json({ 
-            error: 'Sem comunicação nos últimos 15 min. Impossível verificar status em tempo real pois o IP é Local (192.168.x.x).' 
-          }, { status: 400 })
-        }
-      } else {
-        // Outros comandos
-        return NextResponse.json({ 
-          error: 'IP Privado detectado. A nuvem não pode enviar comandos para a rede local da escola. Use o script Sincronizar_Catraca.py para configurações.' 
-        }, { status: 400 })
-      }
-    }
-
-    // 2. Inicializar cliente iDFace (somente para IPs Públicos)
+    // 2. Inicializar cliente iDFace
     const client = new ControliDClient({
       ip: device.ip,
-      port: device.porta || 443,
+      port,
       login: (device.configuracao as any)?.login || 'admin',
       password: (device.configuracao as any)?.password || 'admin',
     })
@@ -139,55 +114,60 @@ export async function POST(req: NextRequest) {
       }
 
       case 'ping': {
-        const info = await client.getDeviceInfo()
-        result = { online: info.online, info }
+        let activeSuccess = false
+        try {
+          // Tentar ping ativo em tempo real diretamente no leitor (funciona em ambiente local ou conexões diretas)
+          const info = await client.getDeviceInfo()
+          if (info && info.online) {
+            result = { online: true, info }
+            activeSuccess = true
 
-        if (info.online && info.serial) {
-          const currentConfig = (device.configuracao as any) || {}
-          const newConfig = { ...currentConfig, serial: info.serial }
+            if (info.serial) {
+              const currentConfig = (device.configuracao as any) || {}
+              const newConfig = { ...currentConfig, serial: info.serial }
 
-          // Se o ID atual for UUID (ex: tem hífen), tentar migrar para o serial físico
-          if (device.id.includes('-')) {
-            try {
-              const { error: updateIdErr } = await supabase
-                .from('portaria_dispositivos')
-                .update({
-                  id: info.serial,
-                  configuracao: newConfig,
-                  status: 'online',
-                  ultima_comunicacao: new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', device.id)
+              // Se o ID atual for UUID (ex: tem hífen), tentar migrar para o serial físico
+              if (device.id.includes('-')) {
+                try {
+                  const { error: updateIdErr } = await supabase
+                    .from('portaria_dispositivos')
+                    .update({
+                      id: info.serial,
+                      configuracao: newConfig,
+                      status: 'online',
+                      ultima_comunicacao: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', device.id)
 
-              if (!updateIdErr) {
-                console.log(`[iDFace Comando Ping] ID atualizado com sucesso de ${device.id} para ${info.serial}`)
-                targetDeviceId = info.serial
-              } else {
-                console.warn('[iDFace Comando Ping] Falha ao migrar ID de dispositivo, salvando apenas na config:', updateIdErr.message)
-                await supabase
-                  .from('portaria_dispositivos')
-                  .update({
-                    configuracao: newConfig,
-                    status: 'online',
-                    ultima_comunicacao: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                  })
-                  .eq('id', device.id)
+                  if (!updateIdErr) {
+                    console.log(`[iDFace Comando Ping] ID atualizado de ${device.id} para ${info.serial}`)
+                    targetDeviceId = info.serial
+                  }
+                } catch (err: any) {
+                  console.warn('[iDFace Comando Ping] Exceção ao migrar ID:', err.message)
+                }
               }
-            } catch (err: any) {
-              console.warn('[iDFace Comando Ping] Exceção ao migrar ID:', err.message)
+            }
+          }
+        } catch (activePingErr: any) {
+          console.warn(`[iDFace Comando Ping] Ping direto em ${device.ip}:${port} falhou (${activePingErr.message}). Testando fallback passivo...`)
+        }
+
+        if (!activeSuccess) {
+          // Se o ping direto não respondeu, verifica se mandou sinal passivo recente (últimos 15 min)
+          const lastComm = device.ultima_comunicacao ? new Date(device.ultima_comunicacao) : null
+          const now = new Date()
+
+          if (lastComm && (now.getTime() - lastComm.getTime() < 15 * 60 * 1000)) {
+            result = {
+              online: true,
+              info: { serial: device.id, msg: 'Ping Passivo: Catraca enviou sinal recente ao sistema' }
             }
           } else {
-            await supabase
-              .from('portaria_dispositivos')
-              .update({
-                configuracao: newConfig,
-                status: 'online',
-                ultima_comunicacao: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', device.id)
+            return NextResponse.json({
+              error: `Dispositivo sem comunicação no momento (IP ${device.ip}:${port} inacessível e sem sinal recente). Verifique se a catraca está ligada.`
+            }, { status: 400 })
           }
         }
         break
@@ -203,6 +183,7 @@ export async function POST(req: NextRequest) {
       ultima_comunicacao: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq('id', targetDeviceId)
+
 
     return NextResponse.json({ success: true, result })
   } catch (err: any) {

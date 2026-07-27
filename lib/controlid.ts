@@ -118,6 +118,10 @@ export class ControliDClient {
   async setUserImage(userId: number, base64Image: string): Promise<any> {
     if (!this.session) await this.authenticate()
 
+    if (!base64Image || base64Image.length < 200 || base64Image === 'data:image/jpeg;base64,') {
+      throw new Error('Imagem inválida ou vazia')
+    }
+
     // Strip data URL prefix if present
     const raw = base64Image.replace(/^data:image\/\w+;base64,/, '')
     const binary = Buffer.from(raw, 'base64')
@@ -155,13 +159,32 @@ export class ControliDClient {
     )
 
     if (!res.ok) {
-      throw new Error(`Get image failed: ${res.status}`)
+      return ''
     }
 
     const buffer = await res.arrayBuffer()
+    if (!buffer || buffer.byteLength < 200) {
+      return ''
+    }
+
+    const uint8 = new Uint8Array(buffer)
+    // Valida bytes mágicos de imagens válidas:
+    // JPEG: 0xFF 0xD8
+    // PNG: 0x89 0x50 0x4E 0x47
+    // WebP: 0x52 0x49 0x46 0x46 (RIFF)
+    const isJpeg = uint8[0] === 0xff && uint8[1] === 0xd8
+    const isPng = uint8[0] === 0x89 && uint8[1] === 0x50 && uint8[2] === 0x4e && uint8[3] === 0x47
+    const isWebp = uint8[0] === 0x52 && uint8[1] === 0x49 && uint8[2] === 0x46 && uint8[3] === 0x46
+
+    if (!isJpeg && !isPng && !isWebp) {
+      return ''
+    }
+
     const base64 = Buffer.from(buffer).toString('base64')
-    return `data:image/jpeg;base64,${base64}`
+    const mime = isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg'
+    return `data:${mime};base64,${base64}`
   }
+
 
   // ─── Access Logs ──────────────────────────────────────────────────
   async loadAccessLogs(limit = 100): Promise<any> {

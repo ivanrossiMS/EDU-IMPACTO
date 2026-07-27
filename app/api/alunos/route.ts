@@ -5,6 +5,7 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import { requireAuth, requireProfile } from '@/lib/server/authGuard'
+import { isValidStudentPhoto } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -148,10 +149,13 @@ export async function GET(request: Request) {
     }
 
     if (foto === 'com_foto') {
-      query = query.not('foto', 'is', null).neq('foto', '')
+      query = query
+        .or('foto.not.is.null,dados->>foto.not.is.null,dados->>avatarUrl.not.is.null,dados->>fotoUrl.not.is.null')
     } else if (foto === 'sem_foto') {
-      query = query.or('foto.is.null,foto.eq.""')
+      query = query
+        .or('foto.is.null,foto.eq.null,foto.eq.undefined,foto.ilike.%svg%')
     }
+
 
     if (observacoesParam === 'com_observacoes') {
       query = query.or('obs.neq."",dados->observacoes.neq.[]')
@@ -231,8 +235,12 @@ export async function GET(request: Request) {
           String(t.nome).toLowerCase() === String(studentTurma).toLowerCase()
         )
 
+        const rawFoto = student.foto || d.foto || d.avatarUrl || d.fotoUrl || null
+        const resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
+
         return {
           ...student,
+          foto: resolvedFoto,
           responsaveis: student.responsaveis || d.responsaveis,
           _responsaveis: student._responsaveis || d._responsaveis,
           responsavel: student.responsavel || d.responsavel,
@@ -252,8 +260,16 @@ export async function GET(request: Request) {
           }
         }
       })
+
+      let finalLightweight = formatted
+      if (foto === 'com_foto') {
+        finalLightweight = formatted.filter((s: any) => isValidStudentPhoto(s.foto))
+      } else if (foto === 'sem_foto') {
+        finalLightweight = formatted.filter((s: any) => !isValidStudentPhoto(s.foto))
+      }
+
       return NextResponse.json({
-        data: formatted,
+        data: finalLightweight,
         total: count || 0,
         page,
         limit
@@ -362,9 +378,13 @@ export async function GET(request: Request) {
         String(t.nome).toLowerCase() === String(studentTurma).toLowerCase()
       )
 
+      const rawFoto = student.foto || student.dados?.foto || student.dados?.avatarUrl || student.dados?.fotoUrl || null
+      const resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
+
       return {
         ...student,
         ...(student.dados || {}), // Spread JSONB data
+        foto: resolvedFoto, // Garantir que foto resolvida estritamente sobrescreva qualquer dado inconsistente
         created_at: student.created_at, // Restore to ensure it's not overwritten
         responsaveis: linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis,
         turma_nome: tObj?.nome || student.turma || '',
@@ -373,8 +393,15 @@ export async function GET(request: Request) {
       }
     })
 
+    let finalFormattedData = formattedData
+    if (foto === 'com_foto') {
+      finalFormattedData = formattedData.filter((s: any) => isValidStudentPhoto(s.foto))
+    } else if (foto === 'sem_foto') {
+      finalFormattedData = formattedData.filter((s: any) => !isValidStudentPhoto(s.foto))
+    }
+
     return NextResponse.json({
-      data: formattedData,
+      data: finalFormattedData,
       total: count || 0,
       page,
       limit

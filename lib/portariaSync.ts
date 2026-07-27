@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { ControliDClient } from '@/lib/controlid'
+import { isValidStudentPhoto } from '@/lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -117,9 +118,9 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
         console.log(`✅ [Portaria Sync] Cadastro básico de "${student.nome}" sincronizado em "${dev.nome}"`)
 
         // Enviar/atualizar foto facial se a opção estiver ativa
-        if (config.reenviar_foto_ao_atualizar && student.foto && typeof student.foto === 'string' && student.foto.length > 50) {
+        if (config.reenviar_foto_ao_atualizar && isValidStudentPhoto(student.foto)) {
           try {
-            await client.setUserImage(numericId, student.foto)
+            await client.setUserImage(numericId, student.foto!)
             console.log(`📸 [Portaria Sync] Foto facial de "${student.nome}" atualizada em "${dev.nome}"`)
           } catch (photoErr: any) {
             console.warn(`⚠️ [Portaria Sync] Foto falhou para "${student.nome}" em "${dev.nome}":`, photoErr.message)
@@ -182,10 +183,11 @@ export async function syncPhotoFromDeviceToStudent(userIdStr: string, deviceSeri
     })
 
     const base64Image = await client.getUserImage(numericId)
-    if (!base64Image) {
-      console.log(`[Portaria Webhook Image Sync] Nenhuma foto encontrada na catraca para o ID ${numericId}`)
+    if (!base64Image || !isValidStudentPhoto(base64Image)) {
+      console.log(`[Portaria Webhook Image Sync] Nenhuma foto válida encontrada na catraca para o ID ${numericId}`)
       return
     }
+
 
     // 3. Atualizar cadastro do aluno correspondente no banco (busca por matricula)
     const { data: student } = await supabase
