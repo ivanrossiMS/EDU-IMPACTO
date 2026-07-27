@@ -188,7 +188,8 @@ def processar_fila_pendencias_erp(cats_conectadas):
     try:
         req = urllib.request.Request(url_queue, method="GET")
         req.add_header("User-Agent", "Mozilla/5.0 (EduImpacto Local Sync Daemon)")
-        with urllib.request.urlopen(req, timeout=10) as r:
+        ctx = SSL_CTX if url_queue.startswith("https") else None
+        with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
             data = json.loads(r.read())
         
         pendentes = data.get("pendentes", [])
