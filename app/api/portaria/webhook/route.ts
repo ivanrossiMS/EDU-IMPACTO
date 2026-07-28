@@ -435,7 +435,7 @@ export async function POST(req: Request) {
     }
 
     if (actions.length > 0) {
-      return NextResponse.json({ actions })
+      return NextResponse.json({ status: 'sucesso', actions })
     }
 
     return NextResponse.json({ status: 'ok', evento: eventStatus })

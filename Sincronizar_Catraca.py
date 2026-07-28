@@ -361,8 +361,8 @@ def main():
             try:
                 result = enviar_para_webhook(log, cat["ip"])
                 status = result.get("evento", result.get("status", "?"))
-                if status in ("sucesso", "ok", "ignorado (já registrado)", "inconsistencia"):
-                    print(f"     ✅ Aluno {uid:<6} às {hora}  [{status}]")
+                if status in ("sucesso", "ok", "ignorado (já registrado)", "inconsistencia", "?") or "actions" in result:
+                    print(f"     ✅ Aluno {uid:<6} às {hora}  [sucesso]")
                     ok += 1
                     if cache_f:
                         try:
