@@ -92,27 +92,33 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    const body = await req.json().catch(() => ({}))
     const { aluno_id, dispositivo_id, status, erro_detalhe, foto_enviada } = body
 
-    if (!aluno_id || !dispositivo_id || !status) {
-      return NextResponse.json({ error: 'aluno_id, dispositivo_id e status são obrigatórios' }, { status: 400 })
+    if (!aluno_id || !status) {
+      return NextResponse.json({ error: 'aluno_id e status são obrigatórios' }, { status: 400 })
     }
 
-    const { error: upsertErr } = await supabase.from('portaria_sync').upsert({
-      aluno_id,
-      dispositivo_id,
-      status,
-      ultima_sync: status === 'sincronizado' ? new Date().toISOString() : null,
-      foto_enviada: foto_enviada ?? (status === 'sincronizado'),
-      erro_detalhe: erro_detalhe || '',
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'aluno_id,dispositivo_id' })
+    let query = supabase
+      .from('portaria_sync')
+      .update({
+        status,
+        ultima_sync: status === 'sincronizado' ? new Date().toISOString() : null,
+        foto_enviada: foto_enviada ?? (status === 'sincronizado'),
+        erro_detalhe: erro_detalhe || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('aluno_id', String(aluno_id))
 
+    if (dispositivo_id) {
+      query = query.eq('dispositivo_id', String(dispositivo_id))
+    }
+
+    const { error: upsertErr } = await query
     if (upsertErr) throw upsertErr
 
     // Atualizar status do dispositivo para online se enviou com sucesso
-    if (status === 'sincronizado') {
+    if (status === 'sincronizado' && dispositivo_id) {
       await supabase.from('portaria_dispositivos').update({
         status: 'online',
         ultima_comunicacao: new Date().toISOString()
