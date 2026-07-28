@@ -139,10 +139,11 @@ export async function POST(req: Request) {
     let dispositivoId = ''
     let dispositivoNome = ''
     if (deviceSerial) {
+      const serialAlt = deviceSerial.includes('/') ? deviceSerial.replace('/', '-') : deviceSerial.replace('-', '/')
       const { data: dev } = await supabase
         .from('portaria_dispositivos')
         .select('id, nome')
-        .or(`id.eq.${deviceSerial},configuracao->>serial.eq.${deviceSerial},ip.eq.${deviceSerial}`)
+        .or(`id.eq.${deviceSerial},id.eq.${serialAlt},configuracao->>serial.eq.${deviceSerial},configuracao->>serial.eq.${serialAlt},ip.eq.${deviceSerial}`)
         .limit(1)
         .maybeSingle()
 
@@ -364,8 +365,9 @@ export async function POST(req: Request) {
         .eq('status', 'pendente')
         .order('updated_at', { ascending: false })
 
-      if (dispositivoId !== 'unknown') {
-        syncQuery = syncQuery.eq('dispositivo_id', dispositivoId)
+      if (dispositivoId && dispositivoId !== 'unknown') {
+        const altDevId = dispositivoId.includes('/') ? dispositivoId.replace('/', '-') : dispositivoId.replace('-', '/')
+        syncQuery = syncQuery.or(`dispositivo_id.eq.${dispositivoId},dispositivo_id.eq.${altDevId},dispositivo_id.is.null`)
       }
 
       const { data: pendingRows } = await syncQuery.limit(15)
