@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
       .from('portaria_sync')
       .select('aluno_id, dispositivo_id, status, erro_detalhe, updated_at', { count: 'exact' })
       .eq('status', 'pendente')
-      .order('updated_at', { ascending: true })
+      .order('updated_at', { ascending: false })
 
     if (dispositivoId) {
       query = query.eq('dispositivo_id', dispositivoId)

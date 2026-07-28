@@ -357,12 +357,12 @@ export async function POST(req: Request) {
         }).eq('id', dispositivoId)
       }
 
-      // Buscar até 15 pendências na fila para este dispositivo especificamente ou globais
+      // Buscar até 15 pendências na fila para este dispositivo especificamente ou globais (mais recentes primeiro)
       let syncQuery = supabase
         .from('portaria_sync')
         .select('aluno_id, dispositivo_id, status, erro_detalhe')
         .eq('status', 'pendente')
-        .order('updated_at', { ascending: true })
+        .order('updated_at', { ascending: false })
 
       if (dispositivoId !== 'unknown') {
         syncQuery = syncQuery.eq('dispositivo_id', dispositivoId)
