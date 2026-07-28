@@ -392,19 +392,33 @@ export async function POST(req: Request) {
 
           if (!isNaN(numId) && numId > 0) {
             if (aluno && aluno.status !== 'inativo') {
+              const nameStr = aluno.nome ? aluno.nome.substring(0, 30) : `Aluno ${numId}`
+              const regStr = String(numId)
+
+              // 1. Modificar se já existe no leitor
               actions.push({
-                action: 'user',
+                action: 'modify_objects',
                 parameters: {
-                  id: numId,
-                  name: aluno.nome ? aluno.nome.substring(0, 30) : `Aluno ${numId}`,
-                  registration: String(numId)
+                  object: 'users',
+                  values: { name: nameStr, registration: regStr },
+                  where: { users: { id: numId } }
                 }
               })
 
+              // 2. Adicionar se novo no leitor
+              actions.push({
+                action: 'add_objects',
+                parameters: {
+                  object: 'users',
+                  values: [{ id: numId, name: nameStr, registration: regStr }]
+                }
+              })
+
+              // 3. Imagem facial
               if (aluno.foto && isValidStudentPhoto(aluno.foto) && aluno.foto.startsWith('data:image')) {
                 const base64Data = aluno.foto.replace(/^data:image\/\w+;base64,/, '')
                 actions.push({
-                  action: 'user_image',
+                  action: 'set_user_image',
                   parameters: {
                     user_id: numId,
                     image: base64Data
@@ -412,8 +426,9 @@ export async function POST(req: Request) {
                 })
               }
             } else {
+              // 4. Deleção
               actions.push({
-                action: 'destroy',
+                action: 'destroy_objects',
                 parameters: {
                   object: 'users',
                   where: { users: { id: numId } }
