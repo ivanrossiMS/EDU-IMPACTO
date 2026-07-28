@@ -440,3 +440,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: 'ok', warning: 'internal_error_logged' })
   }
 }
+
+/**
+ * GET /api/portaria/webhook
+ * Alguns firmwares do iDFace usam GET para o heartbeat do Push Protocol.
+ * Delega para /api/portaria/push que serve a fila de forma idempotente.
+ */
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const deviceSerial =
+    searchParams.get('device_id') ||
+    searchParams.get('deviceId') ||
+    searchParams.get('serial') ||
+    req.headers.get('x-device-id') ||
+    req.headers.get('device-id') ||
+    ''
+
+  const pushUrl = new URL('/api/portaria/push', req.url)
+  if (deviceSerial) pushUrl.searchParams.set('device_id', deviceSerial)
+
+  const pushResp = await fetch(pushUrl.toString(), {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  })
+
+  const text = await pushResp.text()
+  if (!text || text === '') return new Response('', { status: 200 })
+  try {
+    const data = JSON.parse(text)
+    return NextResponse.json(data)
+  } catch {
+    return new Response(text, { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+}

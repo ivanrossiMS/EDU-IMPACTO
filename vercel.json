@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/portaria/cron-push",
+      "schedule": "* * * * *"
+    }
+  ]
+}
