@@ -347,9 +347,12 @@ export async function POST(req: Request) {
       }
     }
 
-    const actions: any[] = []
-
-    // Atualizar última comunicação do dispositivo e verificar pendências na fila de envio
+    // ══════════════════════════════════════════════════════════════════════════════
+    // PUSH PROTOCOL OFICIAL CONTROLID
+    // A catraca iDFace espera UMA transação por ping no formato:
+    // { "verb": "POST", "endpoint": "add_objects", "body": {...}, "contentType": "application/json" }
+    // Ref: https://www.controlid.com.br/documentacao/push-protocol/
+    // ══════════════════════════════════════════════════════════════════════════════
     if (dispositivoId) {
       if (dispositivoId !== 'unknown') {
         await supabase.from('portaria_dispositivos').update({
@@ -358,7 +361,7 @@ export async function POST(req: Request) {
         }).eq('id', dispositivoId)
       }
 
-      // Buscar até 15 pendências na fila para este dispositivo especificamente ou globais (mais recentes primeiro)
+      // Buscar a próxima pendência da fila para ESTE dispositivo (1 por ping = protocolo Push)
       let syncQuery = supabase
         .from('portaria_sync')
         .select('aluno_id, dispositivo_id, status, erro_detalhe')
@@ -367,99 +370,69 @@ export async function POST(req: Request) {
 
       if (dispositivoId && dispositivoId !== 'unknown') {
         const altDevId = dispositivoId.includes('/') ? dispositivoId.replace('/', '-') : dispositivoId.replace('-', '/')
-        syncQuery = syncQuery.or(`dispositivo_id.eq.${dispositivoId},dispositivo_id.eq.${altDevId},dispositivo_id.is.null`)
+        syncQuery = syncQuery.or(`dispositivo_id.eq.${dispositivoId},dispositivo_id.eq.${altDevId}`)
       }
 
-      const { data: pendingRows } = await syncQuery.limit(15)
+      const { data: pendingRows } = await syncQuery.limit(1)
 
       if (pendingRows && pendingRows.length > 0) {
-        const alunoIds = pendingRows.map(r => r.aluno_id)
-        const filterParts = alunoIds.map(id => `id.eq.${id},matricula.eq.${id}`).join(',')
-        const { data: alunos } = await supabase
+        const row = pendingRows[0]
+
+        // Buscar dados do aluno
+        const { data: aluno } = await supabase
           .from('alunos')
-          .select('id, nome, matricula, foto, status')
-          .or(filterParts)
+          .select('id, nome, matricula, codigo, foto, status')
+          .or(`id.eq.${row.aluno_id},matricula.eq.${row.aluno_id}`)
+          .maybeSingle()
 
-        const alunosMap = new Map()
-        for (const a of alunos || []) {
-          alunosMap.set(String(a.id), a)
-          if (a.matricula) alunosMap.set(String(a.matricula), a)
-        }
+        // Determinar ID numérico para a catraca
+        const numId = aluno
+          ? parseInt((aluno.matricula || aluno.codigo || aluno.id).replace?.(/\D/g, '') ?? String(aluno.matricula || aluno.id), 10)
+          : parseInt(String(row.aluno_id).replace(/\D/g, ''), 10)
 
-        for (const row of pendingRows) {
-          const aluno = alunosMap.get(row.aluno_id)
-          const numId = parseInt(aluno?.matricula || row.aluno_id, 10)
+        // Marcar como sincronizado ANTES de responder (o dispositivo só volta a pedir quando responder)
+        let statusUpdate = supabase
+          .from('portaria_sync')
+          .update({ status: 'sincronizado', ultima_sync: new Date().toISOString(), erro_detalhe: null, updated_at: new Date().toISOString() })
+          .eq('aluno_id', String(row.aluno_id))
+        if (row.dispositivo_id) statusUpdate = statusUpdate.eq('dispositivo_id', String(row.dispositivo_id))
+        await statusUpdate
 
-          if (!isNaN(numId) && numId > 0) {
-            if (aluno && aluno.status !== 'inativo') {
-              const nameStr = aluno.nome ? aluno.nome.substring(0, 30) : `Aluno ${numId}`
-              const regStr = String(numId)
+        if (!isNaN(numId) && numId > 0) {
+          const isActive = aluno && ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'].includes(aluno.status)
 
-              // 1. Modificar se já existe no leitor
-              actions.push({
-                action: 'modify_objects',
-                parameters: {
-                  object: 'users',
-                  values: { name: nameStr, registration: regStr },
-                  where: { users: { id: numId } }
-                }
-              })
+          if (isActive || (!aluno && !row.erro_detalhe?.includes('Exclusão'))) {
+            // ─── ADICIONAR/ATUALIZAR USUÁRIO ───────────────────────────────────────
+            const nameStr = aluno?.nome ? aluno.nome.substring(0, 30) : `Aluno ${numId}`
+            const regStr = String(numId)
 
-              // 2. Adicionar se novo no leitor
-              actions.push({
-                action: 'add_objects',
-                parameters: {
-                  object: 'users',
-                  values: [{ id: numId, name: nameStr, registration: regStr }]
-                }
-              })
-
-              // 3. Imagem facial
-              if (aluno.foto && isValidStudentPhoto(aluno.foto) && aluno.foto.startsWith('data:image')) {
-                const base64Data = aluno.foto.replace(/^data:image\/\w+;base64,/, '')
-                actions.push({
-                  action: 'set_user_image',
-                  parameters: {
-                    user_id: numId,
-                    image: base64Data
-                  }
-                })
-              }
-            } else {
-              // 4. Deleção
-              actions.push({
-                action: 'destroy_objects',
-                parameters: {
-                  object: 'users',
-                  where: { users: { id: numId } }
-                }
-              })
-            }
-          }
-
-          // Marcar pendência como sincronizada
-          let updateQuery = supabase
-            .from('portaria_sync')
-            .update({
-              status: 'sincronizado',
-              ultima_sync: new Date().toISOString(),
-              erro_detalhe: null,
-              updated_at: new Date().toISOString()
+            // Responder com add_objects (cria se não existe, ControlID ignora se já existe)
+            return NextResponse.json({
+              verb: 'POST',
+              endpoint: 'add_objects',
+              body: {
+                object: 'users',
+                values: [{ id: numId, name: nameStr, registration: regStr }]
+              },
+              contentType: 'application/json'
             })
-            .eq('aluno_id', String(row.aluno_id))
-
-          if (row.dispositivo_id) {
-            updateQuery = updateQuery.eq('dispositivo_id', String(row.dispositivo_id))
+          } else {
+            // ─── REMOVER USUÁRIO INATIVO ───────────────────────────────────────────
+            return NextResponse.json({
+              verb: 'POST',
+              endpoint: 'destroy_objects',
+              body: {
+                object: 'users',
+                where: { users: { id: numId } }
+              },
+              contentType: 'application/json'
+            })
           }
-          await updateQuery
         }
       }
     }
 
-    if (actions.length > 0) {
-      return NextResponse.json({ status: 'sucesso', actions })
-    }
-
+    // Sem pendências: resposta vazia (protocolo Push exige resposta vazia quando não há comandos)
     return NextResponse.json({ status: 'ok', evento: eventStatus })
   } catch (e: any) {
     // NUNCA retornar erro — loggar e retornar 200
