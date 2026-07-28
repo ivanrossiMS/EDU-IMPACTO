@@ -31,9 +31,9 @@ CATRACA_LOGIN = "admin"
 # Porta 443 → HTTPS
 # Porta 88  → tenta HTTP primeiro, depois HTTPS
 CATRACAS = [
-    {"nome": "Portaria Média",  "ip": "192.168.1.75", "porta": 80},
-    {"nome": "Portaria Fund1",  "ip": "192.168.1.85", "porta": 80},
-    {"nome": "Portaria INF",    "ip": "192.168.1.98", "porta": 80},
+    {"nome": "Portaria Média",  "ip": "192.168.1.75", "id": "0M0200/0262CE", "porta": 80},
+    {"nome": "Portaria Fund1",  "ip": "192.168.1.85", "id": "0M0200/02638E", "porta": 80},
+    {"nome": "Portaria INF",    "ip": "192.168.1.98", "id": "0M0200/02639C", "porta": 80},
 ]
 # ══════════════════════════════════════════════════════════════
 

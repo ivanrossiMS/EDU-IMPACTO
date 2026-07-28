@@ -421,7 +421,7 @@ export async function POST(req: Request) {
           }
 
           // Marcar pendência como sincronizada
-          await supabase
+          let updateQuery = supabase
             .from('portaria_sync')
             .update({
               status: 'sincronizado',
@@ -429,7 +429,12 @@ export async function POST(req: Request) {
               erro_detalhe: null,
               updated_at: new Date().toISOString()
             })
-            .match({ aluno_id: row.aluno_id, dispositivo_id: dispositivoId })
+            .eq('aluno_id', String(row.aluno_id))
+
+          if (row.dispositivo_id) {
+            updateQuery = updateQuery.eq('dispositivo_id', String(row.dispositivo_id))
+          }
+          await updateQuery
         }
       }
     }
