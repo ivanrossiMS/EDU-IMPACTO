@@ -513,6 +513,31 @@ export default function PortariaConfigPage() {
                 🗑️ Excluir Alunos Inativos e Removidos das Catracas
               </button>
 
+              {pendingQueueCount > 0 && (
+                <button
+                  onClick={handleClearQueue}
+                  disabled={clearingQueue}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    padding: '10px 18px', borderRadius: 12, fontSize: 12.5, fontWeight: 700,
+                    background: 'rgba(245,158,11,0.08)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    color: '#f59e0b', cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    opacity: clearingQueue ? 0.6 : 1,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245,158,11,0.15)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(245,158,11,0.08)' }}
+                >
+                  {clearingQueue ? (
+                    <Activity size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                  ) : (
+                    <Trash2 size={14} />
+                  )}
+                  🧹 Limpar Fila de Pendências (Zerar {pendingQueueCount} Ações Agendadas)
+                </button>
+              )}
+
               <div style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '8px 0' }} />
 
               <div style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 1 }}>📥 Sincronização Unidirecional (Catraca ➔ ERP)</div>
