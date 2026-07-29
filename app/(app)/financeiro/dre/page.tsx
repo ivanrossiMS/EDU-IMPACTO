@@ -1024,16 +1024,129 @@ export default function DREPage() {
             </div>
           </div>
 
-          {/* ─── CARDS SUPREMOS DE PONTO DE EQUILÍBRIO & PAINEL GERENCIAL ──────── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+          {/* ─── BLOCO 1: 4 CARDS PRINCIPAIS DA DRE OPERACIONAL (LINHA 1) ─────────── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
             
-            {/* CARD 1: PONTO DE EQUILÍBRIO MENSAL */}
+            {/* Card 1: Receita Bruta Total */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              padding: '18px 20px',
+              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Receita Bruta Total</span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#059669', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                    {formatCurrency(dreData.receitas?.total_geral)}
+                  </h3>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
+                  <TrendingUp size={18} />
+                </div>
+              </div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={13} color="#059669" /> Média mensal: {formatCurrency(faturamentoMensalMedio)}
+              </p>
+            </div>
+
+            {/* Card 2: Despesas Operacionais (OPEX) */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              padding: '18px 20px',
+              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Despesas Operacionais (OPEX)</span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#dc2626', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                    {formatCurrency(dreData.despesas?.total_geral)}
+                  </h3>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
+                  <TrendingDown size={18} />
+                </div>
+              </div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Info size={13} color="#dc2626" /> Custo mensal: {formatCurrency(breakEvenMensal)}
+              </p>
+            </div>
+
+            {/* Card 3: Lucro Operacional Real & % Margem */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #bfdbfe',
+              padding: '18px 20px',
+              boxShadow: '0 4px 16px -2px rgba(37, 99, 235, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lucro Operacional Real</span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#2563eb', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                    {formatCurrency(dreData.resultado_operacional)}
+                  </h3>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563eb' }}>
+                  <DollarSign size={18} />
+                </div>
+              </div>
+              <p style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700, margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Percent size={13} color="#2563eb" /> Margem de Lucro: {margemOperacionalReal}% da receita
+              </p>
+            </div>
+
+            {/* Card 4: Retiradas & Reformas */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #e2e8f0',
+              padding: '18px 20px',
+              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Retiradas & Reformas</span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#7c3aed', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                    {formatCurrency(dreData.destinacao_lucro?.total_destinado || 0)}
+                  </h3>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#f5f3ff', border: '1px solid #ddd6fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
+                  <UserCheck size={18} />
+                </div>
+              </div>
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Sparkles size={13} color="#7c3aed" /> Retirados a partir do lucro
+              </p>
+            </div>
+
+          </div>
+
+          {/* ─── BLOCO 2: 4 CARDS ESTRATÉGICOS DE BREAK-EVEN & CAIXA (LINHA 2) ───── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+            
+            {/* Card 1: Break-Even Mensal (0 a 0) */}
             <div style={{
               background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
               borderRadius: '16px',
-              padding: '20px 24px',
+              padding: '18px 20px',
               color: '#ffffff',
-              boxShadow: '0 8px 20px -4px rgba(3, 105, 161, 0.3)',
+              boxShadow: '0 6px 16px -2px rgba(3, 105, 161, 0.25)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -1041,28 +1154,28 @@ export default function DREPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontSize: '11px', fontWeight: 800, color: '#e0f2fe', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Target size={14} /> Break-Even Mensal (0 a 0)
+                    <Target size={13} /> Break-Even Mensal (0 a 0)
                   </span>
-                  <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#ffffff', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(breakEvenMensal)} / mês
                   </h3>
                 </div>
-                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
-                  <Scale size={20} />
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
+                  <Scale size={18} />
                 </div>
               </div>
-              <p style={{ fontSize: '11px', color: '#e0f2fe', margin: '14px 0 0' }}>
-                Faturamento mensal exato necessário para pagar o OPEX sem dar prejuízo
+              <p style={{ fontSize: '11px', color: '#e0f2fe', margin: '12px 0 0' }}>
+                Faturamento mensal exato para empatar o OPEX
               </p>
             </div>
 
-            {/* CARD 2: PONTO DE EQUILÍBRIO ANUAL */}
+            {/* Card 2: Break-Even Anual (0 a 0) */}
             <div style={{
               background: '#ffffff',
               borderRadius: '16px',
               border: '1px solid #cbd5e1',
-              padding: '20px 24px',
-              boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)',
+              padding: '18px 20px',
+              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -1070,26 +1183,26 @@ export default function DREPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Break-Even Anual (0 a 0)</span>
-                  <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(breakEvenAnual)}
                   </h3>
                 </div>
-                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
-                  <Compass size={20} />
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569' }}>
+                  <Compass size={18} />
                 </div>
               </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '14px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <CheckCircle2 size={14} color="#059669" /> Faturamento anual exato para zerar custos
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 size={13} color="#059669" /> Custo total anual de sustentação
               </p>
             </div>
 
-            {/* CARD 3: MARGEM DE SEGURANÇA OPERACIONAL (%) */}
+            {/* Card 3: Margem de Segurança (%) */}
             <div style={{
               background: '#ffffff',
               borderRadius: '16px',
               border: '1px solid #a7f3d0',
-              padding: '20px 24px',
-              boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)',
+              padding: '18px 20px',
+              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -1097,55 +1210,26 @@ export default function DREPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Margem de Folga / Segurança</span>
-                  <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#059669', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#059669', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     +{margemSeguranca}%
                   </h3>
                 </div>
-                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
-                  <Zap size={20} />
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
+                  <Zap size={18} />
                 </div>
               </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '14px 0 0' }}>
-                O faturamento atual está <strong style={{ color: '#059669' }}>{margemSeguranca}% acima</strong> do ponto de equilíbrio!
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>
+                Receita <strong style={{ color: '#059669' }}>{margemSeguranca}% acima</strong> do ponto de equilíbrio
               </p>
             </div>
 
-            {/* CARD 4: % MARGEM DE LUCRO OPERACIONAL ( % LUCRO REAL ) */}
-            <div style={{
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              borderRadius: '16px',
-              padding: '20px 24px',
-              color: '#ffffff',
-              boxShadow: '0 8px 20px -4px rgba(16, 185, 129, 0.3)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#d1fae5', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Percent size={14} /> % Margem de Lucro Real
-                  </span>
-                  <h3 style={{ fontSize: '28px', fontWeight: 900, color: '#ffffff', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
-                    {margemOperacionalReal}%
-                  </h3>
-                </div>
-                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
-                  <TrendingUp size={22} />
-                </div>
-              </div>
-              <p style={{ fontSize: '11px', color: '#d1fae5', margin: '14px 0 0' }}>
-                A cada R$ 100 faturados, <strong style={{ color: '#ffffff' }}>R$ {margemOperacionalReal.toFixed(0)}</strong> são lucro limpo da operação!
-              </p>
-            </div>
-
-            {/* CARD 5: SOBRA LÍQUIDA RETIDA NO CAIXA */}
+            {/* Card 4: Sobra Retida no Caixa */}
             <div style={{
               background: '#ffffff',
               borderRadius: '16px',
               border: '1px solid #ddd6fe',
-              padding: '20px 24px',
-              boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)',
+              padding: '18px 20px',
+              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between'
@@ -1153,66 +1237,17 @@ export default function DREPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontSize: '11px', fontWeight: 800, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sobra Retida no Caixa</span>
-                  <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#7c3aed', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#7c3aed', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(dreData.destinacao_lucro?.sobra_liquida_caixa ?? dreData.resultado_operacional)}
                   </h3>
                 </div>
-                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
-                  <PiggyBank size={20} />
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
+                  <PiggyBank size={18} />
                 </div>
               </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '14px 0 0' }}>
-                Lucro limpo mantido no fundo de reserva da escola
+              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>
+                Reserva mantida no fundo de caixa da escola
               </p>
-            </div>
-
-          </div>
-
-          {/* ─── 4 KPI CARDS SECUNDÁRIOS DE DRE OPERACIONAL ───────────────────── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
-            
-            <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Receita Bruta Total</span>
-                  <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#059669', margin: '4px 0 0' }}>{formatCurrency(dreData.receitas?.total_geral)}</h3>
-                </div>
-                <TrendingUp size={20} color="#059669" />
-              </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>Média mensal: {formatCurrency(faturamentoMensalMedio)}</p>
-            </div>
-
-            <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Despesas Operacionais (OPEX)</span>
-                  <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#dc2626', margin: '4px 0 0' }}>{formatCurrency(dreData.despesas?.total_geral)}</h3>
-                </div>
-                <TrendingDown size={20} color="#dc2626" />
-              </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>Média mensal: {formatCurrency(breakEvenMensal)}</p>
-            </div>
-
-            <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lucro Operacional Real</span>
-                  <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#2563eb', margin: '4px 0 0' }}>{formatCurrency(dreData.resultado_operacional)}</h3>
-                </div>
-                <DollarSign size={20} color="#2563eb" />
-              </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>Margem real: {margemOperacionalReal}%</p>
-            </div>
-
-            <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px 24px', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Retiradas & Reformas</span>
-                  <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#7c3aed', margin: '4px 0 0' }}>{formatCurrency(dreData.destinacao_lucro?.total_destinado || 0)}</h3>
-                </div>
-                <UserCheck size={20} color="#7c3aed" />
-              </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>Retirado do lucro gerado pela escola</p>
             </div>
 
           </div>
