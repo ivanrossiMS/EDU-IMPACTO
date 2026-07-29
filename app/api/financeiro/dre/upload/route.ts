@@ -349,40 +349,79 @@ INSTRUÇÕES DE EXTRAÇÃO CONTÁBIL:
       }
     }
 
-    // ─── Salvar no Supabase (Opcional & Não Bloqueante) ───────────────────
-    let savedDREId: string | undefined
+    // ─── Salvar no Histórico (Supabase + Backup em Arquivo Local) ───────────
+    let savedDREId: string | undefined = `dre_${Date.now()}`
     let savedInDb = false
+
+    const itemHistorico = {
+      id: savedDREId,
+      nome_arquivo: nomeArquivo || 'DRE - Relatório Analítico',
+      tipo_arquivo: ext,
+      dados_dre: dadosDRE,
+      periodo_descricao: dadosDRE.periodo?.descricao || 'Análise Anual',
+      empresa: dadosDRE.empresa || 'Colégio Impacto',
+      total_receitas: totalReceitasBrutas,
+      total_despesas: totalDespesasOpex,
+      resultado_liquido: resultadoOperacionalReal,
+      criado_em: new Date().toISOString()
+    }
 
     try {
       const supabase = await createClient()
       const { data: userData } = await supabase.auth.getUser()
 
-      if (userData?.user?.id) {
-        const { data: inserted, error: dbError } = await supabase
-          .from('dre_uploads')
-          .insert({
-            usuario_id: userData.user.id,
-            nome_arquivo: nomeArquivo,
-            tipo_arquivo: ext,
-            dados_dre: dadosDRE,
-            periodo_descricao: dadosDRE.periodo?.descricao || 'Análise Anual',
-            empresa: dadosDRE.empresa || 'Colégio Impacto',
-            total_receitas: totalReceitasBrutas,
-            total_despesas: totalDespesasOpex,
-            resultado_liquido: resultadoOperacionalReal
-          })
-          .select('id')
-          .single()
+      const payloadToSave: any = {
+        id: savedDREId,
+        nome_arquivo: itemHistorico.nome_arquivo,
+        tipo_arquivo: itemHistorico.tipo_arquivo,
+        dados_dre: itemHistorico.dados_dre,
+        periodo_descricao: itemHistorico.periodo_descricao,
+        empresa: itemHistorico.empresa,
+        total_receitas: itemHistorico.total_receitas,
+        total_despesas: itemHistorico.total_despesas,
+        resultado_liquido: itemHistorico.resultado_liquido,
+        criado_em: itemHistorico.criado_em
+      }
 
-        if (!dbError && inserted) {
-          savedDREId = inserted.id
-          savedInDb = true
-        } else {
-          console.warn('Banco Supabase aviso:', dbError?.message || dbError)
-        }
+      if (userData?.user?.id) {
+        payloadToSave.usuario_id = userData.user.id
+      }
+
+      const { data: inserted, error: dbError } = await supabase
+        .from('dre_uploads')
+        .insert(payloadToSave)
+        .select('id')
+        .single()
+
+      if (!dbError && inserted) {
+        savedDREId = inserted.id
+        savedInDb = true
+      } else {
+        console.warn('Banco Supabase aviso ao inserir DRE:', dbError?.message || dbError)
       }
     } catch (dbErr) {
-      console.warn('Persistência opcional Supabase não executada:', dbErr)
+      console.warn('Persistência Supabase opcional:', dbErr)
+    }
+
+    // Backup em Arquivo JSON Local do Servidor
+    try {
+      const fs = await import('fs/promises')
+      const path = await import('path')
+      const filePath = path.join(process.cwd(), '.dre_historico_store.json')
+      
+      let items: any[] = []
+      try {
+        const existing = await fs.readFile(filePath, 'utf-8')
+        items = JSON.parse(existing)
+      } catch (e) {
+        items = []
+      }
+
+      // Adiciona o novo DRE mantendo no máximo 100 itens
+      items = [itemHistorico, ...items.filter(i => i.id !== itemHistorico.id)].slice(0, 100)
+      await fs.writeFile(filePath, JSON.stringify(items, null, 2), 'utf-8')
+    } catch (fileErr) {
+      console.warn('Não foi possível gravar backup em arquivo local:', fileErr)
     }
 
     return NextResponse.json({

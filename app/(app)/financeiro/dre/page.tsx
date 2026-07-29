@@ -289,7 +289,8 @@ export default function DREPage() {
       setActiveTab('dre')
 
       // Salva automaticamente no Histórico Híbrido
-      salvarNoHistorico(result.data, nomePadrao)
+      await salvarNoHistorico(result.data, nomePadrao)
+      await fetchHistorico()
 
       if (result.data) {
         const initialExpand: Record<string, boolean> = {}
