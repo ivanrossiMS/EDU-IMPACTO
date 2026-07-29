@@ -10,7 +10,7 @@ import {
   Info, Layers, ArrowUpRight, ArrowDownRight, FileUp, Zap, Scale, Wallet,
   Award, Percent, Target, LineChart as LineChartIcon, ShieldAlert, Cpu,
   UserCheck, Hammer, PiggyBank, Compass, ShieldCheck as ShieldIcon, Clock, CreditCard,
-  Edit3, Save, Check
+  Edit3, Save, Check, Users
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
@@ -54,6 +54,16 @@ interface DREDados {
     total_destinado?: number
     sobra_liquida_caixa?: number
     itens?: DREItem[]
+  }
+  custos_gerenciais?: {
+    custos_fixos?: number
+    custos_variaveis?: number
+    folha_pagamento?: number
+    custo_operacao?: number
+    margem_contribuição_valor?: number
+    margem_contribuição_pct?: number
+    pct_folha_sobre_receita?: number
+    pct_opex_sobre_receita?: number
   }
   metricas_chave?: {
     ebitda?: number
@@ -471,6 +481,36 @@ export default function DREPage() {
   const margemOperacionalReal = useMemo(() => {
     if (!dreData || !dreData.receitas?.total_geral) return 0
     return Math.round(((dreData.resultado_operacional / dreData.receitas.total_geral) * 100) * 10) / 10
+  }, [dreData])
+
+  const custoFolhaPagamento = useMemo(() => {
+    if (dreData?.custos_gerenciais?.folha_pagamento !== undefined && dreData.custos_gerenciais.folha_pagamento > 0) {
+      return dreData.custos_gerenciais.folha_pagamento
+    }
+    // Fallback: calcula dos grupos de despesa se não estiver no custos_gerenciais
+    let sum = 0
+    dreData?.despesas?.grupos?.forEach(g => {
+      const descUpper = String(g.descricao || '').toUpperCase()
+      const cod = String(g.codigo || '')
+      if (cod.startsWith('50') || descUpper.includes('FOLHA') || descUpper.includes('PESSOAL') || descUpper.includes('SALÁRIO') || descUpper.includes('SALARIO') || descUpper.includes('ENCARGOS')) {
+        sum += Number(g.total) || 0
+      }
+    })
+    return sum
+  }, [dreData])
+
+  const pctFolhaPagamento = useMemo(() => {
+    const rec = dreData?.receitas?.total_geral || 0
+    if (!rec || rec === 0) return 0
+    return Math.round((custoFolhaPagamento / rec) * 1000) / 10
+  }, [dreData, custoFolhaPagamento])
+
+  const custoOperacaoTotal = useMemo(() => {
+    return dreData?.despesas?.total_geral || 0
+  }, [dreData])
+
+  const margemContribuiçãoPct = useMemo(() => {
+    return dreData?.custos_gerenciais?.margem_contribuição_pct ?? 85
   }, [dreData])
 
   const breakEvenAnual = useMemo(() => {
@@ -1055,7 +1095,7 @@ export default function DREPage() {
               </p>
             </div>
 
-            {/* Card 2: Despesas Operacionais (OPEX) */}
+            {/* Card 2: Custo de Operação (OPEX) */}
             <div style={{
               background: '#ffffff',
               borderRadius: '16px',
@@ -1068,21 +1108,48 @@ export default function DREPage() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Despesas Operacionais (OPEX)</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Custo de Operação (OPEX)</span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#dc2626', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
-                    {formatCurrency(dreData.despesas?.total_geral)}
+                    {formatCurrency(custoOperacaoTotal)}
                   </h3>
                 </div>
                 <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
-                  <TrendingDown size={18} />
+                  <Activity size={18} />
                 </div>
               </div>
               <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Info size={13} color="#dc2626" /> Custo mensal: {formatCurrency(breakEvenMensal)}
+                <Info size={13} color="#dc2626" /> Custos operacionais mensais: {formatCurrency(custoOperacaoTotal / 12)}
               </p>
             </div>
 
-            {/* Card 3: Lucro Operacional Real & % Margem */}
+            {/* Card 3: Custo de Folha de Pagamento */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #c7d2fe',
+              padding: '18px 20px',
+              boxShadow: '0 4px 16px -2px rgba(79, 70, 229, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Folha de Pagamento</span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#4f46e5', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                    {formatCurrency(custoFolhaPagamento)}
+                  </h3>
+                </div>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#eef2ff', border: '1px solid #c7d2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5' }}>
+                  <Users size={18} />
+                </div>
+              </div>
+              <p style={{ fontSize: '11px', color: '#4338ca', fontWeight: 700, margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <PieChartIcon size={13} color="#4f46e5" /> Comprometimento: {pctFolhaPagamento}% da Receita
+              </p>
+            </div>
+
+            {/* Card 4: Lucro Operacional Real & % Margem */}
             <div style={{
               background: '#ffffff',
               borderRadius: '16px',
@@ -1106,33 +1173,6 @@ export default function DREPage() {
               </div>
               <p style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700, margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Percent size={13} color="#2563eb" /> Margem de Lucro: {margemOperacionalReal}% da receita
-              </p>
-            </div>
-
-            {/* Card 4: Retiradas & Reformas */}
-            <div style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #e2e8f0',
-              padding: '18px 20px',
-              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Retiradas & Reformas</span>
-                  <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#7c3aed', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
-                    {formatCurrency(dreData.destinacao_lucro?.total_destinado || 0)}
-                  </h3>
-                </div>
-                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#f5f3ff', border: '1px solid #ddd6fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
-                  <UserCheck size={18} />
-                </div>
-              </div>
-              <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Sparkles size={13} color="#7c3aed" /> Retirados a partir do lucro
               </p>
             </div>
 
@@ -1166,7 +1206,7 @@ export default function DREPage() {
                 </div>
               </div>
               <p style={{ fontSize: '11px', color: '#e0f2fe', margin: '12px 0 0' }}>
-                Faturamento mensal exato para empatar o OPEX
+                Faturamento mensal via Margem de Contribuição ({margemContribuiçãoPct}%)
               </p>
             </div>
 
@@ -1193,7 +1233,7 @@ export default function DREPage() {
                 </div>
               </div>
               <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <CheckCircle2 size={13} color="#059669" /> Custo total anual de sustentação
+                <CheckCircle2 size={13} color="#059669" /> Ponto de equilíbrio gerencial real
               </p>
             </div>
 
@@ -1220,7 +1260,7 @@ export default function DREPage() {
                 </div>
               </div>
               <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>
-                Receita <strong style={{ color: '#059669' }}>{margemSeguranca}% acima</strong> do ponto de equilíbrio
+                Receita <strong style={{ color: '#059669' }}>{margemSeguranca}% acima</strong> do Break-Even
               </p>
             </div>
 

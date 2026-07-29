@@ -296,41 +296,94 @@ INSTRUÇÕES DE EXTRAÇÃO CONTÁBIL:
       itens: itensDestinacao
     }
 
-    // Métricas Chave Recalculadas no Backend JS
-    const margemOperacionalReal = totalReceitasBrutas > 0 ? (resultadoOperacionalReal / totalReceitasBrutas) * 100 : 0
-    const margemLiquidaSobra = totalReceitasBrutas > 0 ? (sobraLiquidaCaixa / totalReceitasBrutas) * 100 : 0
+    // ─── CLASSIFICAÇÃO CONTÁBIL GERENCIAL: CUSTOS FIXOS VS VARIÁVEIS VS FOLHA ─
+    let totalFolhaPagamento = 0
+    let totalCustosVariaveis = 0
 
-    // Cálculo do Comprometimento de Folha (Equipe sem os sócios)
-    let folhaOpexTotal = 0
     despesasOpexGrupos.forEach(g => {
-      const descUpper = String(g.descricao || '').toUpperCase()
-      if (descUpper.includes('FOLHA') || descUpper.includes('SALÁRIO') || descUpper.includes('SALARIO') || descUpper.includes('ENCARGOS') || descUpper.includes('PESSOAL')) {
-        folhaOpexTotal += Number(g.total) || 0
+      const descGrupoUpper = String(g.descricao || '').toUpperCase()
+      const codGrupo = String(g.codigo || '')
+
+      const isGrupoFolha = codGrupo.startsWith('50') || descGrupoUpper.includes('FOLHA') || descGrupoUpper.includes('PESSOAL') || descGrupoUpper.includes('SALÁRIO') || descGrupoUpper.includes('SALARIO') || descGrupoUpper.includes('ENCARGO')
+
+      if (g.itens && Array.isArray(g.itens)) {
+        g.itens.forEach((item: any) => {
+          const itemDescUpper = String(item.descricao || '').toUpperCase()
+          const itemCod = String(item.codigo || '')
+          const itemValor = Number(item.total) || 0
+
+          // Identifica Folha de Pagamento
+          if (isGrupoFolha || itemCod.startsWith('50') || itemDescUpper.includes('SALÁRIO') || itemDescUpper.includes('SALARIO') || itemDescUpper.includes('FOLHA') || itemDescUpper.includes('PROFESSOR') || itemDescUpper.includes('ENCARGO') || itemDescUpper.includes('INSS') || itemDescUpper.includes('FGTS') || itemDescUpper.includes('BENEFÍCIO') || itemDescUpper.includes('BENEFICIO') || itemDescUpper.includes('THIRTEENTH') || itemDescUpper.includes('DECIMO') || itemDescUpper.includes('13º') || itemDescUpper.includes('FÉRIAS') || itemDescUpper.includes('FERIAS')) {
+            totalFolhaPagamento += itemValor
+          }
+
+          // Identifica Custos/Despesas Variáveis (impostos, taxas operadoras/banco, comissões, alimentação por aluno, material)
+          if (itemDescUpper.includes('IMPOSTO') || itemDescUpper.includes('TRIBUTO') || itemDescUpper.includes('SIMPLES') || itemDescUpper.includes('ISS') || itemDescUpper.includes('TAXA') || itemDescUpper.includes('CARTÃO') || itemDescUpper.includes('CARTAO') || itemDescUpper.includes('BOLETO') || itemDescUpper.includes('COMISSÃO') || itemDescUpper.includes('COMISSAO') || itemDescUpper.includes('ALIMENTAÇÃO') || itemDescUpper.includes('ALIMENTACAO') || itemDescUpper.includes('REFEIÇÃO') || itemDescUpper.includes('REFEICAO') || itemDescUpper.includes('MATERIAL DIDÁTICO') || itemDescUpper.includes('MATERIAL DIDATICO') || itemDescUpper.includes('INADIMPLÊNCIA')) {
+            totalCustosVariaveis += itemValor
+          }
+        })
+      } else {
+        const valorGrupo = Number(g.total) || 0
+        if (isGrupoFolha) totalFolhaPagamento += valorGrupo
+        if (descGrupoUpper.includes('IMPOSTO') || descGrupoUpper.includes('TAXA') || descGrupoUpper.includes('TRIBUTO')) {
+          totalCustosVariaveis += valorGrupo
+        }
       }
     })
-    const comprometimentoFolhaPct = totalReceitasBrutas > 0 ? Math.round((folhaOpexTotal / totalReceitasBrutas) * 100) : 42
 
-    // Cálculos de Ponto de Equilíbrio (Break-Even 0 a 0)
-    const breakEvenAnual = totalDespesasOpex
-    const breakEvenMensal = totalDespesasOpex / 12
+    // Se o balancete não discriminar explicitamente impostos/taxas variáveis no OPEX, 
+    // aplica estimativa contábil gerencial padrão para escolas (~8% da receita bruta como custo variável direto)
+    if (totalCustosVariaveis === 0 && totalReceitasBrutas > 0) {
+      totalCustosVariaveis = Math.round(totalReceitasBrutas * 0.08)
+    }
+
+    // Custos Fixos Totais (OPEX sem despesas variáveis)
+    const totalCustosFixos = Math.max(0, totalDespesasOpex - totalCustosVariaveis)
+
+    // ─── MARGEM DE CONTRIBUIÇÃO E PONTO DE EQUILÍBRIO GERENCIAL REAL ────────
+    // Margem de Contribuição ($) = Receita Bruta - Custos Variáveis
+    const margemContribuiçãoValor = totalReceitasBrutas - totalCustosVariaveis
+    // Margem de Contribuição (%) = (Margem de Contribuição $ / Receita Bruta)
+    const margemContribuiçãoPct = totalReceitasBrutas > 0 ? (margemContribuiçãoValor / totalReceitasBrutas) * 100 : 85
+
+    // Break-Even Real = Custos Fixos / (Margem de Contribuição %)
+    const breakEvenAnualReal = (margemContribuiçãoPct > 0) ? (totalCustosFixos / (margemContribuiçãoPct / 100)) : totalDespesasOpex
+    const breakEvenMensalReal = breakEvenAnualReal / 12
+
     const mediaFaturamentoMensal = totalReceitasBrutas / 12
-    const margemSegurancaPct = totalDespesasOpex > 0
-      ? Math.round(((totalReceitasBrutas - totalDespesasOpex) / totalDespesasOpex) * 1000) / 10
+    const margemSegurancaPct = breakEvenAnualReal > 0
+      ? Math.round(((totalReceitasBrutas - breakEvenAnualReal) / totalReceitasBrutas) * 1000) / 10
       : 0
+
+    const pctFolhaSobreReceita = totalReceitasBrutas > 0 ? Math.round((totalFolhaPagamento / totalReceitasBrutas) * 1000) / 10 : 0
+    const pctOpexSobreReceita = totalReceitasBrutas > 0 ? Math.round((totalDespesasOpex / totalReceitasBrutas) * 1000) / 10 : 0
+    const margemOperacionalReal = totalReceitasBrutas > 0 ? (resultadoOperacionalReal / totalReceitasBrutas) * 100 : 0
+    const margemLiquidaSobra = totalReceitasBrutas > 0 ? (sobraLiquidaCaixa / totalReceitasBrutas) * 100 : 0
     const capacidadeRetiradaMensal = (resultadoOperacionalReal * 0.7) / 12
+
+    dadosDRE.custos_gerenciais = {
+      custos_fixos: totalCustosFixos,
+      custos_variaveis: totalCustosVariaveis,
+      folha_pagamento: totalFolhaPagamento,
+      custo_operacao: totalDespesasOpex,
+      margem_contribuição_valor: margemContribuiçãoValor,
+      margem_contribuição_pct: Math.round(margemContribuiçãoPct * 10) / 10,
+      pct_folha_sobre_receita: pctFolhaSobreReceita,
+      pct_opex_sobre_receita: pctOpexSobreReceita
+    }
 
     dadosDRE.metricas_chave = {
       ebitda: resultadoOperacionalReal,
       margem_ebitda_pct: Math.round(margemOperacionalReal * 10) / 10,
-      comprometimento_folha_pct: comprometimentoFolhaPct,
-      custo_infraestrutura_pct: totalReceitasBrutas > 0 ? Math.round((totalDespesasOpex / totalReceitasBrutas) * 100) : 58,
-      ponto_equilibrio_estimado: breakEvenAnual,
-      ponto_equilibrio_anual: breakEvenAnual,
-      ponto_equilibrio_mensal: breakEvenMensal,
+      comprometimento_folha_pct: Math.round(pctFolhaSobreReceita),
+      custo_infraestrutura_pct: Math.round(pctOpexSobreReceita),
+      ponto_equilibrio_estimado: Math.round(breakEvenAnualReal),
+      ponto_equilibrio_anual: Math.round(breakEvenAnualReal),
+      ponto_equilibrio_mensal: Math.round(breakEvenMensalReal),
       media_faturamento_mensal: mediaFaturamentoMensal,
       margem_seguranca_pct: margemSegurancaPct,
       capacidade_retirada_mensal: capacidadeRetiradaMensal,
-      score_saude_financeira: resultadoOperacionalReal > 0 ? 94 : 45,
+      score_saude_financeira: resultadoOperacionalReal > 0 ? 95 : 45,
       diagnostico_saude: resultadoOperacionalReal > 0 ? 'Excelente Geração de Caixa' : 'Atenção ao Fluxo'
     }
 
