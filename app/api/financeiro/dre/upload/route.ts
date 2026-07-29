@@ -337,35 +337,62 @@ INSTRUÇÕES DE EXTRAÇÃO CONTÁBIL:
       totalCustosVariaveis = Math.round(totalReceitasBrutas * 0.08)
     }
 
-    // Custos Fixos Totais (OPEX sem despesas variáveis)
-    const totalCustosFixos = Math.max(0, totalDespesasOpex - totalCustosVariaveis)
+    // ─── DETECÇÃO INTELIGENTE DO NÚMERO DE MESES DO BALANCETE (N MESES) ─────
+    let numMeses = 12
+    if (dadosDRE.evolucao_mensal && Array.isArray(dadosDRE.evolucao_mensal) && dadosDRE.evolucao_mensal.length > 0) {
+      numMeses = dadosDRE.evolucao_mensal.length
+    } else if (dadosDRE.periodo?.inicio && dadosDRE.periodo?.fim) {
+      try {
+        const pIni = String(dadosDRE.periodo.inicio).split('/')
+        const pFim = String(dadosDRE.periodo.fim).split('/')
+        if (pIni.length === 3 && pFim.length === 3) {
+          const m1 = parseInt(pIni[1])
+          const m2 = parseInt(pFim[1])
+          const a1 = parseInt(pIni[2])
+          const a2 = parseInt(pFim[2])
+          const diff = (a2 - a1) * 12 + (m2 - m1) + 1
+          if (diff > 0 && diff <= 12) numMeses = diff
+        }
+      } catch (e) {}
+    }
 
-    // ─── MARGEM DE CONTRIBUIÇÃO E PONTO DE EQUILÍBRIO GERENCIAL REAL ────────
+    if (!dadosDRE.periodo) dadosDRE.periodo = {}
+    dadosDRE.periodo.numero_meses = numMeses
+
+    // Custos Fixos Totais (OPEX acumulado do período sem despesas variáveis)
+    const totalCustosFixos = Math.max(0, totalDespesasOpex - totalCustosVariaveis)
+    const custosFixosMensais = totalCustosFixos / numMeses
+
+    // ─── MARGEM DE CONTRIBUIÇÃO E PONTO DE EQUILÍBRIO GERENCIAL REAL (DIVIDIDO POR N MESES) ─
     // Margem de Contribuição ($) = Receita Bruta - Custos Variáveis
     const margemContribuiçãoValor = totalReceitasBrutas - totalCustosVariaveis
-    // Margem de Contribuição (%) = (Margem de Contribuição $ / Receita Bruta)
     const margemContribuiçãoPct = totalReceitasBrutas > 0 ? (margemContribuiçãoValor / totalReceitasBrutas) * 100 : 85
 
-    // Break-Even Real = Custos Fixos / (Margem de Contribuição %)
-    const breakEvenAnualReal = (margemContribuiçãoPct > 0) ? (totalCustosFixos / (margemContribuiçãoPct / 100)) : totalDespesasOpex
-    const breakEvenMensalReal = breakEvenAnualReal / 12
+    // Break-Even Mensal Real = Custo Fixo Mensal / (Margem de Contribuição %)
+    const breakEvenMensalReal = (margemContribuiçãoPct > 0) ? (custosFixosMensais / (margemContribuiçãoPct / 100)) : (totalDespesasOpex / numMeses)
+    const breakEvenAnualProjetado = breakEvenMensalReal * 12
 
-    const mediaFaturamentoMensal = totalReceitasBrutas / 12
-    const margemSegurancaPct = breakEvenAnualReal > 0
-      ? Math.round(((totalReceitasBrutas - breakEvenAnualReal) / totalReceitasBrutas) * 1000) / 10
+    const mediaFaturamentoMensal = totalReceitasBrutas / numMeses
+    const mediaOpexMensal = totalDespesasOpex / numMeses
+
+    const margemSegurancaPct = breakEvenMensalReal > 0
+      ? Math.round(((mediaFaturamentoMensal - breakEvenMensalReal) / mediaFaturamentoMensal) * 1000) / 10
       : 0
 
     const pctFolhaSobreReceita = totalReceitasBrutas > 0 ? Math.round((totalFolhaPagamento / totalReceitasBrutas) * 1000) / 10 : 0
     const pctOpexSobreReceita = totalReceitasBrutas > 0 ? Math.round((totalDespesasOpex / totalReceitasBrutas) * 1000) / 10 : 0
     const margemOperacionalReal = totalReceitasBrutas > 0 ? (resultadoOperacionalReal / totalReceitasBrutas) * 100 : 0
     const margemLiquidaSobra = totalReceitasBrutas > 0 ? (sobraLiquidaCaixa / totalReceitasBrutas) * 100 : 0
-    const capacidadeRetiradaMensal = (resultadoOperacionalReal * 0.7) / 12
+    const capacidadeRetiradaMensal = (resultadoOperacionalReal * 0.7) / numMeses
 
     dadosDRE.custos_gerenciais = {
+      numero_meses: numMeses,
       custos_fixos: totalCustosFixos,
+      custos_fixos_mensais: custosFixosMensais,
       custos_variaveis: totalCustosVariaveis,
       folha_pagamento: totalFolhaPagamento,
       custo_operacao: totalDespesasOpex,
+      custo_operacao_mensal: mediaOpexMensal,
       margem_contribuição_valor: margemContribuiçãoValor,
       margem_contribuição_pct: Math.round(margemContribuiçãoPct * 10) / 10,
       pct_folha_sobre_receita: pctFolhaSobreReceita,
@@ -377,8 +404,8 @@ INSTRUÇÕES DE EXTRAÇÃO CONTÁBIL:
       margem_ebitda_pct: Math.round(margemOperacionalReal * 10) / 10,
       comprometimento_folha_pct: Math.round(pctFolhaSobreReceita),
       custo_infraestrutura_pct: Math.round(pctOpexSobreReceita),
-      ponto_equilibrio_estimado: Math.round(breakEvenAnualReal),
-      ponto_equilibrio_anual: Math.round(breakEvenAnualReal),
+      ponto_equilibrio_estimado: Math.round(breakEvenAnualProjetado),
+      ponto_equilibrio_anual: Math.round(breakEvenAnualProjetado),
       ponto_equilibrio_mensal: Math.round(breakEvenMensalReal),
       media_faturamento_mensal: mediaFaturamentoMensal,
       margem_seguranca_pct: margemSegurancaPct,

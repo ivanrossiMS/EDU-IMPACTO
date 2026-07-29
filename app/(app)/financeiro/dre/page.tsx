@@ -38,6 +38,7 @@ interface DREDados {
     inicio?: string
     fim?: string
     descricao: string
+    numero_meses?: number
   }
   receitas: {
     grupos: DREGrupo[]
@@ -56,10 +57,13 @@ interface DREDados {
     itens?: DREItem[]
   }
   custos_gerenciais?: {
+    numero_meses?: number
     custos_fixos?: number
+    custos_fixos_mensais?: number
     custos_variaveis?: number
     folha_pagamento?: number
     custo_operacao?: number
+    custo_operacao_mensal?: number
     margem_contribuição_valor?: number
     margem_contribuição_pct?: number
     pct_folha_sobre_receita?: number
@@ -478,6 +482,30 @@ export default function DREPage() {
     ]
   }, [dreData])
 
+  // ─── NÚMERO DE MESES DO PERÍODO AUDITADO (N MESES DINÂMICO) ────────────────
+  const numeroMeses = useMemo(() => {
+    if (dreData?.custos_gerenciais?.numero_meses) return dreData.custos_gerenciais.numero_meses
+    if (dreData?.periodo?.numero_meses) return dreData.periodo.numero_meses
+    if (dreData?.evolucao_mensal && Array.isArray(dreData.evolucao_mensal) && dreData.evolucao_mensal.length > 0) {
+      return dreData.evolucao_mensal.length
+    }
+    if (dreData?.periodo?.inicio && dreData?.periodo?.fim) {
+      try {
+        const pIni = String(dreData.periodo.inicio).split('/')
+        const pFim = String(dreData.periodo.fim).split('/')
+        if (pIni.length === 3 && pFim.length === 3) {
+          const m1 = parseInt(pIni[1])
+          const m2 = parseInt(pFim[1])
+          const a1 = parseInt(pIni[2])
+          const a2 = parseInt(pFim[2])
+          const diff = (a2 - a1) * 12 + (m2 - m1) + 1
+          if (diff > 0 && diff <= 12) return diff
+        }
+      } catch (e) {}
+    }
+    return 12
+  }, [dreData])
+
   const margemOperacionalReal = useMemo(() => {
     if (!dreData || !dreData.receitas?.total_geral) return 0
     return Math.round(((dreData.resultado_operacional / dreData.receitas.total_geral) * 100) * 10) / 10
@@ -487,7 +515,6 @@ export default function DREPage() {
     if (dreData?.custos_gerenciais?.folha_pagamento !== undefined && dreData.custos_gerenciais.folha_pagamento > 0) {
       return dreData.custos_gerenciais.folha_pagamento
     }
-    // Fallback: calcula dos grupos de despesa se não estiver no custos_gerenciais
     let sum = 0
     dreData?.despesas?.grupos?.forEach(g => {
       const descUpper = String(g.descricao || '').toUpperCase()
@@ -513,23 +540,35 @@ export default function DREPage() {
     return dreData?.custos_gerenciais?.margem_contribuição_pct ?? 85
   }, [dreData])
 
-  const breakEvenAnual = useMemo(() => {
-    return dreData?.metricas_chave?.ponto_equilibrio_anual ?? (dreData?.despesas?.total_geral || 0)
-  }, [dreData])
+  const faturamentoMensalMedio = useMemo(() => {
+    if (dreData?.metricas_chave?.media_faturamento_mensal) return dreData.metricas_chave.media_faturamento_mensal
+    const totalRec = dreData?.receitas?.total_geral || 0
+    return totalRec / (numeroMeses || 12)
+  }, [dreData, numeroMeses])
+
+  const custoOperacaoMensalMedio = useMemo(() => {
+    if (dreData?.custos_gerenciais?.custo_operacao_mensal) return dreData.custos_gerenciais.custo_operacao_mensal
+    const totalDesp = dreData?.despesas?.total_geral || 0
+    return totalDesp / (numeroMeses || 12)
+  }, [dreData, numeroMeses])
 
   const breakEvenMensal = useMemo(() => {
-    return dreData?.metricas_chave?.ponto_equilibrio_mensal ?? ((dreData?.despesas?.total_geral || 0) / 12)
-  }, [dreData])
+    if (dreData?.metricas_chave?.ponto_equilibrio_mensal) return dreData.metricas_chave.ponto_equilibrio_mensal
+    const custosFixos = (dreData?.custos_gerenciais?.custos_fixos || (dreData?.despesas?.total_geral || 0) * 0.9)
+    const custosFixosMensais = custosFixos / (numeroMeses || 12)
+    return margemContribuiçãoPct > 0 ? (custosFixosMensais / (margemContribuiçãoPct / 100)) : custosFixosMensais
+  }, [dreData, numeroMeses, margemContribuiçãoPct])
 
-  const faturamentoMensalMedio = useMemo(() => {
-    return dreData?.metricas_chave?.media_faturamento_mensal ?? ((dreData?.receitas?.total_geral || 0) / 12)
-  }, [dreData])
+  const breakEvenAnual = useMemo(() => {
+    if (dreData?.metricas_chave?.ponto_equilibrio_anual) return dreData.metricas_chave.ponto_equilibrio_anual
+    return breakEvenMensal * 12
+  }, [dreData, breakEvenMensal])
 
   const margemSeguranca = useMemo(() => {
-    if (!breakEvenAnual || breakEvenAnual === 0) return 0
-    const rec = dreData?.receitas?.total_geral || 0
-    return Math.round(((rec - breakEvenAnual) / breakEvenAnual) * 1000) / 10
-  }, [dreData, breakEvenAnual])
+    if (!breakEvenMensal || breakEvenMensal === 0) return 0
+    if (!faturamentoMensalMedio || faturamentoMensalMedio === 0) return 0
+    return Math.round(((faturamentoMensalMedio - breakEvenMensal) / faturamentoMensalMedio) * 1000) / 10
+  }, [faturamentoMensalMedio, breakEvenMensal])
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', padding: '24px 16px', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
@@ -1091,7 +1130,7 @@ export default function DREPage() {
                 </div>
               </div>
               <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <CheckCircle2 size={13} color="#059669" /> Média mensal: {formatCurrency(faturamentoMensalMedio)}
+                <CheckCircle2 size={13} color="#059669" /> Média mensal ({numeroMeses}m): {formatCurrency(faturamentoMensalMedio)}
               </p>
             </div>
 
@@ -1118,7 +1157,7 @@ export default function DREPage() {
                 </div>
               </div>
               <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Info size={13} color="#dc2626" /> Custos operacionais mensais: {formatCurrency(custoOperacaoTotal / 12)}
+                <Info size={13} color="#dc2626" /> Custo mensal ({numeroMeses}m): {formatCurrency(custoOperacaoMensalMedio)}
               </p>
             </div>
 
