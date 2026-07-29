@@ -337,10 +337,17 @@ INSTRUÇÕES DE EXTRAÇÃO CONTÁBIL:
       totalCustosVariaveis = Math.round(totalReceitasBrutas * 0.08)
     }
 
-    // ─── DETECÇÃO INTELIGENTE DO NÚMERO DE MESES DO BALANCETE (N MESES) ─────
+    // ─── DETECÇÃO INTELIGENTE DE MESES EFETIVAMENTE ATIVOS (COM MOVIMENTAÇÃO) ──
     let numMeses = 12
+
     if (dadosDRE.evolucao_mensal && Array.isArray(dadosDRE.evolucao_mensal) && dadosDRE.evolucao_mensal.length > 0) {
-      numMeses = dadosDRE.evolucao_mensal.length
+      // Filtra apenas os meses que possuem receita > 0 ou despesa > 0 (desconsiderando meses futuros zerados)
+      const mesesComAtividade = dadosDRE.evolucao_mensal.filter((m: any) => (Number(m.receita) > 0 || Number(m.despesa) > 0))
+      if (mesesComAtividade.length > 0) {
+        numMeses = mesesComAtividade.length
+      } else {
+        numMeses = dadosDRE.evolucao_mensal.length
+      }
     } else if (dadosDRE.periodo?.inicio && dadosDRE.periodo?.fim) {
       try {
         const pIni = String(dadosDRE.periodo.inicio).split('/')

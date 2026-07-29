@@ -482,13 +482,14 @@ export default function DREPage() {
     ]
   }, [dreData])
 
-  // ─── NÚMERO DE MESES DO PERÍODO AUDITADO (N MESES DINÂMICO) ────────────────
+  // ─── NÚMERO DE MESES DO PERÍODO AUDITADO (APENAS MESES COM MOVIMENTAÇÃO REAL)
   const numeroMeses = useMemo(() => {
+    if (dreData?.evolucao_mensal && Array.isArray(dreData.evolucao_mensal) && dreData.evolucao_mensal.length > 0) {
+      const ativos = dreData.evolucao_mensal.filter(m => (Number(m.receita) > 0 || Number(m.despesa) > 0))
+      if (ativos.length > 0) return ativos.length
+    }
     if (dreData?.custos_gerenciais?.numero_meses) return dreData.custos_gerenciais.numero_meses
     if (dreData?.periodo?.numero_meses) return dreData.periodo.numero_meses
-    if (dreData?.evolucao_mensal && Array.isArray(dreData.evolucao_mensal) && dreData.evolucao_mensal.length > 0) {
-      return dreData.evolucao_mensal.length
-    }
     if (dreData?.periodo?.inicio && dreData?.periodo?.fim) {
       try {
         const pIni = String(dreData.periodo.inicio).split('/')
