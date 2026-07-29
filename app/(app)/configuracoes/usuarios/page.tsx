@@ -19,6 +19,29 @@ interface ModuleGroup { key: string; label: string; icon: React.ReactNode; pages
 
 const toSlug = (str: string) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, '-')
 
+const normalizeString = (str: string) =>
+  (str || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "")
+
+const matchesPerfil = (userPerfil: string, perfilNome: string): boolean => {
+  if (!userPerfil || !perfilNome) return false
+  const u = normalizeString(userPerfil)
+  const p = normalizeString(perfilNome)
+  if (u === p) return true
+
+  if ((u === 'coordenacao' || u === 'coordenador') && (p === 'coordenacao' || p === 'coordenador')) return true
+  if ((u.includes('direc') || u.includes('diretor')) && (p.includes('direc') || p.includes('diretor'))) return true
+  if (u.includes('portaria') && p.includes('portaria')) return true
+  if (u === 'secretaria' && p === 'secretaria') return true
+  if (u === 'familia' && p === 'familia') return true
+
+  return false
+}
+
+const isFamiliaPerfil = (perfilNome: string): boolean => {
+  const p = normalizeString(perfilNome)
+  return p === 'familia'
+}
+
 const MODULES_CONFIG: ModuleGroup[] = ALL_NAV_GROUPS.map(g => ({
   key: toSlug(g.title),
   label: g.title,
@@ -173,6 +196,13 @@ export default function UsuariosPage() {
   const users: SysUser[] = colabData?.data || []
   const colabTotal = colabData?.total || 0;
 
+  const { data: allColabData } = useApiQuery<any>(
+    ['usuarios', 'all-colaboradores'],
+    '/api/configuracoes/usuarios',
+    { type: 'colaboradores', limit: 1000 }
+  )
+  const allUsers: SysUser[] = allColabData?.data || []
+
   const [authUsers] = useLocalStorage<any[]>('edu-auth-users', [])
 
   const { logSystemAction, perfis, setPerfis, perfisLoading } = useData();
@@ -321,7 +351,7 @@ export default function UsuariosPage() {
     }))
   }
 
-  const perfilByName = (name: string) => (perfis || []).find(p => p.nome === name)
+  const perfilByName = (name: string) => (perfis || []).find(p => matchesPerfil(name, p.nome))
 
   return (
     <div>
@@ -548,7 +578,7 @@ export default function UsuariosPage() {
                           <div style={{ flex: 1 }}>
                              <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Membros</div>
                              <div style={{ fontSize: 20, fontWeight: 900, color: p.cor, display: 'flex', alignItems: 'center', gap: 8 }}>
-                               {users.filter(u => u.perfil === p.nome).length + (p.nome === 'Família' ? totalFamiliaUsuarios : 0)}
+                               {allUsers.filter(u => matchesPerfil(u.perfil, p.nome)).length + (isFamiliaPerfil(p.nome) ? totalFamiliaUsuarios : 0)}
                                <span style={{ fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', background: `${p.cor}15`, padding: '2px 8px', borderRadius: 10 }}>Ativos</span>
                              </div>
                           </div>

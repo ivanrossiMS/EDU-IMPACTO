@@ -26,7 +26,7 @@ NETLIFY_URL   = "https://impacto-edu.net"
 CATRACA_SENHA = "Pass1081$"
 CATRACA_LOGIN = "admin"
 
-# Cada catraca: nome, ip, porta
+# Cada catraca: nome, ip, porta, id (serial do equipamento)
 # Porta 80  → HTTP
 # Porta 443 → HTTPS
 # Porta 88  → tenta HTTP primeiro, depois HTTPS
@@ -157,18 +157,26 @@ def configurar_monitor(base_url, session):
         return False
 
 
-def enviar_para_webhook(log_entry, device_ip):
+def enviar_para_webhook(log_entry, cat):
+    """
+    Envia o evento de acesso ao webhook do ERP.
+    Inclui o device_id (serial da catraca) e o user_id numérico para que o servidor
+    consiga identificar corretamente o dispositivo e o aluno.
+    """
+    user_id = log_entry.get("user_id", 0)
+    log_id  = log_entry.get("id", 0)
     payload = {
+        # device_id = serial ou IP da catraca (o webhook tenta as duas formas)
+        "device_id": cat.get("id") or cat["ip"],
         "object_changes": [{
             "object": "access_logs",
             "type":   "inserted",
             "values": {
-                "id":      log_entry.get("id", 0),
-                "user_id": str(log_entry.get("user_id", "")),
+                "id":      log_id,
+                "user_id": user_id,
                 "time":    log_entry.get("time", 0),
             }
         }],
-        "device_id": device_ip,
     }
     return post_json(WEBHOOK_URL, payload, timeout=12)
 
@@ -233,35 +241,56 @@ def processar_fila_pendencias_erp(cats_conectadas):
                                   cookie=session)
                         print(f"     🗑️  [Catraca {cat_nome}] Aluno '{nome}' (ID {numeric_id}) removido da memória flash.")
                     else:
-                        # Criar / Atualizar usuário
-                        post_json(f"{base_url}/modify_objects.fcgi",
-                                  {
-                                      "object": "users",
-                                      "values": {"name": nome, "registration": matricula},
-                                      "where":  {"users": {"id": numeric_id}}
-                                  },
-                                  cookie=session)
-                        
-                        # Tentar criar se não existia
-                        post_json(f"{base_url}/add_objects.fcgi",
-                                  {"object": "users", "values": [{"id": numeric_id, "name": nome, "registration": matricula}]},
-                                  cookie=session)
+                        # Criar ou Atualizar usuário
+                        # 1. Tentar criar o usuário no equipamento (create_objects.fcgi)
+                        criado = False
+                        try:
+                            post_json(f"{base_url}/create_objects.fcgi",
+                                      {"object": "users", "values": [{"id": numeric_id, "name": nome[:30], "registration": str(matricula)}]},
+                                      cookie=session)
+                            criado = True
+                        except Exception:
+                            # Se já existir, atualizar com modify_objects.fcgi
+                            try:
+                                post_json(f"{base_url}/modify_objects.fcgi",
+                                          {
+                                              "object": "users",
+                                              "values": {"name": nome[:30], "registration": str(matricula)},
+                                              "where":  {"users": {"id": numeric_id}}
+                                          },
+                                          cookie=session)
+                            except Exception as me:
+                                pass
 
-                        print(f"     👤 [Catraca {cat_nome}] Dados de '{nome}' (ID {numeric_id}) atualizados.")
+                        print(f"     👤 [Catraca {cat_nome}] Dados de '{nome}' (ID {numeric_id}) sincronizados.")
 
                         # Enviar foto se presente
                         foto_enviada = False
                         if foto and isinstance(foto, str) and len(foto) > 50:
                             try:
-                                # Trata base64
+                                import base64
                                 clean_b64 = foto.split(',')[-1] if ',' in foto else foto
-                                post_json(f"{base_url}/set_user_image.fcgi",
-                                          {"user_id": numeric_id, "image": clean_b64},
-                                          cookie=session)
+                                img_bytes = base64.b64decode(clean_b64)
+                                req = urllib.request.Request(f"{base_url}/user_set_image.fcgi?user_id={numeric_id}", data=img_bytes, method="POST")
+                                req.add_header("Content-Type", "application/octet-stream")
+                                if session:
+                                    req.add_header("Cookie", f"session={session}")
+                                ctx = SSL_CTX if base_url.startswith("https") else None
+                                with urllib.request.urlopen(req, timeout=12, context=ctx) as r:
+                                    res = json.loads(r.read())
                                 foto_enviada = True
                                 print(f"     📸 [Catraca {cat_nome}] Foto de '{nome}' transmitida com sucesso.")
                             except Exception as fe:
-                                print(f"     ⚠️  [Catraca {cat_nome}] Foto falhou para '{nome}': {fe}")
+                                # Tenta fallback JSON
+                                try:
+                                    clean_b64 = foto.split(',')[-1] if ',' in foto else foto
+                                    post_json(f"{base_url}/set_user_image.fcgi",
+                                              {"user_id": numeric_id, "image": clean_b64},
+                                              cookie=session)
+                                    foto_enviada = True
+                                    print(f"     📸 [Catraca {cat_nome}] Foto de '{nome}' transmitida com sucesso (JSON).")
+                                except Exception:
+                                    print(f"     ⚠️  [Catraca {cat_nome}] Foto falhou para '{nome}'")
 
                     # Notificar o servidor online que o item foi sincronizado com sucesso nesta catraca
                     post_json(url_queue, {
@@ -359,7 +388,7 @@ def main():
             uid  = str(log.get("user_id", "?"))
             hora = formatar_hora(log.get("time", 0))
             try:
-                result = enviar_para_webhook(log, cat["ip"])
+                result = enviar_para_webhook(log, cat)
                 status = result.get("evento", result.get("status", "?"))
                 if status in ("sucesso", "ok", "ignorado (já registrado)", "inconsistencia", "?") or "actions" in result:
                     print(f"     ✅ Aluno {uid:<6} às {hora}  [sucesso]")

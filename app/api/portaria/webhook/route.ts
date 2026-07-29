@@ -50,7 +50,13 @@ export async function POST(req: Request) {
     }
 
     // O iDFace envia dados em formato plano OU no formato do Monitor oficial: { object_changes: [ { values: { ... } } ] }
-    let userId = payload.user_id || payload.userId || payload.id || ''
+    // IMPORTANTE: user_id = 0 significa face NÃO reconhecida (negado). Não tratar como vazio!
+    // Usamos null como sentinela para "campo ausente" e 0 para "negado pelo equipamento".
+    let userIdRaw: number | string | null = null
+    if (payload.user_id !== undefined)       userIdRaw = payload.user_id
+    else if (payload.userId !== undefined)   userIdRaw = payload.userId
+    else if (payload.id !== undefined)       userIdRaw = payload.id
+
     let eventTimeRaw = payload.time || payload.timestamp || ''
     let eventType = payload.event_type || payload.type || 'entrada'
 
@@ -62,11 +68,17 @@ export async function POST(req: Request) {
     if (payload.object_changes && Array.isArray(payload.object_changes) && payload.object_changes.length > 0) {
       const change = payload.object_changes[0]
       if (change.values) {
-        userId = userId || change.values.user_id || change.values.userId || ''
+        // Extrair user_id do object_changes (pode ser 0, que é válido — face negada)
+        if (userIdRaw === null && change.values.user_id !== undefined) userIdRaw = change.values.user_id
+        if (userIdRaw === null && change.values.userId !== undefined)   userIdRaw = change.values.userId
         eventTimeRaw = eventTimeRaw || change.values.time || change.values.timestamp || ''
         deviceSerial = deviceSerial || change.values.device_id || change.values.deviceSerial || ''
       }
     }
+
+    // Normalizar userId: null = ausente, 0 = face negada, >0 = usuário reconhecido
+    const userIdNum = userIdRaw !== null ? Number(userIdRaw) : null
+    const userId = userIdNum !== null ? String(userIdNum) : ''
 
     // Converter data de UNIX em segundos/milissegundos ou String para ISO 8601
     let eventTime = new Date().toISOString()
@@ -84,55 +96,54 @@ export async function POST(req: Request) {
     }
 
     // Tentar resolver o aluno pelo código do equipamento
+    // O iDFace cadastra usuários com id = parseInt(matricula) e envia esse mesmo id no access_log.
+    // user_id = 0 → face não reconhecida (nenhum template correspondente na catraca)
+    // user_id > 0 → usuário reconhecido, buscar aluno pelo id numérico da matrícula
     let alunoId: string | null = null
     let alunoNome = ''
     let alunoTurma: string | null = null
     let alunoTurno: string | null = null
     let alunoResponsaveis: any[] = []
 
-    if (userId) {
-      // 1. Tentar buscar direto por correspondência exata de matrícula
-      const { data: alunoExato } = await supabase
+    // Só tenta resolver aluno se houver user_id válido (> 0)
+    if (userIdNum !== null && userIdNum > 0) {
+      // 1. Busca prioritária: aluno onde parseInt(matricula) === userIdNum
+      //    Isso cobre o caso padrão onde o script cadastrou id = parseInt(matricula)
+      const { data: ativos } = await supabase
         .from('alunos')
-        .select('id, nome, turma, turno')
-        .eq('matricula', userId)
-        .limit(1)
-        .maybeSingle()
+        .select('id, nome, matricula, codigo, turma, turno')
+        .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
 
-      if (alunoExato) {
-        alunoId = alunoExato.id
-        alunoNome = alunoExato.nome
-        alunoTurma = alunoExato.turma || null
-        alunoTurno = alunoExato.turno || null
-        // Placeholder for future parent relation
-        alunoResponsaveis = [{ id: `parent_of_${alunoId}` }]
-      } else {
-        // 2. Se não achou por igualdade exata, tenta correspondência numérica parcial
-        const { data: ativos } = await supabase
-          .from('alunos')
-          .select('id, nome, matricula, turma, turno')
-          .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
+      if (ativos && ativos.length > 0) {
+        // Tenta match pelo id numérico da matrícula (campo principal do cadastro na catraca)
+        let match = ativos.find(a => {
+          const mat = a.matricula || a.codigo || ''
+          const numMat = parseInt(String(mat).replace(/\D/g, ''), 10)
+          return !isNaN(numMat) && numMat === userIdNum
+        })
 
-        if (ativos && ativos.length > 0) {
-          const targetNum = parseInt(String(userId).replace(/\D/g, ''), 10)
-          
-          if (!isNaN(targetNum)) {
-            const match = ativos.find(a => {
-              const codStr = a.matricula || ''
-              const codNum = parseInt(codStr.replace(/\D/g, ''), 10)
-              return !isNaN(codNum) && codNum === targetNum
-            })
+        // Fallback: match pelo codigo (alguns registros usam campo separado)
+        if (!match) {
+          match = ativos.find(a => {
+            const cod = a.codigo || ''
+            const numCod = parseInt(String(cod).replace(/\D/g, ''), 10)
+            return !isNaN(numCod) && numCod === userIdNum
+          })
+        }
 
-            if (match) {
-              alunoId = match.id
-              alunoNome = match.nome
-              alunoTurma = match.turma || null
-              alunoTurno = match.turno || null
-              alunoResponsaveis = [{ id: `parent_of_${match.id}` }]
-            }
-          }
+        if (match) {
+          alunoId = match.id
+          alunoNome = match.nome
+          alunoTurma = match.turma || null
+          alunoTurno = match.turno || null
+          alunoResponsaveis = [{ id: `parent_of_${match.id}` }]
+          console.log(`✅ [Webhook Portaria] Aluno resolvido: ${match.nome} (user_id catraca: ${userIdNum} → matrícula: ${match.matricula})`)
+        } else {
+          console.warn(`⚠️ [Webhook Portaria] user_id ${userIdNum} não corresponde a nenhum aluno ativo. Verifique se os alunos estão sincronizados nas catracas.`)
         }
       }
+    } else if (userIdNum === 0) {
+      console.log(`🚫 [Webhook Portaria] Acesso negado — face não reconhecida pelo equipamento (user_id=0)`)
     }
 
     // Resolver dispositivo
@@ -190,29 +201,51 @@ export async function POST(req: Request) {
     const startHour = configVal.horario_entrada_inicio || '06:00'
     const endHour = configVal.horario_entrada_fim || '22:00'
 
-    // Determinar status do evento
-    let eventStatus = alunoId ? 'sucesso' : (userId ? 'inconsistencia' : 'falha')
-
-    // Se o aluno foi identificado com sucesso, validar se está no horário permitido
-    if (eventStatus === 'sucesso') {
-      const eventDate = eventTimeRaw ? new Date(eventTime) : new Date()
-      // A catraca iDFace envia o timestamp UNIX como se o horário local fosse UTC.
-      // Portanto, extraímos as horas em UTC para obter a hora local exata registrada pelo equipamento.
-      const currentHour = String(eventDate.getUTCHours()).padStart(2, '0') + ':' + String(eventDate.getUTCMinutes()).padStart(2, '0')
-      if (currentHour < startHour || currentHour > endHour) {
+    // Determinar status do evento:
+    // sucesso       → aluno identificado e no horário permitido
+    // negado        → face não reconhecida pelo equipamento (user_id = 0)
+    // inconsistencia → aluno reconhecido mas fora da janela de horário, ou user_id presente mas aluno não encontrado
+    // falha         → payload sem identificação nenhuma
+    let eventStatus: string
+    if (userIdNum === 0) {
+      // Face presente mas não cadastrada na catraca → negado
+      eventStatus = 'negado'
+    } else if (alunoId) {
+      // Aluno identificado → validar janela de horário
+      const eventDate = new Date(eventTime)
+      // A catraca iDFace grava o timestamp como se o horário local fosse UTC (sem offset).
+      // Portanto usamos getUTCHours() para obter a hora local real registrada pelo equipamento.
+      const eventHourStr = String(eventDate.getUTCHours()).padStart(2, '0') + ':' + String(eventDate.getUTCMinutes()).padStart(2, '0')
+      if (eventHourStr >= startHour && eventHourStr <= endHour) {
+        eventStatus = 'sucesso'
+      } else {
+        console.warn(`⏰ [Webhook Portaria] Acesso fora da janela permitida (${eventHourStr}) — esperado entre ${startHour} e ${endHour}`)
         eventStatus = 'inconsistencia'
       }
+    } else if (userIdNum && userIdNum > 0) {
+      // user_id presente mas aluno não encontrado no ERP → inconsistencia
+      eventStatus = 'inconsistencia'
+    } else {
+      // Payload sem qualquer identificação
+      eventStatus = 'falha'
     }
 
-    // Identificador único determinístico para evitar duplicidade em sincronizações
-    let eventId = crypto.randomUUID()
+    // ID determinístico para evitar duplicações:
+    // Prioridade: (1) object_changes.id → enviado pelo Sincronizar_Catraca.py
+    //             (2) payload.id       → alguns firmwares enviam diretamente
+    //             (3) device+user+minuto → Push Protocol em tempo real (granularidade 1 min evita dupl)
+    let eventId: string
     if (payload.object_changes && payload.object_changes[0]?.values?.id) {
       eventId = `idface-${dispositivoId}-${payload.object_changes[0].values.id}`
-    } else if (payload.id) {
+    } else if (payload.id && payload.id !== 0) {
       eventId = `idface-${dispositivoId}-${payload.id}`
+    } else {
+      // Granularidade de 1 minuto: evita duplicação se a catraca enviar o mesmo evento 2x no mesmo minuto
+      const minuteBucket = Math.floor(new Date(eventTime).getTime() / 60000)
+      eventId = `idface-${dispositivoId}-${userIdNum ?? 'anon'}-${minuteBucket}`
     }
 
-    // Salvar evento — Usamos upsert para evitar duplicações se rodar o sync de acessos 2x
+    // Salvar evento — upsert garante idempotência ao re-processar ou receber push duplicado
     const { error: insertErr } = await supabase.from('portaria_eventos').upsert({
       id: eventId,
       aluno_id: alunoId,
@@ -222,7 +255,8 @@ export async function POST(req: Request) {
       tipo: 'entrada',
       status: eventStatus,
       data_hora: eventTime,
-      user_id_equipamento: String(userId),
+      // Guardar o user_id numérico original da catraca para diagnóstico
+      user_id_equipamento: userIdNum !== null ? String(userIdNum) : '',
       confianca: payload.score || payload.confidence || 0,
       foto_captura: payload.image || null,
       payload_raw: payload,

@@ -75,6 +75,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'CONTAS A RECEBER', href: '/financeiro/receber', icon: <CreditCard size={16} /> },
       { label: 'RENEGOCIAÇÃO', href: '/financeiro/renegociacao', icon: <Handshake size={16} /> },
+      { label: 'DRE', href: '/financeiro/dre', icon: <BarChart3 size={16} />, badge: 'IA', badgeColor: 'purple' },
     ],
   },
   {

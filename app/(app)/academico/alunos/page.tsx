@@ -1687,56 +1687,68 @@ export default function AlunosPage() {
         </div>
 
         {/* FILTERS & SEARCH */}
-        <div className="glass-card" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="glass-card" style={{ padding: '12px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
             
             {/* Search */}
-            <div style={{ position: 'relative', flex: 1, minWidth: 260 }}>
-              <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <div style={{ position: 'relative', flex: 1, minWidth: 140 }}>
+              <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input 
                 className="form-input" 
-                style={{ paddingLeft: 40, height: 44, borderRadius: 12, border: '1px solid #e2e8f0', width: '100%', fontSize: 14 }} 
+                style={{ paddingLeft: 34, height: 38, borderRadius: 10, border: '1px solid #e2e8f0', width: '100%', fontSize: 13 }} 
                 placeholder="Buscar por nome, código ou CPF…" 
                 value={busca}
                 onChange={e => setBusca(e.target.value)}
               />
             </div>
             
+            {/* Status Select */}
+            <select 
+              className="form-input" 
+              style={{ height: 38, borderRadius: 10, border: '1px solid #e2e8f0', padding: '0 10px', fontSize: 13, width: 145, flexShrink: 0, cursor: 'pointer', backgroundColor: '#fff' }}
+              value={statusFiltro}
+              onChange={e => setStatusFiltro(e.target.value)}
+            >
+              <option value="todos">Todos (Ativos)</option>
+              <option value="todos_com_inativos">Todos (Com inativos)</option>
+              <option value="com_observacoes">Com Observações</option>
+              <option value="sem_observacoes">Sem Observações</option>
+              <option value="ativo">Apenas Ativos</option>
+              <option value="inativo">Apenas Inativos</option>
+              <option value="matriculado_vazio">Matriculado ou Vazio</option>
+              <option value="pode_sair_sim">Pode Sair Sozinho (SIM)</option>
+              <option value="pode_sair_nao">Pode Sair Sozinho (NÃO)</option>
+              <option value="com_responsaveis">Com Responsáveis</option>
+              <option value="sem_responsaveis">Sem Responsáveis</option>
+              <option value="com_turma">Com Turma</option>
+              <option value="sem_turma">Sem Turma</option>
+            </select>
+            
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <select 
-                className="form-input" 
-                style={{ height: 44, borderRadius: 12, border: '1px solid #e2e8f0', padding: '0 12px', fontSize: 14, minWidth: 140 }}
-                value={statusFiltro}
-                onChange={e => setStatusFiltro(e.target.value)}
-              >
-                <option value="todos">Todos (Ativos)</option>
-                <option value="todos_com_inativos">Todos (Com inativos)</option>
-                <option value="com_observacoes">Com Observações (Lançadas)</option>
-                <option value="sem_observacoes">Sem Observações</option>
-                <option value="ativo">Apenas Ativos</option>
-                <option value="inativo">Apenas Inativos</option>
-                <option value="matriculado_vazio">Matriculado ou Vazio</option>
-                <option value="pode_sair_sim">Pode Sair Sozinho (SIM)</option>
-                <option value="pode_sair_nao">Pode Sair Sozinho (NÃO)</option>
-                <option value="com_responsaveis">Com Responsáveis</option>
-                <option value="sem_responsaveis">Sem Responsáveis</option>
-                <option value="com_turma">Com Turma</option>
-                <option value="sem_turma">Sem Turma</option>
-              </select>
-              
-              <button onClick={() => setIsFiltrosAvancadosModalOpen(true)} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>
-                <Filter size={16} /> Filtros Avançados
-              </button>
-              
-              <button onClick={() => setIsImportModalOpen(true)} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>
-                <Upload size={16} /> Importar
-              </button>
-              
-              <button onClick={() => setIsExportModalOpen(true)} className="neo-btn neo-btn-secondary" style={{ padding: '0 16px', height: 44 }}>
-                <Download size={16} /> Exportar
-              </button>
-            </div>
+            <button 
+              onClick={() => setIsFiltrosAvancadosModalOpen(true)} 
+              className="neo-btn neo-btn-secondary" 
+              style={{ padding: '0 12px', height: 38, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              <Filter size={14} /> Filtros Avançados
+            </button>
+            
+            <button 
+              onClick={() => setIsImportModalOpen(true)} 
+              className="neo-btn neo-btn-secondary" 
+              style={{ padding: '0 12px', height: 38, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              <Upload size={14} /> Importar
+            </button>
+            
+            <button 
+              onClick={() => setIsExportModalOpen(true)} 
+              className="neo-btn neo-btn-secondary" 
+              style={{ padding: '0 12px', height: 38, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', flexShrink: 0 }}
+            >
+              <Download size={14} /> Exportar
+            </button>
+
           </div>
         </div>
 

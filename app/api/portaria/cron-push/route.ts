@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { isValidStudentPhoto } from '@/lib/utils'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,10 +8,21 @@ const supabase = createClient(
 
 /**
  * GET /api/portaria/cron-push
- * Cron job do Vercel (roda a cada minuto).
- * Para cada dispositivo com pendências, faz uma chamada direta via API do iDFace
- * usando as credenciais armazenadas no banco.
- * Isso garante que a sincronização acontece MESMO quando ninguém está passando pela catraca.
+ * Cron job do Vercel (roda a cada minuto via vercel.json).
+ *
+ * ⚠️ ARQUITETURA IMPORTANTE:
+ * Este cron roda na NUVEM (Vercel/Netlify) e NÃO tem acesso aos IPs locais das catracas
+ * (192.168.1.x). Tentar conectar diretamente resulta em timeout garantido.
+ *
+ * O fluxo correto de sincronização nas catracas é feito por:
+ *   1. Push Protocol iDFace: a catraca faz POST no webhook a cada heartbeat e recebe
+ *      comandos (add_objects / destroy_objects) na resposta — AUTOMÁTICO.
+ *   2. Script Local: Sincronizar_Catraca.py rodando na rede local da escola.
+ *
+ * Este cron tem as seguintes responsabilidades VÁLIDAS:
+ *   a) Monitorar a fila portaria_sync e logar pendências antigas (>30 min sem resolver)
+ *   b) Marcar dispositivos como offline se não comunicaram há mais de 10 min
+ *   c) Emitir alertas no log para o time de operações
  */
 export async function GET(req: Request) {
   // Verificar se é uma chamada autorizada do Vercel Cron
@@ -26,137 +36,68 @@ export async function GET(req: Request) {
   }
 
   try {
-    // Buscar dispositivos ativos e suas pendências
+    const now = new Date()
+
+    // ─── 1. Monitorar dispositivos: marcar offline se não comunicaram há >10 min ────
+    const offlineThreshold = new Date(now.getTime() - 10 * 60 * 1000).toISOString()
     const { data: devices } = await supabase
       .from('portaria_dispositivos')
-      .select('id, nome, ip, porta, configuracao')
-    
-    if (!devices || devices.length === 0) {
-      return NextResponse.json({ status: 'ok', message: 'Nenhum dispositivo cadastrado' })
+      .select('id, nome, status, ultima_comunicacao')
+
+    const deviceStatus: any[] = []
+    for (const dev of devices || []) {
+      const ultimaComm = dev.ultima_comunicacao ? new Date(dev.ultima_comunicacao) : null
+      const estaOffline = !ultimaComm || ultimaComm.toISOString() < offlineThreshold
+
+      if (estaOffline && dev.status !== 'offline') {
+        await supabase
+          .from('portaria_dispositivos')
+          .update({ status: 'offline' })
+          .eq('id', dev.id)
+        console.warn(`[Cron Portaria] Dispositivo "${dev.nome}" marcado como OFFLINE (última comunicação: ${dev.ultima_comunicacao || 'nunca'})`)
+        deviceStatus.push({ device: dev.nome, action: 'marcado_offline', ultima_comunicacao: dev.ultima_comunicacao })
+      } else {
+        deviceStatus.push({ device: dev.nome, status: dev.status, ultima_comunicacao: dev.ultima_comunicacao })
+      }
     }
 
-    const results: any[] = []
+    // ─── 2. Monitorar fila: detectar pendências antigas (>30 min) e logar alertas ───
+    const staleThreshold = new Date(now.getTime() - 30 * 60 * 1000).toISOString()
+    const { data: stalePending, count: staleCount } = await supabase
+      .from('portaria_sync')
+      .select('aluno_id, dispositivo_id, updated_at', { count: 'exact' })
+      .eq('status', 'pendente')
+      .lt('updated_at', staleThreshold)
 
-    for (const dev of devices) {
-      // Buscar até 15 pendências para este dispositivo
-      const altDevId = dev.id.includes('/') ? dev.id.replace('/', '-') : dev.id.replace('-', '/')
-      const { data: pending } = await supabase
-        .from('portaria_sync')
-        .select('aluno_id, dispositivo_id, erro_detalhe')
-        .eq('status', 'pendente')
-        .or(`dispositivo_id.eq.${dev.id},dispositivo_id.eq.${altDevId}`)
-        .order('updated_at', { ascending: false })
-        .limit(15)
-
-      if (!pending || pending.length === 0) {
-        results.push({ device: dev.nome, processed: 0 })
-        continue
-      }
-
-      const login = dev.configuracao?.login || 'admin'
-      const password = dev.configuracao?.password || 'admin'
-      const port = dev.porta || 80
-      const protocol = port === 443 ? 'https' : 'http'
-      const baseUrl = `${protocol}://${dev.ip}:${port}`
-
-      // Tentar autenticar na catraca local
-      let session = ''
-      try {
-        const loginRes = await fetch(`${baseUrl}/login.fcgi`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ login, password }),
-          signal: AbortSignal.timeout(3000)
-        })
-        if (loginRes.ok) {
-          const loginData = await loginRes.json()
-          session = loginData.session || ''
-        }
-      } catch {
-        // Catraca offline — marcar e continuar
-        results.push({ device: dev.nome, error: 'offline', processed: 0 })
-        continue
-      }
-
-      if (!session) {
-        results.push({ device: dev.nome, error: 'auth_failed', processed: 0 })
-        continue
-      }
-
-      let processed = 0
-
-      for (const row of pending) {
-        // Buscar dados do aluno
-        const { data: aluno } = await supabase
-          .from('alunos')
-          .select('id, nome, matricula, codigo, foto, status')
-          .or(`id.eq.${row.aluno_id},matricula.eq.${row.aluno_id}`)
-          .maybeSingle()
-
-        const codigoStr = aluno?.matricula || aluno?.codigo || String(aluno?.id || row.aluno_id)
-        const numId = parseInt(String(codigoStr).replace(/\D/g, ''), 10)
-        if (isNaN(numId) || numId <= 0) continue
-
-        const isActive = aluno && ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'].includes(aluno.status)
-        const isDeleteRequest = row.erro_detalhe?.toLowerCase().includes('exclus') || row.erro_detalhe?.toLowerCase().includes('remov') || !isActive
-
-        try {
-          if (isDeleteRequest) {
-            await fetch(`${baseUrl}/destroy_objects.fcgi?session=${session}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ object: 'users', where: { users: { id: numId } } }),
-              signal: AbortSignal.timeout(5000)
-            })
-          } else if (isActive) {
-            const nameStr = aluno!.nome ? aluno!.nome.substring(0, 30) : `Aluno ${numId}`
-            // Criar ou atualizar usuário
-            await fetch(`${baseUrl}/add_objects.fcgi?session=${session}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ object: 'users', values: [{ id: numId, name: nameStr, registration: String(numId) }] }),
-              signal: AbortSignal.timeout(5000)
-            })
-
-            // Enviar foto se disponível
-            if (aluno!.foto && isValidStudentPhoto(aluno!.foto) && aluno!.foto.startsWith('data:image')) {
-              const base64 = aluno!.foto.replace(/^data:image\/\w+;base64,/, '')
-              await fetch(`${baseUrl}/set_user_image.fcgi?session=${session}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: numId, image: base64 }),
-                signal: AbortSignal.timeout(10000)
-              }).catch(() => {}) // Foto é opcional
-            }
-          }
-
-          // Marcar como sincronizado
-          let upd = supabase
-            .from('portaria_sync')
-            .update({ status: 'sincronizado', ultima_sync: new Date().toISOString(), erro_detalhe: null, updated_at: new Date().toISOString() })
-            .eq('aluno_id', String(row.aluno_id))
-          if (row.dispositivo_id) upd = upd.eq('dispositivo_id', String(row.dispositivo_id))
-          await upd
-
-          processed++
-        } catch (err: any) {
-          console.error(`[Cron Push] Erro ao sincronizar aluno ${row.aluno_id} em ${dev.nome}:`, err.message)
-        }
-      }
-
-      // Atualizar status do dispositivo
-      await supabase
-        .from('portaria_dispositivos')
-        .update({ status: processed > 0 ? 'online' : 'online', ultima_comunicacao: new Date().toISOString() })
-        .eq('id', dev.id)
-
-      results.push({ device: dev.nome, processed })
+    if (staleCount && staleCount > 0) {
+      console.warn(
+        `[Cron Portaria] ⚠️ ${staleCount} sincronização(ões) PENDENTE(S) há mais de 30 minutos. ` +
+        `Verifique se as catracas estão enviando heartbeat ao webhook (/api/portaria/webhook) ` +
+        `e se o Sincronizar_Catraca.py está rodando na rede local.`
+      )
     }
 
-    const totalProcessed = results.reduce((s, r) => s + (r.processed || 0), 0)
-    console.log(`[Cron Push] Concluído: ${totalProcessed} alunos sincronizados`, results)
+    // ─── 3. Contar total de pendências ativas ───────────────────────────────────────
+    const { count: totalPendente } = await supabase
+      .from('portaria_sync')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pendente')
 
-    return NextResponse.json({ status: 'ok', results, totalProcessed })
+    const summary = {
+      status: 'ok',
+      timestamp: now.toISOString(),
+      dispositivos: deviceStatus,
+      fila: {
+        pendentes_total: totalPendente ?? 0,
+        pendentes_antigos_30min: staleCount ?? 0,
+        nota: staleCount && staleCount > 0
+          ? 'Execute Sincronizar_Catraca.py na rede local ou verifique o Push Protocol das catracas'
+          : 'Fila saudável'
+      }
+    }
+
+    console.log('[Cron Portaria] Verificação concluída:', JSON.stringify(summary))
+    return NextResponse.json(summary)
   } catch (err: any) {
     console.error('[Cron Push Error]', err.message)
     return NextResponse.json({ status: 'error', error: err.message }, { status: 500 })
