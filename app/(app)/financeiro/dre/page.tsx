@@ -33,6 +33,9 @@ interface DREGrupo {
 }
 
 interface DREDados {
+  _arquivo_base64?: string
+  _tipo_arquivo_original?: string
+  _nome_arquivo_original?: string
   empresa?: string
   periodo?: {
     inicio?: string
@@ -115,6 +118,8 @@ interface DREHistoricoItem {
   resultado_liquido: number
   criado_em: string
   dados_dre?: DREDados
+  arquivo_base64?: string
+  arquivo_url?: string
 }
 
 const LOCAL_STORAGE_KEY = 'impacto_dre_historico_v2'
@@ -203,20 +208,119 @@ export default function DREPage() {
     }
   }
 
+  // Item do relatório atualmente visualizado
+  const currentHistoricoItem: DREHistoricoItem = useMemo(() => {
+    const matched = historico.find(h => h.nome_arquivo === nomeRelatorio || (dreData && h.dados_dre === dreData))
+    if (matched) return matched
+    return {
+      id: 'current',
+      nome_arquivo: nomeRelatorio || file?.name || 'relatorio.pdf',
+      tipo_arquivo: file?.name?.split('.').pop()?.toLowerCase() || (dreData?._tipo_arquivo_original || 'pdf'),
+      periodo_descricao: dreData?.periodo?.descricao || 'Análise Anual',
+      total_receitas: dreData?.receitas?.total_geral || 0,
+      total_despesas: dreData?.despesas?.total_geral || 0,
+      resultado_liquido: dreData?.resultado_operacional || 0,
+      criado_em: new Date().toISOString(),
+      dados_dre: dreData || undefined,
+      arquivo_base64: dreData?._arquivo_base64
+    }
+  }, [historico, nomeRelatorio, dreData, file])
+
+  // Função para abrir ou baixar o arquivo original enviado
+  const handleAbrirArquivoOriginal = (item: DREHistoricoItem) => {
+    if (!item) return
+
+    // 1. Se temos o arquivo File em memória na sessão atual com nome correspondente
+    if (file && (file.name === item.nome_arquivo || file.name.startsWith(item.nome_arquivo) || item.nome_arquivo.startsWith(file.name))) {
+      const url = URL.createObjectURL(file)
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        window.open(url, '_blank')
+      } else {
+        const a = document.createElement('a')
+        a.href = url
+        a.download = file.name
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+      return
+    }
+
+    // 2. Busca o base64 do item ou de dados_dre
+    const base64Data = item.arquivo_base64 || item.dados_dre?._arquivo_base64 || (dreData && (nomeRelatorio === item.nome_arquivo || item.id === 'current') ? dreData._arquivo_base64 : null)
+
+    if (!base64Data) {
+      alert('O arquivo original deste relatório antigo não está armazenado no cache local/servidor (apenas os dados processados da DRE foram salvos). Envie o arquivo novamente para habilitar o download do original.')
+      return
+    }
+
+    try {
+      let pureBase64 = base64Data
+      let mimeType = item.tipo_arquivo === 'pdf' || item.nome_arquivo.toLowerCase().endsWith('.pdf')
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+      if (base64Data.startsWith('data:')) {
+        const parts = base64Data.split(',')
+        const match = parts[0].match(/:(.*?);/)
+        if (match) mimeType = match[1]
+        pureBase64 = parts[1]
+      }
+
+      const byteCharacters = atob(pureBase64)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      const blob = new Blob([byteArray], { type: mimeType })
+      const blobUrl = URL.createObjectURL(blob)
+
+      if (mimeType.includes('pdf')) {
+        const newWin = window.open(blobUrl, '_blank')
+        if (!newWin) {
+          const a = document.createElement('a')
+          a.href = blobUrl
+          a.download = item.nome_arquivo.toLowerCase().endsWith('.pdf') ? item.nome_arquivo : `${item.nome_arquivo}.pdf`
+          document.body.appendChild(a)
+          a.click()
+          document.body.removeChild(a)
+        }
+      } else {
+        const ext = item.tipo_arquivo || 'xlsx'
+        const fileName = item.nome_arquivo.includes('.') ? item.nome_arquivo : `${item.nome_arquivo}.${ext}`
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = fileName
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+      }
+
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000)
+    } catch (e) {
+      console.error('Erro ao abrir arquivo original:', e)
+      alert('Não foi possível abrir a cópia original do arquivo.')
+    }
+  }
+
   // Função para salvar no LocalStorage + Supabase
   const salvarNoHistorico = async (dados: DREDados, nomePersonalizado: string) => {
     const idItem = `dre_${Date.now()}`
+    const tipoArq = dados._tipo_arquivo_original || file?.name?.split('.').pop()?.toLowerCase() || 'pdf'
     const novoItem: DREHistoricoItem = {
       id: idItem,
       nome_arquivo: nomePersonalizado || 'DRE - Relatório Analítico',
-      tipo_arquivo: 'pdf',
+      tipo_arquivo: tipoArq,
       periodo_descricao: dados.periodo?.descricao || 'Análise Anual',
       empresa: dados.empresa || 'Colégio Impacto',
       total_receitas: dados.receitas?.total_geral || 0,
       total_despesas: dados.despesas?.total_geral || 0,
       resultado_liquido: dados.resultado_operacional || 0,
       criado_em: new Date().toISOString(),
-      dados_dre: dados
+      dados_dre: dados,
+      arquivo_base64: dados._arquivo_base64
     }
 
     // 1. Salva no LocalStorage imediatamente
@@ -227,7 +331,7 @@ export default function DREPage() {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedList))
       setHistorico(updatedList)
     } catch (e) {
-      console.warn('Erro ao gravar no LocalStorage:', e)
+      console.warn('Erro ao gravar no LocalStorage (pode exceder cota se arquivo for muito grande):', e)
     }
 
     // 2. Tenta salvar na API Supabase
@@ -238,7 +342,9 @@ export default function DREPage() {
         body: JSON.stringify({
           action: 'save',
           nomeArquivo: nomePersonalizado,
-          dadosDRE: dados
+          dadosDRE: dados,
+          arquivoBase64: dados._arquivo_base64,
+          tipoArquivo: tipoArq
         })
       })
     } catch (e) {
@@ -270,6 +376,17 @@ export default function DREPage() {
     }, 400)
 
     try {
+      // Converte cliente para base64 como garantia adicional
+      let clientBase64 = ''
+      try {
+        clientBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () => resolve('')
+          reader.readAsDataURL(selectedFile)
+        })
+      } catch (e) {}
+
       const formData = new FormData()
       formData.append('file', selectedFile)
       formData.append('nomeArquivo', selectedFile.name)
@@ -298,20 +415,27 @@ export default function DREPage() {
       }
 
       const nomePadrao = selectedFile.name.replace(/\.[^/.]+$/, '')
+      const dadosEnriquecidos: DREDados = {
+        ...result.data,
+        _arquivo_base64: result.data._arquivo_base64 || clientBase64,
+        _tipo_arquivo_original: ext,
+        _nome_arquivo_original: selectedFile.name
+      }
+
       setNomeRelatorio(nomePadrao)
-      setDreData(result.data)
+      setDreData(dadosEnriquecidos)
       setActiveTab('dre')
 
       // Salva automaticamente no Histórico Híbrido
-      await salvarNoHistorico(result.data, nomePadrao)
+      await salvarNoHistorico(dadosEnriquecidos, nomePadrao)
       await fetchHistorico()
 
-      if (result.data) {
+      if (dadosEnriquecidos) {
         const initialExpand: Record<string, boolean> = {}
-        result.data.receitas?.grupos?.forEach((g: DREGrupo, i: number) => {
+        dadosEnriquecidos.receitas?.grupos?.forEach((g: DREGrupo, i: number) => {
           initialExpand[`rec_${g.codigo || i}`] = true
         })
-        result.data.despesas?.grupos?.forEach((g: DREGrupo, i: number) => {
+        dadosEnriquecidos.despesas?.grupos?.forEach((g: DREGrupo, i: number) => {
           initialExpand[`desp_${g.codigo || i}`] = true
         })
         setExpandedGroups(initialExpand)
@@ -988,16 +1112,38 @@ export default function DREPage() {
               </p>
             </div>
 
-            {/* SELETOR DE ABAS — PILL STYLE EXECUTIVO */}
-            <div style={{
-              background: '#f1f5f9',
-              borderRadius: '12px',
-              padding: '4px',
-              display: 'flex',
-              gap: '4px',
-              border: '1px solid #e2e8f0',
-              flexWrap: 'wrap'
-            }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => handleAbrirArquivoOriginal(currentHistoricoItem)}
+                style={{
+                  padding: '8px 16px',
+                  background: '#f0f9ff',
+                  color: '#0284c7',
+                  border: '1px solid #bae6fd',
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+                title="Abrir/baixar a cópia do arquivo PDF ou Excel original enviado"
+              >
+                <FileText size={14} color="#0284c7" /> Abrir Original
+              </button>
+
+              {/* SELETOR DE ABAS — PILL STYLE EXECUTIVO */}
+              <div style={{
+                background: '#f1f5f9',
+                borderRadius: '12px',
+                padding: '4px',
+                display: 'flex',
+                gap: '4px',
+                border: '1px solid #e2e8f0',
+                flexWrap: 'wrap'
+              }}>
               <button
                 onClick={() => setActiveTab('dre')}
                 style={{
@@ -1104,6 +1250,7 @@ export default function DREPage() {
               </button>
             </div>
           </div>
+        </div>
 
           {/* ─── BLOCO 1: 4 CARDS PRINCIPAIS DA DRE OPERACIONAL (LINHA 1) ─────────── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
@@ -1889,6 +2036,13 @@ export default function DREPage() {
                           style={{ padding: '8px 16px', background: '#4f46e5', color: '#ffffff', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                         >
                           <Eye size={14} /> Visualizar
+                        </button>
+                        <button
+                          onClick={() => handleAbrirArquivoOriginal(item)}
+                          style={{ padding: '8px 14px', background: '#f0f9ff', color: '#0284c7', border: '1px solid #bae6fd', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          title="Abrir ou baixar arquivo original enviado"
+                        >
+                          <FileText size={14} color="#0284c7" /> Abrir Original
                         </button>
                         <button
                           onClick={(e) => handleExcluirHistorico(item.id, e)}

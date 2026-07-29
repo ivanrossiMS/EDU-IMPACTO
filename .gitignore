@@ -94,3 +94,8 @@ scratch*.js
 .agent/scripts/
 scratch/
 *.zip
+__pycache__/
+sincronizados_*.txt
+.dre_historico_store.json
+task.md
+

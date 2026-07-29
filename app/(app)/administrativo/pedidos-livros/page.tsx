@@ -59,6 +59,21 @@ function abreviarNome(nome?: string): string {
   return `${partes[0]} ${partes[partes.length - 1]}`
 }
 
+function extractYearFromVencimento(vencimento?: string): string | null {
+  if (!vencimento) return null
+  const str = vencimento.trim()
+  if (str.includes('/')) {
+    const parts = str.split('/')
+    if (parts.length === 3 && parts[2].length === 4) return parts[2]
+  }
+  if (str.includes('-')) {
+    const parts = str.split('-')
+    if (parts[0].length === 4) return parts[0]
+  }
+  if (str.length === 4 && !isNaN(Number(str))) return str
+  return null
+}
+
 // ─── Chip de evento colorido ───────────────────────────────────────
 const EVENTO_CORES: Record<string, { bg: string; color: string }> = {
   'livros':         { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa' },
@@ -337,11 +352,17 @@ export default function PedidosLivrosPage() {
         const tObj = rawTurmas.find((t: any) => t.id === (p.turmaId || alu?.turma))
         const nomeTurma = p.turma || tObj?.nome || alu?.turma || '—'
 
+        const yearFromVenc  = extractYearFromVencimento(p.vencimento)
+        const yearFromTurma = tObj?.ano ? String(tObj.ano) : ((tObj as any)?.ano_letivo ? String((tObj as any).ano_letivo) : null)
+        const yearFromAluno = alu?.anoLetivo ? String(alu.anoLetivo) : ((alu as any)?.ano_letivo ? String((alu as any).ano_letivo) : null)
+        const yearFromParc  = (p as any).anoLetivo ? String((p as any).anoLetivo) : ((p as any).ano_letivo ? String((p as any).ano_letivo) : null)
+        const anoLetivoCalculado = yearFromParc || yearFromTurma || yearFromAluno || yearFromVenc || new Date().getFullYear().toString()
+
         map.set(key, {
           alunoNome: p.aluno,
           turma: nomeTurma,
           segmento: inferirSegmento(alu?.serie, nomeTurma),
-          anoLetivo: p.vencimento ? p.vencimento.substring(0, 4) : new Date().getFullYear().toString(),
+          anoLetivo: anoLetivoCalculado,
           eventoId: p.eventoId,
           eventoDescricao: p.eventoDescricao,
           parcelas: [],
@@ -491,13 +512,30 @@ export default function PedidosLivrosPage() {
     marcarFeito(gs.map(g => g.pedidoId), feito)
   }
 
-  // ── KPIs ──────────────────────────────────────────────────────────
-  const totalGrupos    = grupos.length
-  const feitosCount   = grupos.filter(g => isFeito(g.pedidoId)).length
-  const chegouCount   = grupos.filter(g => isChegou(g.pedidoId)).length
-  const entreguesCount = grupos.filter(g => isEntregue(g.pedidoId)).length
+  // ── KPIs baseados no Ano Letivo e demais filtros ─────────────────────
+  const gruposBaseKPI = React.useMemo(() => {
+    return grupos.filter(g => {
+      const matchBusca = !busca ||
+        g.alunoNome.toLowerCase().includes(busca.toLowerCase()) ||
+        g.turma.toLowerCase().includes(busca.toLowerCase()) ||
+        g.segmento.toLowerCase().includes(busca.toLowerCase()) ||
+        g.eventoDescricao.toLowerCase().includes(busca.toLowerCase())
+
+      const matchTurma    = !filtroTurma    || g.turma    === filtroTurma
+      const matchEvento   = !filtroEvento   || g.eventoDescricao === filtroEvento
+      const matchSegmento = !filtroSegmento || g.segmento === filtroSegmento
+      const matchAno      = !filtroAno      || g.anoLetivo === filtroAno
+
+      return matchBusca && matchTurma && matchEvento && matchSegmento && matchAno
+    })
+  }, [grupos, busca, filtroTurma, filtroEvento, filtroSegmento, filtroAno])
+
+  const totalGrupos    = gruposBaseKPI.length
+  const feitosCount   = gruposBaseKPI.filter(g => isFeito(g.pedidoId)).length
+  const chegouCount   = gruposBaseKPI.filter(g => isChegou(g.pedidoId)).length
+  const entreguesCount = gruposBaseKPI.filter(g => isEntregue(g.pedidoId)).length
   const pendenteCount = totalGrupos - feitosCount
-  const valorTotalGeral = grupos.reduce((s, g) => s + g.valorTotal, 0)
+  const valorTotalGeral = gruposBaseKPI.reduce((s, g) => s + g.valorTotal, 0)
 
   // ── Agrupamento visual ─────────────────────────────────────────────
   function getChaves(): string[] {
@@ -604,39 +642,90 @@ export default function PedidosLivrosPage() {
         </div>
       ) : (
       <>
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 20 }}>
-        {[
-          { label: 'Total de Materiais',  value: totalGrupos,    icon: '📋', color: '#60a5fa' },
-          { label: 'Pendentes',         value: pendenteCount,  icon: '⏳', color: '#f59e0b' },
-          { label: 'Pedido Feito',      value: feitosCount,    icon: '✅', color: '#8b5cf6' },
-          { label: 'Chegou na Escola',  value: chegouCount,    icon: '🏢', color: '#a78bfa' },
-          { label: 'Entregues',         value: entreguesCount, icon: '📦', color: '#10b981' },
-        ].map(k => (
-          <div key={k.label} className="kpi-card" style={{ position: 'relative', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 20 }}>{k.icon}</span>
-              <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{k.label}</span>
-            </div>
-            <div style={{
-              fontSize: (k as { isText?: boolean }).isText ? 15 : 28,
-              fontWeight: 900, color: k.color, fontFamily: 'Outfit,sans-serif'
-            }}>
-              {k.value}
-            </div>
-            {typeof k.value === 'number' && totalGrupos > 0 && (
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
-                background: `linear-gradient(90deg, ${k.color}33, transparent)`,
-              }}>
-                <div style={{
-                  height: '100%', width: `${(k.value / totalGrupos) * 100}%`,
-                  background: k.color, borderRadius: 9999, transition: 'width 0.5s'
-                }} />
-              </div>
-            )}
+      {/* KPIs com indicador de Ano Letivo e Interatividade */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '0 2px' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CalendarDays size={15} color="#6366f1" />
+            <span>Ano Letivo: <strong style={{ color: 'hsl(var(--text-foreground))', fontSize: 13 }}>{filtroAno || 'Todos os Anos'}</strong></span>
+            <span style={{ fontSize: 11, background: 'rgba(99,102,241,0.12)', color: '#6366f1', padding: '2px 8px', borderRadius: 9999, fontWeight: 700 }}>
+              {totalGrupos} pedido(s)
+            </span>
           </div>
-        ))}
+          {filtroView !== 'todos' && (
+            <button
+              className="btn btn-ghost btn-xs"
+              style={{ fontSize: 11, color: '#6366f1', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}
+              onClick={() => setFiltroView('todos')}
+            >
+              <RotateCcw size={11} /> Mostrar Todos os Status
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+          {[
+            { label: 'Total de Materiais',  value: totalGrupos,    icon: '📋', color: '#60a5fa', view: 'todos' as FiltroView },
+            { label: 'Pendentes',         value: pendenteCount,  icon: '⏳', color: '#f59e0b', view: 'pendentes' as FiltroView },
+            { label: 'Pedido Feito',      value: feitosCount,    icon: '✅', color: '#8b5cf6', view: 'feitos' as FiltroView },
+            { label: 'Chegou na Escola',  value: chegouCount,    icon: '🏢', color: '#a78bfa', view: 'chegou' as FiltroView },
+            { label: 'Entregues',         value: entreguesCount, icon: '📦', color: '#10b981', view: 'entregues' as FiltroView },
+          ].map(k => {
+            const isSelected = filtroView === k.view
+            return (
+              <motion.div
+                key={k.label}
+                whileHover={{ scale: 1.03, translateY: -2 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setFiltroView(k.view)}
+                className="kpi-card"
+                style={{
+                  position: 'relative',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  borderRadius: 14,
+                  padding: '14px 16px',
+                  background: isSelected ? `${k.color}15` : 'hsl(var(--bg-surface))',
+                  border: isSelected ? `2px solid ${k.color}` : '1px solid hsl(var(--border-subtle))',
+                  boxShadow: isSelected ? `0 6px 16px -4px ${k.color}40` : 'none',
+                  transition: 'all 0.2s ease-in-out',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 20 }}>{k.icon}</span>
+                    <span style={{ fontSize: 11, fontWeight: isSelected ? 800 : 600, color: isSelected ? k.color : 'hsl(var(--text-muted))' }}>{k.label}</span>
+                  </div>
+                  {isSelected && (
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: k.color, boxShadow: `0 0 8px ${k.color}` }} />
+                  )}
+                </div>
+                <div style={{
+                  fontSize: 28,
+                  fontWeight: 900, color: k.color, fontFamily: 'Outfit,sans-serif',
+                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between'
+                }}>
+                  <span>{k.value}</span>
+                  {totalGrupos > 0 && k.view !== 'todos' && (
+                    <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, color: k.color }}>
+                      {Math.round((k.value / totalGrupos) * 100)}%
+                    </span>
+                  )}
+                </div>
+                {typeof k.value === 'number' && totalGrupos > 0 && (
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: 3,
+                    background: `linear-gradient(90deg, ${k.color}33, transparent)`,
+                  }}>
+                    <div style={{
+                      height: '100%', width: `${(k.value / totalGrupos) * 100}%`,
+                      background: k.color, borderRadius: 9999, transition: 'width 0.5s'
+                    }} />
+                  </div>
+                )}
+              </motion.div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Barra de filtros */}

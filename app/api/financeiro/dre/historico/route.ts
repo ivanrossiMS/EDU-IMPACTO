@@ -53,9 +53,15 @@ export async function GET(request: Request) {
     // Mescla os dois ignorando duplicados por ID
     const itemMap = new Map<string, any>()
     for (const item of localItems) {
+      if (item.dados_dre?._arquivo_base64 && !item.arquivo_base64) {
+        item.arquivo_base64 = item.dados_dre._arquivo_base64
+      }
       itemMap.set(item.id, item)
     }
     for (const item of dbItems) {
+      if (item.dados_dre?._arquivo_base64 && !item.arquivo_base64) {
+        item.arquivo_base64 = item.dados_dre._arquivo_base64
+      }
       itemMap.set(item.id, item)
     }
 
@@ -137,14 +143,17 @@ export async function POST(request: Request) {
 
     // Ação: Salvar DRE explicitamente
     if (body.action === 'save') {
-      const { nomeArquivo, dadosDRE, tipoArquivo = 'pdf' } = body
+      const { nomeArquivo, dadosDRE, tipoArquivo = 'pdf', arquivoBase64 } = body
       const { data: userData } = await supabase.auth.getUser()
+
+      const base64ToUse = arquivoBase64 || dadosDRE?._arquivo_base64
 
       const itemToSave: any = {
         id: `dre_${Date.now()}`,
         nome_arquivo: nomeArquivo || 'DRE - Relatório Analítico',
         tipo_arquivo: tipoArquivo,
         dados_dre: dadosDRE,
+        arquivo_base64: base64ToUse,
         periodo_descricao: dadosDRE?.periodo?.descricao || 'Análise Anual',
         empresa: dadosDRE?.empresa || 'Colégio Impacto',
         total_receitas: dadosDRE?.receitas?.total_geral || 0,

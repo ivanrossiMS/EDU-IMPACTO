@@ -8,7 +8,8 @@ import { useEnsalamento } from '@/lib/useEnsalamento'
 import {
   ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
   AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info,
-  Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw, User
+  Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw, User,
+  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
@@ -20,6 +21,225 @@ const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; b
   J: { bg: '#fef3c7', color: '#b45309', border: '#fde68a', label: 'J', glow: 'rgba(245, 158, 11, 0.2)' },
   A: { bg: '#e5e7eb', color: '#374151', border: '#d1d5db', label: 'A', glow: 'rgba(107, 114, 128, 0.2)' },
   '-': { bg: 'transparent', color: '#94a3b8', border: '1px dashed #cbd5e1', label: '-', glow: 'none' },
+}
+
+export interface OrigemFrequenciaInfo {
+  tipo: 'catraca' | 'manual' | 'totem' | 'sem_registro'
+  label: string
+  horario?: string
+  dispositivo?: string
+  detalhes?: string
+}
+
+function formatTimeFromIso(isoStr?: string): string | undefined {
+  if (!isoStr) return undefined
+  try {
+    const d = new Date(isoStr)
+    if (!isNaN(d.getTime())) {
+      const h = String(d.getHours()).padStart(2, '0')
+      const m = String(d.getMinutes()).padStart(2, '0')
+      return `${h}:${m}`
+    }
+  } catch {}
+  return undefined
+}
+
+function getOrigemFrequenciaInfo(
+  alunoId: string,
+  dataStr: string,
+  freqRecord?: any,
+  portariaEvents?: any[]
+): OrigemFrequenciaInfo {
+  const targetId = String(alunoId).trim()
+
+  // Evento de portaria (Catraca iDFace) para o aluno nesta data
+  const portariaEv = (portariaEvents || []).find((ev: any) => {
+    const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
+    const evEquipId = String(ev.user_id_equipamento || '').trim()
+
+    const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+    if (!matchesAluno) return false
+    if (ev.status && ev.status !== 'sucesso') return false
+    const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
+    return evDateStr === dataStr
+  })
+
+  let horaCatraca: string | undefined = undefined
+  if (portariaEv) {
+    const rawTime = portariaEv.data_hora || portariaEv.created_at || portariaEv.data
+    if (rawTime) {
+      try {
+        const d = new Date(rawTime)
+        if (!isNaN(d.getTime())) {
+          const h = String(d.getUTCHours()).padStart(2, '0')
+          const m = String(d.getUTCMinutes()).padStart(2, '0')
+          horaCatraca = `${h}:${m}`
+        }
+      } catch {}
+    }
+  }
+
+  if (freqRecord) {
+    const registradoPor = String(freqRecord.registradoPor || freqRecord.dados?.registradoPor || '')
+    const origem = String(freqRecord.origem || freqRecord.dados?.origem || '')
+    const horaReg = freqRecord.horaRegistro || 
+                    freqRecord.dados?.horaRegistro || 
+                    horaCatraca || 
+                    formatTimeFromIso(freqRecord.created_at || freqRecord.updated_at)
+
+    const isCatraca =
+      origem === 'catraca' ||
+      registradoPor.toLowerCase().includes('catraca') ||
+      registradoPor.toLowerCase().includes('idface') ||
+      !!portariaEv
+
+    const isTotem = origem === 'totem' || registradoPor.toLowerCase().includes('totem')
+
+    if (isCatraca) {
+      return {
+        tipo: 'catraca',
+        label: 'iDFace',
+        horario: horaReg || horaCatraca || undefined,
+        dispositivo: portariaEv?.dispositivo_nome || 'iDFace',
+        detalhes: `Leitura biométrica via iDFace (${portariaEv?.dispositivo_nome || 'Catraca'})`
+      }
+    }
+
+    if (isTotem) {
+      return {
+        tipo: 'totem',
+        label: 'Totem',
+        horario: horaReg || undefined,
+        detalhes: 'Lançamento automático de ausência por totem'
+      }
+    }
+
+    return {
+      tipo: 'manual',
+      label: 'Manual',
+      horario: horaReg || undefined,
+      detalhes: 'Lançado manualmente pelo professor/equipe'
+    }
+  }
+
+  if (portariaEv) {
+    return {
+      tipo: 'catraca',
+      label: 'iDFace',
+      horario: horaCatraca,
+      dispositivo: portariaEv.dispositivo_nome || 'iDFace',
+      detalhes: 'Entrada registrada no equipamento iDFace'
+    }
+  }
+
+  return {
+    tipo: 'sem_registro',
+    label: 'Sem Registro'
+  }
+}
+
+function OrigemBadge({ info, compact = false }: { info: OrigemFrequenciaInfo; compact?: boolean }) {
+  if (!info || info.tipo === 'sem_registro') return null
+
+  if (info.tipo === 'catraca') {
+    return (
+      <span
+        title={info.detalhes || `Leitura biométrica iDFace${info.horario ? ` às ${info.horario}` : ''}`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          padding: compact ? '2px 6px' : '3px 9px',
+          background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+          color: '#0369a1',
+          border: '1px solid #7dd3fc',
+          borderRadius: '8px',
+          fontSize: compact ? '9px' : '11px',
+          fontWeight: 800,
+          lineHeight: 1,
+          boxShadow: '0 1px 3px rgba(3, 105, 161, 0.12)',
+          letterSpacing: '0.2px',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        <ScanFace size={compact ? 11 : 13} style={{ color: '#0284c7' }} />
+        <span>iDFace</span>
+        {info.horario ? (
+          <span style={{ background: '#0284c7', color: '#fff', padding: '2px 5px', borderRadius: '5px', fontSize: '9px', fontWeight: 900 }}>
+            {info.horario}h
+          </span>
+        ) : (
+          <span style={{ background: 'rgba(2, 132, 199, 0.15)', color: '#0369a1', padding: '1px 4px', borderRadius: '4px', fontSize: '8px', fontWeight: 800 }}>
+            Catraca
+          </span>
+        )}
+      </span>
+    )
+  }
+
+  if (info.tipo === 'manual') {
+    return (
+      <span
+        title={info.detalhes || `Chamada lançada manualmente${info.horario ? ` às ${info.horario}` : ''}`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          padding: compact ? '2px 6px' : '3px 9px',
+          background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
+          color: '#6b21a8',
+          border: '1px solid #c084fc',
+          borderRadius: '8px',
+          fontSize: compact ? '9px' : '11px',
+          fontWeight: 800,
+          lineHeight: 1,
+          boxShadow: '0 1px 3px rgba(107, 33, 168, 0.12)',
+          letterSpacing: '0.2px',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        <Edit3 size={compact ? 11 : 13} style={{ color: '#7e22ce' }} />
+        <span>Manual</span>
+        {info.horario && (
+          <span style={{ background: '#7e22ce', color: '#fff', padding: '2px 5px', borderRadius: '5px', fontSize: '9px', fontWeight: 900 }}>
+            {info.horario}h
+          </span>
+        )}
+      </span>
+    )
+  }
+
+  if (info.tipo === 'totem') {
+    return (
+      <span
+        title={info.detalhes || 'Registrado por Totem'}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '5px',
+          padding: compact ? '2px 6px' : '3px 9px',
+          background: '#f1f5f9',
+          color: '#475569',
+          border: '1px solid #cbd5e1',
+          borderRadius: '8px',
+          fontSize: compact ? '9px' : '11px',
+          fontWeight: 800,
+          lineHeight: 1,
+          whiteSpace: 'nowrap'
+        }}
+      >
+        <Cpu size={compact ? 11 : 13} style={{ color: '#64748b' }} />
+        <span>Totem</span>
+        {info.horario && (
+          <span style={{ background: '#64748b', color: '#fff', padding: '2px 5px', borderRadius: '5px', fontSize: '9px', fontWeight: 900 }}>
+            {info.horario}h
+          </span>
+        )}
+      </span>
+    )
+  }
+
+  return null
 }
 
 function renderRegrasModal(isOpen: boolean, onClose: () => void) {
@@ -541,6 +761,35 @@ export default function FrequenciaPage() {
         
         const existing = freqTurma?.find(f => String(f.aluno_id) === String(a.id) && String(f.data).startsWith(dia))
         
+        const targetId = String(a.id).trim()
+        const portariaEv = (portariaEventsList || []).find((ev: any) => {
+          const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
+          const evEquipId = String(ev.user_id_equipamento || '').trim()
+          const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+          if (!matchesAluno) return false
+          if (ev.status && ev.status !== 'sucesso') return false
+          const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
+          return evDateStr === dia
+        })
+
+        let horaCatraca: string | undefined = undefined
+        if (portariaEv) {
+          const rawTime = portariaEv.data_hora || portariaEv.created_at || portariaEv.data
+          if (rawTime) {
+            try {
+              const d = new Date(rawTime)
+              if (!isNaN(d.getTime())) {
+                const h = String(d.getUTCHours()).padStart(2, '0')
+                const m = String(d.getUTCMinutes()).padStart(2, '0')
+                horaCatraca = `${h}:${m}`
+              }
+            } catch {}
+          }
+        }
+
+        const isCatraca = !!portariaEv || existing?.origem === 'catraca' || String(existing?.registradoPor || '').toLowerCase().includes('catraca') || String(existing?.registradoPor || '').toLowerCase().includes('idface')
+        const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        
         recordsToSave.push({
           id: existing?.id,
           alunoId: a.id,
@@ -549,7 +798,10 @@ export default function FrequenciaPage() {
           anoLetivo: filtroAno,
           presente: calc.presente,
           justificativa: calc.justificativa,
-          tempos: calc.temposEfetivos // Salvamos os tempos efetivos com as regras auto-aplicadas
+          tempos: calc.temposEfetivos, // Salvamos os tempos efetivos com as regras auto-aplicadas
+          registradoPor: isCatraca ? (existing?.registradoPor || 'Catraca iDFace') : 'Manual',
+          origem: isCatraca ? 'catraca' : 'manual',
+          horaRegistro: horaCatraca || existing?.horaRegistro || nowTime
         })
       })
     })
@@ -608,6 +860,35 @@ export default function FrequenciaPage() {
       
       const calc = calcularFrequenciaDia(tempos, schedule.segmento)
       
+      const targetId = String(aluno.id).trim()
+      const portariaEv = (portariaEventsList || []).find((ev: any) => {
+        const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
+        const evEquipId = String(ev.user_id_equipamento || '').trim()
+        const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+        if (!matchesAluno) return false
+        if (ev.status && ev.status !== 'sucesso') return false
+        const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
+        return evDateStr === registroManualData
+      })
+
+      let horaCatraca: string | undefined = undefined
+      if (portariaEv) {
+        const rawTime = portariaEv.data_hora || portariaEv.created_at || portariaEv.data
+        if (rawTime) {
+          try {
+            const d = new Date(rawTime)
+            if (!isNaN(d.getTime())) {
+              const h = String(d.getUTCHours()).padStart(2, '0')
+              const m = String(d.getUTCMinutes()).padStart(2, '0')
+              horaCatraca = `${h}:${m}`
+            }
+          } catch {}
+        }
+      }
+
+      const isCatraca = !!portariaEv || existingFreq?.origem === 'catraca' || String(existingFreq?.registradoPor || '').toLowerCase().includes('catraca') || String(existingFreq?.registradoPor || '').toLowerCase().includes('idface')
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
       recordsToSave.push({
         id: existingFreq?.id,
         alunoId: aluno.id,
@@ -616,7 +897,10 @@ export default function FrequenciaPage() {
         anoLetivo: turmaObj.ano || filtroAno,
         presente: calc.presente,
         justificativa: calc.justificativa,
-        tempos: calc.temposEfetivos
+        tempos: calc.temposEfetivos,
+        registradoPor: isCatraca ? (existingFreq?.registradoPor || 'Catraca iDFace') : 'Manual',
+        origem: isCatraca ? 'catraca' : 'manual',
+        horaRegistro: horaCatraca || existingFreq?.horaRegistro || nowTime
       })
     }
 
@@ -2177,53 +2461,53 @@ export default function FrequenciaPage() {
                             <th style={{ padding: '10px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Data & Dia da Semana</th>
                             <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Status do Dia</th>
                             <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Detalhamento por Tempo</th>
-                            <th style={{ padding: '10px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Entrada (Catraca)</th>
+                            <th style={{ padding: '10px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Origem & Horário</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {a.dailyBreakdown.map((d: any) => (
-                            <tr key={d.data} style={{ borderBottom: '1px solid #f1f5f9', background: '#fff' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-                              <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                                {d.dataFormatada}
-                              </td>
-                              <td style={{ padding: '12px 14px' }}>
-                                <span style={{
-                                  padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 800,
-                                  background: d.faltasStr.includes('Falta Total') ? '#fee2e2' :
-                                              d.faltasStr.includes('Parcial') ? '#fef3c7' :
-                                              d.faltasStr.includes('Justificada') ? '#fde68a' :
-                                              d.faltasStr.includes('Sem Registro') ? '#f1f5f9' : '#dcfce7',
-                                  color: d.faltasStr.includes('Falta Total') ? '#b91c1c' :
-                                         d.faltasStr.includes('Parcial') ? '#b45309' :
-                                         d.faltasStr.includes('Justificada') ? '#92400e' :
-                                         d.faltasStr.includes('Sem Registro') ? '#64748b' : '#15803d'
-                                }}>
-                                  {d.faltasStr}
-                                </span>
-                              </td>
-                              <td style={{ padding: '12px 14px' }}>
-                                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                  {Object.entries(d.temposEfetivos).map(([tId, status]) => {
-                                    const cfg = S_CONFIG[status as PresStatus] || { bg: '#f1f5f9', color: '#64748b', label: '-' }
-                                    return (
-                                      <div key={tId} style={{ padding: '2px 8px', borderRadius: '6px', background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border || 'transparent'}`, fontSize: '11px', fontWeight: 800 }}>
-                                        {tId}ºT: {cfg.label}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </td>
-                              <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                                {d.horaRegistro ? (
-                                  <span style={{ padding: '3px 8px', background: '#e0f2fe', color: '#0369a1', borderRadius: '6px', fontWeight: 800 }}>
-                                    {d.horaRegistro}
+                          {a.dailyBreakdown.map((d: any) => {
+                            const dFreqRecord = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(a.id) && isSameDay(f.data, d.data))
+                            const dOrigem = getOrigemFrequenciaInfo(a.id, d.data, dFreqRecord, portariaEventsList)
+
+                            return (
+                              <tr key={d.data} style={{ borderBottom: '1px solid #f1f5f9', background: '#fff' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                                <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+                                  {d.dataFormatada}
+                                </td>
+                                <td style={{ padding: '12px 14px' }}>
+                                  <span style={{
+                                    padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 800,
+                                    background: d.faltasStr.includes('Falta Total') ? '#fee2e2' :
+                                                d.faltasStr.includes('Parcial') ? '#fef3c7' :
+                                                d.faltasStr.includes('Justificada') ? '#fde68a' :
+                                                d.faltasStr.includes('Sem Registro') ? '#f1f5f9' : '#dcfce7',
+                                    color: d.faltasStr.includes('Falta Total') ? '#b91c1c' :
+                                           d.faltasStr.includes('Parcial') ? '#b45309' :
+                                           d.faltasStr.includes('Justificada') ? '#92400e' :
+                                           d.faltasStr.includes('Sem Registro') ? '#64748b' : '#15803d'
+                                  }}>
+                                    {d.faltasStr}
                                   </span>
-                                ) : (
-                                  <span style={{ color: '#94a3b8' }}>—</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
+                                </td>
+                                <td style={{ padding: '12px 14px' }}>
+                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                    {Object.entries(d.temposEfetivos).map(([tId, status]) => {
+                                      const cfg = S_CONFIG[status as PresStatus] || { bg: '#f1f5f9', color: '#64748b', label: '-' }
+                                      return (
+                                        <div key={tId} style={{ padding: '2px 8px', borderRadius: '6px', background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border || 'transparent'}`, fontSize: '11px', fontWeight: 800 }}>
+                                          {tId}ºT: {cfg.label}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
+                                  <OrigemBadge info={dOrigem} />
+                                  {dOrigem.tipo === 'sem_registro' && <span style={{ color: '#94a3b8' }}>—</span>}
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -2576,11 +2860,15 @@ export default function FrequenciaPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {turmaStudents.map(aluno => {
                         const existingFreq = allFreqs?.find(f => String(f.aluno_id) === String(aluno.id) && String(f.data).startsWith(registroManualData))
+                        const infoOrigem = getOrigemFrequenciaInfo(aluno.id, registroManualData, existingFreq, portariaEventsList)
                         
                         return (
                           <div key={aluno.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid #f1f5f9', borderRadius: '12px', gap: '12px' }}>
                             <div>
-                              <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>{aluno.nome}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>{aluno.nome}</div>
+                                <OrigemBadge info={infoOrigem} compact />
+                              </div>
                               <div style={{ fontSize: '11px', color: '#64748b' }}>Matrícula: #{aluno.id}</div>
                             </div>
                             
@@ -3477,6 +3765,9 @@ export default function FrequenciaPage() {
                   totalJustificadas += calc.justificadasContabilizadas
                 })
 
+                const freqRecordDia = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(aluno.id) && isSameDay(f.data, dataSel))
+                const origemInfo = getOrigemFrequenciaInfo(aluno.id, dataSel, freqRecordDia, portariaEventsList)
+
                 return (
                   <tr key={aluno.id} style={{ background: '#fff', transition: 'all 0.2s' }}>
                     {/* Nome do Aluno */}
@@ -3486,7 +3777,10 @@ export default function FrequenciaPage() {
                           {getInitials(aluno.nome)}
                         </div>
                         <div>
-                          <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{aluno.nome}</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{aluno.nome}</p>
+                            <OrigemBadge info={origemInfo} />
+                          </div>
                           <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>ID: {aluno.id} • {turmaObj?.nome} ({turmaObj?.turno})</p>
                         </div>
                       </div>

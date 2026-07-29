@@ -31,9 +31,9 @@ CATRACA_LOGIN = "admin"
 # Porta 443 → HTTPS
 # Porta 88  → tenta HTTP primeiro, depois HTTPS
 CATRACAS = [
-    {"nome": "Portaria Média",  "ip": "192.168.1.75", "id": "0M0200/0262CE", "porta": 80},
-    {"nome": "Portaria Fund1",  "ip": "192.168.1.85", "id": "0M0200/02638E", "porta": 80},
-    {"nome": "Portaria INF",    "ip": "192.168.1.98", "id": "0M0200/02639C", "porta": 80},
+    {"nome": "Portaria Média",  "ip": "192.168.1.150", "id": "0M0200/0262CE", "porta": 80},
+    {"nome": "Portaria Fund1",  "ip": "192.168.1.155", "id": "0M0200/02638E", "porta": 80},
+    {"nome": "Portaria INF",    "ip": "192.168.1.105", "id": "0M0200/02639C", "porta": 80},
 ]
 # ══════════════════════════════════════════════════════════════
 
@@ -311,6 +311,22 @@ def processar_fila_pendencias_erp(cats_conectadas):
         print(f"     ⚠️ Falha ao verificar fila de pendências no ERP: {e}")
 
 
+def carregar_registrados_do_erp():
+    """Consulta o ERP online para obter a lista de alunos que já possuem presença/evento registrado HOJE."""
+    url_queue = f"{NETLIFY_URL}/api/portaria/sync-queue"
+    try:
+        req = urllib.request.Request(url_queue, method="GET")
+        req.add_header("User-Agent", "EduImpacto Local Sync Daemon")
+        ctx = SSL_CTX if url_queue.startswith("https") else None
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+            data = json.loads(r.read())
+            registrados = data.get("registrados_hoje", [])
+            return set(str(x) for x in registrados if x)
+    except Exception as e:
+        print(f"     ⚠️ Não foi possível consultar registros prévios do ERP: {e}")
+        return set()
+
+
 def main():
     hoje_str = date.today().strftime("%d/%m/%Y")
     print()
@@ -326,6 +342,19 @@ def main():
             for line in f:
                 if line.strip():
                     ja_sincronizados.add(line.strip())
+
+    # 🌐 Consulta o ERP online para carregar alunos que já possuem presença registrada hoje
+    print("\n  🌐 Consultando registros já salvos no ERP online para hoje…")
+    registrados_erp = carregar_registrados_do_erp()
+    if registrados_erp:
+        ja_sincronizados.update(registrados_erp)
+        print(f"     ✅ {len(registrados_erp)} aluno(s) já possuem presença registrada no ERP (serão pulados).")
+        try:
+            with open(cache_file, "a") as f:
+                for uid in registrados_erp:
+                    f.write(uid + "\n")
+        except Exception:
+            pass
 
     total_enviados = 0
     total_erros    = 0
@@ -370,10 +399,11 @@ def main():
             if str(log.get("user_id", "")) not in ja_sincronizados:
                 novos_para_enviar.append(log)
         
-        print(f"     📋 {len(logs_hoje)} eventos hoje / {len(reconhecidos_unicos)} alunos únicos / {len(novos_para_enviar)} novos para envio")
+        pulados = len(reconhecidos_unicos) - len(novos_para_enviar)
+        print(f"     📋 {len(logs_hoje)} eventos hoje / {len(reconhecidos_unicos)} alunos únicos / {len(novos_para_enviar)} novos para envio ({pulados} pulados/já registrados)")
 
         if not novos_para_enviar:
-            print(f"     ℹ️  Todos os alunos de hoje já foram sincronizados anteriormente.")
+            print(f"     ℹ️  Todos os alunos de hoje já foram sincronizados anteriormente no sistema. Pulando.")
             continue
 
         cache_f = None

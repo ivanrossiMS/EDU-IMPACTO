@@ -205,6 +205,17 @@ INSTRUÇÕES DE EXTRAÇÃO CONTÁBIL:
       }, { status: 422 })
     }
 
+    const mimeType = isPdf
+      ? 'application/pdf'
+      : (ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/vnd.ms-excel')
+    const base64Data = buffer.toString('base64')
+    const fileDataUrl = `data:${mimeType};base64,${base64Data}`
+
+    dadosDRE._arquivo_base64 = fileDataUrl
+    dadosDRE._tipo_arquivo_original = ext
+    dadosDRE._nome_arquivo_original = nomeArquivo
+
+
     // ─── PÓS-PROCESSAMENTO CONTÁBIL INFALÍVEL EM JS ──────────────────────────
     // Regra: Retirada de Sócios (grupo 59 ou termos como Ivan, Vanderlei, Pró-Labore) 
     // e Reformas/Construção (código 58.01.03 ou Reforma) são EXPURGADAS do OPEX 
@@ -445,6 +456,7 @@ INSTRUÇÕES DE EXTRAÇÃO CONTÁBIL:
       nome_arquivo: nomeArquivo || 'DRE - Relatório Analítico',
       tipo_arquivo: ext,
       dados_dre: dadosDRE,
+      arquivo_base64: fileDataUrl,
       periodo_descricao: dadosDRE.periodo?.descricao || 'Análise Anual',
       empresa: dadosDRE.empresa || 'Colégio Impacto',
       total_receitas: totalReceitasBrutas,

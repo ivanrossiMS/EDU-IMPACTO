@@ -132,7 +132,7 @@ export async function DELETE(request: Request) {
 }
 
 function buildRow(f: any) {
-  const { id, alunoId, turmaId, data, presente, justificativa, anoLetivo, ...rest } = f
+  const { id, alunoId, turmaId, data, presente, justificativa, anoLetivo, registradoPor, origem, horaRegistro, ...rest } = f
   const currentYear = new Date().getFullYear().toString()
   const year = anoLetivo || currentYear
   const diarioId = `DIARIO-${turmaId}-${year}`
@@ -147,7 +147,10 @@ function buildRow(f: any) {
     dados: {
       ...rest,
       diarioId,
-      anoLetivo: year
+      anoLetivo: year,
+      registradoPor: registradoPor || rest.registradoPor || 'Manual',
+      origem: origem || rest.origem || 'manual',
+      horaRegistro: horaRegistro || rest.horaRegistro || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     },
   }
 }

@@ -10,6 +10,58 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env
  * Retorna as pendências de sincronização para os leitores localmente ou via daemon.
  * Query params: ?dispositivo_id=... &limit=...
  */
+async function getRegistradosHoje() {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+    const todayStr = formatter.format(new Date())
+    const startOfTodayIso = `${todayStr}T00:00:00.000Z`
+
+    const { data: eventosHoje } = await supabase
+      .from('portaria_eventos')
+      .select('user_id_equipamento, aluno_id')
+      .gte('data_hora', startOfTodayIso)
+
+    const { data: freqHoje } = await supabase
+      .from('frequencias')
+      .select('aluno_id')
+      .eq('data', todayStr)
+
+    const registeredSet = new Set<string>()
+
+    for (const e of eventosHoje || []) {
+      if (e.user_id_equipamento) registeredSet.add(String(e.user_id_equipamento).trim())
+    }
+
+    const alunoUuids = new Set<string>()
+    for (const e of eventosHoje || []) {
+      if (e.aluno_id) alunoUuids.add(String(e.aluno_id))
+    }
+    for (const f of freqHoje || []) {
+      if (f.aluno_id) alunoUuids.add(String(f.aluno_id))
+    }
+
+    if (alunoUuids.size > 0) {
+      const { data: alunosMatch } = await supabase
+        .from('alunos')
+        .select('id, matricula, codigo')
+        .in('id', Array.from(alunoUuids))
+
+      for (const a of alunosMatch || []) {
+        if (a.id) registeredSet.add(String(a.id))
+        const numMat = parseInt(String(a.matricula || a.codigo || '').replace(/\D/g, ''), 10)
+        if (!isNaN(numMat) && numMat > 0) {
+          registeredSet.add(String(numMat))
+        }
+      }
+    }
+
+    return Array.from(registeredSet)
+  } catch (err: any) {
+    console.error('[getRegistradosHoje Error]', err?.message)
+    return []
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -29,8 +81,10 @@ export async function GET(req: NextRequest) {
     const { data: pendingRows, error: pendingErr, count } = await query.limit(limitParam)
     if (pendingErr) throw pendingErr
 
+    const registrados_hoje = await getRegistradosHoje()
+
     if (!pendingRows || pendingRows.length === 0) {
-      return NextResponse.json({ pendentes: [], total: count || 0 })
+      return NextResponse.json({ pendentes: [], registrados_hoje, total: count || 0 })
     }
 
     const alunoIds = Array.from(new Set(pendingRows.map(r => r.aluno_id)))
@@ -39,7 +93,7 @@ export async function GET(req: NextRequest) {
     const filterParts = alunoIds.map(id => `id.eq.${id},matricula.eq.${id}`).join(',')
     const { data: alunos, error: alunosErr } = await supabase
       .from('alunos')
-      .select('id, nome, matricula, foto, status')
+      .select('id, nome, matricula, foto, status, codigo')
       .or(filterParts)
 
     if (alunosErr) throw alunosErr
@@ -59,24 +113,21 @@ export async function GET(req: NextRequest) {
         acao = 'delete'
       }
 
-      const codigo = a?.codigo || a?.matricula || row.aluno_id || ''
-      const numericId = parseInt(String(codigo).replace(/\D/g, ''), 10)
-
       return {
+        id: row.aluno_id,
         aluno_id: row.aluno_id,
         dispositivo_id: row.dispositivo_id,
-        acao,
-        numeric_id: isNaN(numericId) ? null : numericId,
-        nome: a?.nome || '',
-        matricula: codigo,
-        foto: isValidStudentPhoto(a?.foto) ? a?.foto : null,
-        status_aluno: a?.status || 'inativo',
-        updated_at: row.updated_at
+        numeric_id: a ? (parseInt(String(a.matricula).replace(/\D/g, ''), 10) || null) : null,
+        nome: a?.nome || 'Aluno Removido',
+        matricula: a?.matricula || '',
+        foto: (a && isActive) ? a.foto : null,
+        acao
       }
     })
 
     return NextResponse.json({
       pendentes: result,
+      registrados_hoje,
       total: count ?? result.length
     })
   } catch (err: any) {

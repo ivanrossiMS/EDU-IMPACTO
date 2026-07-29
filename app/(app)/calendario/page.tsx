@@ -4,7 +4,7 @@ import { useData, EventoAgenda, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useState, useMemo, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar, Trash, PieChart, Clock, Activity, FileText, GraduationCap, MapPin, Info, Bus, Sun, Download, List, Grid, ArrowRight, ArrowDown, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar, Trash, PieChart, Clock, Activity, FileText, GraduationCap, MapPin, Info, Bus, Sun, Download, List, Grid, ArrowRight, ArrowDown, Upload } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { TurmaDropdown } from '@/app/agenda-digital/colaborador/components/TurmaDropdown'
 
@@ -419,6 +419,120 @@ export default function CalendarioPage() {
     fetchNivers()
   }, [month])
 
+function TurmasBadgeList({ turmas }: { turmas: string[] }) {
+  const [showPopover, setShowPopover] = useState(false);
+
+  if (!turmas || turmas.length === 0 || (turmas[0] && (turmas[0].startsWith('TODOS') || turmas[0] === 'TODA A ESCOLA' || turmas[0] === 'TODAS'))) {
+    return (
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '8px', background: '#e0e7ff', color: '#4338ca', fontSize: '11px', fontWeight: 700 }}>
+        <Users size={13} style={{ color: '#4338ca' }} />
+        <span>Todas as Turmas</span>
+      </div>
+    );
+  }
+
+  const maxVisible = 2;
+  const visibleTurmas = turmas.slice(0, maxVisible);
+  const remainingCount = turmas.length - maxVisible;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', position: 'relative' }}>
+      <Users size={14} style={{ color: '#94a3b8', flexShrink: 0, marginRight: 2 }} />
+      {visibleTurmas.map((t, idx) => (
+        <span 
+          key={idx} 
+          title={t}
+          style={{ 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            padding: '3px 8px', 
+            borderRadius: '6px', 
+            background: '#f1f5f9', 
+            border: '1px solid #e2e8f0', 
+            color: '#334155', 
+            fontSize: '11px', 
+            fontWeight: 600,
+            maxWidth: '160px',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}
+        >
+          {t}
+        </span>
+      ))}
+
+      {remainingCount > 0 && (
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowPopover(!showPopover); }} 
+            style={{ 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              gap: '4px', 
+              padding: '3px 8px', 
+              borderRadius: '6px', 
+              background: '#e0e7ff', 
+              border: '1px solid #c7d2fe', 
+              color: '#4338ca', 
+              fontSize: '11px', 
+              fontWeight: 700, 
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#c7d2fe'}
+            onMouseLeave={e => e.currentTarget.style.background = '#e0e7ff'}
+          >
+            <span>+{remainingCount} turmas</span>
+            <ChevronDown size={12} />
+          </button>
+
+          {showPopover && (
+            <>
+              <div 
+                style={{ position: 'fixed', inset: 0, zIndex: 49 }} 
+                onClick={(e) => { e.stopPropagation(); setShowPopover(false); }} 
+              />
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                style={{ 
+                  position: 'absolute', 
+                  bottom: 'calc(100% + 6px)', 
+                  left: 0, 
+                  zIndex: 50, 
+                  background: '#ffffff', 
+                  border: '1px solid #e2e8f0', 
+                  borderRadius: '12px', 
+                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)', 
+                  padding: '12px', 
+                  minWidth: '220px',
+                  maxWidth: '300px',
+                  maxHeight: '220px',
+                  overflowY: 'auto'
+                }}
+              >
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Turmas no evento ({turmas.length})</span>
+                  <button type="button" onClick={() => setShowPopover(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2 }}>✕</button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  {turmas.map((t, idx) => (
+                    <div key={idx} style={{ fontSize: '12px', fontWeight: 600, color: '#1e293b', background: '#f8fafc', padding: '5px 8px', borderRadius: '6px', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', flexShrink: 0 }} />
+                      <span>{t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
   const renderEventCard = (ev: EventoAgenda, idx: number) => {
     const evColor = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
     
@@ -431,12 +545,6 @@ export default function CalendarioPage() {
         case 'aula': return <GraduationCap size={24} color={evColor} />;
         default: return <Calendar size={24} color={evColor} />;
       }
-    };
-
-    const formatTurmas = (turmas: string[]) => {
-      if (!turmas || turmas.length === 0) return 'Turmas: Todas';
-      if (turmas[0].startsWith('TODOS')) return 'Turmas: Todas';
-      return `Turmas: ${turmas.join(', ')}`;
     };
 
     return (
@@ -499,10 +607,8 @@ export default function CalendarioPage() {
                <Clock size={14} style={{ color: '#94a3b8' }} /> {(ev as any).diaTodo ? 'Todo o dia • Sem horário definido' : `${ev.horaInicio || ''}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
             </div>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4 }}>
-              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                 <Users size={14} style={{ color: '#94a3b8' }} /> {formatTurmas(ev.turmas)}
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, flexWrap: 'wrap', gap: 8 }}>
+              <TurmasBadgeList turmas={ev.turmas} />
               
               {/* Bottom Right Actions */}
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
