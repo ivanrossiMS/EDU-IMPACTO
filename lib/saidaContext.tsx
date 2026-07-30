@@ -861,7 +861,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   const refreshCalls = useCallback(async () => {
     try {
       invalidateCache('saida/calls')
-      const res = await fetch(`/api/saida/calls?_t=${Date.now()}`, {
+      const res = await fetch(`/api/saida/calls?date=${getTodayStr()}&_t=${Date.now()}`, {
         headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
       })
       if (res.ok) {

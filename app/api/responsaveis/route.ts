@@ -82,16 +82,20 @@ export async function GET(request: Request) {
     if (studentIds.length > 0) {
       for (let i = 0; i < studentIds.length; i += chunkSize) {
         const chunk = studentIds.slice(i, i + chunkSize)
-        const { data: chunkStudents, error: studentError } = await supabase
-          .from('alunos')
-          .select('*')
-          .in('id', chunk)
-          .limit(10000)
-          
-        if (studentError) {
-          console.error(`[${new Date().toISOString()}] Error Responsáveis GET (Alunos Chunk ${i}): ${studentError.message}\n`)
-        } else if (chunkStudents) {
-          students.push(...chunkStudents)
+        const cleanChunk = chunk.map(c => String(c).trim()).filter(Boolean)
+        if (cleanChunk.length > 0) {
+          const formattedRefs = cleanChunk.map(r => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r).join(',')
+          const { data: chunkStudents, error: studentError } = await supabase
+            .from('alunos')
+            .select('id, nome, matricula, codigo, dados')
+            .or(`id.in.(${formattedRefs}),matricula.in.(${formattedRefs}),codigo.in.(${formattedRefs})`)
+            .limit(10000)
+            
+          if (studentError) {
+            console.error(`[${new Date().toISOString()}] Error Responsáveis GET (Alunos Chunk ${i}): ${studentError.message}\n`)
+          } else if (chunkStudents) {
+            students.push(...chunkStudents)
+          }
         }
       }
     }
@@ -102,18 +106,26 @@ export async function GET(request: Request) {
       dataNasc: resp.data_nasc,
       diasAcesso: resp.dias_acesso,
       alunosVinculados: links
-        .filter((l: any) => l.responsavel_id === resp.id)
+        .filter((l: any) => String(l.responsavel_id).trim() === String(resp.id).trim())
         .map((l: any) => {
-          const aluno = students.find((s: any) => s.id === l.aluno_id || s.matricula === l.aluno_id) || {}
+          const targetRef = String(l.aluno_id).trim().toLowerCase()
+          const aluno = students.find((s: any) =>
+            String(s.id).trim().toLowerCase() === targetRef ||
+            String(s.matricula || '').trim().toLowerCase() === targetRef ||
+            String(s.codigo || '').trim().toLowerCase() === targetRef ||
+            String(s.dados?.codigo || '').trim().toLowerCase() === targetRef
+          ) || {}
           return {
             ...aluno,
+            id: aluno.id || l.aluno_id,
+            nome: aluno.nome || `Aluno (${l.aluno_id})`,
             parentesco: l.parentesco,
-            isFinanceiro: l.resp_financeiro,
-            isPedagogico: l.resp_pedagogico,
-            isOutro: l.resp_outro
+            isFinanceiro: l.resp_financeiro === true,
+            isPedagogico: l.resp_pedagogico === true,
+            isOutro: l.resp_outro === true
           }
         })
-        .filter((a: any) => a.id) || []
+        .filter((a: any) => a.id || a.nome) || []
     }))
 
     return NextResponse.json({

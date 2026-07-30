@@ -11,8 +11,20 @@ export async function GET(request: Request) {
   const supabase = await createProtectedClient()
 
   try {
+    const url = new URL(request.url)
+    const dateParam = url.searchParams.get('date')
+    let refDate: Date
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      const [y, m, d] = dateParam.split('-').map(Number)
+      refDate = new Date(y, m - 1, d, 12, 0, 0)
+    } else {
+      const spDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+      const [y, m, d] = spDateStr.split('-').map(Number)
+      refDate = new Date(y, m - 1, d, 12, 0, 0)
+    }
+
     const DIAS_LABEL = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab']
-    const todayK = DIAS_LABEL[new Date().getDay()]
+    const todayK = DIAS_LABEL[refDate.getDay()]
 
     // ── Executa as 2 queries principais em paralelo (reduz latência total) ─────
     // Função auxiliar para buscar todos os registros burlando o limite de 1000 do PostgREST

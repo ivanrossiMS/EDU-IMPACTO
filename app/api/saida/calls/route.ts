@@ -22,19 +22,21 @@ export async function GET(request: Request) {
       query = query.eq('dados->>studentId', studentId)
     }
     
-    if (fromDate) {
-      query = query.gte('created_at', fromDate + 'T00:00:00')
+    const dateParam = url.searchParams.get('date') || fromDate
+    const formatter = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'America/Sao_Paulo', 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    })
+    const todayStr = dateParam || formatter.format(new Date())
+
+    if (fromDate || dateParam) {
+      query = query.gte('created_at', `${todayStr}T00:00:00-05:00`)
     } else {
-      // Filter for today's calls only if no from date provided
-      // Usa o timezone de Brasília para garantir que "hoje" seja calculado corretamente mesmo no servidor (que roda em UTC)
-      const formatter = new Intl.DateTimeFormat('en-CA', { 
-        timeZone: 'America/Sao_Paulo', 
-        year: 'numeric', 
-        month: '2-digit', 
-        day: '2-digit' 
-      })
-      const todayStr = formatter.format(new Date())
-      query = query.gte('created_at', `${todayStr}T00:00:00-03:00`)
+      // Filter for calls from the last 24 hours if no date provided
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      query = query.gte('created_at', cutoff)
     }
     
     if (toDate) {
@@ -45,7 +47,63 @@ export async function GET(request: Request) {
       
     if (error) throw new Error(error.message)
     
-    const rawResult = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+    let rawResult = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
+
+    // Buscar saídas registradas na tabela de frequências para garantir histórico completo
+    const targetDate = fromDate || todayStr
+    const { data: freqRecords } = await supabase
+      .from('frequencias')
+      .select('id, aluno_id, turma_id, data, dados, created_at')
+      .gte('data', targetDate)
+
+    const existingStudentIds = new Set(rawResult.map(c => String(c.studentId || '').trim()))
+
+    if (freqRecords && freqRecords.length > 0) {
+      const missingStudentIds = freqRecords
+        .filter(f => f.dados && (f.dados.saidaHorario || f.dados.saidaResponsavel))
+        .map(f => String(f.aluno_id).trim())
+        .filter(id => id && !existingStudentIds.has(id))
+
+      let alunosMap: Record<string, any> = {}
+      if (missingStudentIds.length > 0) {
+        const { data: dbAlunos } = await supabase
+          .from('alunos')
+          .select('id, nome, turma, foto, imagem1')
+          .in('id', missingStudentIds)
+        if (dbAlunos) {
+          dbAlunos.forEach((a: any) => {
+            alunosMap[String(a.id)] = a
+          })
+        }
+      }
+
+      for (const fRecord of freqRecords) {
+        const aId = String(fRecord.aluno_id || '').trim()
+        if (!aId) continue
+        const sHorario = fRecord.dados?.saidaHorario
+        const sResp = fRecord.dados?.saidaResponsavel
+        if (sHorario || sResp) {
+          if (!existingStudentIds.has(aId)) {
+            existingStudentIds.add(aId)
+            const al = alunosMap[aId]
+            const recordDate = fRecord.data || targetDate
+            rawResult.push({
+              id: `freq-saida-${aId}-${recordDate}`,
+              studentId: aId,
+              studentName: al?.nome || aId,
+              studentClass: al?.turma || fRecord.turma_id || '',
+              studentPhoto: al?.foto || al?.imagem1 || null,
+              guardianId: 'frequencia-diario',
+              guardianName: sResp || 'Responsável Cadastrado',
+              calledAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-03:00`,
+              confirmedAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-03:00`,
+              status: 'confirmed',
+              source: 'frequencia'
+            })
+          }
+        }
+      }
+    }
 
     // Build set of studentIds that have a confirmed call today
     const confirmedStudentIds = new Set(

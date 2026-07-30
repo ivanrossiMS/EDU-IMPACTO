@@ -9,7 +9,7 @@ import {
   ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
   AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info,
   Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw, User,
-  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace
+  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace, LogOut, UserCheck, Plus, CheckCircle2
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
@@ -509,6 +509,161 @@ function getTempoEntrada(horaRegistro: string | null, segment: string, turno: st
   return `${firstPresentIndex + 1}º Tempo`;
 }
 
+export interface GuardianInfo {
+  id: string
+  name: string
+  role: string
+  permitido: boolean
+  motivoProibicao?: string
+  diasSemana?: string[]
+}
+
+function getStudentGuardians(student: any, globalResponsaveisList?: any[]): GuardianInfo[] {
+  if (!student) return []
+  const list: GuardianInfo[] = []
+  const seen = new Set<string>()
+
+  const addGuardian = (nameVal: any, roleVal: string = 'Responsável', isProibido: boolean = false, motivo: string = '', dias: string[] = []) => {
+    if (!nameVal) return
+    let nameStr = ''
+    if (typeof nameVal === 'string') {
+      nameStr = nameVal.trim()
+    } else if (typeof nameVal === 'object' && nameVal !== null) {
+      nameStr = (nameVal.nome || nameVal.name || nameVal.nomeCompleto || nameVal.nome_completo || '').trim()
+    }
+    if (!nameStr) return
+    const key = nameStr.toLowerCase()
+    if (['none', 'nenhum', 'n/a', 'null', 'undefined', '-'].includes(key)) return
+
+    if (!seen.has(key)) {
+      seen.add(key)
+      list.push({
+        id: `g-${seen.size}`,
+        name: nameStr,
+        role: roleVal,
+        permitido: !isProibido,
+        motivoProibicao: motivo || (isProibido ? 'Restrição cadastrada' : undefined),
+        diasSemana: dias
+      })
+    }
+  }
+
+  // 1. Cruzar com a lista global cadastrada no módulo Responsáveis (/academico/responsaveis)
+  if (Array.isArray(globalResponsaveisList) && globalResponsaveisList.length > 0) {
+    const studentRefs = [
+      student.id,
+      student.matricula,
+      student.codigo,
+      student.dados?.codigo,
+      student.dados?.id,
+      student.dados?.matricula,
+      student.nome
+    ].filter(Boolean).map(r => String(r).trim().toLowerCase())
+
+    globalResponsaveisList.forEach((rObj: any) => {
+      const name = rObj.nome || rObj.name
+      if (!name) return
+
+      const vincs = rObj.alunosVinculados || rObj.aluno_responsavel || rObj.dados?.alunosVinculados || []
+      const isLinked = Array.isArray(vincs) && vincs.some((v: any) => {
+        const vId = String(typeof v === 'object' ? (v.id || v.aluno_id || v.matricula || v.nome) : v).trim().toLowerCase()
+        return studentRefs.includes(vId)
+      })
+
+      if (isLinked) {
+        const vincInfo = Array.isArray(vincs)
+          ? vincs.find((v: any) => typeof v === 'object' && studentRefs.includes(String(v.id || v.aluno_id || v.matricula || v.nome).trim().toLowerCase()))
+          : null
+
+        const isPed = vincInfo?.isPedagogico || vincInfo?.resp_pedagogico || rObj.isPedagogico
+        const isFin = vincInfo?.isFinanceiro || vincInfo?.resp_financeiro || rObj.isFinanceiro
+        const isOut = vincInfo?.isOutro || vincInfo?.resp_outro || rObj.isOutro
+
+        let role = vincInfo?.parentesco || rObj.parentesco || ''
+        if (isPed) role = 'Resp. Pedagógico'
+        else if (isFin) role = 'Resp. Financeiro'
+        else if (isOut) role = (role && role.toLowerCase() !== 'outro' && role.toLowerCase() !== 'outros') ? `Outros (${role})` : 'Outros'
+        else if (!role) role = 'Responsável'
+
+        const proibido = rObj.proibido === true || vincInfo?.proibido === true
+        const dias = rObj.diasAcesso || rObj.dias_acesso || rObj.diasSemana || []
+        addGuardian(name, role, proibido, rObj.observacao || rObj.motivo, dias)
+      }
+    })
+  }
+
+  // 2. Responsáveis cadastrados na estrutura do aluno
+  const resps: any[] = []
+  const pushArray = (arr: any) => {
+    if (Array.isArray(arr)) resps.push(...arr)
+  }
+  pushArray(student.responsaveis)
+  pushArray(student.dados?.responsaveis)
+  pushArray(student.responsaveis_lista)
+  pushArray(student.outrosResponsaveis)
+  pushArray(student.dados?.outrosResponsaveis)
+  pushArray(student.responsaveisOutros)
+  pushArray(student.dados?.responsaveisOutros)
+  pushArray(student._responsaveis)
+  pushArray(student.dados?._responsaveis)
+
+  resps.forEach((r: any) => {
+    const name = r.nome || r.name || r.nomeCompleto || r.nome_completo
+    if (!name) return
+
+    let rawRole = r.parentesco || r.role || r.tipo || ''
+    const isPed = r.isPedagogico === true || r.respPedagogico === true || rawRole.toLowerCase().includes('pedag')
+    const isFin = r.isFinanceiro === true || r.respFinanceiro === true || rawRole.toLowerCase().includes('finan')
+    const isOut = r.isOutro === true || r.resp_outro === true || r.respOutro === true || rawRole.toLowerCase() === 'outro' || rawRole.toLowerCase() === 'outros'
+
+    let finalRole = rawRole
+    if (isPed) {
+      finalRole = 'Resp. Pedagógico'
+    } else if (isFin) {
+      finalRole = 'Resp. Financeiro'
+    } else if (isOut) {
+      finalRole = (rawRole && rawRole.toLowerCase() !== 'outro' && rawRole.toLowerCase() !== 'outros')
+        ? `Outros (${rawRole})`
+        : 'Outros'
+    } else if (!finalRole) {
+      finalRole = 'Responsável'
+    }
+
+    const proibido = r.proibido === true || r.bloqueado === true || r.status === 'proibido' || r.permitido === false
+    const dias = r.diasAcesso || r.diasSemana || r.dias_acesso || []
+    addGuardian(name, finalRole, proibido, r.motivo || r.observacao || r.obsProibicao, dias)
+  })
+
+  // 3. Autorizados do módulo Saúde & Obs / Portaria
+  const saude: any = student.saude || student.dados?.saude || {}
+  const autorizados: any[] = []
+  pushArray(saude.autorizados)
+  pushArray(student.autorizados)
+  pushArray(student.dados?.autorizados)
+  pushArray(student.autorizadosSaida)
+  pushArray(student.dados?.autorizadosSaida)
+
+  autorizados.forEach((aut: any) => {
+    const name = aut.nome || aut.name || aut.nomeCompleto
+    if (!name) return
+    const rawRole = aut.parentesco || aut.role || 'Autorizado'
+    const proibido = aut.proibido === true || aut.bloqueado === true || aut.status === 'proibido' || aut.permitido === false
+    const dias = aut.diasSemana || aut.diasAcesso || []
+    addGuardian(name, rawRole, proibido, aut.obsProibicao || aut.motivo, dias)
+  })
+
+  // 4. Campos ERP diretos (Responsável Pedagógico, Financeiro, Outros, Mãe, Pai, Responsável Geral)
+  const d = student.dados || {}
+  addGuardian(student.responsavelPedagogico || student.responsavel_pedagogico || d.responsavelPedagogico || d.responsavel_pedagogico || d.resp_pedagogico, 'Resp. Pedagógico')
+  addGuardian(student.responsavelFinanceiro || student.responsavel_financeiro || d.responsavelFinanceiro || d.responsavel_financeiro || d.resp_financeiro, 'Resp. Financeiro')
+  addGuardian(student.responsavelOutro || student.responsavel_outro || d.responsavelOutro || d.responsavel_outro || d.resp_outro, 'Outros')
+  addGuardian(d.nome_mae || d.mae || d.nomeMae || d.filiacao?.mae || d.filiacao_mae || student.mae || student.nomeMae, 'Mãe')
+  addGuardian(d.nome_pai || d.pai || d.nomePai || d.filiacao?.pai || d.filiacao_pai || student.pai || student.nomePai, 'Pai')
+  addGuardian(d.nome_responsavel || d.responsavel || d.nomeResponsavel || d.resp_nome || student.responsavel || student.nomeResponsavel, 'Responsável')
+
+  return list
+}
+
 function todayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
@@ -538,6 +693,20 @@ export default function FrequenciaPage() {
     { lightweight: true, all: true, limit: 2000 }
   )
   const alunos = apiResponse?.data || []
+
+  // Lista global de responsáveis vindos do módulo /academico/responsaveis (/api/responsaveis)
+  const { data: allResponsaveisResp } = useApiQuery<any>(
+    ['all-responsaveis-frequencia'],
+    '/api/responsaveis',
+    { all: true, limit: 5000 }
+  )
+
+  const allResponsaveisList = useMemo(() => {
+    if (!allResponsaveisResp) return []
+    if (Array.isArray(allResponsaveisResp)) return allResponsaveisResp
+    if (Array.isArray(allResponsaveisResp.data)) return allResponsaveisResp.data
+    return []
+  }, [allResponsaveisResp])
 
   const { data: allFreqs, isLoading: loadingAllFreqs, isFetching: fetchingAllFreqs, refetch: refetchAllFreqs } = useApiQuery<any[]>(
     ['all-frequencias'],
@@ -628,6 +797,17 @@ export default function FrequenciaPage() {
   const [absencesManual, setAbsencesManual] = useState<Record<string, Record<string, PresStatus>>>({})
   const [salvandoManual, setSalvandoManual] = useState(false)
 
+  // Estados específicos para Educação Infantil (Horários de Entrada, Saída e Responsáveis)
+  const [horariosEntrada, setHorariosEntrada] = useState<Record<string, Record<string, string>>>({})
+  const [horariosSaida, setHorariosSaida] = useState<Record<string, Record<string, string>>>({})
+  const [responsaveisSaida, setResponsaveisSaida] = useState<Record<string, Record<string, string>>>({})
+  const [saidaModalData, setSaidaModalData] = useState<{ aluno: any; dia: string } | null>(null)
+  const [saidaModalHora, setSaidaModalHora] = useState<string>('')
+  const [saidaModalResponsavel, setSaidaModalResponsavel] = useState<string>('')
+  const [customResponsavel, setCustomResponsavel] = useState<string>('')
+  const [salvandoSaida, setSalvandoSaida] = useState<boolean>(false)
+  const [editingEntrada, setEditingEntrada] = useState<{ alunoId: string; dia: string } | null>(null)
+
   // Auto-open sync modal on page load
   useEffect(() => {
     setShowAcessosModal(true)
@@ -674,7 +854,20 @@ export default function FrequenciaPage() {
   )
 
   const alunosDaTurma = useMemo(() => {
-    const lista = turmaSel ? alunos.filter((a: any) => String(a.turma) === String(turmaSel)) : []
+    if (!turmaSel) return []
+    const tId = turmaObj?.id ? String(turmaObj.id) : String(turmaSel)
+    const tCod = turmaObj?.codigo ? String(turmaObj.codigo) : ''
+    const tNome = turmaObj?.nome ? String(turmaObj.nome).toLowerCase() : ''
+
+    const lista = alunos.filter((a: any) => {
+      const aTurma = String(a.turma || a.turma_id || a.dados?.turma || '').trim()
+      const aTurmaNome = String(a.turma_nome || '').trim().toLowerCase()
+      
+      if (aTurma === tId || (tCod && aTurma === tCod)) return true
+      if (aTurma.toLowerCase() === tNome || (tNome && aTurmaNome === tNome)) return true
+      if (String(aTurma) === String(turmaSel)) return true
+      return false
+    })
     const ordenados = ordenarPorChamada(lista)
     return ordenados.map((aluno: any) => {
       const aId = String(aluno.id);
@@ -684,7 +877,7 @@ export default function FrequenciaPage() {
         horaRegistro: freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null
       }
     })
-  }, [alunos, turmaSel, ordenarPorChamada, freqTurma, dataSel])
+  }, [alunos, turmaSel, turmaObj, ordenarPorChamada, freqTurma, dataSel])
   
   const alunosFiltrados = useMemo(() => !buscaAluno ? alunosDaTurma : alunosDaTurma.filter((a: any) => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())), [alunosDaTurma, buscaAluno])
 
@@ -694,8 +887,12 @@ export default function FrequenciaPage() {
     if (freqTurma) {
       console.log('Frequências carregadas:', freqTurma.length)
       const newAbsences: Record<string, Record<string, Record<string, PresStatus>>> = {}
+      const newHorariosEntrada: Record<string, Record<string, string>> = {}
+      const newHorariosSaida: Record<string, Record<string, string>> = {}
+      const newResponsaveisSaida: Record<string, Record<string, string>> = {}
+
       freqTurma.forEach(f => {
-        const aId = String(f.aluno_id)
+        const aId = String(f.aluno_id || f.alunoId)
         if (!newAbsences[aId]) newAbsences[aId] = {}
         const dia = String(f.data).split('T')[0]
         
@@ -711,8 +908,28 @@ export default function FrequenciaPage() {
           })
           newAbsences[aId][dia] = temposMap
         }
+
+        const hEntrada = f.dados?.horaEntrada || f.dados?.horaRegistro || f.horaRegistro
+        const hSaida = f.dados?.saidaHorario || f.saidaHorario
+        const rSaida = f.dados?.saidaResponsavel || f.saidaResponsavel
+
+        if (hEntrada) {
+          if (!newHorariosEntrada[aId]) newHorariosEntrada[aId] = {}
+          newHorariosEntrada[aId][dia] = hEntrada
+        }
+        if (hSaida) {
+          if (!newHorariosSaida[aId]) newHorariosSaida[aId] = {}
+          newHorariosSaida[aId][dia] = formatTimeFromIso(hSaida) || hSaida
+        }
+        if (rSaida) {
+          if (!newResponsaveisSaida[aId]) newResponsaveisSaida[aId] = {}
+          newResponsaveisSaida[aId][dia] = rSaida
+        }
       })
       setAbsences(newAbsences)
+      setHorariosEntrada(newHorariosEntrada)
+      setHorariosSaida(newHorariosSaida)
+      setResponsaveisSaida(newResponsaveisSaida)
     }
   }, [freqTurma, turmaObj])
 
@@ -726,22 +943,275 @@ export default function FrequenciaPage() {
     return '-'
   }, [absences])
 
+  // Salvamento automático em tempo real para cada alteração de frequência
+  const autoSaveStudent = useCallback(async (
+    alunoId: string,
+    dia: string,
+    overrideTempos?: Record<string, PresStatus>,
+    overrideEntrada?: string,
+    overrideSaida?: string,
+    overrideRespSaida?: string
+  ) => {
+    const aId = String(alunoId)
+    const aluno = alunos.find(a => String(a.id) === aId)
+    if (!aluno) return
+
+    const schedule = getTurmaSchedule(turmaObj)
+    const studentDay = overrideTempos || absences[aId]?.[dia] || {}
+    const tempos: Record<string, PresStatus> = {}
+    schedule.tempos.forEach(t => {
+      tempos[t.id] = studentDay[t.id] || '-'
+    })
+
+    const calc = calcularFrequenciaDia(tempos, schedule.segmento)
+    const existing = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dia))
+
+    const targetId = aId.trim()
+    const portariaEv = (portariaEventsList || []).find((ev: any) => {
+      const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
+      const evEquipId = String(ev.user_id_equipamento || '').trim()
+      const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+      if (!matchesAluno) return false
+      if (ev.status && ev.status !== 'sucesso') return false
+      const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
+      return evDateStr === dia
+    })
+
+    let horaCatraca: string | undefined = undefined
+    if (portariaEv) {
+      const rawTime = portariaEv.data_hora || portariaEv.created_at || portariaEv.data
+      if (rawTime) {
+        try {
+          const d = new Date(rawTime)
+          if (!isNaN(d.getTime())) {
+            const h = String(d.getUTCHours()).padStart(2, '0')
+            const m = String(d.getUTCMinutes()).padStart(2, '0')
+            horaCatraca = `${h}:${m}`
+          }
+        } catch {}
+      }
+    }
+
+    const isCatraca = !!portariaEv || existing?.origem === 'catraca' || String(existing?.registradoPor || '').toLowerCase().includes('catraca')
+    const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const customEntrada = overrideEntrada !== undefined ? overrideEntrada : (horariosEntrada[aId]?.[dia] || horaCatraca || existing?.horaRegistro || nowTime)
+    const customSaida = overrideSaida !== undefined ? overrideSaida : (horariosSaida[aId]?.[dia] || existing?.dados?.saidaHorario || null)
+    const customRespSaida = overrideRespSaida !== undefined ? overrideRespSaida : (responsaveisSaida[aId]?.[dia] || existing?.dados?.saidaResponsavel || null)
+
+    const recordToSave = {
+      id: existing?.id,
+      alunoId: aluno.id,
+      turmaId: turmaId,
+      data: dia,
+      anoLetivo: filtroAno,
+      presente: calc.presente,
+      justificativa: calc.justificativa,
+      tempos: calc.temposEfetivos,
+      registradoPor: isCatraca ? (existing?.registradoPor || 'Catraca iDFace') : 'Manual (Auto)',
+      origem: isCatraca ? 'catraca' : 'manual',
+      horaRegistro: customEntrada || nowTime,
+      dados: {
+        ...(existing?.dados || {}),
+        horaEntrada: customEntrada || nowTime,
+        saidaHorario: customSaida,
+        saidaResponsavel: customRespSaida,
+      }
+    }
+
+    try {
+      await fetch('/api/academico/frequencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([recordToSave])
+      })
+      if (refetchFreq) refetchFreq()
+      if (refetchAllFreqs) refetchAllFreqs()
+    } catch (err) {
+      console.error('Erro no salvamento automático de frequência:', err)
+    }
+  }, [alunos, turmaObj, absences, freqTurma, portariaEventsList, horariosEntrada, horariosSaida, responsaveisSaida, turmaId, filtroAno, refetchFreq, refetchAllFreqs])
+
   const setStatus = (alunoId: string, dia: string, tempoId: string, statusNext: PresStatus) => {
     const aId = String(alunoId)
     setAbsences(prev => {
       const studentData = prev[aId] || {}
       const dayData = studentData[dia] || {}
+      const updatedDayData = {
+        ...dayData,
+        [tempoId]: statusNext
+      }
+
+      // Dispara salvamento automático instantâneo em tempo real no banco
+      autoSaveStudent(aId, dia, updatedDayData)
+
       return {
         ...prev,
         [aId]: {
           ...studentData,
-          [dia]: {
-            ...dayData,
-            [tempoId]: statusNext
-          }
+          [dia]: updatedDayData
         }
       }
     })
+  }
+
+  const handleConfirmarSaidaInfantil = async () => {
+    if (!saidaModalData) return
+    const { aluno, dia } = saidaModalData
+    const quemRetirou = (customResponsavel.trim() || saidaModalResponsavel.trim()) || 'Não informado'
+    const horaSaida = saidaModalHora || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const aId = String(aluno.id)
+
+    setSalvandoSaida(true)
+    try {
+      // 1. Atualiza estado local de saída e responsável
+      setHorariosSaida(prev => ({
+        ...prev,
+        [aId]: { ...(prev[aId] || {}), [dia]: horaSaida }
+      }))
+      setResponsaveisSaida(prev => ({
+        ...prev,
+        [aId]: { ...(prev[aId] || {}), [dia]: quemRetirou }
+      }))
+
+      // Garantir presença em todos os tempos para a Educação Infantil
+      const schedule = getTurmaSchedule(turmaObj)
+      schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'P'))
+
+      // 2. Transmite a saída para a API /api/saida/calls (POST) que atualiza /chamadas e dispara Realtime para o Monitor TV
+      const nowIso = new Date().toISOString()
+      const confirmedAtIso = `${dia}T${horaSaida}:00-03:00`
+      
+      await fetch('/api/saida/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `infantil-${aId}-${dia}`,
+          studentId: aId,
+          studentName: aluno.nome,
+          studentClass: aluno.turmaNome || turmaObj?.nome || aluno.turma || '',
+          studentPhoto: aluno.foto || aluno.imagem1 || null,
+          guardianId: 'manual-infantil',
+          guardianName: quemRetirou,
+          calledAt: nowIso,
+          confirmedAt: confirmedAtIso,
+          status: 'confirmed',
+          source: 'manual'
+        })
+      })
+
+      // 3. Salvar o registro na API de frequências
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const currentEntrada = horariosEntrada[aId]?.[dia] || nowTime
+
+      const recordsToSave = [{
+        alunoId: aluno.id,
+        turmaId: turmaId,
+        data: dia,
+        anoLetivo: filtroAno,
+        presente: true,
+        justificativa: '',
+        tempos: { '1': 'P', '2': 'P', '3': 'P', '4': 'P' },
+        registradoPor: 'Educação Infantil (Saída)',
+        origem: 'manual',
+        horaRegistro: currentEntrada,
+        dados: {
+          horaEntrada: currentEntrada,
+          saidaHorario: confirmedAtIso,
+          saidaResponsavel: quemRetirou,
+          anoLetivo: filtroAno
+        }
+      }]
+
+      await fetch('/api/academico/frequencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(recordsToSave)
+      })
+
+      if (refetchFreq) refetchFreq()
+      if (refetchAllFreqs) refetchAllFreqs()
+
+      setSaidaModalData(null)
+      setCustomResponsavel('')
+      setSaidaModalResponsavel('')
+    } catch (err: any) {
+      alert('Erro ao registrar saída: ' + (err.message || 'Erro desconhecido'))
+    } finally {
+      setSalvandoSaida(false)
+    }
+  }
+
+  const handleCancelarSaidaInfantil = async (aluno: any, dia: string) => {
+    const aId = String(aluno.id)
+    
+    // 1. Limpa o estado local
+    setHorariosSaida(prev => {
+      const copy = { ...prev }
+      if (copy[aId]) delete copy[aId][dia]
+      return copy
+    })
+    setResponsaveisSaida(prev => {
+      const copy = { ...prev }
+      if (copy[aId]) delete copy[aId][dia]
+      return copy
+    })
+
+    // 2. Persiste a remoção da saída no banco de dados (/api/academico/frequencias)
+    try {
+      const existing = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dia))
+      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      const currentEntrada = horariosEntrada[aId]?.[dia] || existing?.horaRegistro || nowTime
+
+      const recordToSave = {
+        id: existing?.id,
+        alunoId: aluno.id,
+        turmaId: turmaId,
+        data: dia,
+        anoLetivo: filtroAno,
+        presente: true,
+        justificativa: existing?.justificativa || '',
+        tempos: existing?.tempos || { '1': 'P', '2': 'P', '3': 'P', '4': 'P' },
+        registradoPor: existing?.registradoPor || 'Manual',
+        origem: existing?.origem || 'manual',
+        horaRegistro: currentEntrada,
+        dados: {
+          ...(existing?.dados || {}),
+          saidaHorario: null,
+          saidaResponsavel: null,
+        }
+      }
+
+      await fetch('/api/academico/frequencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([recordToSave])
+      })
+
+      // 3. Atualiza / cancela o registro no painel de chamadas da portaria
+      const nowIso = new Date().toISOString()
+      await fetch('/api/saida/calls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: `infantil-${aId}-${dia}`,
+          studentId: aId,
+          studentName: aluno.nome,
+          studentClass: turmaObj?.nome || '',
+          guardianId: 'manual-infantil',
+          guardianName: 'Saída Cancelada',
+          calledAt: nowIso,
+          confirmedAt: null,
+          status: 'cancelled',
+          isRevert: true,
+          source: 'manual'
+        })
+      })
+
+      if (refetchFreq) refetchFreq()
+      if (refetchAllFreqs) refetchAllFreqs()
+    } catch (err: any) {
+      console.error('Erro ao salvar cancelamento de saída:', err)
+    }
   }
 
   const handleSave = async () => {
@@ -790,6 +1260,10 @@ export default function FrequenciaPage() {
         const isCatraca = !!portariaEv || existing?.origem === 'catraca' || String(existing?.registradoPor || '').toLowerCase().includes('catraca') || String(existing?.registradoPor || '').toLowerCase().includes('idface')
         const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
         
+        const customEntrada = horariosEntrada[String(a.id)]?.[dia]
+        const customSaida = horariosSaida[String(a.id)]?.[dia]
+        const customRespSaida = responsaveisSaida[String(a.id)]?.[dia]
+
         recordsToSave.push({
           id: existing?.id,
           alunoId: a.id,
@@ -801,7 +1275,13 @@ export default function FrequenciaPage() {
           tempos: calc.temposEfetivos, // Salvamos os tempos efetivos com as regras auto-aplicadas
           registradoPor: isCatraca ? (existing?.registradoPor || 'Catraca iDFace') : 'Manual',
           origem: isCatraca ? 'catraca' : 'manual',
-          horaRegistro: horaCatraca || existing?.horaRegistro || nowTime
+          horaRegistro: customEntrada || horaCatraca || existing?.horaRegistro || nowTime,
+          dados: {
+            ...(existing?.dados || {}),
+            horaEntrada: customEntrada || horaCatraca || existing?.horaRegistro || nowTime,
+            saidaHorario: customSaida || existing?.dados?.saidaHorario || null,
+            saidaResponsavel: customRespSaida || existing?.dados?.saidaResponsavel || null,
+          }
         })
       })
     })
@@ -819,8 +1299,7 @@ export default function FrequenciaPage() {
         if (refetchAllFreqs) refetchAllFreqs()
         setTimeout(() => {
           setSalvo(false)
-          setTurmaSel(null)
-        }, 1200)
+        }, 1500)
       } else {
         const err = await response.json()
         alert('Erro ao salvar: ' + (err.error || response.statusText))
@@ -2730,6 +3209,230 @@ export default function FrequenciaPage() {
     )
   }
 
+  // Render do Modal de Confirmação de Saída (Educação Infantil)
+  const renderSaidaModal = () => {
+    if (!saidaModalData) return null
+    const { aluno, dia } = saidaModalData
+    const guardias = getStudentGuardians(aluno, allResponsaveisList)
+    const isSaiuSozinho = saidaModalResponsavel === 'Saiu Sozinho'
+
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)',
+        zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+        animation: 'fadeIn 0.2s ease-out'
+      }}>
+        <div style={{
+          background: '#fff', borderRadius: '24px', maxWidth: '580px', width: '100%',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', border: '1px solid #e2e8f0', overflow: 'hidden'
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '20px 24px', borderBottom: '1px solid #f1f5f9',
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#fff',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: 'rgba(168, 85, 247, 0.2)', color: '#c026d3', width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(192, 38, 211, 0.3)' }}>
+                <LogOut size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: 900, color: '#fff' }}>
+                  Confirmar Saída do Aluno
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#cbd5e1' }}>
+                  {aluno.nome} ({turmaObj?.nome || ''})
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSaidaModalData(null)}
+              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '6px', borderRadius: '8px', cursor: 'pointer' }}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            
+            {/* Horário de Saída */}
+            <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Horário de Saída:
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Clock size={18} style={{ color: '#c026d3' }} />
+                <input
+                  type="time"
+                  value={saidaModalHora}
+                  onChange={e => setSaidaModalHora(e.target.value)}
+                  style={{
+                    padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                    fontSize: '16px', fontWeight: 900, color: '#0f172a', background: '#fff', width: '130px'
+                  }}
+                />
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+                  (Sincronizado em tempo real com /chamadas)
+                </span>
+              </div>
+            </div>
+
+            {/* Quem Retirou (Responsáveis + Status de Permissão) */}
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '10px', letterSpacing: '0.5px' }}>
+                Com quem o aluno saiu? (Selecione o Responsável Autorizado):
+              </label>
+
+              {/* Lista de Responsáveis Cadastrados com Status de Permissão */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '10px', marginBottom: '16px' }}>
+                {guardias.length === 0 && (
+                  <div style={{ gridColumn: '1 / -1', padding: '10px 14px', borderRadius: '10px', background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '11px', fontWeight: 600 }}>
+                    ℹ️ Nenhum responsável cadastrado na ficha do aluno. Selecione "Saiu Sozinho" ou digite o nome no campo abaixo:
+                  </div>
+                )}
+                {guardias.map((g, idx) => {
+                  const fullLabel = `${g.name} (${g.role})`
+                  const isSel = (saidaModalResponsavel === fullLabel || saidaModalResponsavel === g.name) && !customResponsavel
+
+                  if (!g.permitido) {
+                    // RESPONSÁVEL BLOQUEADO / PROIBIDO DE RETIRAR
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => alert(`⚠️ ATENÇÃO: ${g.name} NÃO POSSUI PERMISSÃO PARA RETIRAR ${aluno.nome.toUpperCase()}.\n\nMotivo: ${g.motivoProibicao || 'Restrição legal/cadastral'}.`)}
+                        style={{
+                          padding: '12px 14px', borderRadius: '14px', border: '2px solid #fecaca',
+                          background: '#fef2f2', cursor: 'not-allowed', opacity: 0.9,
+                          display: 'flex', flexDirection: 'column', gap: '4px', transition: 'all 0.15s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 800, color: '#991b1b' }}>{g.name}</span>
+                          <span style={{ fontSize: '10px', fontWeight: 900, background: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '100px', border: '1px solid #fca5a5' }}>
+                            🔴 PROIBIDO RETIRAR
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '11px', color: '#991b1b', fontWeight: 600 }}>
+                          Parentesco: <strong>{g.role}</strong>
+                        </span>
+                      </div>
+                    )
+                  }
+
+                  // RESPONSÁVEL PERMITIDO / AUTORIZADO
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setSaidaModalResponsavel(fullLabel)
+                        setCustomResponsavel('')
+                      }}
+                      style={{
+                        padding: '12px 14px', borderRadius: '14px', textAlign: 'left',
+                        cursor: 'pointer', border: isSel ? '2px solid #c026d3' : '1px solid #e2e8f0',
+                        background: isSel ? 'linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%)' : '#fff',
+                        color: isSel ? '#c026d3' : '#0f172a',
+                        boxShadow: isSel ? '0 4px 12px rgba(192, 38, 211, 0.2)' : '0 1px 3px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s', display: 'flex', flexDirection: 'column', gap: '4px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <UserCheck size={16} style={{ color: isSel ? '#c026d3' : '#16a34a' }} />
+                          <span style={{ fontSize: '13px', fontWeight: 800 }}>{g.name}</span>
+                        </div>
+                        <span style={{ fontSize: '10px', fontWeight: 800, background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '100px', border: '1px solid #bbf7d0' }}>
+                          🟢 PERMITIDO
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '11px', color: isSel ? '#9333ea' : '#64748b', fontWeight: 600 }}>
+                        Parentesco: <strong>{g.role}</strong>
+                      </span>
+                    </button>
+                  )
+                })}
+
+                {/* Opção Saiu Sozinho */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSaidaModalResponsavel('Saiu Sozinho')
+                    setCustomResponsavel('')
+                  }}
+                  style={{
+                    padding: '12px 14px', borderRadius: '14px', textAlign: 'left',
+                    cursor: 'pointer', border: isSaiuSozinho ? '2px solid #10b981' : '1px dashed #cbd5e1',
+                    background: isSaiuSozinho ? '#dcfce7' : '#f8fafc',
+                    color: isSaiuSozinho ? '#15803d' : '#475569',
+                    transition: 'all 0.15s', display: 'flex', flexDirection: 'column', gap: '4px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 800 }}>🚶‍♂️ Saiu Sozinho</span>
+                    <span style={{ fontSize: '10px', fontWeight: 800, background: '#e2e8f0', color: '#475569', padding: '2px 6px', borderRadius: '100px' }}>
+                      Sem Acompanhante
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>Autorização individual</span>
+                </button>
+              </div>
+
+              {/* Input para Digitar Novo Responsável */}
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="text"
+                  placeholder="Ou digite o nome de outro responsável/acompanhante..."
+                  value={customResponsavel}
+                  onChange={e => {
+                    setCustomResponsavel(e.target.value)
+                    if (e.target.value) setSaidaModalResponsavel('')
+                  }}
+                  style={{
+                    width: '100%', padding: '12px 14px', borderRadius: '12px',
+                    border: customResponsavel ? '2px solid #c026d3' : '1px solid #cbd5e1',
+                    fontSize: '13px', fontWeight: 600, background: customResponsavel ? '#fdf4ff' : '#fff'
+                  }}
+                />
+              </div>
+            </div>
+
+          </div>
+
+          {/* Footer */}
+          <div style={{
+            padding: '16px 24px', borderTop: '1px solid #f1f5f9', background: '#f8fafc',
+            display: 'flex', justifyContent: 'flex-end', gap: '12px'
+          }}>
+            <button
+              type="button"
+              onClick={() => setSaidaModalData(null)}
+              style={{ padding: '10px 18px', borderRadius: '10px', background: '#fff', border: '1px solid #cbd5e1', color: '#475569', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={salvandoSaida}
+              onClick={handleConfirmarSaidaInfantil}
+              style={{
+                padding: '10px 24px', borderRadius: '10px',
+                background: 'linear-gradient(135deg, #c026d3 0%, #9333ea 100%)',
+                color: '#fff', border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(192, 38, 211, 0.3)', display: 'flex', alignItems: 'center', gap: '8px'
+              }}
+            >
+              <CheckCircle2 size={16} />
+              <span>{salvandoSaida ? 'Confirmando...' : 'Confirmar Saída no Sistema'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Render do Modal de Registro Manual de Não Identificados
   const renderRegistroManualModal = () => {
     if (!showRegistroManualModal) return null
@@ -3533,6 +4236,7 @@ export default function FrequenciaPage() {
         {renderRegrasModal(showRegrasModal, () => setShowRegrasModal(false))}
         {renderRelatorioModal()}
         {renderRegistroManualModal()}
+        {renderSaidaModal()}
         <SyncAcessosModal 
           isOpen={showAcessosModal} 
           onClose={() => setShowAcessosModal(false)}
@@ -3545,6 +4249,7 @@ export default function FrequenciaPage() {
 
   // ── VISTA INTERNA (LANÇAMENTO DE FALTAS) ──────────────────────────────────
   const schedule = getTurmaSchedule(turmaObj)
+  const isInfantil = schedule.segmento === 'Educação Infantil' || ((turmaObj as any)?.dados?.segmento === 'Educação Infantil') || (turmaObj?.nome || '').toLowerCase().includes('infantil') || (turmaObj?.nome || '').toLowerCase().includes('maternal') || (turmaObj?.nome || '').toLowerCase().includes('jardim') || (turmaObj?.nome || '').toLowerCase().includes('pré')
   
   const datasAtivasDaTurma = new Set<string>()
   Object.values(absences).forEach(studentDays => {
@@ -3696,57 +4401,67 @@ export default function FrequenciaPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
             <thead>
-              <tr>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
-                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '150px' }}>Freq. Total</th>
-                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltas</th>
-                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Justificadas</th>
-                {diasPeriodo.map(dia => {
-                  const dateObj = new Date(dia + 'T00:00:00')
-                  const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
-                  return (
-                    <th key={dia} style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, minWidth: '320px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ textTransform: 'uppercase', fontSize: '11px', color: '#94a3b8' }}>{diaSemana}</span>
-                          <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{dia.split('-')[2]}/{dia.split('-')[1]}</span>
+              {isInfantil ? (
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '120px' }}>Freq. Total</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '90px' }}>Faltas</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '220px' }}>Entrada / Presença (1-Clique)</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '260px' }}>Saída do Aluno & Retirada (/chamadas)</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '150px' }}>Freq. Total</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltas</th>
+                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Justificadas</th>
+                  {diasPeriodo.map(dia => {
+                    const dateObj = new Date(dia + 'T00:00:00')
+                    const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
+                    return (
+                      <th key={dia} style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, minWidth: '320px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ textTransform: 'uppercase', fontSize: '11px', color: '#94a3b8' }}>{diaSemana}</span>
+                            <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{dia.split('-')[2]}/{dia.split('-')[1]}</span>
+                          </div>
+                          {/* Ações em lote para a turma */}
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => {
+                                alunosFiltrados.forEach(a => {
+                                  schedule.tempos.forEach(t => setStatus(a.id, dia, t.id, 'P'))
+                                })
+                              }}
+                              style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#059669'}
+                              onMouseLeave={e => e.currentTarget.style.background = '#10b981'}
+                            >
+                              Presença Geral (Turma)
+                            </button>
+                            <button
+                              onClick={() => {
+                                alunosFiltrados.forEach(a => {
+                                  schedule.tempos.forEach(t => setStatus(a.id, dia, t.id, 'F'))
+                                })
+                              }}
+                              style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                              onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+                            >
+                              Falta Geral (Turma)
+                            </button>
+                          </div>
                         </div>
-                        {/* Ações em lote para a turma */}
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <button
-                            onClick={() => {
-                              alunosFiltrados.forEach(a => {
-                                schedule.tempos.forEach(t => setStatus(a.id, dia, t.id, 'P'))
-                              })
-                            }}
-                            style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#059669'}
-                            onMouseLeave={e => e.currentTarget.style.background = '#10b981'}
-                          >
-                            Presença Geral (Turma)
-                          </button>
-                          <button
-                            onClick={() => {
-                              alunosFiltrados.forEach(a => {
-                                schedule.tempos.forEach(t => setStatus(a.id, dia, t.id, 'F'))
-                              })
-                            }}
-                            style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
-                            onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
-                            onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
-                          >
-                            Falta Geral (Turma)
-                          </button>
-                        </div>
-                      </div>
-                    </th>
-                  )
-                })}
-              </tr>
+                      </th>
+                    )
+                  })}
+                </tr>
+              )}
             </thead>
             <tbody>
               {loadingFreqTurma ? (
-                <TableSkeleton rows={5} cols={4 + diasPeriodo.length} />
+                <TableSkeleton rows={5} cols={isInfantil ? 5 : 4 + diasPeriodo.length} />
               ) : alunosFiltrados.map((aluno: any) => {
                 const freqGeral = calcFreqGeral(aluno.id)
                 const isLow = freqGeral !== null && freqGeral < freqMinima
@@ -3814,96 +4529,273 @@ export default function FrequenciaPage() {
                       <span style={{ fontSize: '13px', color: totalFaltas > 5 ? '#ef4444' : '#0f172a', fontWeight: 600 }}>{totalFaltas}</span>
                     </td>
 
-                    {/* Justificadas */}
-                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
-                      <span style={{ fontSize: '13px', color: '#64748b' }}>{totalJustificadas}</span>
-                    </td>
+                    {isInfantil ? (
+                      <>
+                        {/* Entrada / Frequência (Botão Único 1-Clique) */}
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                          {diasPeriodo.map(dia => {
+                            const status1 = getStatus(aluno.id, dia, '1')
+                            const currentEntrada = horariosEntrada[aluno.id]?.[dia] || (origemInfo.horario ? origemInfo.horario : '')
+                            const isEditingThisEntrada = editingEntrada?.alunoId === aluno.id && editingEntrada?.dia === dia
 
-                    {/* Dias de Frequência (com controle de tempos) */}
-                    {diasPeriodo.map(dia => {
-                      return (
-                        <td 
-                          key={dia} 
-                          style={{ padding: '6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}
-                        >
-                          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', alignItems: 'center' }}>
-                            {/* Tempos individuais */}
-                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
-                              {schedule.tempos.map(tempo => {
-                                const status = getStatus(aluno.id, dia, tempo.id)
-                                const cfg = S_CONFIG[status]
-                                
-                                return (
-                                  <div key={tempo.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                    <button
-                                      onClick={() => {
-                                        const nextStatus = status === '-' ? 'P' : (status === 'P' ? 'F' : (status === 'F' ? 'J' : '-'))
-                                        setStatus(aluno.id, dia, tempo.id, nextStatus)
-                                      }}
-                                      title={`${tempo.label}: ${tempo.horario}`}
-                                      style={{
-                                        width: '32px',
-                                        height: '32px',
-                                        borderRadius: '8px',
-                                        border: `1px solid ${cfg.border}`,
-                                        background: cfg.bg,
-                                        color: cfg.color,
-                                        fontWeight: 800,
-                                        fontSize: '11px',
-                                        cursor: 'pointer',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        boxShadow: `0 2px 4px ${cfg.glow}`,
-                                        position: 'relative'
-                                      }}
-                                      onMouseEnter={e => {
-                                        e.currentTarget.style.transform = 'scale(1.1)';
-                                        e.currentTarget.style.boxShadow = `0 4px 6px ${cfg.glow}`;
-                                      }}
-                                      onMouseLeave={e => {
-                                        e.currentTarget.style.transform = 'scale(1)';
-                                        e.currentTarget.style.boxShadow = `0 2px 4px ${cfg.glow}`;
-                                      }}
-                                    >
-                                      {cfg.label}
-                                    </button>
-                                    <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700 }}>{tempo.id}º</span>
+                            return (
+                              <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextStatus: PresStatus = status1 === '-' ? 'P' : (status1 === 'P' ? 'F' : (status1 === 'F' ? 'J' : '-'))
+                                    const newDayTempos: Record<string, PresStatus> = {}
+                                    schedule.tempos.forEach(t => { newDayTempos[t.id] = nextStatus })
+
+                                    let newEntrada = horariosEntrada[aluno.id]?.[dia]
+                                    if (nextStatus === 'P' && !newEntrada) {
+                                      const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                      newEntrada = origemInfo.horario || nowT
+                                      setHorariosEntrada(prev => ({
+                                        ...prev,
+                                        [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: newEntrada! }
+                                      }))
+                                    }
+
+                                    schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, nextStatus))
+                                    autoSaveStudent(aluno.id, dia, newDayTempos, newEntrada)
+                                  }}
+                                  style={{
+                                    padding: '8px 18px', borderRadius: '10px', fontWeight: 900, fontSize: '13px', cursor: 'pointer',
+                                    border: status1 === 'P' ? '1px solid #bbf7d0' : (status1 === 'F' ? '1px solid #fecaca' : (status1 === 'J' ? '1px solid #fde68a' : '1px dashed #cbd5e1')),
+                                    background: status1 === 'P' ? 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)' : (status1 === 'F' ? 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' : (status1 === 'J' ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : '#f8fafc')),
+                                    color: status1 === 'P' ? '#15803d' : (status1 === 'F' ? '#b91c1c' : (status1 === 'J' ? '#b45309' : '#64748b')),
+                                    boxShadow: status1 === 'P' ? '0 2px 8px rgba(34, 197, 94, 0.2)' : 'none',
+                                    transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '6px'
+                                  }}
+                                >
+                                  {status1 === 'P' && <CheckCircle size={16} />}
+                                  {status1 === 'F' && <XCircle size={16} />}
+                                  {status1 === 'J' && <AlertTriangle size={16} />}
+                                  <span>
+                                    {status1 === 'P' ? 'PRESENTE' : (status1 === 'F' ? 'FALTOSO' : (status1 === 'J' ? 'JUSTIFICADO' : 'DEFINIR FREQUÊNCIA'))}
+                                  </span>
+                                </button>
+
+                                {status1 === 'P' && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {isEditingThisEntrada ? (
+                                      <input
+                                        type="time"
+                                        autoFocus
+                                        value={currentEntrada || '07:30'}
+                                        onBlur={() => setEditingEntrada(null)}
+                                        onChange={e => {
+                                          const v = e.target.value
+                                          setHorariosEntrada(prev => ({
+                                            ...prev,
+                                            [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: v }
+                                          }))
+                                          autoSaveStudent(aluno.id, dia, undefined, v)
+                                        }}
+                                        style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
+                                      />
+                                    ) : (
+                                      <span
+                                        onClick={() => setEditingEntrada({ alunoId: aluno.id, dia })}
+                                        title="Clique para editar o horário de entrada"
+                                        style={{
+                                          cursor: 'pointer', fontSize: '11px', fontWeight: 800, color: '#0369a1',
+                                          background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', border: '1px solid #7dd3fc',
+                                          display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                        }}
+                                      >
+                                        <Clock size={12} />
+                                        <span>Entrou: {currentEntrada || '07:30'}h</span>
+                                        <Edit3 size={10} style={{ opacity: 0.7 }} />
+                                      </span>
+                                    )}
                                   </div>
-                                )
-                              })}
-                            </div>
-
-                            {/* Ações rápidas */}
-                            <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <button
-                                title="Marcar presença em todos os tempos"
-                                onClick={() => {
-                                  schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'P'))
-                                }}
-                                style={{ fontSize: '9px', fontWeight: 800, padding: '3px 6px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#dcfce7'}
-                                onMouseLeave={e => e.currentTarget.style.background = '#f0fdf4'}
-                              >
-                                P. Geral
-                              </button>
-                              <button
-                                title="Marcar falta em todos os tempos"
-                                onClick={() => {
-                                  schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'F'))
-                                }}
-                                style={{ fontSize: '9px', fontWeight: 800, padding: '3px 6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-                                onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
-                              >
-                                F. Geral
-                              </button>
-                            </div>
-                          </div>
+                                )}
+                              </div>
+                            )
+                          })}
                         </td>
-                      )
-                    })}
+
+                        {/* Saída do Aluno & Retirada (/chamadas) */}
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
+                          {diasPeriodo.map(dia => {
+                            const status1 = getStatus(aluno.id, dia, '1')
+                            const hSaida = horariosSaida[aluno.id]?.[dia]
+                            const rSaida = responsaveisSaida[aluno.id]?.[dia]
+
+                            if (status1 !== 'P') {
+                              return <span key={dia} style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>
+                            }
+
+                            if (hSaida && rSaida) {
+                              return (
+                                <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                  <span style={{
+                                    background: 'linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%)',
+                                    color: '#c026d3', border: '1px solid #f5d0fe', borderRadius: '10px',
+                                    padding: '6px 12px', fontSize: '11px', fontWeight: 800,
+                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                    boxShadow: '0 2px 6px rgba(192, 38, 211, 0.12)'
+                                  }}>
+                                    <CheckCircle2 size={14} style={{ color: '#c026d3' }} />
+                                    <span>Saiu às {hSaida}h</span>
+                                  </span>
+                                  <span style={{ fontSize: '11px', color: '#475569', fontWeight: 700 }}>
+                                    Retirado por: <strong style={{ color: '#0f172a' }}>{rSaida}</strong>
+                                  </span>
+
+                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSaidaModalHora(hSaida)
+                                        setSaidaModalResponsavel(rSaida)
+                                        setSaidaModalData({ aluno, dia })
+                                      }}
+                                      style={{ fontSize: '10px', fontWeight: 800, background: '#f1f5f9', color: '#2563eb', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 6px', cursor: 'pointer' }}
+                                    >
+                                      Editar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (confirm(`Deseja cancelar o registro de saída de ${aluno.nome}?`)) {
+                                          handleCancelarSaidaInfantil(aluno, dia)
+                                        }
+                                      }}
+                                      style={{ fontSize: '10px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 6px', cursor: 'pointer' }}
+                                    >
+                                      Cancelar Saída
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            }
+
+                            return (
+                              <div key={dia} style={{ display: 'flex', justifyContent: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                    setSaidaModalHora(nowT)
+                                    const guardias = getStudentGuardians(aluno, allResponsaveisList)
+                                    setSaidaModalResponsavel(guardias.length > 0 ? `${guardias[0].name} (${guardias[0].role})` : '')
+                                    setCustomResponsavel('')
+                                    setSaidaModalData({ aluno, dia })
+                                  }}
+                                  style={{
+                                    padding: '8px 16px', borderRadius: '10px', fontWeight: 800, fontSize: '12px',
+                                    background: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)', color: '#fff',
+                                    border: 'none', cursor: 'pointer', boxShadow: '0 3px 10px rgba(147, 51, 234, 0.25)',
+                                    display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s'
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                                  onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                                >
+                                  <LogOut size={14} />
+                                  <span>Registrar Saída</span>
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        {/* Justificadas */}
+                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ fontSize: '13px', color: '#64748b' }}>{totalJustificadas}</span>
+                        </td>
+
+                        {/* Dias de Frequência (com controle de tempos) */}
+                        {diasPeriodo.map(dia => {
+                          return (
+                            <td 
+                              key={dia} 
+                              style={{ padding: '6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}
+                            >
+                              <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', alignItems: 'center' }}>
+                                {/* Tempos individuais */}
+                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
+                                  {schedule.tempos.map(tempo => {
+                                    const status = getStatus(aluno.id, dia, tempo.id)
+                                    const cfg = S_CONFIG[status]
+                                    
+                                    return (
+                                      <div key={tempo.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
+                                        <button
+                                          onClick={() => {
+                                            const nextStatus = status === '-' ? 'P' : (status === 'P' ? 'F' : (status === 'F' ? 'J' : '-'))
+                                            setStatus(aluno.id, dia, tempo.id, nextStatus)
+                                          }}
+                                          title={`${tempo.label}: ${tempo.horario}`}
+                                          style={{
+                                            width: '32px',
+                                            height: '32px',
+                                            borderRadius: '8px',
+                                            border: `1px solid ${cfg.border}`,
+                                            background: cfg.bg,
+                                            color: cfg.color,
+                                            fontWeight: 800,
+                                            fontSize: '11px',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                                            boxShadow: `0 2px 4px ${cfg.glow}`,
+                                            position: 'relative'
+                                          }}
+                                          onMouseEnter={e => {
+                                            e.currentTarget.style.transform = 'scale(1.1)';
+                                            e.currentTarget.style.boxShadow = `0 4px 6px ${cfg.glow}`;
+                                          }}
+                                          onMouseLeave={e => {
+                                            e.currentTarget.style.transform = 'scale(1)';
+                                            e.currentTarget.style.boxShadow = `0 2px 4px ${cfg.glow}`;
+                                          }}
+                                        >
+                                          {cfg.label}
+                                        </button>
+                                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700 }}>{tempo.id}º</span>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+
+                                {/* Ações rápidas */}
+                                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <button
+                                    title="Marcar presença em todos os tempos"
+                                    onClick={() => {
+                                      schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'P'))
+                                    }}
+                                    style={{ fontSize: '9px', fontWeight: 800, padding: '3px 6px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#dcfce7'}
+                                    onMouseLeave={e => e.currentTarget.style.background = '#f0fdf4'}
+                                  >
+                                    P. Geral
+                                  </button>
+                                  <button
+                                    title="Marcar falta em todos os tempos"
+                                    onClick={() => {
+                                      schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'F'))
+                                    }}
+                                    style={{ fontSize: '9px', fontWeight: 800, padding: '3px 6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
+                                    onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                                    onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+                                  >
+                                    F. Geral
+                                  </button>
+                                </div>
+                              </div>
+                            </td>
+                          )
+                        })}
+                      </>
+                    )}
                   </tr>
                 )
               })}
@@ -3914,6 +4806,7 @@ export default function FrequenciaPage() {
       {renderRegrasModal(showRegrasModal, () => setShowRegrasModal(false))}
       {renderRelatorioModal()}
       {renderRegistroManualModal()}
+      {renderSaidaModal()}
       <SyncAcessosModal 
         isOpen={showAcessosModal} 
         onClose={() => setShowAcessosModal(false)}

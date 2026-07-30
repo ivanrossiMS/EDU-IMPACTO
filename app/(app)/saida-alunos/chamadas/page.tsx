@@ -317,50 +317,62 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
     const list: { id: string; name: string; role: string; rfid?: string; proibido?: boolean; diasSemana?: string[] }[] = []
     const seen = new Set<string>()
 
-    // 1. Autorizados do módulo Saúde & Obs
-    if (autorizados.length > 0) {
-      autorizados.forEach((aut, i) => {
-        const key = (aut.nome || '').toLowerCase().trim()
-        if (!key || seen.has(key)) return
+    const addRes = (id: string, nameVal: any, roleVal: string, rfid?: string, proibido?: boolean, dias?: string[]) => {
+      if (!nameVal || typeof nameVal !== 'string') return
+      const cleaned = nameVal.trim()
+      if (!cleaned) return
+      const key = cleaned.toLowerCase()
+      if (!seen.has(key)) {
         seen.add(key)
-        list.push({
-          id: `saude-aut-${i}`,
-          name: aut.nome,
-          role: aut.parentesco || 'Autorizado',
-          rfid: aut.rfid,
-          proibido: aut.proibido === true,
-          diasSemana: aut.diasSemana || [],
-        })
-      })
+        list.push({ id, name: cleaned, role: roleVal, rfid, proibido: proibido === true, diasSemana: dias || [] })
+      }
     }
+
+    // 1. Autorizados do módulo Saúde & Obs
+    const saudeAuts = Array.isArray(autorizados) ? autorizados : []
+    saudeAuts.forEach((aut: any, i: number) => {
+      addRes(`saude-aut-${i}`, aut.nome || aut.name, aut.parentesco || aut.role || 'Autorizado', aut.rfid, aut.proibido, aut.diasSemana || aut.diasAcesso)
+    })
     
     // 2. Responsáveis cadastrados na aba Responsáveis
-    const resps: any[] = student.responsaveis || []
+    const resps: any[] = []
+    const pushArray = (arr: any) => { if (Array.isArray(arr)) resps.push(...arr) }
+    pushArray(student.responsaveis)
+    pushArray(student.dados?.responsaveis)
+    pushArray(student.responsaveis_lista)
+    pushArray(student.outrosResponsaveis)
+    pushArray(student.dados?.outrosResponsaveis)
+    pushArray(student.responsaveisOutros)
+    pushArray(student.dados?.responsaveisOutros)
+
     resps.forEach((r: any, i: number) => {
-      const key = (r.nome || '').toLowerCase().trim()
-      if (key && !seen.has(key)) {
-        seen.add(key)
-        list.push({ 
-          id: `resp-${i}`, 
-          name: r.nome, 
-          role: r.parentesco || 'Responsável',
-          proibido: r.proibido === true,
-          diasSemana: r.diasAcesso || r.dias_acesso || r.diasSemana || []
-        })
-      }
+      const name = r.nome || r.name || r.nomeCompleto
+      if (!name) return
+
+      let rawRole = r.parentesco || r.role || r.tipo || ''
+      const isPed = r.isPedagogico === true || r.respPedagogico === true || rawRole.toLowerCase().includes('pedag')
+      const isFin = r.isFinanceiro === true || r.respFinanceiro === true || rawRole.toLowerCase().includes('finan')
+      const isOut = r.isOutro === true || r.resp_outro === true || r.respOutro === true || rawRole.toLowerCase() === 'outro' || rawRole.toLowerCase() === 'outros'
+
+      let finalRole = rawRole
+      if (isPed) finalRole = 'Resp. Pedagógico'
+      else if (isFin) finalRole = 'Resp. Financeiro'
+      else if (isOut) finalRole = (rawRole && rawRole.toLowerCase() !== 'outro' && rawRole.toLowerCase() !== 'outros') ? `Outros (${rawRole})` : 'Outros'
+      else if (!finalRole) finalRole = 'Responsável'
+
+      addRes(`resp-${i}`, name, finalRole, r.rfid, r.proibido, r.diasAcesso || r.dias_acesso || r.diasSemana)
     })
 
     // 3. Fallback to ERP fields
-    const erp: { name: string; role: string }[] = []
-    if (student.responsavel?.trim())           erp.push({ name: student.responsavel.trim(),           role: 'Responsável' })
-    if (student.responsavelFinanceiro?.trim()) erp.push({ name: student.responsavelFinanceiro.trim(), role: 'Financeiro' })
-    if (student.responsavelPedagogico?.trim()) erp.push({ name: student.responsavelPedagogico.trim(), role: 'Pedagógico' })
-    erp.forEach((c, i) => {
-      const key = c.name.toLowerCase().trim()
-      if (!seen.has(key)) { seen.add(key); list.push({ id: `erp-${i}`, name: c.name, role: c.role }) }
-    })
+    addRes('erp-ped', student.responsavelPedagogico || student.responsavel_pedagogico || student.dados?.responsavelPedagogico, 'Pedagógico')
+    addRes('erp-fin', student.responsavelFinanceiro || student.responsavel_financeiro || student.dados?.responsavelFinanceiro, 'Financeiro')
+    addRes('erp-out', student.responsavelOutro || student.responsavel_outro || student.dados?.responsavelOutro, 'Outros')
+    addRes('erp-resp', student.responsavel || student.dados?.responsavel, 'Responsável')
+    addRes('erp-mae', student.mae || student.dados?.mae, 'Mãe')
+    addRes('erp-pai', student.pai || student.dados?.pai, 'Pai')
+
     return list
-  }, [autorizados, student.responsaveis, student.responsavel, student.responsavelFinanceiro, student.responsavelPedagogico])
+  }, [autorizados, student])
 
   const alreadyCalled = useMemo(() => {
     return activeCalls.some(c =>
@@ -823,6 +835,11 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         return (sId && acId && sId === acId) || (sName && acName && sName === acName)
       })
 
+      const d = new Date(c.calledAt)
+      const dateStr = !isNaN(d.getTime())
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        : c.calledAt.split('T')[0]
+
       return {
         id: c.id,
         studentId: c.studentId,
@@ -831,7 +848,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         studentPhoto: c.studentPhoto,
         authorizedPerson: c.guardianName,
         loggedBy: c.operatorId || 'Sistema',
-        date: c.calledAt.split('T')[0],
+        date: dateStr,
         time: new Date(c.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
         calledAtMs: new Date(c.calledAt).getTime(),
         confirmedOut: !!pickUpCall,
@@ -1428,7 +1445,9 @@ function ProibidosRetiradaCard() {
   useEffect(() => {
     const fetchRestritos = async () => {
       try {
-        const res = await fetch('/api/portaria/restritos-hoje')
+        const d = new Date()
+        const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const res = await fetch(`/api/portaria/restritos-hoje?date=${localDateStr}`)
         if (res.ok) {
           const json = await res.json()
           setRestritos(json.data || [])

@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     const to = from + limit - 1
 
     const queryFields = lightweight
-      ? 'id, nome, turma, status, dados'
+      ? 'id, nome, turma, status, responsavel, responsavel_financeiro, responsavel_pedagogico, dados'
       : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at'
 
     let query = supabase
@@ -225,6 +225,40 @@ export async function GET(request: Request) {
         }
       }
 
+      // Buscar vínculos da tabela aluno_responsavel para todos os identificadores possíveis dos alunos
+      const studentRefsAll = Array.from(new Set(students.flatMap((s: any) => [
+        s.id,
+        s.matricula,
+        s.codigo,
+        s.dados?.codigo,
+        s.dados?.id,
+        s.dados?.matricula,
+        s.matricula ? String(s.matricula) : null,
+        s.codigo ? String(s.codigo) : null,
+        s.dados?.codigo ? String(s.dados?.codigo) : null
+      ]).filter(Boolean).map(r => String(r).trim())))
+
+      let links: any[] = []
+      let responsaveisTable: any[] = []
+
+      if (studentRefsAll.length > 0) {
+        const { data: arLinks } = await supabase
+          .from('aluno_responsavel')
+          .select('aluno_id, responsavel_id, parentesco, resp_financeiro, resp_pedagogico, resp_outro, tipo')
+          .in('aluno_id', studentRefsAll)
+
+        links = arLinks || []
+        const respIds = Array.from(new Set(links.map((l: any) => String(l.responsavel_id).trim()).filter(Boolean)))
+
+        if (respIds.length > 0) {
+          const { data: respData } = await supabase
+            .from('responsaveis')
+            .select('id, nome, parentesco, telefone, email, rfid, proibido, dias_acesso, status, observacao')
+            .in('id', respIds)
+          responsaveisTable = respData || []
+        }
+      }
+
       const formatted = (students || []).map((student: any) => {
         const d = student.dados || {}
         
@@ -238,18 +272,110 @@ export async function GET(request: Request) {
         const rawFoto = student.foto || d.foto || d.avatarUrl || d.fotoUrl || null
         const resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
 
+        const thisStudentRefs = [
+          student.id,
+          student.matricula,
+          student.codigo,
+          student.dados?.codigo,
+          student.dados?.id,
+          student.dados?.matricula,
+          student.matricula ? String(student.matricula) : null,
+          student.codigo ? String(student.codigo) : null,
+          student.dados?.codigo ? String(student.dados?.codigo) : null
+        ].filter(Boolean).map(r => String(r).trim())
+
+        // Mesclar responsáveis da tabela aluno_responsavel com responsaveis no JSON/coluna do aluno
+        const linked = links.filter((l: any) => thisStudentRefs.includes(String(l.aluno_id).trim()))
+          .map((l: any) => {
+            const r = responsaveisTable.find((rObj: any) => String(rObj.id).trim() === String(l.responsavel_id).trim()) || {}
+            const isPed = l.resp_pedagogico === true || l.tipo === 'pedagogico' || r.isPedagogico === true
+            const isFin = l.resp_financeiro === true || l.tipo === 'financeiro' || r.isFinanceiro === true
+            const isOut = l.resp_outro === true || l.tipo === 'outro' || l.tipo === 'outros' || r.isOutro === true
+            const parentesco = l.parentesco || r.parentesco || (isPed ? 'Resp. Pedagógico' : (isFin ? 'Resp. Financeiro' : (isOut ? 'Outros' : 'Responsável')))
+            return {
+              id: r.id || l.responsavel_id,
+              nome: r.nome || '',
+              parentesco: parentesco,
+              telefone: r.telefone,
+              email: r.email,
+              rfid: r.rfid,
+              proibido: r.proibido === true,
+              diasAcesso: r.dias_acesso,
+              isFinanceiro: isFin,
+              isPedagogico: isPed,
+              isOutro: isOut
+            }
+          }).filter((r: any) => r.nome && r.nome.trim())
+
+        const jsonResps = [
+          ...(Array.isArray(student.responsaveis) ? student.responsaveis : []),
+          ...(Array.isArray(d.responsaveis) ? d.responsaveis : []),
+          ...(Array.isArray(student.outrosResponsaveis) ? student.outrosResponsaveis : []),
+          ...(Array.isArray(d.outrosResponsaveis) ? d.outrosResponsaveis : []),
+          ...(Array.isArray(student.responsaveisOutros) ? student.responsaveisOutros : []),
+          ...(Array.isArray(d.responsaveisOutros) ? d.responsaveisOutros : []),
+        ]
+        const mergedResponsaveis = [...linked]
+        jsonResps.forEach((j: any) => {
+          const jName = (typeof j === 'string' ? j : (j.nome || j.name || j.nomeCompleto || '')).trim()
+          if (jName && !mergedResponsaveis.some(m => m.nome && m.nome.toLowerCase() === jName.toLowerCase())) {
+            mergedResponsaveis.push(typeof j === 'string' ? { nome: jName, parentesco: 'Responsável' } : j)
+          }
+        })
+
+        const checkDirectField = (val: any, defaultRole: string, isPed = false, isFin = false, isOut = false) => {
+          if (!val) return
+          let name = ''
+          if (typeof val === 'string') name = val.trim()
+          else if (typeof val === 'object') name = (val.nome || val.name || val.nomeCompleto || val.nome_completo || '').trim()
+          
+          if (!name) return
+          const lower = name.toLowerCase()
+          if (['none', 'nenhum', 'n/a', 'null', 'undefined', '-'].includes(lower)) return
+          
+          if (!mergedResponsaveis.some(m => m.nome && m.nome.toLowerCase() === lower)) {
+            mergedResponsaveis.push({
+              id: '',
+              nome: name,
+              parentesco: defaultRole,
+              telefone: null,
+              email: null,
+              rfid: null,
+              proibido: false,
+              diasAcesso: [],
+              isPedagogico: isPed,
+              isFinanceiro: isFin,
+              isOutro: isOut
+            })
+          }
+        }
+
+        checkDirectField(student.responsavelPedagogico || student.responsavel_pedagogico || d.responsavelPedagogico || d.responsavel_pedagogico || d.resp_pedagogico, 'Resp. Pedagógico', true, false, false)
+        checkDirectField(student.responsavelFinanceiro || student.responsavel_financeiro || d.responsavelFinanceiro || d.responsavel_financeiro || d.resp_financeiro, 'Resp. Financeiro', false, true, false)
+        checkDirectField(student.responsavelOutro || student.responsavel_outro || d.responsavelOutro || d.responsavel_outro || d.resp_outro, 'Outros', false, false, true)
+        checkDirectField(d.nome_mae || d.mae || d.nomeMae || d.filiacao?.mae || d.filiacao_mae || student.mae || student.nomeMae, 'Mãe')
+        checkDirectField(d.nome_pai || d.pai || d.nomePai || d.filiacao?.pai || d.filiacao_pai || student.pai || student.nomePai, 'Pai')
+        checkDirectField(d.nome_responsavel || d.responsavel || d.nomeResponsavel || d.resp_nome || student.responsavel || student.nomeResponsavel, 'Responsável')
+
         return {
           ...student,
           foto: resolvedFoto,
-          responsaveis: student.responsaveis || d.responsaveis,
+          responsaveis: mergedResponsaveis,
           _responsaveis: student._responsaveis || d._responsaveis,
           responsavel: student.responsavel || d.responsavel,
+          responsavelPedagogico: student.responsavel_pedagogico || student.responsavelPedagogico || d.responsavelPedagogico,
+          responsavelFinanceiro: student.responsavel_financeiro || student.responsavelFinanceiro || d.responsavelFinanceiro,
+          mae: d.mae || d.nomeMae || d.filiacao?.mae || null,
+          pai: d.pai || d.nomePai || d.filiacao?.pai || null,
+          saude: student.saude || d.saude,
+          autorizados: student.autorizados || d.autorizados,
           cpf_responsavel: student.cpf_responsavel || d.cpf_responsavel || d.cpfResponsavel,
           email_responsavel: student.email_responsavel || d.email_responsavel || d.emailResponsavel,
           celular_responsavel: student.celular_responsavel || d.celular_responsavel || d.telResponsavel,
           turma_nome: tObj?.nome || student.turma || '',
           turma_anoLetivo: tObj?.ano !== undefined ? String(tObj.ano) : (student.anoLetivo || student.ano_letivo || d.anoLetivo || ''),
           dados: {
+            ...(d || {}),
             historicoTurmas: [],
             celular_responsavel: d.celular_responsavel,
             cpfResponsavel: d.cpfResponsavel,
@@ -283,8 +409,12 @@ export async function GET(request: Request) {
     const allStudentRefs = Array.from(new Set(students.flatMap((s: any) => [
       s.id, 
       s.matricula, 
+      s.codigo,
       s.dados?.codigo, 
+      s.dados?.id,
+      s.dados?.matricula,
       s.matricula ? String(s.matricula) : null, 
+      s.codigo ? String(s.codigo) : null,
       s.dados?.codigo ? String(s.dados?.codigo) : null
     ]).filter(Boolean).map(r => String(r).trim())))
 
@@ -360,52 +490,79 @@ export async function GET(request: Request) {
       const studentRefs = [
         student.id, 
         student.matricula, 
+        student.codigo,
         student.dados?.codigo, 
+        student.dados?.id,
+        student.dados?.matricula,
         student.matricula ? String(student.matricula) : null, 
+        student.codigo ? String(student.codigo) : null,
         student.dados?.codigo ? String(student.dados?.codigo) : null
       ].filter(Boolean).map(r => String(r).trim())
       
       const linkedResponsaveis = links?.filter((l: any) => studentRefs.includes(String(l.aluno_id).trim()))
         .map((l: any) => {
           const resp = responsaveis.find((r: any) => String(r.id).trim() === String(l.responsavel_id).trim()) || {}
+          const isPed = l.resp_pedagogico === true || l.tipo === 'pedagogico' || resp.isPedagogico === true
+          const isFin = l.resp_financeiro === true || l.tipo === 'financeiro' || resp.isFinanceiro === true
+          const isOut = l.resp_outro === true || l.tipo === 'outro' || l.tipo === 'outros' || resp.isOutro === true
+          const parentesco = l.parentesco || resp.parentesco || (isPed ? 'Resp. Pedagógico' : (isFin ? 'Resp. Financeiro' : (isOut ? 'Outros' : 'Responsável')))
           return {
             ...resp,
-            parentesco: l.parentesco,
-            isFinanceiro: l.resp_financeiro,
-            isPedagogico: l.resp_pedagogico,
-            isOutro: l.resp_outro,
+            parentesco,
+            isFinanceiro: isFin,
+            isPedagogico: isPed,
+            isOutro: isOut,
             dataNasc: resp.data_nasc,
             diasAcesso: resp.dias_acesso
           }
-        }).filter((r: any) => r.id) || []
+        }).filter((r: any) => r.id || r.nome) || []
 
-      const fallbackResponsaveis = student.dados?.responsaveis || []
-      
-      let finalResponsaveis = linkedResponsaveis.length > 0 ? linkedResponsaveis : fallbackResponsaveis
-      if (finalResponsaveis.length === 0) {
-        const candidateText = (student.responsavel || student.responsavel_financeiro || student.responsavel_pedagogico || '').trim()
-        if (candidateText && candidateText.toLowerCase() !== 'none' && candidateText.toLowerCase() !== 'nenhum') {
-          const matchedResp = responsaveis.find((r: any) => r.nome && r.nome.trim().toLowerCase() === candidateText.toLowerCase())
-          if (matchedResp) {
-            finalResponsaveis = [{
-              ...matchedResp,
-              parentesco: 'mae',
-              isFinanceiro: true,
-              isPedagogico: true,
-              isOutro: false
-            }]
-          } else {
-            finalResponsaveis = [{
-              id: '',
-              nome: candidateText,
-              parentesco: 'mae',
-              isFinanceiro: true,
-              isPedagogico: true,
-              isOutro: false
-            }]
-          }
+      const jsonResps = [
+        ...(Array.isArray(student.responsaveis) ? student.responsaveis : []),
+        ...(Array.isArray(student.dados?.responsaveis) ? student.dados.responsaveis : []),
+        ...(Array.isArray(student.outrosResponsaveis) ? student.outrosResponsaveis : []),
+        ...(Array.isArray(student.dados?.outrosResponsaveis) ? student.dados.outrosResponsaveis : []),
+        ...(Array.isArray(student.responsaveisOutros) ? student.responsaveisOutros : []),
+        ...(Array.isArray(student.dados?.responsaveisOutros) ? student.dados.responsaveisOutros : []),
+      ]
+
+      let finalResponsaveis = [...linkedResponsaveis]
+      jsonResps.forEach((j: any) => {
+        const jName = (typeof j === 'string' ? j : (j.nome || j.name || j.nomeCompleto || '')).trim()
+        if (jName && !finalResponsaveis.some(m => m.nome && m.nome.toLowerCase() === jName.toLowerCase())) {
+          finalResponsaveis.push(typeof j === 'string' ? { nome: jName, parentesco: 'Responsável' } : j)
+        }
+      })
+
+      const d = student.dados || {}
+      const checkDirectField = (val: any, defaultRole: string, isPed = false, isFin = false, isOut = false) => {
+        if (!val) return
+        let name = ''
+        if (typeof val === 'string') name = val.trim()
+        else if (typeof val === 'object') name = (val.nome || val.name || val.nomeCompleto || val.nome_completo || '').trim()
+        
+        if (!name) return
+        const lower = name.toLowerCase()
+        if (['none', 'nenhum', 'n/a', 'null', 'undefined', '-'].includes(lower)) return
+        
+        if (!finalResponsaveis.some(m => m.nome && m.nome.toLowerCase() === lower)) {
+          finalResponsaveis.push({
+            id: '',
+            nome: name,
+            parentesco: defaultRole,
+            isPedagogico: isPed,
+            isFinanceiro: isFin,
+            isOutro: isOut
+          })
         }
       }
+
+      checkDirectField(student.responsavelPedagogico || student.responsavel_pedagogico || d.responsavelPedagogico || d.responsavel_pedagogico || d.resp_pedagogico, 'Resp. Pedagógico', true, false, false)
+      checkDirectField(student.responsavelFinanceiro || student.responsavel_financeiro || d.responsavelFinanceiro || d.responsavel_financeiro || d.resp_financeiro, 'Resp. Financeiro', false, true, false)
+      checkDirectField(student.responsavelOutro || student.responsavel_outro || d.responsavelOutro || d.responsavel_outro || d.resp_outro, 'Outros', false, false, true)
+      checkDirectField(d.nome_mae || d.mae || d.nomeMae || d.filiacao?.mae || d.filiacao_mae || student.mae || student.nomeMae, 'Mãe')
+      checkDirectField(d.nome_pai || d.pai || d.nomePai || d.filiacao?.pai || d.filiacao_pai || student.pai || student.nomePai, 'Pai')
+      checkDirectField(d.nome_responsavel || d.responsavel || d.nomeResponsavel || d.resp_nome || student.responsavel || student.nomeResponsavel, 'Responsável')
 
       const studentTurma = student.turma
       const tObj = turmasData?.find((t: any) =>
