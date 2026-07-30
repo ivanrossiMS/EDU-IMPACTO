@@ -24,20 +24,14 @@ export async function GET(request: Request) {
     
     const dateParam = url.searchParams.get('date') || fromDate
     const formatter = new Intl.DateTimeFormat('en-CA', { 
-      timeZone: 'America/Sao_Paulo', 
+      timeZone: 'America/Campo_Grande', 
       year: 'numeric', 
       month: '2-digit', 
       day: '2-digit' 
     })
     const todayStr = dateParam || formatter.format(new Date())
 
-    if (fromDate || dateParam) {
-      query = query.gte('created_at', `${todayStr}T00:00:00-05:00`)
-    } else {
-      // Filter for calls from the last 24 hours if no date provided
-      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-      query = query.gte('created_at', cutoff)
-    }
+    query = query.gte('created_at', `${todayStr}T00:00:00-04:00`)
     
     if (toDate) {
       query = query.lte('created_at', toDate + 'T23:59:59')
@@ -95,8 +89,8 @@ export async function GET(request: Request) {
               studentPhoto: al?.foto || al?.imagem1 || null,
               guardianId: 'frequencia-diario',
               guardianName: sResp || 'Responsável Cadastrado',
-              calledAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-03:00`,
-              confirmedAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-03:00`,
+              calledAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-04:00`,
+              confirmedAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-04:00`,
               status: 'confirmed',
               source: 'frequencia'
             })
@@ -175,7 +169,7 @@ export async function POST(request: Request) {
             const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
             const { data: aluno } = await supabase.from('alunos').select('nome, turma').eq('id', row.dados.studentId).single()
             if (aluno) {
-              const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+              const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
               const freqId = `FREQ-${row.dados.studentId}-${today}`
               const anoLetivo = new Date().getFullYear().toString()
               
@@ -217,7 +211,7 @@ export async function POST(request: Request) {
     const row = buildRow(body)
 
     const supabaseService = getAdminClient()
-    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+    const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' })
     const todayStr = formatter.format(new Date())
 
     const studentId = row.dados?.studentId ? String(row.dados.studentId) : null
@@ -229,7 +223,7 @@ export async function POST(request: Request) {
         .from('saida_calls')
         .select('id, dados')
         .eq('dados->>studentId', studentId)
-        .gte('created_at', `${todayStr}T00:00:00-03:00`)
+        .gte('created_at', `${todayStr}T00:00:00-04:00`)
 
       const confirmedEntry = (studentCallsToday || []).find(r => {
         let d = r.dados
@@ -279,7 +273,7 @@ export async function POST(request: Request) {
           .from('saida_calls')
           .select('id, dados')
           .eq('dados->>studentId', studentId)
-          .gte('created_at', `${todayStr}T00:00:00-03:00`)
+          .gte('created_at', `${todayStr}T00:00:00-04:00`)
 
         for (const sRow of (siblingCalls || [])) {
           if (sRow.id === data.id) continue
@@ -303,7 +297,7 @@ export async function POST(request: Request) {
         const { data: aluno } = await supabase.from('alunos').select('nome, turma').eq('id', data.dados.studentId).single()
         if (aluno) {
           // Create frequencia record
-          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
           const freqId = `FREQ-${data.dados.studentId}-${today}`
           const anoLetivo = new Date().getFullYear().toString()
           
@@ -355,7 +349,7 @@ export async function DELETE(request: Request) {
 
     if (clearToday) {
       const formatter = new Intl.DateTimeFormat('en-CA', { 
-        timeZone: 'America/Sao_Paulo', 
+        timeZone: 'America/Campo_Grande', 
         year: 'numeric', 
         month: '2-digit', 
         day: '2-digit' 
@@ -364,7 +358,7 @@ export async function DELETE(request: Request) {
       const { error } = await supabaseService
         .from('saida_calls')
         .delete()
-        .gte('created_at', `${todayStr}T00:00:00-03:00`)
+        .gte('created_at', `${todayStr}T00:00:00-04:00`)
 
       if (error) throw new Error(error.message)
 

@@ -1,5 +1,5 @@
 'use client'
-import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useSupabaseArray, useSupabaseCollection, invalidateCache } from '@/lib/useSupabaseCollection'
 import { supabase } from '@/lib/supabase'
@@ -154,7 +154,7 @@ export function useSaida() {
 export function SaidaProvider({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
   // `enabled` gates heavy data fetching (calls list, config) but Realtime channel
   // is ALWAYS active so all clients (including Família/mobile) receive live updates.
-  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled })
+  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled, mergeLocal: false })
   const [logs, setLogs] = useState<SaidaLog[]>([])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG, { enabled })
 
@@ -162,8 +162,18 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   const [realtimeStatus, setRealtimeStatus] = useState<'online' | 'connecting' | 'offline'>('connecting')
 
   const getTodayStr = useCallback(() => {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date())
+  }, [])
+
+  const isFromToday = useCallback((isoString?: string) => {
+    if (!isoString) return false
+    try {
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date())
+      const callDateStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date(isoString))
+      return callDateStr >= todayStr
+    } catch {
+      return true
+    }
   }, [])
 
   const channelRef = useRef<any>(null)
@@ -902,9 +912,13 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     }
   }, [setActiveCalls, setActiveCallsLocal])
 
+  const filteredActiveCalls = useMemo(() => {
+    return (activeCalls || []).filter(c => isFromToday(c.calledAt))
+  }, [activeCalls, isFromToday])
+
   return (
     <Ctx.Provider value={{
-      guardians: [], rfidMap: [], studentGuardians: [], activeCalls, logs,
+      guardians: [], rfidMap: [], studentGuardians: [], activeCalls: filteredActiveCalls, logs,
       config,
       isConfigLoading,
       realtimeStatus, isLoadingCalls,

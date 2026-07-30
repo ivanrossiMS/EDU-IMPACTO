@@ -84,6 +84,7 @@ export function useSupabaseCollection<T>(
     persister?: (value: T) => Promise<void>
     refreshIntervalMs?: number
     enabled?: boolean
+    mergeLocal?: boolean
   }
 ): [T, (value: T | ((prev: T) => T)) => Promise<void>, { loading: boolean; error: string | null; setLocal?: React.Dispatch<React.SetStateAction<T>>; refresh?: () => void }] {
   const lsKey = `edu-ls-${endpoint}`
@@ -224,7 +225,7 @@ export function useSupabaseCollection<T>(
           }
           normalized = merged as any
           // Do NOT update cache while locked — preserve optimistic data
-        } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
+        } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal !== false) {
           // Outside lock window: still preserve local items missing from server response
           const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
           const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
@@ -288,7 +289,7 @@ export function useSupabaseCollection<T>(
               }
               normalized = merged as any
               // Do NOT update cache during lock — optimistic data wins
-            } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized)) {
+            } else if (!isLocked && Array.isArray(latestState.current) && Array.isArray(normalized) && options?.mergeLocal !== false) {
               const serverIds = new Set((normalized as any[]).map((item: any) => item?.id).filter(Boolean))
               const localOnly = (latestState.current as any[]).filter((item: any) => item && item.id && !serverIds.has(item.id))
               if (localOnly.length > 0) {
@@ -423,7 +424,7 @@ export function useSupabaseCollection<T>(
 export function useSupabaseArray<T>(
   endpoint: string,
   initialValue: T[] = [],
-  options?: { refreshIntervalMs?: number, noCache?: boolean, enabled?: boolean }
+  options?: { refreshIntervalMs?: number, noCache?: boolean, enabled?: boolean, mergeLocal?: boolean }
 ): [T[], (value: T[] | ((prev: T[]) => T[])) => Promise<void>, { loading: boolean; error: string | null; setLocal?: React.Dispatch<React.SetStateAction<T[]>>; refresh?: () => void }] {
   const safeInitial = initialValue !== undefined && initialValue !== null ? initialValue : [];
   return useSupabaseCollection<T[]>(endpoint, safeInitial, {

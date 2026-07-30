@@ -944,6 +944,9 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
       flexDirection: 'column',
       justifyContent: 'flex-start',
       height: '100%',
+      minWidth: 0,
+      maxWidth: '100%',
+      boxSizing: 'border-box',
     }}
     onMouseEnter={e => {
       e.currentTarget.style.transform = 'none'
@@ -966,16 +969,16 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         📝 Autorização Especial do Dia
       </div>
 
-      {/* COMPACT SINGLE-ROW FORM GRID (SEARCH, AUTHORIZED PERSON, SUBMIT BUTTON) */}
+      {/* COMPACT FORM GRID (SEARCH, AUTHORIZED PERSON, SUBMIT BUTTON) */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: 8,
         marginBottom: 10,
-        flexWrap: isMobile ? 'wrap' : 'nowrap',
+        flexWrap: 'wrap',
       }}>
         {/* COLUMN 1: STUDENT SEARCH OR SELECTION */}
-        <div style={{ flex: '1 1 150px', minWidth: 0, position: 'relative' }}>
+        <div style={{ flex: '1 1 140px', minWidth: 0, position: 'relative' }}>
           {!selectedStudent ? (
             <div style={{ position: 'relative' }}>
               <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#d97706' }}/>
@@ -1095,7 +1098,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         </div>
 
         {/* COLUMN 2: AUTHORIZED PERSON */}
-        <div style={{ flex: '1.1 1 160px', minWidth: 0 }}>
+        <div style={{ flex: '1.1 1 150px', minWidth: 0 }}>
           <input
             value={authorizedPerson}
             onChange={e => setAuthorizedPerson(e.target.value)}
@@ -1155,7 +1158,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         <div style={{
           flex: 1, overflowY: 'auto',
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
           alignContent: 'start',
           alignItems: 'start',
           gap: 8,
@@ -1169,7 +1172,8 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 border: l.confirmedOut ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.22)',
                 borderRadius: 12, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
                 boxShadow: 'var(--shadow-sm)',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s',
+                minWidth: 0,
               }}
             >
               <div style={{
@@ -1189,17 +1193,17 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 <div style={{ fontWeight: 800, fontSize: 11, color: 'hsl(var(--text-primary))', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {l.studentName}
                 </div>
-                <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 9, color: 'hsl(var(--text-muted))', marginTop: 1, lineHeight: 1.35, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
                   retirado por: <span style={{ color: l.confirmedOut ? '#10b981' : '#d97706', fontWeight: 700 }}>{l.authorizedPerson}</span>
                 </div>
-                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500 }}>
+                <div style={{ fontSize: 8.5, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 4, fontWeight: 500, flexWrap: 'wrap' }}>
                   <span>{l.time}</span>
                   <span>·</span>
                   <span>por: <span style={{ color: 'hsl(var(--text-secondary))', fontWeight: 700 }}>{l.loggedBy}</span></span>
                 </div>
                 {l.confirmedOut && (
-                  <div style={{ fontSize: 8.5, color: '#10b981', fontWeight: 800, marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <CheckCircle2 size={10} /> Confirmada saída às {l.confirmedAt}
+                  <div style={{ fontSize: 8.5, color: '#10b981', fontWeight: 800, marginTop: 3, display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'wrap', wordBreak: 'break-word' }}>
+                    <CheckCircle2 size={10} style={{ flexShrink: 0 }} /> Confirmada saída às {l.confirmedAt}
                   </div>
                 )}
               </div>
@@ -1997,7 +2001,7 @@ function ChamadasContent() {
       {/* ── 2 CARDS GRID (PROIBIDOS RETIRADA & AUTORIZAÇÃO ESPECIAL - 50% EACH) ── */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) minmax(0, 1fr)',
         gap: 20,
         marginBottom: 28,
         alignItems: 'stretch',
