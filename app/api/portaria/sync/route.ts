@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     let alunosQuery = supabase
       .from('alunos')
       .select('id, nome, matricula, foto, status')
-      .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
+      .or('status.neq.inativo,status.is.null')
 
     if (aluno_id) {
       alunosQuery = alunosQuery.eq('id', aluno_id)

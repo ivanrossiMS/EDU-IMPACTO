@@ -10,8 +10,17 @@ import {
 
 const ACCENT = '#06b6d4'
 
+const getTodayBRT = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  } catch {
+    return new Date().toISOString().slice(0, 10)
+  }
+}
+
 export default function PortariaDashboardPage() {
-  const [filtroData, setFiltroData] = useState(new Date().toISOString().slice(0, 10))
+  const todayBRT = getTodayBRT()
+  const [filtroData, setFiltroData] = useState(todayBRT)
   const [liveMonitoring, setLiveMonitoring] = useState(true)
 
   // 1. Buscar todos os eventos da portaria na data selecionada
@@ -70,10 +79,10 @@ export default function PortariaDashboardPage() {
 
   // Último reconhecimento facial destacado para a tela de monitoramento
   const ultimoReconhecimento = useMemo(() => {
-    const validEvents = eventos.filter(e => e.status === 'sucesso')
-    if (validEvents.length === 0) return null
+    const validEvents = eventos.filter(e => e.status === 'sucesso' && (e.aluno_nome || e.aluno_id))
+    const ev = validEvents.length > 0 ? validEvents[0] : eventos.find(e => e.aluno_nome || e.aluno_id)
+    if (!ev) return null
     
-    const ev = validEvents[0]
     const alunoERP = ev.aluno_id ? alunosMap[ev.aluno_id] : null
     
     return {
@@ -130,7 +139,7 @@ export default function PortariaDashboardPage() {
             onChange={e => {
               setFiltroData(e.target.value)
               // Pausar live polling se escolher outra data para evitar sobrescritas
-              if (e.target.value !== new Date().toISOString().slice(0, 10)) {
+              if (e.target.value !== todayBRT) {
                 setLiveMonitoring(false)
               }
             }}
@@ -151,7 +160,7 @@ export default function PortariaDashboardPage() {
             {liveMonitoring ? (
               <>
                 <Play size={14} style={{ fill: '#10b981' }} />
-                <span>POLING ATIVO (5s)</span>
+                <span>POLLING ATIVO (5s)</span>
               </>
             ) : (
               <>
@@ -235,50 +244,23 @@ export default function PortariaDashboardPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                 
-                {/* Comparador Side-by-Side */}
-                <div style={{ display: 'flex', gap: 12, flexShrink: 0 }}>
-                  
-                  {/* Foto Oficial ERP */}
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{
-                      width: 105, height: 135, borderRadius: 16,
-                      background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))',
-                      overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      position: 'relative', boxShadow: '0 4px 15px rgba(0,0,0,0.05)'
-                    }}>
-                      {ultimoReconhecimento.fotoOficial ? (
-                        <img src={ultimoReconhecimento.fotoOficial} alt="ERP" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>Sem Foto</div>
-                      )}
-                      <span style={{ position: 'absolute', bottom: 6, left: 6, right: 6, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 8.5, padding: '2px 0', borderRadius: 4, fontWeight: 800 }}>
-                        FOTO OFICIAL
-                      </span>
-                    </div>
+                {/* Foto Oficial ERP Única */}
+                <div style={{ flexShrink: 0 }}>
+                  <div style={{
+                    width: 115, height: 145, borderRadius: 18,
+                    background: 'hsl(var(--bg-base))', border: '1px solid hsl(var(--border-subtle))',
+                    overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    position: 'relative', boxShadow: '0 6px 20px rgba(0,0,0,0.06)'
+                  }}>
+                    {ultimoReconhecimento.fotoOficial ? (
+                      <img src={ultimoReconhecimento.fotoOficial} alt="ERP" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>Sem Foto</div>
+                    )}
+                    <span style={{ position: 'absolute', bottom: 6, left: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 8.5, padding: '2.5px 0', borderRadius: 4, fontWeight: 800, textAlign: 'center' }}>
+                      FOTO OFICIAL
+                    </span>
                   </div>
-
-                  {/* Foto Capturada iDFace */}
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{
-                      width: 105, height: 135, borderRadius: 16,
-                      background: 'hsl(var(--bg-base))', border: `2px solid ${ACCENT}`,
-                      overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      position: 'relative', boxShadow: `0 4px 20px ${ACCENT}20`
-                    }}>
-                      {ultimoReconhecimento.foto_captura ? (
-                        <img src={ultimoReconhecimento.foto_captura} alt="iDFace" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'hsl(var(--text-muted))' }}>
-                          <Camera size={20} style={{ opacity: 0.5 }} />
-                          <span style={{ fontSize: 8.5, fontWeight: 700, marginTop: 4 }}>Sem capture</span>
-                        </div>
-                      )}
-                      <span style={{ position: 'absolute', bottom: 6, left: 6, right: 6, background: `${ACCENT}`, color: '#fff', fontSize: 8.5, padding: '2px 0', borderRadius: 4, fontWeight: 800 }}>
-                        CATRACA LIVE
-                      </span>
-                    </div>
-                  </div>
-
                 </div>
 
                 {/* Informações detalhadas do aluno e acesso */}

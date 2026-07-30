@@ -114,7 +114,7 @@ export async function POST(req: Request) {
       const { data: allActiveStudents } = await supabase
         .from('alunos')
         .select('id, matricula, nome')
-        .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
+        .or('status.neq.inativo,status.is.null')
 
       deviceUsers = (allActiveStudents || []).map((s) => ({
         id: s.id,
@@ -136,7 +136,7 @@ export async function POST(req: Request) {
     const { data: activeStudents } = await supabase
       .from('alunos')
       .select('id, nome, matricula, foto')
-      .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
+      .or('status.neq.inativo,status.is.null')
 
     if (!activeStudents || activeStudents.length === 0) {
       return NextResponse.json({

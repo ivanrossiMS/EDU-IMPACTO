@@ -11,11 +11,19 @@ import {
 
 const ACCENT = '#06b6d4'
 
+const getTodayBRT = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  } catch {
+    return new Date().toISOString().slice(0, 10)
+  }
+}
+
 import { Suspense } from 'react'
 
 function PortariaRelatoriosPageContent() {
-  const [dataInicio, setDataInicio] = useState(new Date().toISOString().slice(0, 10))
-  const [dataFim, setDataFim] = useState(new Date().toISOString().slice(0, 10))
+  const [dataInicio, setDataInicio] = useState(getTodayBRT())
+  const [dataFim, setDataFim] = useState(getTodayBRT())
   const [turmaId, setTurmaId] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
   const [buscaAluno, setBuscaAluno] = useState('')

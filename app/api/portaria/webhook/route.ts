@@ -53,10 +53,6 @@ export async function POST(req: Request) {
     // IMPORTANTE: user_id = 0 significa face NÃO reconhecida (negado). Não tratar como vazio!
     // Usamos null como sentinela para "campo ausente" e 0 para "negado pelo equipamento".
     let userIdRaw: number | string | null = null
-    if (payload.user_id !== undefined)       userIdRaw = payload.user_id
-    else if (payload.userId !== undefined)   userIdRaw = payload.userId
-    else if (payload.id !== undefined)       userIdRaw = payload.id
-
     let eventTimeRaw = payload.time || payload.timestamp || ''
     let eventType = payload.event_type || payload.type || 'entrada'
 
@@ -65,15 +61,26 @@ export async function POST(req: Request) {
       searchParams.get('device_id') || searchParams.get('deviceId') || searchParams.get('serial') ||
       req.headers.get('x-device-id') || req.headers.get('device-id') || req.headers.get('device_id') || req.headers.get('x-serial') || ''
 
+    // 1. Priorizar extração do user_id do objeto de mudanças (object_changes.values) enviado pelas catracas/scripts
     if (payload.object_changes && Array.isArray(payload.object_changes) && payload.object_changes.length > 0) {
       const change = payload.object_changes[0]
       if (change.values) {
-        // Extrair user_id do object_changes (pode ser 0, que é válido — face negada)
-        if (userIdRaw === null && change.values.user_id !== undefined) userIdRaw = change.values.user_id
-        if (userIdRaw === null && change.values.userId !== undefined)   userIdRaw = change.values.userId
+        if (change.values.user_id !== undefined && change.values.user_id !== null)       userIdRaw = change.values.user_id
+        else if (change.values.userId !== undefined && change.values.userId !== null)   userIdRaw = change.values.userId
+        else if (change.values.id_usuario !== undefined && change.values.id_usuario !== null) userIdRaw = change.values.id_usuario
+        
         eventTimeRaw = eventTimeRaw || change.values.time || change.values.timestamp || ''
         deviceSerial = deviceSerial || change.values.device_id || change.values.deviceSerial || ''
       }
+    }
+
+    // 2. Se não veio em object_changes, buscar nos campos de usuário do payload raiz
+    // NOTA: NUNCA usar payload.id pois payload.id é o ID sequencial do log na catraca, NÃO o id do aluno!
+    if (userIdRaw === null) {
+      if (payload.user_id !== undefined && payload.user_id !== null)             userIdRaw = payload.user_id
+      else if (payload.userId !== undefined && payload.userId !== null)         userIdRaw = payload.userId
+      else if (payload.user_id_equipamento !== undefined && payload.user_id_equipamento !== null) userIdRaw = payload.user_id_equipamento
+      else if (payload.id_usuario !== undefined && payload.id_usuario !== null) userIdRaw = payload.id_usuario
     }
 
     // Normalizar userId: null = ausente, 0 = face negada, >0 = usuário reconhecido
@@ -107,28 +114,64 @@ export async function POST(req: Request) {
 
     // Só tenta resolver aluno se houver user_id válido (> 0)
     if (userIdNum !== null && userIdNum > 0) {
-      // 1. Busca prioritária: aluno onde parseInt(matricula) === userIdNum
-      //    Isso cobre o caso padrão onde o script cadastrou id = parseInt(matricula)
-      const { data: ativos } = await supabase
-        .from('alunos')
-        .select('id, nome, matricula, codigo, turma, turno')
-        .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
+      const fetchAllPages = async (table: string, selectFields: string, orFilter?: string) => {
+        let allData: any[] = []
+        let from = 0
+        const step = 1000
+        while (true) {
+          let q = supabase.from(table).select(selectFields)
+          if (orFilter) q = q.or(orFilter)
+          const { data, error } = await q.range(from, from + step - 1)
+          if (error || !data || data.length === 0) break
+          allData = allData.concat(data)
+          if (data.length < step) break
+          from += step
+        }
+        return allData
+      }
+
+      const [ativos, responsaveis, links] = await Promise.all([
+        fetchAllPages('alunos', 'id, nome, matricula, turma, turno, status, dados', 'status.neq.inativo,status.is.null'),
+        fetchAllPages('responsaveis', 'id, nome, codigo, rfid, dados'),
+        fetchAllPages('aluno_responsavel', 'aluno_id, responsavel_id, parentesco'),
+      ])
 
       if (ativos && ativos.length > 0) {
-        // Tenta match pelo id numérico da matrícula (campo principal do cadastro na catraca)
+        const rawUserIdStr = String(userIdNum).trim()
+        const cleanUserIdZero = rawUserIdStr.replace(/^0+/, '')
+
         let match = ativos.find(a => {
-          const mat = a.matricula || a.codigo || ''
-          const numMat = parseInt(String(mat).replace(/\D/g, ''), 10)
-          return !isNaN(numMat) && numMat === userIdNum
+          const candidates = [
+            a.id, a.matricula,
+            a.dados?.codigo, a.dados?.matricula, a.dados?.codigoAluno, a.dados?.id
+          ].filter(Boolean).map(x => String(x).trim())
+
+          return candidates.some(c => {
+            if (c === rawUserIdStr || c.toLowerCase() === rawUserIdStr.toLowerCase()) return true
+            if (cleanUserIdZero && c.replace(/^0+/, '') === cleanUserIdZero) return true
+            const num = parseInt(c.replace(/\D/g, ''), 10)
+            return !isNaN(num) && num === userIdNum
+          })
         })
 
-        // Fallback: match pelo codigo (alguns registros usam campo separado)
-        if (!match) {
-          match = ativos.find(a => {
-            const cod = a.codigo || ''
-            const numCod = parseInt(String(cod).replace(/\D/g, ''), 10)
-            return !isNaN(numCod) && numCod === userIdNum
+        // Se não achou em alunos, buscar em responsáveis vinculados a um aluno
+        if (!match && responsaveis.length > 0 && links.length > 0) {
+          const respMatch = responsaveis.find(r => {
+            const candidates = [r.id, r.codigo, r.rfid, r.dados?.codigo, r.dados?.id].filter(Boolean).map(x => String(x).trim())
+            return candidates.some(c => {
+              if (c === rawUserIdStr || c.toLowerCase() === rawUserIdStr.toLowerCase()) return true
+              if (cleanUserIdZero && c.replace(/^0+/, '') === cleanUserIdZero) return true
+              const num = parseInt(c.replace(/\D/g, ''), 10)
+              return !isNaN(num) && num === userIdNum
+            })
           })
+
+          if (respMatch) {
+            const link = links.find(l => String(l.responsavel_id).trim() === String(respMatch.id).trim())
+            if (link) {
+              match = ativos.find(a => String(a.id).trim() === String(link.aluno_id).trim())
+            }
+          }
         }
 
         if (match) {
@@ -137,9 +180,9 @@ export async function POST(req: Request) {
           alunoTurma = match.turma || null
           alunoTurno = match.turno || null
           alunoResponsaveis = [{ id: `parent_of_${match.id}` }]
-          console.log(`✅ [Webhook Portaria] Aluno resolvido: ${match.nome} (user_id catraca: ${userIdNum} → matrícula: ${match.matricula})`)
+          console.log(`✅ [Webhook Portaria] Aluno resolvido: ${match.nome} (user_id catraca: ${userIdNum} → matrícula: ${match.matricula || match.codigo})`)
         } else {
-          console.warn(`⚠️ [Webhook Portaria] user_id ${userIdNum} não corresponde a nenhum aluno ativo. Verifique se os alunos estão sincronizados nas catracas.`)
+          console.warn(`⚠️ [Webhook Portaria] user_id ${userIdNum} não corresponde a nenhum aluno. Verifique se os alunos estão sincronizados nas catracas.`)
         }
       }
     } else if (userIdNum === 0) {

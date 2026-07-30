@@ -9,10 +9,18 @@ import {
 
 const ACCENT = '#06b6d4'
 
+const getTodayBRT = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  } catch {
+    return new Date().toISOString().slice(0, 10)
+  }
+}
+
 export default function PortariaLogsPage() {
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('Todos')
-  const [filtroData, setFiltroData] = useState(new Date().toISOString().slice(0, 10))
+  const [filtroData, setFiltroData] = useState(getTodayBRT())
   const [expandedPayload, setExpandedPayload] = useState<string | null>(null)
   const [loadedPhotos, setLoadedPhotos] = useState<Record<string, string>>({})
   const [loadingPhotoId, setLoadingPhotoId] = useState<string | null>(null)

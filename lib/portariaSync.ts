@@ -98,7 +98,8 @@ export async function syncStudentToDevices(studentId: string, actionType: 'creat
       return
     }
 
-    const isStudentActive = ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'].includes(student.status)
+    const statusLower = (student.status || '').toLowerCase()
+    const isStudentActive = statusLower !== 'inativo' && statusLower !== 'cancelado' && statusLower !== 'transferido'
 
     // Se o aluno foi alterado para inativo, e a remoção automática está ativa: exclui do leitor
     if (!isStudentActive) {

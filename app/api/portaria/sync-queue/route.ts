@@ -204,7 +204,7 @@ export async function PUT(req: NextRequest) {
     const { data: alunos, error: alunosErr } = await supabase
       .from('alunos')
       .select('id')
-      .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
+      .or('status.neq.inativo,status.is.null')
 
     if (alunosErr) throw alunosErr
 
@@ -274,7 +274,7 @@ export async function DELETE(req: NextRequest) {
     const { data: ativos } = await supabase
       .from('alunos')
       .select('id, matricula')
-      .in('status', ['matriculado', 'cursando', 'ativo', 'Cursando', 'Matriculado', 'Ativo'])
+      .or('status.neq.inativo,status.is.null')
 
     const activeIds = new Set<string>()
     for (const a of ativos || []) {

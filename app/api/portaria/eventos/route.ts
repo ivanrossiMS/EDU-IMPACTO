@@ -103,46 +103,196 @@ export async function GET(req: NextRequest) {
 
     let mergedData = data || []
     if (data && data.length > 0) {
-      const uniqueAlunoIds = Array.from(new Set(data.map((e: any) => e.aluno_id).filter(Boolean)))
-      if (uniqueAlunoIds.length > 0) {
-        const { data: studentsData, error: stdError } = await supabase
-          .from('alunos')
-          .select('id, foto, turma, turno')
-          .in('id', uniqueAlunoIds)
+      // Helper para buscar 100% dos registros burlando o limite max_rows (1000) do PostgREST
+      const fetchAllPages = async (table: string, selectFields: string) => {
+        let allData: any[] = []
+        let from = 0
+        const step = 1000
+        while (true) {
+          const { data, error } = await supabase
+            .from(table)
+            .select(selectFields)
+            .range(from, from + step - 1)
+          if (error) {
+            console.error(`[FetchAllPages Error in ${table}]`, error)
+            break
+          }
+          if (!data || data.length === 0) break
+          allData = allData.concat(data)
+          if (data.length < step) break
+          from += step
+        }
+        return allData
+      }
 
-        if (!stdError && studentsData) {
-          const uniqueTurmaIds = Array.from(new Set(studentsData.map((s: any) => s.turma).filter(Boolean)))
+      // Buscar todos os alunos, responsáveis e vínculos sem limite de 1000
+      const [studentsData, responsaveisData, linksData] = await Promise.all([
+        fetchAllPages('alunos', 'id, nome, matricula, foto, turma, turno, status, dados'),
+        fetchAllPages('responsaveis', 'id, nome, codigo, rfid, dados'),
+        fetchAllPages('aluno_responsavel', 'aluno_id, responsavel_id, parentesco'),
+      ])
+
+      if (studentsData.length > 0) {
+        const studentByIdMap: Record<string, any> = {}
+        const studentByCleanCodeMap: Record<string, any> = {}
+        const studentByNumericMap: Record<number, any> = {}
+
+        const registerStudent = (s: any, rawVal: any) => {
+          if (!rawVal) return
+          const str = String(rawVal).trim()
+          if (!str) return
           
-          let turmaMap: Record<string, string> = {}
-          if (uniqueTurmaIds.length > 0) {
-            const { data: turmasData } = await supabase
-              .from('turmas')
-              .select('id, nome')
-              .in('id', uniqueTurmaIds)
-            
-            turmasData?.forEach((t: any) => {
-              turmaMap[String(t.id)] = t.nome
-            })
+          studentByCleanCodeMap[str] = s
+          studentByCleanCodeMap[str.toLowerCase()] = s
+          
+          const cleanZero = str.replace(/^0+/, '')
+          if (cleanZero) studentByCleanCodeMap[cleanZero] = s
+          
+          const num = parseInt(str.replace(/\D/g, ''), 10)
+          if (!isNaN(num) && num > 0) {
+            studentByNumericMap[num] = s
+            studentByCleanCodeMap[String(num)] = s
+          }
+        }
+
+        studentsData.forEach((s: any) => {
+          studentByIdMap[String(s.id).trim()] = s
+          registerStudent(s, s.id)
+          registerStudent(s, s.matricula)
+          if (s.dados) {
+            registerStudent(s, s.dados.codigo)
+            registerStudent(s, s.dados.matricula)
+            registerStudent(s, s.dados.codigoAluno)
+            registerStudent(s, s.dados.id)
+          }
+        })
+
+        // Indexar também responsáveis associando-os ao aluno correspondente
+        if (responsaveisData.length > 0 && linksData.length > 0) {
+          const respToAlunoMap: Record<string, any> = {}
+          linksData.forEach((l: any) => {
+            const st = studentByIdMap[String(l.aluno_id).trim()]
+            if (st) {
+              respToAlunoMap[String(l.responsavel_id).trim()] = st
+            }
+          })
+
+          responsaveisData.forEach((r: any) => {
+            const linkedStudent = respToAlunoMap[String(r.id).trim()]
+            if (linkedStudent) {
+              registerStudent(linkedStudent, r.id)
+              registerStudent(linkedStudent, r.codigo)
+              registerStudent(linkedStudent, r.rfid)
+              if (r.dados) {
+                registerStudent(linkedStudent, r.dados.codigo)
+                registerStudent(linkedStudent, r.dados.id)
+              }
+            }
+          })
+        }
+
+        // Buscar nomes das turmas
+        const uniqueTurmaIds = Array.from(new Set(studentsData.map((s: any) => s.turma).filter(Boolean)))
+        let turmaMap: Record<string, string> = {}
+        if (uniqueTurmaIds.length > 0) {
+          const { data: turmasData } = await supabase
+            .from('turmas')
+            .select('id, nome')
+            .in('id', uniqueTurmaIds)
+          
+          turmasData?.forEach((t: any) => {
+            turmaMap[String(t.id)] = t.nome
+          })
+        }
+
+        const dbUpdatesToRun: any[] = []
+
+        const extractRealUserId = (e: any): string => {
+          const payload = e.payload_raw || {}
+          if (payload.object_changes && Array.isArray(payload.object_changes) && payload.object_changes.length > 0) {
+            const val = payload.object_changes[0]?.values
+            if (val) {
+              if (val.user_id !== undefined && val.user_id !== null) return String(val.user_id).trim()
+              if (val.userId !== undefined && val.userId !== null) return String(val.userId).trim()
+              if (val.id_usuario !== undefined && val.id_usuario !== null) return String(val.id_usuario).trim()
+            }
+          }
+          if (payload.user_id !== undefined && payload.user_id !== null) return String(payload.user_id).trim()
+          if (payload.userId !== undefined && payload.userId !== null) return String(payload.userId).trim()
+          if (payload.user_id_equipamento !== undefined && payload.user_id_equipamento !== null) return String(payload.user_id_equipamento).trim()
+          return e.user_id_equipamento ? String(e.user_id_equipamento).trim() : ''
+        }
+
+        mergedData = data.map((e: any) => {
+          const realEqId = extractRealUserId(e)
+          let student = e.aluno_id ? studentByIdMap[String(e.aluno_id).trim()] : null
+          
+          // Tentar encontrar por código real extraído do evento/payload
+          if (!student && realEqId) {
+            const rawEq = realEqId
+            const cleanEqZero = rawEq.replace(/^0+/, '')
+            const numEq = parseInt(rawEq.replace(/\D/g, ''), 10)
+
+            student =
+              studentByCleanCodeMap[rawEq] ||
+              studentByCleanCodeMap[rawEq.toLowerCase()] ||
+              (cleanEqZero ? studentByCleanCodeMap[cleanEqZero] : null) ||
+              (!isNaN(numEq) ? studentByNumericMap[numEq] : null) ||
+              null
           }
 
-          const studentMap: Record<string, any> = {}
-          studentsData.forEach((s: any) => {
-            const turmaName = s.turma ? turmaMap[String(s.turma)] : null
-            studentMap[s.id] = {
-              ...s,
-              turma_formatada: s.turma ? (turmaName ? `${s.turma} - ${turmaName}` : String(s.turma)) : null
-            }
-          })
+          let currentStatus = e.status
 
-          mergedData = data.map((e: any) => {
-            const student = e.aluno_id ? studentMap[e.aluno_id] : null
+          if (student) {
+            const turmaName = student.turma ? turmaMap[String(student.turma)] : null
+            const turmaFormatada = student.turma ? (turmaName ? `${student.turma} - ${turmaName}` : String(student.turma)) : null
+            
+            const statusLower = (student.status || '').toLowerCase()
+            const isInactive = statusLower === 'inativo' || statusLower === 'cancelado' || statusLower === 'transferido'
+            
+            // Se o evento era uma inconsistência por aluno não encontrado, mas agora encontramos o aluno ativo:
+            if ((currentStatus === 'inconsistencia' || !e.aluno_nome || e.aluno_nome === 'Usuário Não Cadastrado') && !isInactive) {
+              currentStatus = 'sucesso'
+            }
+
+            // Agendar reparo persistente no banco de dados
+            if (!e.aluno_id || e.aluno_id !== student.id || !e.aluno_nome || e.aluno_nome !== student.nome || e.status !== currentStatus || (realEqId && e.user_id_equipamento !== realEqId)) {
+              dbUpdatesToRun.push({
+                id: e.id,
+                aluno_id: student.id,
+                aluno_nome: student.nome,
+                user_id_equipamento: realEqId || e.user_id_equipamento,
+                status: currentStatus,
+              })
+            }
+
             return {
               ...e,
-              aluno_foto: student?.foto || null,
-              aluno_turma: student?.turma_formatada || null,
-              aluno_turno: student?.turno || null,
+              user_id_equipamento: realEqId || e.user_id_equipamento,
+              aluno_id: student.id,
+              aluno_nome: student.nome,
+              aluno_foto: student.foto || null,
+              aluno_turma: turmaFormatada || null,
+              aluno_turno: student.turno || null,
+              status: currentStatus,
             }
-          })
+          }
+
+          return e
+        })
+
+        // Persistir atualizações no Supabase em segundo plano
+        if (dbUpdatesToRun.length > 0) {
+          Promise.allSettled(
+            dbUpdatesToRun.map(u =>
+              supabase.from('portaria_eventos').update({
+                aluno_id: u.aluno_id,
+                aluno_nome: u.aluno_nome,
+                user_id_equipamento: u.user_id_equipamento,
+                status: u.status,
+              }).eq('id', u.id)
+            )
+          ).catch(err => console.error('[Portaria Eventos Repair Error]', err))
         }
       }
     }
