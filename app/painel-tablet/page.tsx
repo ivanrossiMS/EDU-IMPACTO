@@ -309,11 +309,6 @@ function StudentCard({
               <Clock size={12}/> {recalling ? 'Chamando novamente...' : 'Aguardando na portaria'}
             </div>
           )}
-          {!blocked && !alreadyCalled && (
-            <div style={{ fontSize: 12, color: `${accent}cc`, fontWeight: 600 }}>
-              Toque para chamar o aluno
-            </div>
-          )}
           {aut?.rfid && (
             <div style={{ fontSize: 10, color: '#334155', fontFamily: 'monospace', letterSpacing: 1 }}>
               📡 {aut.rfid}
