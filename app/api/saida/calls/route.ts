@@ -173,13 +173,17 @@ export async function POST(request: Request) {
               const freqId = `FREQ-${row.dados.studentId}-${today}`
               const anoLetivo = new Date().getFullYear().toString()
               
+              const { data: existingFreq } = await supabase.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
+
               await supabase.from('frequencias').upsert({
                 id: freqId,
                 aluno_id: row.dados.studentId,
                 turma_id: aluno.turma || '',
                 data: today,
-                presente: true,
+                presente: existingFreq?.presente ?? true,
+                tempos: existingFreq?.tempos || null,
                 dados: {
+                  ...(existingFreq?.dados || {}),
                   saidaHorario: row.dados.confirmedAt || new Date().toISOString(),
                   saidaResponsavel: row.dados.guardianName || '',
                   anoLetivo,
@@ -301,13 +305,17 @@ export async function POST(request: Request) {
           const freqId = `FREQ-${data.dados.studentId}-${today}`
           const anoLetivo = new Date().getFullYear().toString()
           
+          const { data: existingFreq } = await supabase.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
+
           await supabase.from('frequencias').upsert({
             id: freqId,
             aluno_id: data.dados.studentId,
             turma_id: aluno.turma || '',
             data: today,
-            presente: true,
+            presente: existingFreq?.presente ?? true,
+            tempos: existingFreq?.tempos || null,
             dados: {
+              ...(existingFreq?.dados || {}),
               saidaHorario: data.dados.confirmedAt || new Date().toISOString(),
               saidaResponsavel: data.dados.guardianName || '',
               anoLetivo,

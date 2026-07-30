@@ -23,18 +23,45 @@ const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; b
   '-': { bg: 'transparent', color: '#94a3b8', border: '1px dashed #cbd5e1', label: '-', glow: 'none' },
 }
 
-export interface OrigemFrequenciaInfo {
-  tipo: 'catraca' | 'manual' | 'totem' | 'sem_registro'
+export interface OrigemBadgeItem {
+  tipo: 'catraca' | 'manual' | 'totem' | 'chamadas' | 'sem_registro'
   label: string
   horario?: string
+  responsavel?: string
   dispositivo?: string
   detalhes?: string
 }
 
+export interface OrigemFrequenciaCompleta {
+  entrada: OrigemBadgeItem | null
+  saida: OrigemBadgeItem | null
+}
+
 function formatTimeFromIso(isoStr?: string): string | undefined {
   if (!isoStr) return undefined
+  const s = String(isoStr).trim()
+  if (/^\d{2}:\d{2}$/.test(s)) return s
+  if (/^\d{2}:\d{2}:\d{2}$/.test(s)) return s.slice(0, 5)
+
+  if (s.includes('T')) {
+    const timePart = s.split('T')[1]
+    if (timePart && /^\d{2}:\d{2}/.test(timePart)) {
+      if (s.endsWith('Z')) {
+        try {
+          const d = new Date(s)
+          if (!isNaN(d.getTime())) {
+            const h = String(d.getHours()).padStart(2, '0')
+            const m = String(d.getMinutes()).padStart(2, '0')
+            return `${h}:${m}`
+          }
+        } catch {}
+      }
+      return timePart.slice(0, 5)
+    }
+  }
+
   try {
-    const d = new Date(isoStr)
+    const d = new Date(s)
     if (!isNaN(d.getTime())) {
       const h = String(d.getHours()).padStart(2, '0')
       const m = String(d.getMinutes()).padStart(2, '0')
@@ -44,202 +71,278 @@ function formatTimeFromIso(isoStr?: string): string | undefined {
   return undefined
 }
 
-function getOrigemFrequenciaInfo(
+function getLocalIsoString(dia: string, hora: string): string {
+  if (!dia || !hora) return new Date().toISOString()
+  try {
+    const [yyyy, mm, dd] = dia.split('-').map(Number)
+    const [hh, min] = hora.split(':').map(Number)
+    const d = new Date(yyyy, mm - 1, dd, hh, min, 0)
+    
+    const offsetMinutes = d.getTimezoneOffset()
+    const sign = offsetMinutes > 0 ? '-' : '+'
+    const absMinutes = Math.abs(offsetMinutes)
+    const offsetHours = String(Math.floor(absMinutes / 60)).padStart(2, '0')
+    const offsetMins = String(absMinutes % 60).padStart(2, '0')
+    return `${dia}T${hora.slice(0, 5)}:00${sign}${offsetHours}:${offsetMins}`
+  } catch {
+    return `${dia}T${hora.slice(0, 5)}:00`
+  }
+}
+
+function getOrigemFrequenciaCompleta(
   alunoId: string,
   dataStr: string,
   freqRecord?: any,
-  portariaEvents?: any[]
-): OrigemFrequenciaInfo {
+  portariaEvents?: any[],
+  saidaCalls?: any[],
+  horarioEntradaState?: string,
+  horarioSaidaState?: string,
+  responsavelSaidaState?: string
+): OrigemFrequenciaCompleta {
   const targetId = String(alunoId).trim()
 
   // Evento de portaria (Catraca iDFace) para o aluno nesta data
-  const portariaEv = (portariaEvents || []).find((ev: any) => {
+  const portariaEvEntrada = (portariaEvents || []).find((ev: any) => {
     const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
     const evEquipId = String(ev.user_id_equipamento || '').trim()
-
     const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
     if (!matchesAluno) return false
     if (ev.status && ev.status !== 'sucesso') return false
     const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
-    return evDateStr === dataStr
+    if (evDateStr !== dataStr) return false
+    const sentido = String(ev.sentido || ev.tipo || '').toLowerCase()
+    return sentido !== 'saida'
   })
 
-  let horaCatraca: string | undefined = undefined
-  if (portariaEv) {
-    const rawTime = portariaEv.data_hora || portariaEv.created_at || portariaEv.data
-    if (rawTime) {
-      try {
-        const d = new Date(rawTime)
-        if (!isNaN(d.getTime())) {
-          const h = String(d.getUTCHours()).padStart(2, '0')
-          const m = String(d.getUTCMinutes()).padStart(2, '0')
-          horaCatraca = `${h}:${m}`
-        }
-      } catch {}
-    }
+  const portariaEvSaida = (portariaEvents || []).find((ev: any) => {
+    const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
+    const evEquipId = String(ev.user_id_equipamento || '').trim()
+    const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
+    if (!matchesAluno) return false
+    if (ev.status && ev.status !== 'sucesso') return false
+    const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
+    if (evDateStr !== dataStr) return false
+    const sentido = String(ev.sentido || ev.tipo || '').toLowerCase()
+    return sentido === 'saida'
+  })
+
+  let horaCatracaEntrada: string | undefined = undefined
+  if (portariaEvEntrada) {
+    const rawTime = portariaEvEntrada.data_hora || portariaEvEntrada.created_at || portariaEvEntrada.data
+    horaCatracaEntrada = formatTimeFromIso(rawTime) || (rawTime ? String(rawTime).split('T')[1]?.slice(0, 5) : undefined)
   }
+
+  let horaCatracaSaida: string | undefined = undefined
+  if (portariaEvSaida) {
+    const rawTime = portariaEvSaida.data_hora || portariaEvSaida.created_at || portariaEvSaida.data
+    horaCatracaSaida = formatTimeFromIso(rawTime) || (rawTime ? String(rawTime).split('T')[1]?.slice(0, 5) : undefined)
+  }
+
+  // --- LOGICA ENTRADA ---
+  let entrada: OrigemBadgeItem | null = null
 
   if (freqRecord) {
     const registradoPor = String(freqRecord.registradoPor || freqRecord.dados?.registradoPor || '')
     const origem = String(freqRecord.origem || freqRecord.dados?.origem || '')
-    const horaReg = freqRecord.horaRegistro || 
-                    freqRecord.dados?.horaRegistro || 
-                    horaCatraca || 
-                    formatTimeFromIso(freqRecord.created_at || freqRecord.updated_at)
+    const isSaidaOnlyRecord = registradoPor.toLowerCase().includes('saída') || registradoPor.toLowerCase().includes('saida')
+
+    const horaEntradaExplicit = horarioEntradaState ||
+                                freqRecord.dados?.horaEntrada || 
+                                (!isSaidaOnlyRecord && (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) ? (freqRecord.horaRegistro || freqRecord.dados?.horaRegistro) : null) || 
+                                horaCatracaEntrada
 
     const isCatraca =
-      origem === 'catraca' ||
-      registradoPor.toLowerCase().includes('catraca') ||
-      registradoPor.toLowerCase().includes('idface') ||
-      !!portariaEv
+      (origem === 'catraca' && !isSaidaOnlyRecord) ||
+      (registradoPor.toLowerCase().includes('catraca') && !isSaidaOnlyRecord) ||
+      (registradoPor.toLowerCase().includes('idface') && !isSaidaOnlyRecord) ||
+      !!portariaEvEntrada
 
     const isTotem = origem === 'totem' || registradoPor.toLowerCase().includes('totem')
 
+    const hasEntradaExplicit = !!horarioEntradaState ||
+                               !!freqRecord.dados?.horaEntrada ||
+                               (freqRecord.origem === 'manual' && !isSaidaOnlyRecord && (freqRecord.horaRegistro || freqRecord.presente || (freqRecord.tempos && Object.values(freqRecord.tempos).some(v => v === 'P'))))
+
     if (isCatraca) {
-      return {
+      entrada = {
         tipo: 'catraca',
         label: 'iDFace',
-        horario: horaReg || horaCatraca || undefined,
-        dispositivo: portariaEv?.dispositivo_nome || 'iDFace',
-        detalhes: `Leitura biométrica via iDFace (${portariaEv?.dispositivo_nome || 'Catraca'})`
+        horario: horaEntradaExplicit || horaCatracaEntrada || undefined,
+        dispositivo: portariaEvEntrada?.dispositivo_nome || 'iDFace',
+        detalhes: `Entrada por biometria iDFace (${portariaEvEntrada?.dispositivo_nome || 'Catraca'})`
       }
-    }
-
-    if (isTotem) {
-      return {
+    } else if (isTotem) {
+      entrada = {
         tipo: 'totem',
         label: 'Totem',
-        horario: horaReg || undefined,
-        detalhes: 'Lançamento automático de ausência por totem'
+        horario: horaEntradaExplicit || undefined,
+        detalhes: 'Entrada registrada via Totem'
+      }
+    } else if (hasEntradaExplicit && horaEntradaExplicit) {
+      entrada = {
+        tipo: 'manual',
+        label: 'Manual',
+        horario: horaEntradaExplicit || undefined,
+        detalhes: 'Entrada lançada manualmente'
       }
     }
-
-    return {
-      tipo: 'manual',
-      label: 'Manual',
-      horario: horaReg || undefined,
-      detalhes: 'Lançado manualmente pelo professor/equipe'
-    }
-  }
-
-  if (portariaEv) {
-    return {
+  } else if (portariaEvEntrada) {
+    entrada = {
       tipo: 'catraca',
       label: 'iDFace',
-      horario: horaCatraca,
-      dispositivo: portariaEv.dispositivo_nome || 'iDFace',
+      horario: horaCatracaEntrada,
+      dispositivo: portariaEvEntrada.dispositivo_nome || 'iDFace',
       detalhes: 'Entrada registrada no equipamento iDFace'
+    }
+  } else if (horarioEntradaState) {
+    entrada = {
+      tipo: 'manual',
+      label: 'Manual',
+      horario: horarioEntradaState,
+      detalhes: 'Entrada registrada manualmente'
     }
   }
 
-  return {
-    tipo: 'sem_registro',
-    label: 'Sem Registro'
+  // --- LOGICA SAÍDA ---
+  let saida: OrigemBadgeItem | null = null
+
+  // 1. Verificar em /chamadas (saidaCalls)
+  const chamadaConfirmada = (saidaCalls || []).find((c: any) => {
+    const cStudentId = String(c.studentId || c.alunoId || c.aluno_id || '').trim()
+    if (cStudentId !== targetId) return false
+    const cStatus = String(c.status || '').toLowerCase()
+    if (cStatus !== 'confirmed' && cStatus !== 'confirmado' && !c.confirmedAt) return false
+    const cDate = String(c.confirmedAt || c.calledAt || c.created_at || '').split('T')[0]
+    return cDate === dataStr
+  })
+
+  const freqSaidaHorario = freqRecord?.dados?.saidaHorario || freqRecord?.saidaHorario
+  const freqSaidaResp = freqRecord?.dados?.saidaResponsavel || freqRecord?.saidaResponsavel
+  const freqSaidaOrigem = freqRecord?.dados?.saidaOrigem || freqRecord?.saidaOrigem
+
+  const horaSaidaRaw = horarioSaidaState ||
+                       (chamadaConfirmada ? (chamadaConfirmada.confirmedAt || chamadaConfirmada.calledAt) : null) ||
+                       freqSaidaHorario ||
+                       horaCatracaSaida
+
+  const horaSaidaFormatted = formatTimeFromIso(horaSaidaRaw) || (horaSaidaRaw ? String(horaSaidaRaw).slice(11, 16) : undefined)
+  const respSaida = responsavelSaidaState || chamadaConfirmada?.guardianName || chamadaConfirmada?.responsavel || freqSaidaResp
+
+  if (horaSaidaFormatted || chamadaConfirmada || portariaEvSaida || (freqRecord && (freqSaidaHorario || freqSaidaResp))) {
+    const isCatracaSaida = !!portariaEvSaida ||
+                           freqSaidaOrigem === 'catraca' ||
+                           freqSaidaOrigem === 'idface' ||
+                           chamadaConfirmada?.source === 'idface' ||
+                           chamadaConfirmada?.source === 'catraca'
+
+    if (isCatracaSaida) {
+      saida = {
+        tipo: 'catraca',
+        label: 'iDFace',
+        horario: horaSaidaFormatted,
+        responsavel: respSaida,
+        detalhes: `Saída biométrica iDFace${respSaida ? ` (${respSaida})` : ''}`
+      }
+    } else {
+      saida = {
+        tipo: 'manual',
+        label: 'Manual',
+        horario: horaSaidaFormatted,
+        responsavel: respSaida,
+        detalhes: `Saída confirmada em /chamadas${respSaida ? ` (Retirado por: ${respSaida})` : ''}`
+      }
+    }
   }
+
+  return { entrada, saida }
 }
 
-function OrigemBadge({ info, compact = false }: { info: OrigemFrequenciaInfo; compact?: boolean }) {
+function OrigemBadgePair({ infoCompleta, compact = false }: { infoCompleta: OrigemFrequenciaCompleta; compact?: boolean }) {
+  if (!infoCompleta) return null
+  const { entrada, saida } = infoCompleta
+  if (!entrada && !saida) return null
+
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+      {/* Badge de Entrada */}
+      {entrada && (
+        <span
+          title={entrada.detalhes || `Entrada ${entrada.label}${entrada.horario ? ` às ${entrada.horario}` : ''}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: compact ? '2px 6px' : '3px 8px',
+            background: entrada.tipo === 'catraca'
+              ? 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)'
+              : 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
+            color: entrada.tipo === 'catraca' ? '#0369a1' : '#6b21a8',
+            border: `1px solid ${entrada.tipo === 'catraca' ? '#7dd3fc' : '#c084fc'}`,
+            borderRadius: '8px',
+            fontSize: compact ? '9px' : '11px',
+            fontWeight: 800,
+            lineHeight: 1,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            letterSpacing: '0.2px',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {entrada.tipo === 'catraca' ? (
+            <ScanFace size={compact ? 11 : 13} style={{ color: '#0284c7' }} />
+          ) : (
+            <Edit3 size={compact ? 11 : 13} style={{ color: '#7e22ce' }} />
+          )}
+          <span>Entrada: {entrada.label}</span>
+          {entrada.horario && (
+            <span style={{ background: entrada.tipo === 'catraca' ? '#0284c7' : '#7e22ce', color: '#fff', padding: '2px 5px', borderRadius: '4px', fontSize: '9px', fontWeight: 900 }}>
+              {entrada.horario}h
+            </span>
+          )}
+        </span>
+      )}
+
+      {/* Badge de Saída */}
+      {saida && (
+        <span
+          title={saida.detalhes || `Saída ${saida.label}${saida.horario ? ` às ${saida.horario}` : ''}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: compact ? '2px 6px' : '3px 8px',
+            background: saida.tipo === 'catraca'
+              ? 'linear-gradient(135deg, #ecfdf5 0%, #a7f3d0 100%)'
+              : 'linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%)',
+            color: saida.tipo === 'catraca' ? '#047857' : '#c026d3',
+            border: `1px solid ${saida.tipo === 'catraca' ? '#6ee7b7' : '#f5d0fe'}`,
+            borderRadius: '8px',
+            fontSize: compact ? '9px' : '11px',
+            fontWeight: 800,
+            lineHeight: 1,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            letterSpacing: '0.2px',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          <LogOut size={compact ? 11 : 13} style={{ color: saida.tipo === 'catraca' ? '#059669' : '#c026d3' }} />
+          <span>Saída: {saida.label}</span>
+          {saida.horario && (
+            <span style={{ background: saida.tipo === 'catraca' ? '#059669' : '#c026d3', color: '#fff', padding: '2px 5px', borderRadius: '4px', fontSize: '9px', fontWeight: 900 }}>
+              {saida.horario}h
+            </span>
+          )}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function OrigemBadge({ info, infoCompleta, compact = false }: { info?: any; infoCompleta?: OrigemFrequenciaCompleta; compact?: boolean }) {
+  if (infoCompleta) {
+    return <OrigemBadgePair infoCompleta={infoCompleta} compact={compact} />
+  }
   if (!info || info.tipo === 'sem_registro') return null
-
-  if (info.tipo === 'catraca') {
-    return (
-      <span
-        title={info.detalhes || `Leitura biométrica iDFace${info.horario ? ` às ${info.horario}` : ''}`}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '5px',
-          padding: compact ? '2px 6px' : '3px 9px',
-          background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
-          color: '#0369a1',
-          border: '1px solid #7dd3fc',
-          borderRadius: '8px',
-          fontSize: compact ? '9px' : '11px',
-          fontWeight: 800,
-          lineHeight: 1,
-          boxShadow: '0 1px 3px rgba(3, 105, 161, 0.12)',
-          letterSpacing: '0.2px',
-          whiteSpace: 'nowrap'
-        }}
-      >
-        <ScanFace size={compact ? 11 : 13} style={{ color: '#0284c7' }} />
-        <span>iDFace</span>
-        {info.horario ? (
-          <span style={{ background: '#0284c7', color: '#fff', padding: '2px 5px', borderRadius: '5px', fontSize: '9px', fontWeight: 900 }}>
-            {info.horario}h
-          </span>
-        ) : (
-          <span style={{ background: 'rgba(2, 132, 199, 0.15)', color: '#0369a1', padding: '1px 4px', borderRadius: '4px', fontSize: '8px', fontWeight: 800 }}>
-            Catraca
-          </span>
-        )}
-      </span>
-    )
-  }
-
-  if (info.tipo === 'manual') {
-    return (
-      <span
-        title={info.detalhes || `Chamada lançada manualmente${info.horario ? ` às ${info.horario}` : ''}`}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '5px',
-          padding: compact ? '2px 6px' : '3px 9px',
-          background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)',
-          color: '#6b21a8',
-          border: '1px solid #c084fc',
-          borderRadius: '8px',
-          fontSize: compact ? '9px' : '11px',
-          fontWeight: 800,
-          lineHeight: 1,
-          boxShadow: '0 1px 3px rgba(107, 33, 168, 0.12)',
-          letterSpacing: '0.2px',
-          whiteSpace: 'nowrap'
-        }}
-      >
-        <Edit3 size={compact ? 11 : 13} style={{ color: '#7e22ce' }} />
-        <span>Manual</span>
-        {info.horario && (
-          <span style={{ background: '#7e22ce', color: '#fff', padding: '2px 5px', borderRadius: '5px', fontSize: '9px', fontWeight: 900 }}>
-            {info.horario}h
-          </span>
-        )}
-      </span>
-    )
-  }
-
-  if (info.tipo === 'totem') {
-    return (
-      <span
-        title={info.detalhes || 'Registrado por Totem'}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '5px',
-          padding: compact ? '2px 6px' : '3px 9px',
-          background: '#f1f5f9',
-          color: '#475569',
-          border: '1px solid #cbd5e1',
-          borderRadius: '8px',
-          fontSize: compact ? '9px' : '11px',
-          fontWeight: 800,
-          lineHeight: 1,
-          whiteSpace: 'nowrap'
-        }}
-      >
-        <Cpu size={compact ? 11 : 13} style={{ color: '#64748b' }} />
-        <span>Totem</span>
-        {info.horario && (
-          <span style={{ background: '#64748b', color: '#fff', padding: '2px 5px', borderRadius: '5px', fontSize: '9px', fontWeight: 900 }}>
-            {info.horario}h
-          </span>
-        )}
-      </span>
-    )
-  }
-
-  return null
+  return <OrigemBadgePair infoCompleta={{ entrada: info, saida: null }} compact={compact} />
 }
 
 function renderRegrasModal(isOpen: boolean, onClose: () => void) {
@@ -730,6 +833,21 @@ export default function FrequenciaPage() {
     return []
   }, [portariaEventsResponse])
 
+  // Saídas confirmadas em /chamadas (/api/saida/calls)
+  const { data: saidaCallsResponse, refetch: refetchSaidaCalls } = useApiQuery<any>(
+    ['saida-calls-frequencia'],
+    '/api/saida/calls',
+    { limit: 5000 },
+    { noCache: true }
+  )
+
+  const saidaCallsList = useMemo(() => {
+    if (!saidaCallsResponse) return []
+    if (Array.isArray(saidaCallsResponse)) return saidaCallsResponse
+    if (Array.isArray(saidaCallsResponse.data)) return saidaCallsResponse.data
+    return []
+  }, [saidaCallsResponse])
+
   // Mesclar registros do Context com os carregados via API
   const combinedFreqs = useMemo(() => {
     const map = new Map<string, any>()
@@ -1073,13 +1191,9 @@ export default function FrequenciaPage() {
         [aId]: { ...(prev[aId] || {}), [dia]: quemRetirou }
       }))
 
-      // Garantir presença em todos os tempos para a Educação Infantil
-      const schedule = getTurmaSchedule(turmaObj)
-      schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'P'))
-
       // 2. Transmite a saída para a API /api/saida/calls (POST) que atualiza /chamadas e dispara Realtime para o Monitor TV
       const nowIso = new Date().toISOString()
-      const confirmedAtIso = `${dia}T${horaSaida}:00-03:00`
+      const confirmedAtIso = getLocalIsoString(dia, horaSaida)
       
       await fetch('/api/saida/calls', {
         method: 'POST',
@@ -1099,25 +1213,26 @@ export default function FrequenciaPage() {
         })
       })
 
-      // 3. Salvar o registro na API de frequências
-      const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-      const currentEntrada = horariosEntrada[aId]?.[dia] || nowTime
+      // 3. Salvar o registro de saída na API de frequências sem alterar os tempos nem criar entrada manual fictícia
+      const existing = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dia))
 
       const recordsToSave = [{
+        id: existing?.id,
         alunoId: aluno.id,
         turmaId: turmaId,
         data: dia,
         anoLetivo: filtroAno,
-        presente: true,
-        justificativa: '',
-        tempos: { '1': 'P', '2': 'P', '3': 'P', '4': 'P' },
-        registradoPor: 'Educação Infantil (Saída)',
-        origem: 'manual',
-        horaRegistro: currentEntrada,
+        presente: existing?.presente ?? true,
+        justificativa: existing?.justificativa || '',
+        tempos: existing?.tempos || null,
+        registradoPor: existing?.registradoPor || null,
+        origem: existing?.origem || null,
+        horaRegistro: existing?.horaRegistro || null,
         dados: {
-          horaEntrada: currentEntrada,
+          ...(existing?.dados || {}),
           saidaHorario: confirmedAtIso,
           saidaResponsavel: quemRetirou,
+          saidaOrigem: 'manual',
           anoLetivo: filtroAno
         }
       }]
@@ -1130,6 +1245,7 @@ export default function FrequenciaPage() {
 
       if (refetchFreq) refetchFreq()
       if (refetchAllFreqs) refetchAllFreqs()
+      if (refetchSaidaCalls) refetchSaidaCalls()
 
       setSaidaModalData(null)
       setCustomResponsavel('')
@@ -1209,6 +1325,7 @@ export default function FrequenciaPage() {
 
       if (refetchFreq) refetchFreq()
       if (refetchAllFreqs) refetchAllFreqs()
+      if (refetchSaidaCalls) refetchSaidaCalls()
     } catch (err: any) {
       console.error('Erro ao salvar cancelamento de saída:', err)
     }
@@ -2946,7 +3063,7 @@ export default function FrequenciaPage() {
                         <tbody>
                           {a.dailyBreakdown.map((d: any) => {
                             const dFreqRecord = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(a.id) && isSameDay(f.data, d.data))
-                            const dOrigem = getOrigemFrequenciaInfo(a.id, d.data, dFreqRecord, portariaEventsList)
+                            const dOrigem = getOrigemFrequenciaCompleta(a.id, d.data, dFreqRecord, portariaEventsList, saidaCallsList)
 
                             return (
                               <tr key={d.data} style={{ borderBottom: '1px solid #f1f5f9', background: '#fff' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
@@ -2981,8 +3098,8 @@ export default function FrequenciaPage() {
                                   </div>
                                 </td>
                                 <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                                  <OrigemBadge info={dOrigem} />
-                                  {dOrigem.tipo === 'sem_registro' && <span style={{ color: '#94a3b8' }}>—</span>}
+                                  <OrigemBadgePair infoCompleta={dOrigem} />
+                                  {!dOrigem.entrada && !dOrigem.saida && <span style={{ color: '#94a3b8' }}>—</span>}
                                 </td>
                               </tr>
                             )
@@ -3563,14 +3680,14 @@ export default function FrequenciaPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {turmaStudents.map(aluno => {
                         const existingFreq = allFreqs?.find(f => String(f.aluno_id) === String(aluno.id) && String(f.data).startsWith(registroManualData))
-                        const infoOrigem = getOrigemFrequenciaInfo(aluno.id, registroManualData, existingFreq, portariaEventsList)
+                        const infoOrigem = getOrigemFrequenciaCompleta(aluno.id, registroManualData, existingFreq, portariaEventsList, saidaCallsList)
                         
                         return (
                           <div key={aluno.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid #f1f5f9', borderRadius: '12px', gap: '12px' }}>
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                 <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>{aluno.nome}</div>
-                                <OrigemBadge info={infoOrigem} compact />
+                                <OrigemBadgePair infoCompleta={infoOrigem} compact />
                               </div>
                               <div style={{ fontSize: '11px', color: '#64748b' }}>Matrícula: #{aluno.id}</div>
                             </div>
@@ -4481,7 +4598,16 @@ export default function FrequenciaPage() {
                 })
 
                 const freqRecordDia = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(aluno.id) && isSameDay(f.data, dataSel))
-                const origemInfo = getOrigemFrequenciaInfo(aluno.id, dataSel, freqRecordDia, portariaEventsList)
+                const origemInfoCompleta = getOrigemFrequenciaCompleta(
+                  aluno.id,
+                  dataSel,
+                  freqRecordDia,
+                  portariaEventsList,
+                  saidaCallsList,
+                  horariosEntrada[aluno.id]?.[dataSel],
+                  horariosSaida[aluno.id]?.[dataSel],
+                  responsaveisSaida[aluno.id]?.[dataSel]
+                )
 
                 return (
                   <tr key={aluno.id} style={{ background: '#fff', transition: 'all 0.2s' }}>
@@ -4494,7 +4620,7 @@ export default function FrequenciaPage() {
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                             <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{aluno.nome}</p>
-                            <OrigemBadge info={origemInfo} />
+                            <OrigemBadgePair infoCompleta={origemInfoCompleta} />
                           </div>
                           <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>ID: {aluno.id} • {turmaObj?.nome} ({turmaObj?.turno})</p>
                         </div>
@@ -4535,7 +4661,7 @@ export default function FrequenciaPage() {
                         <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
                           {diasPeriodo.map(dia => {
                             const status1 = getStatus(aluno.id, dia, '1')
-                            const currentEntrada = horariosEntrada[aluno.id]?.[dia] || (origemInfo.horario ? origemInfo.horario : '')
+                            const currentEntrada = horariosEntrada[aluno.id]?.[dia] || (origemInfoCompleta.entrada?.horario ? origemInfoCompleta.entrada.horario : '')
                             const isEditingThisEntrada = editingEntrada?.alunoId === aluno.id && editingEntrada?.dia === dia
 
                             return (
@@ -4550,7 +4676,7 @@ export default function FrequenciaPage() {
                                     let newEntrada = horariosEntrada[aluno.id]?.[dia]
                                     if (nextStatus === 'P' && !newEntrada) {
                                       const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                                      newEntrada = origemInfo.horario || nowT
+                                      newEntrada = origemInfoCompleta.entrada?.horario || nowT
                                       setHorariosEntrada(prev => ({
                                         ...prev,
                                         [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: newEntrada! }
@@ -4815,6 +4941,7 @@ export default function FrequenciaPage() {
         onSuccess={() => {
           if (refetchAllFreqs) refetchAllFreqs()
           if (turmaSel && refetchFreq) refetchFreq()
+          if (refetchSaidaCalls) refetchSaidaCalls()
         }}
       />
     </div>
