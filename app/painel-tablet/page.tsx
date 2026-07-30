@@ -101,8 +101,22 @@ const STANDALONE_STYLES = `
 // ─── Helper: verifica se hoje é dia permitido ─────────────────────────────────
 function isDiaPermitido(diasSemana: string[]): boolean {
   if (!diasSemana || diasSemana.length === 0) return true
-  const remap = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab']
-  return diasSemana.includes(remap[new Date().getDay()])
+  const dayIndex = new Date().getDay()
+  const dayVariants: string[][] = [
+    ['dom', 'domingo'],
+    ['seg', 'segunda', 'segunda-feira'],
+    ['ter', 'terca', 'terça', 'terca-feira', 'terça-feira'],
+    ['qua', 'quarta', 'quarta-feira'],
+    ['qui', 'quinta', 'quinta-feira', 'qta'],
+    ['sex', 'sexta', 'sexta-feira'],
+    ['sab', 'sáb', 'sabado', 'sábado']
+  ]
+  const validForToday = dayVariants[dayIndex] || []
+  return diasSemana.some(d => {
+    const cleanD = String(d || '').trim().toLowerCase()
+    if (!cleanD) return false
+    return validForToday.some(v => cleanD.startsWith(v) || v.startsWith(cleanD))
+  })
 }
 
 // ─── StudentCard: card grande clicável ────────────────────────────────────────
@@ -810,7 +824,8 @@ function PainelTabletContent() {
     let prohibitionReason = ''
 
     for (const alunoCompleto of matchedStudents) {
-      const isAtivo = alunoCompleto.status === 'Ativo' || alunoCompleto.status === 'matriculado';
+      const st = String(alunoCompleto.status || alunoCompleto.dados?.status || 'ativo').trim().toLowerCase();
+      const isAtivo = st !== 'inativo';
       if (!isAtivo) {
         setShowInactiveAlert({ name: alunoCompleto.nome })
         setTimeout(() => setShowInactiveAlert(null), 3000)
@@ -861,8 +876,10 @@ function PainelTabletContent() {
     }
 
     // 4. Validar dias de acesso do responsável (só se não for proibido)
-    if (diasAcesso.length > 0 && !diasAcesso.includes(todayKey)) {
-      const reason = `${gName} só pode retirar alunos nos dias: ${diasAcesso.join(', ')}. Hoje é ${todayKey}.`
+    if (diasAcesso.length > 0 && !isDiaPermitido(diasAcesso)) {
+      const todayNames = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']
+      const todayLabel = todayNames[new Date().getDay()]
+      const reason = `${gName} só pode retirar alunos nos dias: ${diasAcesso.join(', ')}. Hoje é ${todayLabel}.`
 
       for (const aluno of matchedStudents) {
         const foto = aluno.foto && aluno.foto.length > 10 ? aluno.foto : null

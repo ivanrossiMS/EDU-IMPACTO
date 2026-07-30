@@ -84,11 +84,13 @@ export async function GET(request: Request) {
         const chunk = studentIds.slice(i, i + chunkSize)
         const cleanChunk = chunk.map(c => String(c).trim()).filter(Boolean)
         if (cleanChunk.length > 0) {
-          const formattedRefs = cleanChunk.map(r => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r).join(',')
+          const formatRef = (r: string) => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r
+          const formattedAll = cleanChunk.map(formatRef).join(',')
+
           const { data: chunkStudents, error: studentError } = await supabase
             .from('alunos')
-            .select('id, nome, matricula, codigo, dados')
-            .or(`id.in.(${formattedRefs}),matricula.in.(${formattedRefs}),codigo.in.(${formattedRefs})`)
+            .select('id, nome, matricula, status, foto, foto_url, turma, dados')
+            .or(`id.in.(${formattedAll}),matricula.in.(${formattedAll})`)
             .limit(10000)
             
           if (studentError) {
@@ -109,16 +111,29 @@ export async function GET(request: Request) {
         .filter((l: any) => String(l.responsavel_id).trim() === String(resp.id).trim())
         .map((l: any) => {
           const targetRef = String(l.aluno_id).trim().toLowerCase()
-          const aluno = students.find((s: any) =>
-            String(s.id).trim().toLowerCase() === targetRef ||
-            String(s.matricula || '').trim().toLowerCase() === targetRef ||
-            String(s.codigo || '').trim().toLowerCase() === targetRef ||
-            String(s.dados?.codigo || '').trim().toLowerCase() === targetRef
-          ) || {}
+          const targetUnpadded = targetRef.replace(/^0+/, '')
+          const aluno = students.find((s: any) => {
+            const sId = String(s.id || '').trim().toLowerCase()
+            const sMat = String(s.matricula || '').trim().toLowerCase()
+            const sCod = String(s.codigo || '').trim().toLowerCase()
+            const sDCod = String(s.dados?.codigo || '').trim().toLowerCase()
+            const sDCodAlu = String(s.dados?.codigoAluno || '').trim().toLowerCase()
+            const sDId = String(s.dados?.id || '').trim().toLowerCase()
+            return (
+              sId === targetRef || (targetUnpadded && sId.replace(/^0+/, '') === targetUnpadded) ||
+              sMat === targetRef || (targetUnpadded && sMat.replace(/^0+/, '') === targetUnpadded) ||
+              sCod === targetRef || (targetUnpadded && sCod.replace(/^0+/, '') === targetUnpadded) ||
+              sDCod === targetRef || (targetUnpadded && sDCod.replace(/^0+/, '') === targetUnpadded) ||
+              sDCodAlu === targetRef || (targetUnpadded && sDCodAlu.replace(/^0+/, '') === targetUnpadded) ||
+              sDId === targetRef || (targetUnpadded && sDId.replace(/^0+/, '') === targetUnpadded)
+            )
+          }) || {}
           return {
             ...aluno,
             id: aluno.id || l.aluno_id,
             nome: aluno.nome || `Aluno (${l.aluno_id})`,
+            status: aluno.status || aluno.dados?.status || 'ativo',
+            foto: aluno.foto || aluno.foto_url || aluno.dados?.foto || null,
             parentesco: l.parentesco,
             isFinanceiro: l.resp_financeiro === true,
             isPedagogico: l.resp_pedagogico === true,
