@@ -1199,74 +1199,63 @@ function PainelTabletContent() {
 
             {/* Guardian hero card */}
             <div style={{
-              borderRadius: 20, overflow: 'hidden', marginBottom: 32,
+              borderRadius: 20, overflow: 'hidden', marginBottom: 20,
               background: 'linear-gradient(135deg, rgba(6,182,212,0.1) 0%, rgba(99,102,241,0.06) 100%)',
               border: '1px solid rgba(6,182,212,0.25)',
               boxShadow: '0 8px 40px rgba(6,182,212,0.12)',
             }}>
               {/* Top accent bar */}
-              <div style={{ height: 4, background: 'linear-gradient(90deg, #06b6d4, #6366f1)' }}/>
-              <div style={{ padding: isMobile ? '18px 20px' : '22px 28px', display: 'flex', alignItems: 'center', gap: 18 }}>
+              <div style={{ height: 3, background: 'linear-gradient(90deg, #06b6d4, #6366f1)' }}/>
+              <div style={{ padding: isMobile ? '12px 16px' : '15px 22px', display: 'flex', alignItems: 'center', gap: 14 }}>
                 {/* Avatar */}
                 <div style={{
-                  width: isMobile ? 58 : 72, height: isMobile ? 58 : 72,
+                  width: isMobile ? 46 : 58, height: isMobile ? 46 : 58,
                   borderRadius: '50%', flexShrink: 0,
                   background: 'linear-gradient(135deg, #06b6d490, #6366f140)',
                   border: '2px solid rgba(6,182,212,0.4)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 900, fontSize: isMobile ? 24 : 30, color: '#fff',
+                  fontWeight: 900, fontSize: isMobile ? 19 : 24, color: '#fff',
                   boxShadow: '0 4px 20px rgba(6,182,212,0.3)',
                 }}>
                   {(matchedGuardianName[0] || '?').toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, fontWeight: 800, color: '#475569', letterSpacing: '0.1em', marginBottom: 6 }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 800, color: '#475569', letterSpacing: '0.1em', marginBottom: 4 }}>
                     ✅ RESPONSÁVEL IDENTIFICADO VIA RFID
                   </div>
-                  <div style={{ fontWeight: 900, fontSize: isMobile ? 20 : 26, color: '#f1f5f9', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+                  <div style={{ fontWeight: 900, fontSize: isMobile ? 16 : 21, color: '#f1f5f9', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
                     {matchedGuardianName}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{matchedGuardianRole}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{matchedGuardianRole}</span>
                     <span style={{
-                      fontSize: 10, padding: '2px 10px', borderRadius: 100,
+                      fontSize: 9.5, padding: '2px 8px', borderRadius: 100,
                       background: 'rgba(6,182,212,0.12)', color: '#06b6d4',
                       fontWeight: 800, border: '1px solid rgba(6,182,212,0.25)',
                       fontFamily: 'monospace', letterSpacing: 1,
                     }}>
                       📡 {rfidCode}
                     </span>
-                    <span style={{
-                      fontSize: 10, padding: '2px 10px', borderRadius: 100,
-                      background: 'rgba(16,185,129,0.1)', color: '#10b981',
-                      fontWeight: 800, border: '1px solid rgba(16,185,129,0.25)',
-                    }}>
-                      {rfidStudents.length} aluno{rfidStudents.length !== 1 ? 's' : ''}
-                    </span>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Section header */}
-            <div style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontWeight: 900, fontSize: isMobile ? 15 : 17, color: '#f1f5f9' }}>
-                  Alunos vinculados a este cartão
-                </div>
-                <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>
-                  Toque no card para chamar o aluno
+                {/* Larger Badge on the right */}
+                <div style={{
+                  padding: isMobile ? '6px 14px' : '8px 18px',
+                  borderRadius: 100,
+                  background: 'rgba(6,182,212,0.14)',
+                  border: '1px solid rgba(6,182,212,0.3)',
+                  color: '#06b6d4',
+                  fontWeight: 900,
+                  fontSize: isMobile ? 12 : 14,
+                  letterSpacing: '0.02em',
+                  boxShadow: '0 2px 12px rgba(6,182,212,0.15)',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}>
+                  {rfidStudents.length} aluno{rfidStudents.length !== 1 ? 's' : ''}
                 </div>
               </div>
-              {rfidStudents.length > 1 && (
-                <div style={{
-                  padding: '6px 14px', borderRadius: 100,
-                  background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.25)',
-                  fontSize: 11, fontWeight: 800, color: '#06b6d4',
-                }}>
-                  {rfidStudents.length} alunos
-                </div>
-              )}
             </div>
 
             {/* Student cards grid */}
