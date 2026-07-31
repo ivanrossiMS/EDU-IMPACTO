@@ -65,7 +65,7 @@ export default function UploadProvaPage() {
         const nome = r.professores?.nome || r.professor_nome || '';
         return nome ? formatProfessorHeaderName(nome) : '';
       }))).filter(Boolean).join(', ')
-      const formattedDate = data?.data_aplicacao ? data.data_aplicacao.split('-').reverse().join('/') : ''
+      const formattedDate = data?.data_aplicacao ? data.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________'
       const formattedSeries = Array.isArray(data?.series) ? data.series.join(', ') : (data?.series || '')
 
       const provaData = { 
@@ -626,7 +626,7 @@ export default function UploadProvaPage() {
             prova={{ 
               ...prova, 
               isProva: true,
-              formattedDate: prova?.data_aplicacao ? prova.data_aplicacao.split('-').reverse().join('/') : '',
+              formattedDate: prova?.data_aplicacao ? prova.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',
               formattedSeries: Array.isArray(prova?.series) ? prova.series.join(', ') : (prova?.series || ''),
               formattedDisciplinas: Array.from(new Set(prova?.provas_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(prova?.provas_upload_requisicoes?.map((r: any) => {

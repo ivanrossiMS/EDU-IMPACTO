@@ -304,7 +304,7 @@ export default function VerRedaçãoUploadPage() {
             prova={{ 
               ...redacao, 
               isRedacao: true,
-              formattedDate: redacao?.data_aplicacao ? redacao.data_aplicacao.split('-').reverse().join('/') : '',
+              formattedDate: redacao?.data_aplicacao ? redacao.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',
               formattedSeries: Array.isArray(redacao?.series) ? redacao.series.join(', ') : (redacao?.series || ''),
               formattedDisciplinas: Array.from(new Set(requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(requisicoes?.map((r: any) => {

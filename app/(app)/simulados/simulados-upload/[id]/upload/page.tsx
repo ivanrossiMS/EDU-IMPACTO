@@ -66,7 +66,7 @@ export default function UploadSimuladoPage() {
         const nome = r.professores?.nome || r.professor_nome || '';
         return nome ? formatProfessorHeaderName(nome) : '';
       }))).filter(Boolean).join(', ')
-      const formattedDate = data?.data_aplicacao ? data.data_aplicacao.split('-').reverse().join('/') : ''
+      const formattedDate = data?.data_aplicacao ? data.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________'
       const formattedSeries = Array.isArray(data?.series) ? data.series.join(', ') : (data?.series || '')
 
       const simuladoData = { 
@@ -624,7 +624,7 @@ export default function UploadSimuladoPage() {
           simulado={{ 
             ...simulado, 
             isSimulado: true,
-            formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '',
+            formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',
             formattedSeries: simulado?.series?.join(', ') || '',
             formattedDisciplinas: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
             formattedProfessors: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {
@@ -651,7 +651,7 @@ export default function UploadSimuladoPage() {
             simulado={{ 
               ...simulado, 
               isSimulado: true,
-              formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '',
+              formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',
               formattedSeries: simulado?.series?.join(', ') || '',
               formattedDisciplinas: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {

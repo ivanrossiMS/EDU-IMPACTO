@@ -304,7 +304,7 @@ export default function VerProvaUploadPage() {
             prova={{ 
               ...prova, 
               isProva: true,
-              formattedDate: prova?.data_aplicacao ? prova.data_aplicacao.split('-').reverse().join('/') : '',
+              formattedDate: prova?.data_aplicacao ? prova.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',
               formattedSeries: prova?.series?.join(', ') || '',
               formattedDisciplinas: Array.from(new Set(requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
               formattedProfessors: Array.from(new Set(requisicoes?.map((r: any) => {

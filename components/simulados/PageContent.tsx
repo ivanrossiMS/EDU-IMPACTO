@@ -258,7 +258,7 @@ export function PageContent({
                 if (key === 'title') value = simulado?.titulo || '';
                 else if (key === 'disciplina') value = simulado?.formattedDisciplinas || '';
                 else if (key === 'professor') value = formatProfessorHeaderName(simulado?.formattedProfessors || '');
-                else if (key === 'data') value = simulado?.formattedDate || '';
+                else if (key === 'data') value = simulado?.formattedDate ? simulado.formattedDate : '____ / ____ / ________';
                 else if (key === 'turma') value = simulado?.formattedSeries || '';
                 else if (key === 'valor') value = simulado?.valor || '';
                 else if (key === 'nota') value = ''; // Nota fica em branco para o professor preencher à mão
