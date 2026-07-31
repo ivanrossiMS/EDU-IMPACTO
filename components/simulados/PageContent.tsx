@@ -365,10 +365,10 @@ export function PageContent({
                     {q.tipo_questao === 'texto_apoio' && (
                       <div className="no-print texto-apoio-badge" style={{
                         position: 'absolute',
-                        left: -40,
-                        top: 60,
-                        transform: 'rotate(-90deg)',
-                        transformOrigin: '0 0',
+                        left: -20,
+                        top: '50%',
+                        transform: 'translate(-50%, -50%) rotate(-90deg)',
+                        transformOrigin: 'center center',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 6,
@@ -1124,10 +1124,10 @@ export function PageContent({
                     {q.tipo_questao === 'texto_apoio' && block.isFirst && (
                       <div className="no-print texto-apoio-badge" style={{
                         position: 'absolute',
-                        left: -40,
-                        top: 60,
-                        transform: 'rotate(-90deg)',
-                        transformOrigin: '0 0',
+                        left: -20,
+                        top: '50%',
+                        transform: 'translate(-50%, -50%) rotate(-90deg)',
+                        transformOrigin: 'center center',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 6,
