@@ -362,35 +362,34 @@ export function PageContent({
                 return (
                   <div key={`b-${bIndex}`} className="questao-container alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, breakInside: 'avoid' }}>
 
+                    {q.tipo_questao === 'texto_apoio' && (
+                      <div className="no-print texto-apoio-badge" style={{
+                        position: 'absolute',
+                        left: -40,
+                        top: 60,
+                        transform: 'rotate(-90deg)',
+                        transformOrigin: '0 0',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '3px 10px',
+                        backgroundColor: '#8b5cf6',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        borderRadius: '12px',
+                        fontSize: '7.5pt',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 2px 6px rgba(139, 92, 246, 0.3)',
+                        zIndex: 20
+                      }}>
+                        <FileText size={12} color="#ffffff" />
+                        Texto de Apoio
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                      {q.tipo_questao === 'texto_apoio' ? (
-                        <div style={{ width: '28px', minWidth: '28px', position: 'relative', display: 'flex', justifyContent: 'center' }}>
-                          <div className="no-print texto-apoio-badge" style={{
-                            position: 'absolute',
-                            top: 55,
-                            left: '50%',
-                            transform: 'translateX(-50%) rotate(-90deg)',
-                            transformOrigin: 'center center',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            padding: '3px 10px',
-                            backgroundColor: '#8b5cf6',
-                            color: '#ffffff',
-                            fontWeight: 800,
-                            borderRadius: '12px',
-                            fontSize: '7.5pt',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            whiteSpace: 'nowrap',
-                            boxShadow: '0 2px 6px rgba(139, 92, 246, 0.3)',
-                            zIndex: 10
-                          }}>
-                            <FileText size={12} color="#ffffff" />
-                            Texto de Apoio
-                          </div>
-                        </div>
-                      ) : (
+                      {q.tipo_questao !== 'texto_apoio' && (
                         <div style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           width: '28px', height: '28px', minWidth: '28px', backgroundColor: '#1e293b', color: '#ffffff',
@@ -1122,36 +1121,33 @@ export function PageContent({
                 return (
                   <div key={`b-${bIndex}`} style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
 
-                    {q.tipo_questao === 'texto_apoio' ? (
-                      <div style={{ width: '28px', minWidth: '28px', position: 'relative', display: 'flex', justifyContent: 'center' }}>
-                        {block.isFirst && (
-                          <div className="no-print texto-apoio-badge" style={{
-                            position: 'absolute',
-                            top: 55,
-                            left: '50%',
-                            transform: 'translateX(-50%) rotate(-90deg)',
-                            transformOrigin: 'center center',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            padding: '3px 10px',
-                            backgroundColor: '#8b5cf6',
-                            color: '#ffffff',
-                            fontWeight: 800,
-                            borderRadius: '12px',
-                            fontSize: '7.5pt',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            whiteSpace: 'nowrap',
-                            boxShadow: '0 2px 6px rgba(139, 92, 246, 0.3)',
-                            zIndex: 10
-                          }}>
-                            <FileText size={12} color="#ffffff" />
-                            Texto de Apoio
-                          </div>
-                        )}
+                    {q.tipo_questao === 'texto_apoio' && block.isFirst && (
+                      <div className="no-print texto-apoio-badge" style={{
+                        position: 'absolute',
+                        left: -40,
+                        top: 60,
+                        transform: 'rotate(-90deg)',
+                        transformOrigin: '0 0',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '3px 10px',
+                        backgroundColor: '#8b5cf6',
+                        color: '#ffffff',
+                        fontWeight: 800,
+                        borderRadius: '12px',
+                        fontSize: '7.5pt',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.06em',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 2px 6px rgba(139, 92, 246, 0.3)',
+                        zIndex: 20
+                      }}>
+                        <FileText size={12} color="#ffffff" />
+                        Texto de Apoio
                       </div>
-                    ) : (
+                    )}
+                    {q.tipo_questao !== 'texto_apoio' && (
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         width: '28px', height: '28px', minWidth: '28px', backgroundColor: block.isFirst ? '#1e293b' : 'transparent', color: block.isFirst ? '#ffffff' : 'transparent',
