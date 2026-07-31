@@ -521,9 +521,15 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
        (studentIdToConfirm && c.studentId != null && String(c.studentId) === studentIdToConfirm) ||
        (studentNameToConfirm && c.studentName && c.studentName.trim().toLowerCase() === studentNameToConfirm))
     )
+    const fixCall = (c: PickupCall) => {
+      const conf = currentNow
+      const cTime = (c.calledAt && new Date(c.calledAt).getTime() > new Date(conf).getTime()) ? conf : c.calledAt
+      return { ...c, calledAt: cTime, status: 'confirmed' as const, confirmedAt: conf }
+    }
+
     const updatedCalls: PickupCall[] = callsToConfirm.length > 0
-      ? callsToConfirm.map(c => ({ ...c, status: 'confirmed' as const, confirmedAt: currentNow }))
-      : [{ ...callToUpdate, status: 'confirmed' as const, confirmedAt: currentNow }]
+      ? callsToConfirm.map(fixCall)
+      : [fixCall(callToUpdate)]
 
     setActiveCallsLocal?.(prev => {
       const arr = prev || []
@@ -534,7 +540,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
             (c.id === callId ||
              (studentIdToConfirm && cStudentId === studentIdToConfirm) ||
              (studentNameToConfirm && cStudentName === studentNameToConfirm))) {
-          return { ...c, status: 'confirmed' as const, confirmedAt: currentNow }
+          return fixCall(c)
         }
         return c
       })

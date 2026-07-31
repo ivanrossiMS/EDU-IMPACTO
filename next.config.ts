@@ -27,8 +27,8 @@ const securityHeaders = [
       "img-src 'self' data: blob: https:",
       "media-src 'self' blob: https://*.supabase.co https://*.supabase.in",
       process.env.NODE_ENV === 'development'
-        ? "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br ws://localhost:* ws://127.0.0.1:* https://*.onesignal.com"
-        : "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br https://*.onesignal.com",
+        ? "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br ws://localhost:* ws://127.0.0.1:* https://*.onesignal.com https://script.google.com https://*.googleusercontent.com https://www.googleapis.com https://*.google.com"
+        : "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br https://*.onesignal.com https://script.google.com https://*.googleusercontent.com https://www.googleapis.com https://*.google.com",
       "worker-src 'self' blob: https://cdn.onesignal.com https://onesignal.com",
       "frame-src 'self' https://onesignal.com",
       "frame-ancestors 'none'",

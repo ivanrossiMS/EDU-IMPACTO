@@ -39,33 +39,19 @@ export interface OrigemFrequenciaCompleta {
 
 function formatTimeFromIso(isoStr?: string): string | undefined {
   if (!isoStr) return undefined
-  const s = String(isoStr).trim()
-  if (/^\d{2}:\d{2}$/.test(s)) return s
-  if (/^\d{2}:\d{2}:\d{2}$/.test(s)) return s.slice(0, 5)
-
-  if (s.includes('T')) {
-    const timePart = s.split('T')[1]
-    if (timePart && /^\d{2}:\d{2}/.test(timePart)) {
-      if (s.endsWith('Z')) {
-        try {
-          const d = new Date(s)
-          if (!isNaN(d.getTime())) {
-            const h = String(d.getHours()).padStart(2, '0')
-            const m = String(d.getMinutes()).padStart(2, '0')
-            return `${h}:${m}`
-          }
-        } catch {}
-      }
-      return timePart.slice(0, 5)
-    }
-  }
-
+  let str = String(isoStr).trim()
+  if (!str) return undefined
   try {
-    const d = new Date(s)
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+      const [h, m] = str.split(':').map(Number)
+      const dateToday = new Date().toISOString().split('T')[0]
+      str = `${dateToday}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
+    } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-03:00'
+    }
+    const d = new Date(str)
     if (!isNaN(d.getTime())) {
-      const h = String(d.getHours()).padStart(2, '0')
-      const m = String(d.getMinutes()).padStart(2, '0')
-      return `${h}:${m}`
+      return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
     }
   } catch {}
   return undefined

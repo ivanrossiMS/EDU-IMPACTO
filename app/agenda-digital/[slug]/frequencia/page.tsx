@@ -693,7 +693,7 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
                       {/* Saída Confirmada Cards */}
                       {selectedSaidaCalls.map((call, i) => {
                         const confirmedTime = call.confirmedAt 
-                          ? new Date(call.confirmedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) 
+                          ? new Date(call.confirmedAt.includes('T') && !call.confirmedAt.endsWith('Z') && !call.confirmedAt.includes('-') && !call.confirmedAt.includes('+') ? `${call.confirmedAt}-04:00` : call.confirmedAt).toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }) 
                           : ''
 
                         return (

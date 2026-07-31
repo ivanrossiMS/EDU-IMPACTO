@@ -15,9 +15,23 @@ export default function ResponsaveisPage() {
   
   const [search, setSearch] = useState('')
   const [paginaAtual, setPaginaAtual] = useState(1)
-  const [itensPorPagina, setItensPorPagina] = useState(5)
+  const [itensPorPagina, setItensPorPagina] = useState(10)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [isModalOpen])
   const [editingResponsavel, setEditingResponsavel] = useState<any | null>(null)
   const [buscaAluno, setBuscaAluno] = useState('')
   const [resultadosAlunos, setResultadosAlunos] = useState<any[]>([])

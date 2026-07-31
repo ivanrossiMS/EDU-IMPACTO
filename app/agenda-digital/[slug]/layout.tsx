@@ -406,7 +406,15 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
   const formatTime = (isoStr?: string) => {
     if (!isoStr) return ''
     try {
-      return new Date(isoStr).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      let str = String(isoStr).trim()
+      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+        const [h, m] = str.split(':').map(Number)
+        const dateToday = new Date().toISOString().split('T')[0]
+        str = `${dateToday}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
+      } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+        str += '-03:00'
+      }
+      return new Date(str).toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
     } catch { return '' }
   }
 

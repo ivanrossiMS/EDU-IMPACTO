@@ -8,8 +8,23 @@ import Image from 'next/image'
 import { Tv, Clock, User, Nfc, Maximize, Wifi, WifiOff, Loader2 } from 'lucide-react'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+function fmtTime(iso?: string) {
+  if (!iso) return ''
+  try {
+    let str = String(iso).trim()
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+      const [h, m] = str.split(':').map(Number)
+      const dateToday = new Date().toISOString().split('T')[0]
+      str = `${dateToday}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
+    } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-03:00'
+    }
+    const d = new Date(str)
+    if (isNaN(d.getTime())) return str
+    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return String(iso)
+  }
 }
 
 function elapsedSec(since: string) {

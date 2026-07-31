@@ -9,6 +9,54 @@ import { isValidStudentPhoto } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
+function cleanNameString(str: any): string {
+  if (!str) return ''
+  const s = typeof str === 'object' ? (str.nome || str.name || str.nomeCompleto || str.nome_completo || '') : String(str)
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+}
+
+function isSamePerson(r1: any, r2: any): boolean {
+  if (!r1 || !r2) return false
+  
+  const id1 = String(r1.id || r1.codigo || '').trim()
+  const id2 = String(r2.id || r2.codigo || '').trim()
+  if (id1 && id2 && id1 === id2) return true
+
+  const e1 = (r1.email || '').trim().toLowerCase()
+  const e2 = (r2.email || '').trim().toLowerCase()
+  if (e1 && e2 && e1.includes('@') && e1 === e2) return true
+
+  const t1 = (r1.telefone || r1.celular || '').replace(/\D/g, '')
+  const t2 = (r2.telefone || r2.celular || '').replace(/\D/g, '')
+  if (t1 && t2 && t1.length >= 8 && t1 === t2) return true
+
+  const n1 = cleanNameString(r1)
+  const n2 = cleanNameString(r2)
+
+  if (!n1 || !n2) return false
+  if (n1 === n2) return true
+
+  const w1 = n1.replace(/[^a-z0-9\s]/g, ' ').split(' ').filter(Boolean)
+  const w2 = n2.replace(/[^a-z0-9\s]/g, ' ').split(' ').filter(Boolean)
+
+  if (w1.length < 2 || w2.length < 2) return false
+  if (w1[0] !== w2[0] || w1[w1.length - 1] !== w2[w2.length - 1]) return false
+
+  const mid1 = w1.slice(1, -1)
+  const mid2 = w2.slice(1, -1)
+  if (mid1.length === 0 || mid2.length === 0) return true
+
+  const [shorter, longer] = mid1.length <= mid2.length ? [mid1, mid2] : [mid2, mid1]
+  return shorter.every(sWord => {
+    return longer.some(lWord => lWord === sWord || (sWord.length === 1 && lWord.startsWith(sWord)))
+  })
+}
+
 // ─── GET: Listar alunos ──────────────────────────────────────────────────────
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
@@ -284,8 +332,8 @@ export async function GET(request: Request) {
           student.dados?.codigo ? String(student.dados?.codigo) : null
         ].filter(Boolean).map(r => String(r).trim())
 
-        // Mesclar responsáveis da tabela aluno_responsavel com responsaveis no JSON/coluna do aluno
-        const linked = links.filter((l: any) => thisStudentRefs.includes(String(l.aluno_id).trim()))
+        // Mesclar e consolidar responsáveis da tabela aluno_responsavel
+        const rawLinked = links.filter((l: any) => thisStudentRefs.includes(String(l.aluno_id).trim()))
           .map((l: any) => {
             const r = responsaveisTable.find((rObj: any) => String(rObj.id).trim() === String(l.responsavel_id).trim()) || {}
             const isPed = l.resp_pedagogico === true || l.tipo === 'pedagogico' || r.isPedagogico === true
@@ -307,6 +355,28 @@ export async function GET(request: Request) {
             }
           }).filter((r: any) => r.nome && r.nome.trim())
 
+        const mergedResponsaveis: any[] = []
+        rawLinked.forEach((r: any) => {
+          const existing = mergedResponsaveis.find(m => isSamePerson(m, r))
+          if (existing) {
+            if (!existing.id && r.id) existing.id = r.id
+            if (r.isFinanceiro) existing.isFinanceiro = true
+            if (r.isPedagogico) existing.isPedagogico = true
+            if (r.isOutro) existing.isOutro = true
+            if (r.email && !existing.email) existing.email = r.email
+            if (r.telefone && !existing.telefone) existing.telefone = r.telefone
+            if (r.rfid && !existing.rfid) existing.rfid = r.rfid
+            if (r.parentesco && ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)) {
+              existing.parentesco = r.parentesco
+            }
+            if (r.nome && r.nome.length > existing.nome.length) {
+              existing.nome = r.nome
+            }
+          } else {
+            mergedResponsaveis.push({ ...r })
+          }
+        })
+
         const jsonResps = [
           ...(Array.isArray(student.responsaveis) ? student.responsaveis : []),
           ...(Array.isArray(d.responsaveis) ? d.responsaveis : []),
@@ -315,34 +385,47 @@ export async function GET(request: Request) {
           ...(Array.isArray(student.responsaveisOutros) ? student.responsaveisOutros : []),
           ...(Array.isArray(d.responsaveisOutros) ? d.responsaveisOutros : []),
         ]
-        const mergedResponsaveis = [...linked]
         jsonResps.forEach((j: any) => {
-          const jName = (typeof j === 'string' ? j : (j.nome || j.name || j.nomeCompleto || '')).trim()
-          if (jName && !mergedResponsaveis.some(m => m.nome && m.nome.toLowerCase() === jName.toLowerCase())) {
-            mergedResponsaveis.push(typeof j === 'string' ? { nome: jName, parentesco: 'Responsável' } : j)
+          const jObj = typeof j === 'string' ? { nome: j.trim(), parentesco: 'Responsável' } : j
+          if (!jObj || !jObj.nome) return
+          const existing = mergedResponsaveis.find(m => isSamePerson(m, jObj))
+          if (existing) {
+            if (jObj.id && !existing.id) existing.id = jObj.id
+            if (jObj.isPedagogico || jObj.respPedagogico) existing.isPedagogico = true
+            if (jObj.isFinanceiro || jObj.respFinanceiro) existing.isFinanceiro = true
+            if (jObj.isOutro || jObj.respOutro) existing.isOutro = true
+            if (jObj.nome && jObj.nome.length > existing.nome.length) existing.nome = jObj.nome
+          } else {
+            mergedResponsaveis.push({ ...jObj })
           }
         })
 
         const checkDirectField = (val: any, defaultRole: string, isPed = false, isFin = false, isOut = false) => {
           if (!val) return
-          let name = ''
-          if (typeof val === 'string') name = val.trim()
-          else if (typeof val === 'object') name = (val.nome || val.name || val.nomeCompleto || val.nome_completo || '').trim()
+          const origName = typeof val === 'string' ? val.trim() : (val.nome || val.name || val.nomeCompleto || '')
+          if (!origName || ['none', 'nenhum', 'n/a', 'null', 'undefined', '-'].includes(origName.toLowerCase())) return
           
-          if (!name) return
-          const lower = name.toLowerCase()
-          if (['none', 'nenhum', 'n/a', 'null', 'undefined', '-'].includes(lower)) return
-          
-          if (!mergedResponsaveis.some(m => m.nome && m.nome.toLowerCase() === lower)) {
+          const tempObj = typeof val === 'object' ? val : { nome: origName }
+          const existing = mergedResponsaveis.find(m => isSamePerson(m, tempObj))
+          if (existing) {
+            if (isPed) existing.isPedagogico = true
+            if (isFin) existing.isFinanceiro = true
+            if (isOut) existing.isOutro = true
+          } else {
+            // Se o aluno já possui responsáveis reais vinculados em aluno_responsavel,
+            // NÃO adicionamos novos registros duplicados derivados de strings de colunas legadas!
+            if (rawLinked.length > 0) return
+
+            const foundInTable = responsaveisTable.find((rObj: any) => isSamePerson(rObj, tempObj))
             mergedResponsaveis.push({
-              id: '',
-              nome: name,
+              id: foundInTable?.id || '',
+              nome: foundInTable?.nome || origName,
               parentesco: defaultRole,
-              telefone: null,
-              email: null,
-              rfid: null,
-              proibido: false,
-              diasAcesso: [],
+              telefone: foundInTable?.telefone || null,
+              email: foundInTable?.email || null,
+              rfid: foundInTable?.rfid || null,
+              proibido: foundInTable?.proibido === true,
+              diasAcesso: foundInTable?.dias_acesso || [],
               isPedagogico: isPed,
               isFinanceiro: isFin,
               isOutro: isOut
@@ -357,10 +440,34 @@ export async function GET(request: Request) {
         checkDirectField(d.nome_pai || d.pai || d.nomePai || d.filiacao?.pai || d.filiacao_pai || student.pai || student.nomePai, 'Pai')
         checkDirectField(d.nome_responsavel || d.responsavel || d.nomeResponsavel || d.resp_nome || student.responsavel || student.nomeResponsavel, 'Responsável')
 
+        // Passagem final de garantia absoluta de deduplicação por pessoa única
+        const finalUniqueResps: any[] = []
+        mergedResponsaveis.forEach((r: any) => {
+          if (!r.nome) return
+          const existing = finalUniqueResps.find(u => isSamePerson(u, r))
+          if (existing) {
+            if (!existing.id && r.id) existing.id = r.id
+            if (r.isFinanceiro) existing.isFinanceiro = true
+            if (r.isPedagogico) existing.isPedagogico = true
+            if (r.isOutro) existing.isOutro = true
+            if (r.email && !existing.email) existing.email = r.email
+            if (r.telefone && !existing.telefone) existing.telefone = r.telefone
+            if (r.rfid && !existing.rfid) existing.rfid = r.rfid
+            if (r.parentesco && ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)) {
+              existing.parentesco = r.parentesco
+            }
+            if (r.nome && r.nome.length > existing.nome.length) {
+              existing.nome = r.nome
+            }
+          } else {
+            finalUniqueResps.push({ ...r })
+          }
+        })
+
         return {
           ...student,
           foto: resolvedFoto,
-          responsaveis: mergedResponsaveis,
+          responsaveis: finalUniqueResps,
           _responsaveis: student._responsaveis || d._responsaveis,
           responsavel: student.responsavel || d.responsavel,
           responsavelPedagogico: student.responsavel_pedagogico || student.responsavelPedagogico || d.responsavelPedagogico,
@@ -741,6 +848,19 @@ export async function POST(request: Request) {
           respDataToSave.id = existingRespEmail.id
         }
       }
+
+      // Verifica duplicidade por Nome se o ID ainda não tiver sido localizado
+      if (!respDataToSave.id && respDataToSave.nome && respDataToSave.nome.trim()) {
+        const nameClean = respDataToSave.nome.trim().replace(/\s+/g, ' ')
+        const { data: existingRespName } = await supabase
+          .from('responsaveis')
+          .select('id, nome')
+          .ilike('nome', nameClean)
+          .maybeSingle()
+        if (existingRespName) {
+          respDataToSave.id = existingRespName.id
+        }
+      }
       
       if (isNewResp) {
         delete respDataToSave.id
@@ -989,6 +1109,19 @@ export async function PUT(request: Request) {
           respDataToSave.id = existingRespEmail.id
         }
       }
+
+      // Verifica duplicidade por Nome se o ID ainda não tiver sido localizado
+      if (!respDataToSave.id && respDataToSave.nome && respDataToSave.nome.trim()) {
+        const nameClean = respDataToSave.nome.trim().replace(/\s+/g, ' ')
+        const { data: existingRespName } = await supabase
+          .from('responsaveis')
+          .select('id, nome')
+          .ilike('nome', nameClean)
+          .maybeSingle()
+        if (existingRespName) {
+          respDataToSave.id = existingRespName.id
+        }
+      }
       
       if (!respDataToSave.id || (typeof respDataToSave.id === 'string' && respDataToSave.id.startsWith('TEMP-')) || respDataToSave.id === '') {
         delete respDataToSave.id
@@ -1020,12 +1153,20 @@ export async function PUT(request: Request) {
       if (linkError) throw new Error(`Erro ao vincular responsável ${resp.nome} ao aluno: ${linkError.message}`)
     }
 
-    // 3. Desvincular responsáveis que foram removidos (apenas se salvou responsáveis com sucesso nesta requisição)
-    if (savedRespIds.length > 0) {
+    // 3. Desvincular responsáveis que foram removidos
+    if (Array.isArray(body.responsaveis) || Array.isArray(body._responsaveis)) {
       const studentRefs = [
         savedStudent.id,
         savedStudent.matricula,
-        savedStudent.dados?.codigo
+        savedStudent.codigo,
+        savedStudent.dados?.codigo,
+        savedStudent.dados?.id,
+        savedStudent.dados?.matricula,
+        savedStudent.matricula ? String(savedStudent.matricula) : null,
+        savedStudent.codigo ? String(savedStudent.codigo) : null,
+        savedStudent.dados?.codigo ? String(savedStudent.dados?.codigo) : null,
+        body.aluno?.codigo ? String(body.aluno.codigo) : null,
+        body.codigo ? String(body.codigo) : null
       ].filter(Boolean).map(r => String(r).trim())
 
       const { data: currentLinks, error: fetchLinksError } = await supabase
@@ -1419,6 +1560,32 @@ function buildRow(a: any) {
   const finResp = listResps?.find((r: any) => r.isFinanceiro || r.respFinanceiro)?.nome || firstResp
   const pedResp = listResps?.find((r: any) => r.isPedagogico || r.respPedagogico)?.nome || firstResp
 
+  const hasProvidedResps = Array.isArray(responsaveis) || Array.isArray(a._responsaveis)
+
+  if (hasProvidedResps) {
+    delete rest.responsaveis
+    delete rest._responsaveis
+    delete rest.outrosResponsaveis
+    delete rest.responsaveisOutros
+    delete rest.responsavelPedagogico
+    delete rest.responsavel_pedagogico
+    delete rest.responsavelFinanceiro
+    delete rest.responsavel_financeiro
+    delete rest.responsavelOutro
+    delete rest.responsavel_outro
+    delete rest.resp_pedagogico
+    delete rest.resp_financeiro
+    delete rest.resp_outro
+    delete rest.mae
+    delete rest.nomeMae
+    delete rest.pai
+    delete rest.nomePai
+    delete rest.nome_mae
+    delete rest.nome_pai
+    delete rest.responsavel
+    delete rest.nomeResponsavel
+  }
+
   const extractName = (val: any) => {
     if (!val) return ''
     if (typeof val === 'object') return val.nome || ''
@@ -1454,9 +1621,9 @@ function buildRow(a: any) {
     status: mappedStatus || 'matriculado',
     email: mappedEmail,
     data_nascimento: mappedDataNasc,
-    responsavel: extractName(responsavel) || firstResp,
-    responsavel_financeiro: extractName(responsavel_financeiro) || finResp,
-    responsavel_pedagogico: extractName(responsavel_pedagogico) || pedResp,
+    responsavel: hasProvidedResps ? (firstResp || null) : (extractName(responsavel) || firstResp || null),
+    responsavel_financeiro: hasProvidedResps ? (finResp || null) : (extractName(responsavel_financeiro) || finResp || null),
+    responsavel_pedagogico: hasProvidedResps ? (pedResp || null) : (extractName(responsavel_pedagogico) || pedResp || null),
     telefone: mappedTelefone,
     inadimplente: inadimplente || false,
     risco_evasao: risco_evasao || 'baixo',

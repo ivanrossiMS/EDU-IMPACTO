@@ -47,11 +47,33 @@ function statusMeta(call: PickupCall) {
 
 function elapsedSec(since: string, nowTime?: number) {
   const current = nowTime !== undefined ? nowTime : Date.now()
-  return Math.max(0, Math.floor((current - new Date(since).getTime()) / 1000))
+  if (!since) return 0
+  let str = String(since).trim()
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+    str += '-04:00'
+  }
+  const t = new Date(str).getTime()
+  if (isNaN(t)) return 0
+  return Math.max(0, Math.floor((current - t) / 1000))
 }
 
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+function fmtTime(iso?: string) {
+  if (!iso) return ''
+  try {
+    let str = String(iso).trim()
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+      const [h, m] = str.split(':').map(Number)
+      const dateToday = new Date().toISOString().split('T')[0]
+      str = `${dateToday}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
+    } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-03:00'
+    }
+    const d = new Date(str)
+    if (isNaN(d.getTime())) return str
+    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return String(iso)
+  }
 }
 
 // ── Unified call card (Ultra Modern TV-Monitor style) ─────────────────────────
@@ -93,6 +115,10 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
   }
 
   const mins = Math.floor(secs / 60)
+
+  const displayCalledAt = (call.confirmedAt && new Date(call.calledAt).getTime() > new Date(call.confirmedAt).getTime())
+    ? call.confirmedAt
+    : call.calledAt
 
   return (
     <div style={{
@@ -225,7 +251,7 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, fontSize: 9, color: '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                <Megaphone size={9} color={color} />
-               {fmtTime(call.calledAt)}
+               {fmtTime(displayCalledAt)}
              </div>
              {call.confirmedAt && (
                <div style={{ display: 'flex', alignItems: 'center', gap: 3, color: '#10b981' }}>
@@ -849,11 +875,11 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
         authorizedPerson: c.guardianName,
         loggedBy: c.operatorId || 'Sistema',
         date: dateStr,
-        time: new Date(c.calledAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        time: fmtTime(c.calledAt),
         calledAtMs: new Date(c.calledAt).getTime(),
         confirmedOut: !!pickUpCall,
         confirmedAt: pickUpCall
-          ? new Date(pickUpCall.confirmedAt || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          ? fmtTime(pickUpCall.confirmedAt || pickUpCall.calledAt)
           : undefined
       }
     })

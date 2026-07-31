@@ -16,12 +16,36 @@ import {
 // ── Helper functions ──
 function fmtDate(iso?: string) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  try {
+    let str = String(iso).trim()
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-03:00'
+    }
+    const d = new Date(str)
+    if (isNaN(d.getTime())) return String(iso)
+    return d.toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return String(iso)
+  }
 }
 
 function fmtTime(iso?: string) {
   if (!iso) return '—'
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  try {
+    let str = String(iso).trim()
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+      const [h, m] = str.split(':').map(Number)
+      const dateToday = new Date().toISOString().split('T')[0]
+      str = `${dateToday}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
+    } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-03:00'
+    }
+    const d = new Date(str)
+    if (isNaN(d.getTime())) return str
+    return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return String(iso)
+  }
 }
 
 function normalizeDay(day: string): string {

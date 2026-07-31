@@ -18,6 +18,54 @@ import { useQueryClient } from '@tanstack/react-query'
 import * as XLSX from 'xlsx'
 import { formatPhone, isValidStudentPhoto } from '@/lib/utils'
 
+function cleanName(str: any): string {
+  if (!str) return ''
+  const s = typeof str === 'object' ? (str.nome || str.name || str.nomeCompleto || str.nome_completo || '') : String(str)
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+}
+
+function isSamePerson(r1: any, r2: any): boolean {
+  if (!r1 || !r2) return false
+  
+  const id1 = String(r1.id || r1.codigo || '').trim()
+  const id2 = String(r2.id || r2.codigo || '').trim()
+  if (id1 && id2 && id1 === id2) return true
+
+  const e1 = (r1.email || '').trim().toLowerCase()
+  const e2 = (r2.email || '').trim().toLowerCase()
+  if (e1 && e2 && e1.includes('@') && e1 === e2) return true
+
+  const t1 = (r1.telefone || r1.celular || '').replace(/\D/g, '')
+  const t2 = (r2.telefone || r2.celular || '').replace(/\D/g, '')
+  if (t1 && t2 && t1.length >= 8 && t1 === t2) return true
+
+  const n1 = cleanName(r1)
+  const n2 = cleanName(r2)
+
+  if (!n1 || !n2) return false
+  if (n1 === n2) return true
+
+  const w1 = n1.replace(/[^a-z0-9\s]/g, ' ').split(' ').filter(Boolean)
+  const w2 = n2.replace(/[^a-z0-9\s]/g, ' ').split(' ').filter(Boolean)
+
+  if (w1.length < 2 || w2.length < 2) return false
+  if (w1[0] !== w2[0] || w1[w1.length - 1] !== w2[w2.length - 1]) return false
+
+  const mid1 = w1.slice(1, -1)
+  const mid2 = w2.slice(1, -1)
+  if (mid1.length === 0 || mid2.length === 0) return true
+
+  const [shorter, longer] = mid1.length <= mid2.length ? [mid1, mid2] : [mid2, mid1]
+  return shorter.every(sWord => {
+    return longer.some(lWord => lWord === sWord || (sWord.length === 1 && lWord.startsWith(sWord)))
+  })
+}
+
 function formatName(fullName: string) {
   if (!fullName) return ''
   const parts = fullName.trim().split(/\s+/)
@@ -74,7 +122,7 @@ export default function AlunosPage() {
   const [editingAlunoId, setEditingAlunoId] = useState<string | null>(null)
   const [mostrarFormResponsavel, setMostrarFormResponsavel] = useState(false)
   const [statusFiltro, setStatusFiltro] = useState('todos')
-  const [itensPorPagina, setItensPorPagina] = useState(5)
+  const [itensPorPagina, setItensPorPagina] = useState(10)
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
@@ -676,7 +724,25 @@ export default function AlunosPage() {
   const [loadingBuscaResp, setLoadingBuscaResp] = useState(false)
   const [validationErrors, setValidationErrors] = useState<any[]>([])
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
+  const [respToDelete, setRespToDelete] = useState<{ index: number; nome: string } | null>(null)
   const hasError = (fieldId: string) => validationErrors.some(e => e.field === fieldId)
+
+  // Trava a rolagem da página de fundo (body scroll lock) quando qualquer modal está aberto
+  const isAnyModalOpen = isModalOpen || isImportModalOpen || isHelpModalOpen || isFiltrosAvancadosModalOpen || isExportModalOpen || isValidationModalOpen || !!respToDelete
+
+  useEffect(() => {
+    if (isAnyModalOpen) {
+      document.body.style.overflow = 'hidden'
+      document.documentElement.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+      document.documentElement.style.overflow = ''
+    }
+  }, [isAnyModalOpen])
 
   const handleBuscarResponsavel = async () => {
     if (!buscaResponsavel.trim()) return
@@ -1104,11 +1170,39 @@ export default function AlunosPage() {
               ? [typeof aluno.responsavel === 'string' ? { nome: aluno.responsavel } : aluno.responsavel]
               : []
             );
-        if (rawResps.length === 0) {
-          const randCode = Math.floor(1000000 + Math.random() * 9000000).toString();
+
+        // Deduplica os responsáveis por pessoa única no frontend
+        const uniqueResps: any[] = [];
+        rawResps.forEach((r: any) => {
+          if (!r || (!r.nome && !r.id)) return;
+
+          const existing = uniqueResps.find(u => isSamePerson(u, r));
+
+          if (existing) {
+            const respId = String(r.id || r.codigo || '').trim();
+            if (!existing.id && respId) {
+              existing.id = respId;
+              existing.codigo = respId;
+            }
+            if (r.isFinanceiro || r.resp_financeiro) existing.isFinanceiro = true;
+            if (r.isPedagogico || r.resp_pedagogico) existing.isPedagogico = true;
+            if (r.isOutro || r.resp_outro) existing.isOutro = true;
+            if (r.parentesco && ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)) {
+              existing.parentesco = r.parentesco;
+            }
+            if (r.email && !existing.email) existing.email = r.email;
+            if (r.telefone && !existing.telefone) existing.telefone = r.telefone;
+            if (r.rfid && !existing.rfid) existing.rfid = r.rfid;
+            if (r.dataNasc && !existing.dataNasc) existing.dataNasc = r.dataNasc;
+            if (r.nome && r.nome.length > existing.nome.length) existing.nome = r.nome;
+          } else {
+            uniqueResps.push({ ...r });
+          }
+        });
+        if (uniqueResps.length === 0) {
           return [{
-            id: randCode,
-            codigo: randCode,
+            id: '',
+            codigo: '',
             nome: '',
             dataNasc: '',
             email: '',
@@ -1124,8 +1218,9 @@ export default function AlunosPage() {
             proibido: false
           }];
         }
-        return rawResps.map((r: any) => {
-          const respId = String(r.id || r.codigo || Math.floor(1000000 + Math.random() * 9000000)).trim();
+
+        return uniqueResps.map((r: any) => {
+          const respId = String(r.id || r.codigo || '').trim();
           return {
             id: respId,
             codigo: respId,
@@ -1851,76 +1946,68 @@ export default function AlunosPage() {
                       </td>
                       <td style={{ maxWidth: 220, whiteSpace: 'nowrap' }}>
                         <div style={{ fontSize: 11, color: '#64748b', display: 'flex', flexDirection: 'column', gap: 6, whiteSpace: 'nowrap' }}>
-                          {aluno.responsaveis && aluno.responsaveis.length > 0 
-                            ? aluno.responsaveis.map((r: any, idx: number) => (
-                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                  <span style={{ fontWeight: 600, color: '#475569', lineHeight: 1.1 }} title={r.nome}>{formatName(r.nome)}</span>
-                                  {r.parentesco && (
-                                    <span style={{
-                                      padding: '2px 6px',
-                                      borderRadius: '6px',
-                                      fontSize: '9px',
-                                      fontWeight: 800,
-                                      textTransform: 'uppercase',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      background: r.parentesco === 'pai' 
-                                        ? 'rgba(59, 130, 246, 0.1)' 
-                                        : r.parentesco === 'mae' 
-                                          ? 'rgba(236, 72, 153, 0.1)' 
-                                          : 'rgba(139, 92, 246, 0.1)',
-                                      border: r.parentesco === 'pai' 
-                                        ? '1px solid rgba(59, 130, 246, 0.2)' 
-                                        : r.parentesco === 'mae' 
-                                          ? '1px solid rgba(236, 72, 153, 0.2)' 
-                                          : '1px solid rgba(139, 92, 246, 0.2)',
-                                      color: r.parentesco === 'pai' 
-                                        ? '#1d4ed8' 
-                                        : r.parentesco === 'mae' 
-                                          ? '#be185d' 
-                                          : '#6d28d9'
-                                    }}>
-                                      {r.parentesco}
-                                    </span>
-                                  )}
-                                </div>
-                              ))
-                            : (
+                          {(() => {
+                            const rawList = aluno.responsaveis && aluno.responsaveis.length > 0 ? aluno.responsaveis : [];
+                            const uniqueList: any[] = [];
+                            rawList.forEach((r: any) => {
+                              const existing = uniqueList.find(u => isSamePerson(u, r));
+                              if (existing) {
+                                if (!existing.id && r.id) existing.id = r.id;
+                                if (r.isFinanceiro) existing.isFinanceiro = true;
+                                if (r.isPedagogico) existing.isPedagogico = true;
+                                if (r.isOutro) existing.isOutro = true;
+                                if (r.parentesco && ['pai', 'mae', 'Pai', 'Mãe'].includes(r.parentesco)) {
+                                  existing.parentesco = r.parentesco;
+                                }
+                                if (r.nome && r.nome.length > existing.nome.length) {
+                                  existing.nome = r.nome;
+                                }
+                              } else {
+                                uniqueList.push({ ...r });
+                              }
+                            });
+                            if (uniqueList.length === 0) {
+                              const fallbackResp = aluno.responsavel?.nome || (typeof aluno.responsavel === 'string' ? aluno.responsavel : 'Nenhum');
+                              return (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-                                  <span style={{ fontWeight: 600, color: '#475569', lineHeight: 1.1 }} title={aluno.responsavel?.nome || (typeof aluno.responsavel === 'string' ? aluno.responsavel : 'Nenhum')}>
-                                    {formatName(aluno.responsavel?.nome || (typeof aluno.responsavel === 'string' ? aluno.responsavel : 'Nenhum'))}
-                                  </span>
-                                  {aluno.responsavel?.parentesco && (
-                                    <span style={{
-                                      padding: '2px 6px',
-                                      borderRadius: '6px',
-                                      fontSize: '9px',
-                                      fontWeight: 800,
-                                      textTransform: 'uppercase',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      background: aluno.responsavel.parentesco === 'pai' 
-                                        ? 'rgba(59, 130, 246, 0.1)' 
-                                        : aluno.responsavel.parentesco === 'mae' 
-                                          ? 'rgba(236, 72, 153, 0.1)' 
-                                          : 'rgba(139, 92, 246, 0.1)',
-                                      border: aluno.responsavel.parentesco === 'pai' 
-                                        ? '1px solid rgba(59, 130, 246, 0.2)' 
-                                        : aluno.responsavel.parentesco === 'mae' 
-                                          ? '1px solid rgba(236, 72, 153, 0.2)' 
-                                          : '1px solid rgba(139, 92, 246, 0.2)',
-                                      color: aluno.responsavel.parentesco === 'pai' 
-                                        ? '#1d4ed8' 
-                                        : aluno.responsavel.parentesco === 'mae' 
-                                          ? '#be185d' 
-                                          : '#6d28d9'
-                                    }}>
-                                      {aluno.responsavel.parentesco}
-                                    </span>
-                                  )}
+                                  <span style={{ fontWeight: 600, color: '#475569', lineHeight: 1.1 }} title={fallbackResp}>{formatName(fallbackResp)}</span>
                                 </div>
-                              )
-                          }
+                              );
+                            }
+                            return uniqueList.map((r: any, idx: number) => (
+                              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                                <span style={{ fontWeight: 600, color: '#475569', lineHeight: 1.1 }} title={r.nome}>{formatName(r.nome)}</span>
+                                {r.parentesco && (
+                                  <span style={{
+                                    padding: '2px 6px',
+                                    borderRadius: '6px',
+                                    fontSize: '9px',
+                                    fontWeight: 800,
+                                    textTransform: 'uppercase',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    background: r.parentesco === 'pai' 
+                                      ? 'rgba(59, 130, 246, 0.1)' 
+                                      : r.parentesco === 'mae' 
+                                        ? 'rgba(236, 72, 153, 0.1)' 
+                                        : 'rgba(245, 158, 11, 0.12)',
+                                    border: r.parentesco === 'pai' 
+                                      ? '1px solid rgba(59, 130, 246, 0.2)' 
+                                      : r.parentesco === 'mae' 
+                                        ? '1px solid rgba(236, 72, 153, 0.2)' 
+                                        : '1px solid rgba(245, 158, 11, 0.3)',
+                                    color: r.parentesco === 'pai' 
+                                      ? '#1d4ed8' 
+                                      : r.parentesco === 'mae' 
+                                        ? '#be185d' 
+                                        : '#d97706'
+                                  }}>
+                                    {r.parentesco}
+                                  </span>
+                                )}
+                              </div>
+                            ));
+                          })()}
                         </div>
                       </td>
                       <td style={{ fontWeight: 600, color: '#1d4ed8', fontSize: 12, whiteSpace: 'nowrap' }}>
@@ -2035,7 +2122,6 @@ export default function AlunosPage() {
                 value={itensPorPagina}
                 onChange={e => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
               >
-                <option value={5}>5</option>
                 <option value={10}>10</option>
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -2406,10 +2492,10 @@ export default function AlunosPage() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const updated = formData.responsaveis.filter((_, i) => i !== index);
-                                  setFormData({ ...formData, responsaveis: updated });
-                                  if (updated.length === 0) setMostrarFormResponsavel(false);
-                                  setValidationErrors(prev => prev.filter(err => !err.field.startsWith(`resp_${index}_`)));
+                                  setRespToDelete({
+                                    index,
+                                    nome: resp.nome?.trim() || `Responsável #${index + 1}`
+                                  });
                                 }}
                                 style={{
                                   padding: '4px',
@@ -3278,6 +3364,67 @@ export default function AlunosPage() {
             >
               Entendido
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE VÍNCULO DO RESPONSÁVEL */}
+      {respToDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div 
+            className="glass-card ultra-modal modal-enter-active" 
+            style={{ width: '100%', maxWidth: 460, padding: 32, textAlign: 'center', position: 'relative', boxShadow: '0 30px 60px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)' }}
+          >
+            <button 
+              onClick={() => setRespToDelete(null)} 
+              style={{ position: 'absolute', top: 20, right: 20, width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b', transition: 'all 0.2s' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.1)'; e.currentTarget.style.color = '#0f172a' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)'; e.currentTarget.style.color = '#64748b' }}
+            >
+              <X size={16} />
+            </button>
+
+            <div style={{ width: 64, height: 64, borderRadius: 20, background: 'rgba(239, 68, 68, 0.1)', border: '1.5px dashed rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+              <Trash2 size={28} color="#ef4444" />
+            </div>
+
+            <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', fontFamily: 'Outfit, sans-serif' }}>Excluir Vínculo do Responsável</h3>
+            <p style={{ fontSize: 13, color: '#64748b', lineHeight: '1.6', margin: '0 0 16px' }}>
+              Tem certeza que deseja remover o vínculo de <strong style={{ color: '#0f172a' }}>{respToDelete.nome}</strong> com este aluno?
+            </p>
+
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 16px', borderRadius: 12, marginBottom: 24, fontSize: 12, color: '#991b1b', textAlign: 'left', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <AlertTriangle size={18} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>Esta ação é <strong>irreversível</strong>. A remoção do vínculo será aplicada ao finalizar o cadastro do aluno.</span>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setRespToDelete(null)}
+                style={{ flex: 1, padding: '12px 16px', borderRadius: 12, background: '#f1f5f9', color: '#475569', border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
+                onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const index = respToDelete.index;
+                  const updated = formData.responsaveis.filter((_, i) => i !== index);
+                  setFormData({ ...formData, responsaveis: updated });
+                  if (updated.length === 0) setMostrarFormResponsavel(false);
+                  setValidationErrors(prev => prev.filter(err => !err.field.startsWith(`resp_${index}_`)));
+                  setRespToDelete(null);
+                }}
+                style={{ flex: 1, padding: '12px 16px', borderRadius: 12, background: '#ef4444', color: '#fff', border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+              >
+                Sim, Excluir Vínculo
+              </button>
+            </div>
           </div>
         </div>
       )}
