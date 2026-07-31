@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, Plus, Minus, FileText } from 'lucide-react';
+import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, Plus, Minus, FileText, LayoutList } from 'lucide-react';
 import { useState } from 'react';
 import { HtmlContent } from '../HtmlContent';
 import { DraggableHeaderField } from './DraggableHeaderField';
@@ -36,6 +36,9 @@ export function PageContent({
 }: any) {
   const isLastRedacaoPage = adicionarPaginaRedacao && pIndex === totalPages - 1 && pIndex > 0;
   const [imgMenuOpen, setImgMenuOpen] = useState<string | null>(null);
+  const [altLinesModalOpen, setAltLinesModalOpen] = useState<{ qId: string, altId: string, altParts: any[], q: any, a: any } | null>(null);
+  const [altLinesCount, setAltLinesCount] = useState<number>(3);
+  const [altLinesType, setAltLinesType] = useState<'pautado' | 'branco'>('pautado');
   const [mainImgMenuOpen, setMainImgMenuOpen] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState<string | null>(null);
   const [linesCount, setLinesCount] = useState<number>(5);
@@ -157,6 +160,15 @@ export function PageContent({
             transition: opacity 0.2s;
           }
           .alt-hover-group:hover .alt-img-actions {
+            opacity: 1;
+            pointer-events: auto;
+          }
+          .alt-hover-group .alt-lines-btn {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+          }
+          .alt-hover-group:hover .alt-lines-btn {
             opacity: 1;
             pointer-events: auto;
           }
@@ -703,7 +715,57 @@ export function PageContent({
                             </div>
                           );
                         })()}
-                        <div style={alternativasLayout === 'horizontal' ? { display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 4 } : { marginTop: 4 }}>
+                        {/* Per-question columns toggle — 1col/2col/3col */}
+                        {!readOnly && q.tipo_questao !== 'descritiva' && q.tipo_questao !== 'texto_apoio' && q.simulados_alternativas?.length > 0 && onEditEnunciado && (() => {
+                          const metaAltCols = (() => {
+                            const m = (q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
+                            return m ? parseInt(m[1]) : 1;
+                          })();
+                          const metaRegex = /(<meta[^>]+>)/ig;
+                          const setAltCols = (n: number) => {
+                            const currentMeta = (q.enunciado || '').match(metaRegex) || [];
+                            const otherMetas = currentMeta.filter((mt: string) => !mt.includes('alt-cols'));
+                            const newMetaTag = n > 1 ? `<meta name="alt-cols" content="${n}">` : '';
+                            const strippedEnun = (q.enunciado || '').replace(metaRegex, '').trim();
+                            const allMetas = [...otherMetas, ...(newMetaTag ? [newMetaTag] : [])];
+                            const newEnun = allMetas.length > 0 ? allMetas.join('\n') + '\n' + strippedEnun : strippedEnun;
+                            onEditEnunciado(q.id, newEnun);
+                            forceRepaginate();
+                          };
+                          return (
+                            <div className="no-print" style={{ position: 'absolute', right: -42, bottom: 0, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {[1, 2, 3].map(n => {
+                                const isActive = metaAltCols === n;
+                                return (
+                                  <button
+                                    key={n}
+                                    title={n === 1 ? 'Alternativas em 1 coluna' : `Alternativas em ${n} colunas`}
+                                    onClick={() => setAltCols(n)}
+                                    style={{
+                                      width: 32, height: 22, borderRadius: 6,
+                                      border: isActive ? 'none' : '1px solid #cbd5e1',
+                                      background: isActive ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#f8fafc',
+                                      color: isActive ? 'white' : '#64748b',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      cursor: 'pointer', fontSize: 9, fontWeight: 800, letterSpacing: '-0.5px',
+                                      boxShadow: isActive ? '0 2px 6px rgba(99,102,241,0.4)' : '0 1px 2px rgba(0,0,0,0.05)'
+                                    }}
+                                  >
+                                    {n}col
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+
+                        <div style={(() => {
+                          const m = (q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
+                          const cols = m ? parseInt(m[1]) : 1;
+                          return cols > 1
+                            ? { display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: '4px 16px', marginTop: 4, alignItems: 'start' as const }
+                            : (alternativasLayout === 'horizontal' ? { display: 'flex', flexWrap: 'wrap' as const, gap: 24, marginTop: 4 } : { marginTop: 4 });
+                        })()}>
                           {(() => {
                             const imgWidths = q.simulados_alternativas
                               ?.filter((a: any) => a.imagem_url)
@@ -740,12 +802,22 @@ export function PageContent({
                                 onEditAlternativaImage?.(q.id, a.id, `${imgBaseUrl}#${p.toString()}`);
                               };
                               
+                              const altParts = parseEnunciadoParts(a.texto || '', []);
+                              const saveAltParts = (newParts: any[]) => {
+                                const newTexto = newParts.map((p: any) => {
+                                  if (p.type === 'text') return p.content || '';
+                                  if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
+                                  return '';
+                                }).join('');
+                                onEditAlternativa(q.id, a.id, newTexto);
+                                forceRepaginate();
+                              };
+
                               return (
                                 <div key={a.id} className="alt-hover-group" style={{ 
                                   display: 'flex', gap: 12, 
-                                  marginTop: alternativasLayout === 'vertical' ? 8 : 0, 
+                                  marginTop: 6, 
                                   alignItems: 'flex-start', position: 'relative',
-                                  flex: alternativasLayout === 'horizontal' ? (effectiveWidth ? '0 0 auto' : '1 1 200px') : '1 1 auto',
                                   zIndex: imgMenuOpen === `${q.id}-${a.id}` ? 50 : 1
                                 }}>
                                   <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
@@ -849,15 +921,63 @@ export function PageContent({
                                       </div>
                                     )}
                                   
-                                  <HtmlContent 
-                                    editable={!readOnly}
-                                    html={a.texto}
-                                    onBlurHtml={(newHtml) => {
-                                      onEditAlternativa(q.id, a.id, newHtml);
-                                      forceRepaginate();
-                                    }}
-                                    style={{ wordBreak: 'break-word', outline: 'none', fontSize: `${alternativasFontSize}px` }}
-                                  />
+                                  <div style={{ position: 'relative' }}>
+                                      {altParts.map((part: any, pIdx: number) => {
+                                        if (part.type === 'text') {
+                                          return (
+                                            <HtmlContent
+                                              key={`alt-text-${pIdx}`}
+                                              editable={!readOnly}
+                                              html={part.content || ''}
+                                              onBlurHtml={(newHtml: string) => {
+                                                const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
+                                                saveAltParts(updated);
+                                              }}
+                                              style={{ wordBreak: 'break-word', outline: 'none', fontSize: `${alternativasFontSize}px` }}
+                                            />
+                                          );
+                                        }
+                                        if (part.type === 'lines') {
+                                          return (
+                                            <div key={`alt-lines-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
+                                              {Array.from({ length: part.count }).map((_: any, li: number) => (
+                                                <div key={li} style={{ position: 'relative', width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }}>
+                                                  {part.style !== 'branco' && (
+                                                    <div style={{ position: 'absolute', left: -22, bottom: 0, width: 18, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', paddingRight: 4, fontSize: '8pt', color: '#a1a1aa', fontWeight: 500, userSelect: 'none', height: 22 }}>
+                                                      {li + 1}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              ))}
+                                              {!readOnly && (
+                                                <div className="no-print alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
+                                                  <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Remover uma linha">-</button>
+                                                  <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Adicionar uma linha">+</button>
+                                                  <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      })}
+                                      {!readOnly && onEditAlternativa && (
+                                        <button
+                                          className="no-print alt-lines-btn"
+                                          title="Adicionar Linhas / Espaço à alternativa"
+                                          onClick={() => {
+                                            const hasLines = altParts.some((p: any) => p.type === 'lines');
+                                            if (hasLines) { alert('Esta alternativa já possui linhas/espaço. Use os botões + e − para ajustar.'); return; }
+                                            setAltLinesCount(3);
+                                            setAltLinesType('pautado');
+                                            setAltLinesModalOpen({ qId: q.id, altId: a.id, altParts, q, a });
+                                          }}
+                                          style={{ position: 'absolute', bottom: -20, left: 0, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', boxShadow: '0 2px 6px rgba(99,102,241,0.4)', zIndex: 10 }}
+                                        >
+                                          <Plus size={12} />
+                                        </button>
+                                      )}
+                                    </div>
 
                                 {onEditAlternativaImage && !readOnly && (
                                   <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === `${q.id}-${a.id}` ? 1 : undefined, pointerEvents: imgMenuOpen === `${q.id}-${a.id}` ? 'auto' : undefined }}>
@@ -1857,6 +1977,68 @@ export function PageContent({
               >
                 Confirmar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alt Lines Modal */}
+      {altLinesModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+          onClick={() => setAltLinesModalOpen(null)}>
+          <div style={{ background: 'white', borderRadius: 20, padding: 28, width: 380, boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
+            onClick={e => e.stopPropagation()}
+            onKeyDown={e => { if (e.key === 'Enter') {
+              const { qId, altId, altParts } = altLinesModalOpen;
+              const newParts = [...altParts, { type: 'lines', count: altLinesCount, style: altLinesType }];
+              const newTexto = newParts.map((p: any) => { if (p.type === 'text') return p.content || ''; if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`; return ''; }).join('');
+              onEditAlternativa(qId, altId, newTexto);
+              forceRepaginate();
+              setAltLinesModalOpen(null);
+            }}}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Plus size={18} color="white" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>Linhas na Alternativa {altLinesModalOpen.a?.letra}</div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>Escolha o tipo e a quantidade</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+              {(['pautado', 'branco'] as const).map(type => (
+                <button key={type} onClick={() => setAltLinesType(type)} style={{ flex: 1, padding: '12px 8px', borderRadius: 12, border: altLinesType === type ? 'none' : '1.5px solid #e2e8f0', background: altLinesType === type ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#f8fafc', color: altLinesType === type ? 'white' : '#475569', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                  {type === 'pautado' ? '📝 Linhas Pautadas' : '⬜ Espaço em Branco'}
+                </button>
+              ))}
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8 }}>Quantidade de linhas</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                {[1, 2, 3, 4, 5, 6, 8, 10, 12, 15].map(n => (
+                  <button key={n} onClick={() => setAltLinesCount(n)} style={{ width: 36, height: 36, borderRadius: 8, border: altLinesCount === n ? 'none' : '1px solid #e2e8f0', background: altLinesCount === n ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#f8fafc', color: altLinesCount === n ? 'white' : '#475569', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>{n}</button>
+                ))}
+              </div>
+              <input type="number" min={1} max={50} value={altLinesCount} onChange={e => setAltLinesCount(Math.max(1, parseInt(e.target.value) || 1))} style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1.5px solid #e2e8f0', fontSize: 14, fontWeight: 600, outline: 'none', textAlign: 'center' }} />
+            </div>
+            <div style={{ marginBottom: 20, padding: 12, background: '#f8fafc', borderRadius: 12 }}>
+              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 }}>Pré-visualização</div>
+              {Array.from({ length: Math.min(5, altLinesCount) }).map((_, i) => (
+                <div key={i} style={{ height: 20, borderBottom: altLinesType === 'branco' ? 'none' : '1px solid #000', marginBottom: 2 }} />
+              ))}
+              {altLinesCount > 5 && <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 4 }}>+ {altLinesCount - 5} linhas</div>}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setAltLinesModalOpen(null)} style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #e2e8f0', background: '#f8fafc', color: '#64748b', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={() => {
+                const { qId, altId, altParts } = altLinesModalOpen!;
+                const newParts = [...altParts, { type: 'lines', count: altLinesCount, style: altLinesType }];
+                const newTexto = newParts.map((p: any) => { if (p.type === 'text') return p.content || ''; if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`; return ''; }).join('');
+                onEditAlternativa(qId, altId, newTexto);
+                forceRepaginate();
+                setAltLinesModalOpen(null);
+              }} style={{ flex: 2, padding: '12px 0', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>✓ Confirmar</button>
             </div>
           </div>
         </div>
