@@ -254,6 +254,25 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
     return calls.sort((a, b) => (priority[a.status] || 99) - (priority[b.status] || 99))
   }, [activeCalls, gId, meusAlunosIds])
 
+  const isStudentConfirmedToday = useCallback((studentId: string) => {
+    if (!studentId) return false;
+    const c = activeCalls.find(ac => String(ac.studentId) === String(studentId) && ac.status === 'confirmed');
+    if (c) return true;
+    
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(`edu-confirmed-exit-${studentId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) {
+            return true;
+          }
+        }
+      } catch (e) {}
+    }
+    return false;
+  }, [activeCalls]);
+
   const [pendingStudentIds, confirmedStudentIds, specialStudentIds] = React.useMemo(() => {
     const pending = new Set<string>()
     const confirmed = new Set<string>()
@@ -278,25 +297,52 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
   const confirmedCalls = myCalls.filter(c => c.status === 'confirmed' && confirmedStudentIds.has(String(c.studentId)))
   const specialAuthCalls = myCalls.filter(c => c.status === 'special_auth' && specialStudentIds.has(String(c.studentId)))
 
-  const hasPending = pendingStudentIds.size > 0
-  const hasConfirmed = confirmedStudentIds.size > 0
-  const hasSpecialAuth = specialStudentIds.size > 0
-
   const pendingCount = pendingStudentIds.size
   const specialCount = specialStudentIds.size
 
-  // Is the current student's call specifically active or special?
+  // Is the current student's call specifically active, confirmed, or special?
   const myCall = myCalls.find(c => String(c.studentId) === String(aluno?.id))
   const isBlocked = myCall?.status === 'blocked'
 
-  // The button should be green ONLY if there is a confirmed call and NO pending calls AND NO active special authorizations
-  const isConfirmed = (!hasPending && !hasSpecialAuth) && (hasConfirmed || localConfirmed)
+  // The button for THIS student should be green ONLY if THIS specific student was confirmed
+  const isConfirmed = isStudentConfirmedToday(aluno?.id) || localConfirmed
 
-  // We show active state if there is any pending call
-  const isActiveState = hasPending
+  // We show active state for THIS student if THIS student is in pending calls
+  const isActiveState = pendingStudentIds.has(String(aluno?.id)) || myCall?.status === 'waiting' || myCall?.status === 'called'
 
-  // We show special auth state if there are special auths and NO pending and NO confirmed
-  const isSpecialAuth = hasSpecialAuth && !hasPending && !isConfirmed
+  // We show special auth state for THIS student if THIS student is in special_auth
+  const isSpecialAuth = specialStudentIds.has(String(aluno?.id)) || myCall?.status === 'special_auth'
+
+  // Summary of OTHER students linked to this guardian
+  const otherStudentsSummary = useMemo(() => {
+    if (!meusAlunos || meusAlunos.length <= 1 || !aluno?.id) return null;
+    const otherStudents = meusAlunos.filter((a: any) => String(a.id) !== String(aluno?.id));
+    if (otherStudents.length === 0) return null;
+
+    let confirmedCount = 0;
+    let pendingCount = 0;
+
+    for (const os of otherStudents) {
+      const sId = String(os.id);
+      if (isStudentConfirmedToday(sId)) {
+        confirmedCount++;
+      } else if (pendingStudentIds.has(sId) || activeCalls.some(ac => String(ac.studentId) === sId && (ac.status === 'waiting' || ac.status === 'called'))) {
+        pendingCount++;
+      }
+    }
+
+    if (confirmedCount === 0 && pendingCount === 0) return null;
+
+    const parts = [];
+    if (confirmedCount > 0) {
+      parts.push(confirmedCount === 1 ? '1 outro aluno já retirado' : `${confirmedCount} outros alunos já retirados`);
+    }
+    if (pendingCount > 0) {
+      parts.push(pendingCount === 1 ? '1 outro em chamada' : `${pendingCount} outros em chamada`);
+    }
+
+    return parts.join(' • ');
+  }, [meusAlunos, aluno?.id, isStudentConfirmedToday, pendingStudentIds, activeCalls]);
 
   const callLabel = pendingCount > 1 ? 'Chamando Alunos' : 'Chamando Aluno'
 
@@ -384,6 +430,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           background: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)',
           color: 'white',
           boxShadow: '0 12px 28px rgba(99,102,241,0.25)',
+          padding: otherStudentsSummary ? '8px 16px' : '0 16px',
         }}
         onMouseEnter={e => {
           e.currentTarget.style.transform = 'translateY(-2px)'
@@ -394,9 +441,16 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           e.currentTarget.style.boxShadow = '0 12px 28px rgba(99,102,241,0.25)'
         }}
       >
-        <Megaphone size={18} style={{ strokeWidth: 2.2 }} />
-        <span className="ad-call-btn-label">Chamar Aluno</span>
-        <span className="ad-call-btn-arrow" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', opacity: 0.8 }}>
+        <Megaphone size={18} style={{ strokeWidth: 2.2, flexShrink: 0 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Chamar Aluno</span>
+          {otherStudentsSummary && (
+            <span style={{ fontSize: 10, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
+              {otherStudentsSummary}
+            </span>
+          )}
+        </div>
+        <span className="ad-call-btn-arrow" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', opacity: 0.8, flexShrink: 0 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </span>
       </button>
@@ -619,7 +673,7 @@ export default function ADInnerLayout({
   const { turmas = [] } = useData();
   const { adConfig, setAdLoading } = useAgendaDigital();
   const { currentUser, hydrated, setCurrentUser, setLoadingPath } = useApp()
-  const { callStudent, addSpecialAuth } = useSaida()
+  const { callStudent, addSpecialAuth, activeCalls = [] } = useSaida()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -1030,10 +1084,25 @@ export default function ADInnerLayout({
           }
           const isSelected = selectedAlunos.includes(a.id)
 
+          const isConfirmedExit = (() => {
+            if (activeCalls.some(c => String(c.studentId) === String(a.id) && c.status === 'confirmed')) return true;
+            try {
+              const stored = localStorage.getItem(`edu-confirmed-exit-${a.id}`);
+              if (stored) {
+                const parsed = JSON.parse(stored);
+                if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) return true;
+              }
+            } catch(e) {}
+            return false;
+          })();
+
+          const isPendingCall = activeCalls.some(c => String(c.studentId) === String(a.id) && (c.status === 'waiting' || c.status === 'called'));
+
           return (
             <div 
               key={a.id}
               onClick={() => {
+                if (isConfirmedExit) return;
                 if (isSelected) {
                   setSelectedAlunos(prev => prev.filter(id => id !== a.id))
                 } else {
@@ -1041,18 +1110,24 @@ export default function ADInnerLayout({
                 }
               }}
               style={{
-                background: isSelected ? 'rgba(99,102,241,0.05)' : 'rgba(0,0,0,0.02)',
-                border: `1px solid ${isSelected ? 'rgba(99,102,241,0.3)' : 'rgba(0,0,0,0.04)'}`,
+                background: isConfirmedExit 
+                  ? 'rgba(0,0,0,0.02)' 
+                  : isSelected ? 'rgba(99,102,241,0.05)' : 'rgba(0,0,0,0.02)',
+                border: `1px solid ${isConfirmedExit ? 'rgba(0,0,0,0.04)' : isSelected ? 'rgba(99,102,241,0.3)' : 'rgba(0,0,0,0.04)'}`,
                 borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center',
-                gap: 14, cursor: 'pointer', transition: 'all 0.2s',
+                gap: 14,
+                cursor: isConfirmedExit ? 'not-allowed' : 'pointer',
+                opacity: isConfirmedExit ? 0.6 : 1,
+                transition: 'all 0.2s',
               }}
             >
               <div style={{
                 width: 52, height: 52, borderRadius: 16, flexShrink: 0, overflow: 'hidden',
-                background: 'linear-gradient(135deg, #a855f7, #ec4899)',
+                background: isConfirmedExit ? '#cbd5e1' : 'linear-gradient(135deg, #a855f7, #ec4899)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 18, fontWeight: 900, color: '#fff',
-                boxShadow: isSelected ? '0 4px 16px rgba(168,85,247,0.25)' : 'none',
+                boxShadow: isSelected && !isConfirmedExit ? '0 4px 16px rgba(168,85,247,0.25)' : 'none',
+                filter: isConfirmedExit ? 'grayscale(0.6)' : 'none',
               }}>
                 {a.foto || a.imagem1
                   ? <img src={a.foto || a.imagem1} alt={a.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1060,27 +1135,60 @@ export default function ADInnerLayout({
                 }
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: isConfirmedExit ? '#64748b' : '#0f172a', fontFamily: 'Outfit, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {abbreviateName(a.nome || '')}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Turma:</span>
                   <span style={{
-                    fontSize: 11, fontWeight: 800, color: '#4f46e5',
-                    background: 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: 100,
+                    fontSize: 11, fontWeight: 800, color: isConfirmedExit ? '#64748b' : '#4f46e5',
+                    background: isConfirmedExit ? 'rgba(0,0,0,0.05)' : 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: 100,
                   }}>{aTurma}</span>
+
+                  {isConfirmedExit && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, color: '#059669',
+                      background: 'rgba(16,185,129,0.12)', padding: '2px 8px', borderRadius: 100,
+                      display: 'flex', alignItems: 'center', gap: 4
+                    }}>
+                      <CheckCircle2 size={12} /> Retirado
+                    </span>
+                  )}
+                  {isPendingCall && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, color: '#d97706',
+                      background: 'rgba(245,158,11,0.12)', padding: '2px 8px', borderRadius: 100,
+                      display: 'flex', alignItems: 'center', gap: 4
+                    }}>
+                      <Loader2 size={12} className="spin-anim" /> Em chamada
+                    </span>
+                  )}
                 </div>
               </div>
-              {/* Checkbox / Selected Indicator */}
-              <div style={{ 
-                width: 24, height: 24, borderRadius: 8, flexShrink: 0,
-                border: `2px solid ${isSelected ? '#6366f1' : 'rgba(0,0,0,0.15)'}`,
-                background: isSelected ? '#6366f1' : 'transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.2s'
-              }}>
-                {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
-              </div>
+              {/* Checkbox / Disabled Indicator */}
+              {isConfirmedExit ? (
+                <div 
+                  title="Aluno já retirado hoje"
+                  style={{ 
+                    width: 24, height: 24, borderRadius: 8, flexShrink: 0,
+                    border: '1px solid rgba(0,0,0,0.1)',
+                    background: 'rgba(0,0,0,0.04)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <X size={14} color="#94a3b8" strokeWidth={2.5} />
+                </div>
+              ) : (
+                <div style={{ 
+                  width: 24, height: 24, borderRadius: 8, flexShrink: 0,
+                  border: `2px solid ${isSelected ? '#6366f1' : 'rgba(0,0,0,0.15)'}`,
+                  background: isSelected ? '#6366f1' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all 0.2s'
+                }}>
+                  {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                </div>
+              )}
             </div>
           )
         })}
@@ -2413,10 +2521,25 @@ export default function ADInnerLayout({
                       vinculo={profileData?.vinculo} 
                       onOpenModal={() => { 
                         setIsSpecialAuthModalOpen(true); 
-                        if (profileData?.meusAlunos && profileData.meusAlunos.length > 0) {
-                          setSelectedAlunos(profileData.meusAlunos.map((a: any) => a.id));
+                        const all = profileData?.meusAlunos && profileData.meusAlunos.length > 0 ? profileData.meusAlunos : (aluno ? [aluno] : []);
+                        const isConfirmed = (sId: string) => {
+                          if (activeCalls.some(c => String(c.studentId) === String(sId) && c.status === 'confirmed')) return true;
+                          try {
+                            const stored = localStorage.getItem(`edu-confirmed-exit-${sId}`);
+                            if (stored) {
+                              const parsed = JSON.parse(stored);
+                              if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) return true;
+                            }
+                          } catch(e) {}
+                          return false;
+                        };
+                        const unconfirmedIds = all.filter((a: any) => !isConfirmed(a.id)).map((a: any) => a.id);
+                        if (unconfirmedIds.length > 0) {
+                          setSelectedAlunos(unconfirmedIds);
                         } else if (aluno?.id) {
                           setSelectedAlunos([aluno.id]);
+                        } else {
+                          setSelectedAlunos([]);
                         }
                       }} 
                       meusAlunos={profileData?.meusAlunos || []}
