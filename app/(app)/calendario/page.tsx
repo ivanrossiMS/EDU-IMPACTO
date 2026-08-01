@@ -408,7 +408,7 @@ export default function CalendarioPage() {
           let isProximo = false
           if (mesView === (hoje.getMonth() + 1)) {
             const diaHoje = hoje.getDate()
-            isProximo = p.dia >= diaHoje && p.dia <= (diaHoje + 7)
+            isProximo = p.dia === diaHoje
           }
           return { ...p, isProximo }
         }).sort((a: any, b: any) => a.dia - b.dia)

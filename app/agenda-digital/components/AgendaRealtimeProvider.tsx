@@ -115,6 +115,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               OneSignalNative.initialize(appId)
               ;(window as any).__OS_NATIVE_READY__ = true
               
+              // Solicitar permissão de notificação no Android 13+ e iOS
+              try {
+                await OneSignalNative.Notifications.requestPermission(true)
+              } catch (permErr: any) {
+                console.warn('📱 [OneSignal] Aviso permissão nativa:', permErr?.message)
+              }
+
               // Deep link nativo
               OneSignalNative.Notifications.addEventListener('click', (event: any) => {
                 const data = event?.notification?.additionalData || {}

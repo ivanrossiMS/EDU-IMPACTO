@@ -51,6 +51,8 @@ export async function GET(request: Request) {
     perfil: dbUser?.perfil || user.user_metadata?.perfil,
     cargo: dbUser?.cargo || user.user_metadata?.cargo,
     status: dbUser?.status || 'ativo',
+    responsavel_id: dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '',
+    aluno_id: dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
   };
 
   return NextResponse.json({ user: userData, ip }, {

@@ -541,18 +541,21 @@ export default function DashboardPage() {
               {aniversariantes.length === 0 ? (
                 <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhum neste mês.</div>
               ) : (
-                aniversariantes.slice(0, 3).map((aniv: any) => (
-                  <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #fdf2f8' }}>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(236, 72, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '14px', flexShrink: 0 }}>
-                      {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
+                aniversariantes.slice(0, 3).map((aniv: any) => {
+                  const isHoje = Number(aniv.dia) === hoje.getDate();
+                  return (
+                    <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #fdf2f8' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: '50%', background: isHoje ? 'rgba(236, 72, 153, 0.1)' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isHoje ? '#ec4899' : '#64748b', fontWeight: 800, fontSize: '14px', flexShrink: 0, border: isHoje ? '2px solid #fbcfe8' : '1px solid #e2e8f0' }}>
+                        {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
+                        <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase', marginTop: 2 }}>Aluno • {aniv.turma}</div>
+                      </div>
+                      <div style={{ fontSize: '11px', fontWeight: 900, color: isHoje ? '#ec4899' : '#64748b', flexShrink: 0, textTransform: 'uppercase' }}>Dia {aniv.dia}</div>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
-                      <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase', marginTop: 2 }}>Aluno • {aniv.turma}</div>
-                    </div>
-                    <div style={{ fontSize: '11px', fontWeight: 900, color: '#ec4899', flexShrink: 0, textTransform: 'uppercase' }}>Dia {aniv.dia}</div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
             
@@ -801,21 +804,24 @@ export default function DashboardPage() {
                   {aniversariantes
                     .filter((a: any) => anivFiltroAno === 'Todos' || a.anoLetivoId === anivFiltroAno)
                     .filter((a: any) => anivFiltroTurma === 'Todas' || a.turma === anivFiltroTurma)
-                    .map((aniv: any) => (
-                    <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: '16px', border: '1px solid #fce7f3', background: 'hsl(var(--bg-surface))bfd' }}>
-                      <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(236, 72, 153, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899', fontWeight: 800, fontSize: '18px', flexShrink: 0, border: '2px solid #fbcfe8' }}>
-                        {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '15px', fontWeight: 900, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
-                        <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4 }}>Turma • {aniv.turma}</div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#ec4899', padding: '8px 12px', borderRadius: 12, color: 'hsl(var(--bg-surface))' }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', opacity: 0.9 }}>Dia</span>
-                        <span style={{ fontSize: 18, fontWeight: 900, lineHeight: 1 }}>{aniv.dia}</span>
-                      </div>
-                    </div>
-                  ))}
+                    .map((aniv: any) => {
+                      const isHoje = Number(aniv.dia) === hoje.getDate();
+                      return (
+                        <div key={aniv.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: '16px', border: isHoje ? '1px solid #fce7f3' : '1px solid hsl(var(--border-subtle))', background: isHoje ? 'rgba(236, 72, 153, 0.04)' : 'hsl(var(--bg-surface))' }}>
+                          <div style={{ width: 56, height: 56, borderRadius: '50%', background: isHoje ? 'rgba(236, 72, 153, 0.1)' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isHoje ? '#ec4899' : '#64748b', fontWeight: 800, fontSize: '18px', flexShrink: 0, border: isHoje ? '2px solid #fbcfe8' : '2px solid #e2e8f0' }}>
+                            {aniv.foto ? <img src={aniv.foto} alt="" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : getInitials(aniv.nome)}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '15px', fontWeight: 900, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aniv.nome}</div>
+                            <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 4 }}>Turma • {aniv.turma}</div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: isHoje ? '#ec4899' : '#fff', border: isHoje ? 'none' : '1.5px solid #e2e8f0', padding: '8px 12px', borderRadius: 12, color: isHoje ? '#fff' : '#1e293b' }}>
+                            <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', opacity: 0.9, color: isHoje ? 'rgba(255,255,255,0.8)' : '#94a3b8' }}>Dia</span>
+                            <span style={{ fontSize: 18, fontWeight: 900, lineHeight: 1 }}>{aniv.dia}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   {aniversariantes
                     .filter((a: any) => anivFiltroAno === 'Todos' || a.anoLetivoId === anivFiltroAno)
                     .filter((a: any) => anivFiltroTurma === 'Todas' || a.turma === anivFiltroTurma).length === 0 && (

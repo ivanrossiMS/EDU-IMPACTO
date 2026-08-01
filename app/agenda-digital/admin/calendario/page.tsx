@@ -322,7 +322,7 @@ export default function CalendarioPage() {
           let isProximo = false
           if (mesView === (hoje.getMonth() + 1)) {
             const diaHoje = hoje.getDate()
-            isProximo = dia >= diaHoje && dia <= (diaHoje + 7)
+            isProximo = dia === diaHoje
           }
           return { ...p, dia, isProximo }
         }).sort((a: any, b: any) => a.dia - b.dia)

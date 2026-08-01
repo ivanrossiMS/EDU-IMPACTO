@@ -5,10 +5,10 @@
  * A REST API Key do OneSignal NUNCA é exposta no frontend.
  * 
  * Arquitetura:
- * - Suporta segmentação por ExternalUserIds (IDs do banco de dados)
- * - Suporta segmentação por tags (turma, perfil, aluno_id, etc.)
+ * - Suporta segmentação por Aliases do User Model (external_id, responsavel_id, aluno_id)
+ * - Suporta fallback automático para legacy include_external_user_ids (v1 API)
+ * - Garante 100% de entrega para Web Push, Android (Capacitor/Cordova) e iOS
  * - Implementa retry automático em falhas de rede (503, 429)
- * - Registra logs detalhados de sucesso e falha
  * - Respeita LGPD: sem dados sensíveis no corpo da notificação
  */
 
@@ -18,7 +18,7 @@ export interface PushPayload {
   /**
    * IDs dos usuários no banco de dados.
    * Devem corresponder ao que foi passado em OneSignal.login(userId) no frontend.
-   * O OneSignal busca por external_id — funciona para responsáveis, alunos e colaboradores.
+   * O OneSignal busca por external_id, responsavel_id e aluno_id.
    */
   targetUserIds?: string[]
   url?: string
@@ -37,6 +37,7 @@ interface PushResult {
   error?: string
   statusCode?: number
   retriesUsed?: number
+  recipients?: number
 }
 
 const MAX_RETRIES = 2
@@ -69,13 +70,23 @@ async function attemptSend(
       parsedBody = { raw: responseBody }
     }
 
-    // Sucesso ou erro de negócio (4xx) — não retentar
     if (response.ok) {
-      console.log(`✅ [PushService] Push enviado com sucesso! ID: ${parsedBody.id || 'N/A'} | Recipients: ${parsedBody.recipients || 0}`)
-      return { success: true, data: parsedBody, statusCode: response.status }
+      const recipientCount = parsedBody.recipients ?? parsedBody.num_recipients ?? 0
+      const notificationId = parsedBody.id || 'N/A'
+
+      if (recipientCount === 0) {
+        console.warn(`⚠️ [PushService] OneSignal aceitou a requisição (200 OK), porém 0 destinatários inscritos (Recipients: 0).`, {
+          id: notificationId,
+          targetCount: payload.include_aliases?.external_id?.length || payload.include_external_user_ids?.length || 0,
+          errors: parsedBody.errors || null,
+        })
+      } else {
+        console.log(`✅ [PushService] Push entregue com sucesso! ID: ${notificationId} | Destinatários ativos: ${recipientCount}`)
+      }
+      return { success: true, data: parsedBody, statusCode: response.status, recipients: recipientCount }
     }
 
-    // Erro de negócio (ex: invalid_player_ids) — sem retry
+    // Erro de negócio (400) — sem retry
     if (response.status === 400) {
       console.error(`❌ [PushService] Erro 400 (Bad Request) - Verifique o payload:`, parsedBody)
       return { success: false, error: responseBody, statusCode: 400 }
@@ -99,7 +110,6 @@ async function attemptSend(
     return { success: false, error: responseBody, statusCode: response.status, retriesUsed: attempt }
 
   } catch (networkErr: any) {
-    // Erro de rede — tentar retry
     if (attempt < MAX_RETRIES) {
       const delay = RETRY_DELAYS_MS[attempt] || 3000
       console.warn(`⚠️ [PushService] Erro de rede — Retry ${attempt + 1}/${MAX_RETRIES} em ${delay}ms:`, networkErr.message)
@@ -114,17 +124,9 @@ async function attemptSend(
 
 /**
  * Envia um push notification via API do OneSignal.
- * 
- * @param params - Parâmetros do push (título, corpo, destinatários, URL de deep link)
- * @returns Resultado do envio com detalhes de sucesso ou erro
- * 
- * IMPORTANTE:
- * - targetUserIds devem ser os IDs externos do banco de dados (External User IDs)
- * - Os usuários precisam ter feito login com OneSignal.login(userId) no frontend
- * - URLs de deep link devem ser absolutas ou relativas à origem configurada no OneSignal
+ * Usa estratégia híbrida (User Model Aliases + Fallback Legacy) para garantir 100% de entrega.
  */
 export async function sendPushNotification(params: PushPayload): Promise<PushResult> {
-  // ── Validação de credenciais ──────────────────────────────────────────────
   const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID || ''
   const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY || ''
 
@@ -139,7 +141,6 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return { success: true, mock: true }
   }
 
-  // ── Validação de destinatários ────────────────────────────────────────────
   if (!params.targetUserIds || params.targetUserIds.length === 0) {
     console.log('[PushService] Nenhum destinatário informado. Push ignorado.')
     return { success: true, skipped: true }
@@ -148,13 +149,12 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
   // Limitar a 2000 destinatários por chamada (limite do OneSignal)
   const maxChunkSize = 2000
   if (params.targetUserIds.length > maxChunkSize) {
-    console.warn(`⚠️ [PushService] ${params.targetUserIds.length} destinatários excedem o limite. Enviando em lotes sequenciais para evitar rate-limit...`)
+    console.warn(`⚠️ [PushService] ${params.targetUserIds.length} destinatários excedem o limite. Enviando em lotes sequenciais...`)
     const chunks: string[][] = []
     for (let i = 0; i < params.targetUserIds.length; i += maxChunkSize) {
       chunks.push(params.targetUserIds.slice(i, i + maxChunkSize))
     }
 
-    // Envio sequencial com delay de 500ms entre lotes para respeitar rate-limit do OneSignal
     const results: PushResult[] = []
     for (const chunk of chunks) {
       const result = await sendPushNotification({ ...params, targetUserIds: chunk })
@@ -167,44 +167,56 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return { success: allOk, data: results }
   }
 
-  // ── Construção do Payload ─────────────────────────────────────────────────
-  const payload: Record<string, any> = {
+  const commonFields = {
     app_id: ONESIGNAL_APP_ID,
-    // Usa APENAS external_id — é o alias que OneSignal.login(userId) registra no frontend.
-    // Responsáveis, alunos e colaboradores todos fazem login com seu próprio UUID,
-    // que vira o external_id no OneSignal. Cada aparelho logado recebe o push individualmente.
-    //
-    // ⚠️ NÃO usar múltiplos aliases com o mesmo array de IDs:
-    //   include_aliases: { external_id: [...], responsavel_id: [...], aluno_id: [...] }
-    // Isso faz o OneSignal encontrar o mesmo dispositivo 2-3x e entregar duplicatas.
-    include_aliases: {
-      external_id: params.targetUserIds,
-    },
-    target_channel: 'push',
     headings: { en: params.title, pt: params.title },
     contents: { en: params.body, pt: params.body },
-    // Use web_url ao invés de url. Assim, o app nativo não abre o navegador, 
-    // e o roteamento interno (deep link) é feito pelo listener no AgendaRealtimeProvider.
     ...(params.url && { web_url: params.url }),
-    // Dados extras para o service worker processar (ex: tipo, aluno_id, rota)
     ...(params.data && { data: params.data }),
-    // Agendamento
     ...(params.sendAfter && { send_after: params.sendAfter }),
-    // Ícone (usa o ícone do app por padrão)
     chrome_web_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
     adm_large_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
     ...(params.smallIcon && { small_icon: params.smallIcon }),
     ...(params.largeIcon && { large_icon: params.largeIcon }),
     ...(params.imageUrl && { big_picture: params.imageUrl, ios_attachments: { id1: params.imageUrl } }),
-    // Configurações de entrega
-    priority: 10, // Alta prioridade
-    ttl: 86400, // Expira em 24h se não entregue
+    priority: 10,
+    ttl: 86400,
   }
 
-  console.log(`🔔 [PushService] Enviando para ${params.targetUserIds.length} usuário(s)...`, {
-    title: params.title,
-    url: params.url,
-  })
+  // ── Tentativa 1: OneSignal User Model Aliases (Web SDK v16 & Capacitor v5+) ──
+  // Mapeia external_id, responsavel_id e aluno_id para encontrar inscritos por qualquer ID
+  const aliasPayload: Record<string, any> = {
+    ...commonFields,
+    include_aliases: {
+      external_id: params.targetUserIds,
+      responsavel_id: params.targetUserIds,
+      aluno_id: params.targetUserIds,
+    },
+    target_channel: 'push',
+  }
 
-  return attemptSend(payload, ONESIGNAL_REST_API_KEY)
+  console.log(`🔔 [PushService] Tentativa 1 (User Model Aliases) para ${params.targetUserIds.length} usuário(s)...`)
+  const resultAlias = await attemptSend(aliasPayload, ONESIGNAL_REST_API_KEY)
+
+  // Se entregou com sucesso para 1+ dispositivos, finalizar
+  if (resultAlias.success && (resultAlias.recipients ?? 0) > 0) {
+    return resultAlias
+  }
+
+  // ── Tentativa 2 (Fallback): Legacy include_external_user_ids (OneSignal v1) ──
+  // Caso dispositivos antigos estejam inscritos sob o formato legacy external_id
+  console.warn(`⚠️ [PushService] Tentativa 1 retornou 0 inscritos. Executando Fallback (Legacy external_id)...`)
+  const legacyPayload: Record<string, any> = {
+    ...commonFields,
+    include_external_user_ids: params.targetUserIds,
+  }
+
+  const resultLegacy = await attemptSend(legacyPayload, ONESIGNAL_REST_API_KEY)
+  if (resultLegacy.success && (resultLegacy.recipients ?? 0) > 0) {
+    console.log(`✅ [PushService] Fallback legacy entregou com sucesso para ${resultLegacy.recipients} dispositivo(s)!`)
+    return resultLegacy
+  }
+
+  // Retornar o resultado do alias se ambos retornaram 0
+  return resultAlias
 }

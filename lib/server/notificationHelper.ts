@@ -201,6 +201,31 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     // se inscrevem no OneSignal usando o alias 'aluno_id'.
     finalAlunosIds.forEach(id => allResponsavelIds.add(String(id)))
 
+    // ── Mapear IDs de responsáveis/alunos para system_users.id ───────────
+    // Garante que se o usuário logou com seu ID de system_user (Auth UUID), 
+    // a notificação o encontre mesmo se o destino foi especificado como responsavel_id
+    const rawIds = Array.from(allResponsavelIds)
+    if (rawIds.length > 0) {
+      try {
+        const { data: sysUsers } = await supabase
+          .from('system_users')
+          .select('id, dados, email')
+          .limit(5000)
+
+        if (sysUsers && sysUsers.length > 0) {
+          sysUsers.forEach((u: any) => {
+            const rId = u.dados?.responsavel_id || u.dados?.responsavelId
+            const aId = u.dados?.aluno_id || u.dados?.alunoId
+            if ((rId && rawIds.includes(String(rId))) || (aId && rawIds.includes(String(aId)))) {
+              allResponsavelIds.add(String(u.id))
+            }
+          })
+        }
+      } catch (sysErr) {
+        console.warn('[NotifHelper] Aviso ao expandir IDs via system_users:', sysErr)
+      }
+    }
+
     const result = Array.from(allResponsavelIds)
     console.log(`[NotifHelper] ${result.length} destinatário(s) resolvido(s) | turmas=${allGroupTerms.length} | alunos=${finalAlunosIds.length}`)
     return result
