@@ -258,7 +258,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const gerenciarUsuarioPush = async () => {
+    const gerenciarUsuarioPush = async (retryCount = 0) => {
       try {
         let isNative = false
         try {
@@ -267,10 +267,15 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
         let OS: any = null
         if (isNative) {
-          // Aguarda a inicialização nativa completar (appId) antes de logar
+          // Aguarda a inicialização nativa completar antes de logar
+          // Limite de 25 tentativas (~5 segundos) para evitar loop infinito
           if (!(window as any).__OS_NATIVE_READY__) {
-             setTimeout(() => gerenciarUsuarioPush(), 200)
-             return
+            if (retryCount >= 25) {
+              console.warn('[OneSignal] Nativo não inicializou após 25 tentativas. Abandonando.')
+              return
+            }
+            setTimeout(() => gerenciarUsuarioPush(retryCount + 1), 200)
+            return
           }
           const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
           OS = OneSignalNative
@@ -753,12 +758,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 function typeToRoute(type: string): string {
   const map: Record<string, string> = {
     comunicados: 'comunicados',
-    momentos: 'momentos',
-    calendario: 'calendario',
-    frequencia: 'frequencia',
+    momentos:    'momentos',
+    calendario:  'calendario',
+    frequencia:  'frequencia',
     ocorrencias: 'ocorrencias',
-    notas: 'notas',
-    cobrancas: 'financeiro',
+    notas:       'notas',
+    cobrancas:   'financeiro',
+    saida:       'portaria', // ← deep link de saída/portaria
   }
   return map[type] || ''
 }

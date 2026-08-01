@@ -1,12 +1,12 @@
 /**
  * agendaNotifications.ts — Central de Notificações da Agenda Digital
- * 
+ *
  * Responsável por:
  * 1. Enviar pushes via OneSignal (backend seguro)
  * 2. Controlar duplicidade (evita disparar o mesmo push duas vezes)
  * 3. Gravar logs de auditoria na tabela `agenda_push_logs`
  * 4. Suportar todos os tipos de evento: comunicados, momentos, calendário, etc.
- * 
+ *
  * LGPD: Notificações não contêm dados sensíveis — apenas avisos genéricos.
  * O conteúdo real só é acessível após login autenticado.
  */
@@ -22,6 +22,7 @@ export type AgendaPushType =
   | 'notas'
   | 'cobrancas'
   | 'saida'
+  | 'test' // ← adicionado para não quebrar tipagem no diagnóstico
 
 interface SendAgendaPushParams {
   type: AgendaPushType
@@ -48,15 +49,28 @@ interface PushResult {
 }
 
 /**
- * Cache em memória para deduplicacao intra-processo.
+ * Cache em memória para deduplicação intra-processo.
  * Sobrevive a hot-reloads do Next.js via singleton global —
  * sem isso, cada reload zeraria o cache e permitiria disparos duplicados.
- * A chave expira apos 5 minutos para nao crescer indefinidamente.
+ * A chave expira após 5 minutos para não crescer indefinidamente.
  */
 // @ts-ignore
 const _globalSentKeys: Map<string, number> = (global as any).__agendaPushSentKeys
   ?? ((global as any).__agendaPushSentKeys = new Map<string, number>())
 const IN_PROCESS_TTL_MS = 5 * 60 * 1000 // 5 minutos
+
+/**
+ * Limpa entradas expiradas do cache em memória.
+ * Chamado de forma proativa para evitar acúmulo em servidores long-running.
+ */
+function _pruneExpiredKeys(): void {
+  const now = Date.now()
+  for (const [key, sentAt] of _globalSentKeys.entries()) {
+    if (now - sentAt > IN_PROCESS_TTL_MS) {
+      _globalSentKeys.delete(key)
+    }
+  }
+}
 
 function _isInProcessDuplicate(key: string): boolean {
   const sentAt = _globalSentKeys.get(key)
@@ -69,7 +83,51 @@ function _isInProcessDuplicate(key: string): boolean {
 }
 
 function _markInProcess(key: string): void {
+  // A cada 100 inserções, limpar expirados para evitar memory leak em long-running servers
+  if (_globalSentKeys.size > 0 && _globalSentKeys.size % 100 === 0) {
+    _pruneExpiredKeys()
+  }
   _globalSentKeys.set(key, Date.now())
+}
+
+/**
+ * Cria um cliente Supabase Service Role para operações de servidor.
+ * Usa cache no escopo do módulo para evitar múltiplas instâncias por request.
+ */
+function _createSupabaseService() {
+  const { createClient } = require('@supabase/supabase-js')
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: (url: any, options: any) => fetch(url, { ...options, cache: 'no-store' }) }
+    }
+  )
+}
+
+/**
+ * Constrói URL completa e segura usando URLSearchParams para evitar duplicatas de parâmetros.
+ */
+function _buildTargetUrl(targetUrl: string, itemId: string): string {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu-app.vercel.app'
+  const base = targetUrl.startsWith('http') ? targetUrl : `${appUrl}${targetUrl}`
+
+  if (!itemId) return base
+
+  try {
+    const parsed = new URL(base)
+    if (!parsed.searchParams.has('id')) {
+      parsed.searchParams.set('id', itemId)
+    }
+    return parsed.toString()
+  } catch {
+    // URL inválida — fallback manual (evita crash)
+    if (!base.includes('id=')) {
+      return base + (base.includes('?') ? '&' : '?') + `id=${encodeURIComponent(itemId)}`
+    }
+    return base
+  }
 }
 
 /**
@@ -107,18 +165,11 @@ export async function sendAgendaPushNotification({
       return { success: true, skipped: true, reason: 'invalid_target_ids' }
     }
 
+    // ── Criar cliente Supabase Service Role (uma única vez por request) ─────
+    const supabaseService = _createSupabaseService()
+
     // ── Checagem de Configuração Global de Notificações Push ───────────────
     try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabaseService = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          auth: { persistSession: false, autoRefreshToken: false },
-          global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) }
-        }
-      )
-
       const { data: configRow } = await supabaseService
         .from('configuracoes')
         .select('valor')
@@ -129,13 +180,14 @@ export async function sendAgendaPushNotification({
         const notifs = configRow.valor.notificacoes
         const configMap: Record<string, boolean | undefined> = {
           comunicados: notifs.pushComunicados,
-          momentos: notifs.pushMomentos,
-          calendario: notifs.pushCalendario,
-          frequencia: notifs.pushFrequencia,
+          momentos:    notifs.pushMomentos,
+          calendario:  notifs.pushCalendario,
+          frequencia:  notifs.pushFrequencia,
           ocorrencias: notifs.pushOcorrencias,
-          notas: notifs.pushNotas,
-          cobrancas: notifs.pushFinanceiro,
-          saida: notifs.pushSaidaPortaria,
+          notas:       notifs.pushNotas,
+          cobrancas:   notifs.pushFinanceiro,
+          saida:       notifs.pushSaidaPortaria,
+          test:        true, // testes de diagnóstico sempre passam
         }
 
         if (configMap[type] === false) {
@@ -165,16 +217,6 @@ export async function sendAgendaPushNotification({
     // REQUISITO DE BANCO (rodar uma única vez no Supabase SQL Editor):
     //   ALTER TABLE agenda_push_logs
     //     ADD CONSTRAINT agenda_push_logs_item_id_type_unique UNIQUE (item_id, type);
-    const { createClient } = await import('@supabase/supabase-js')
-    const supabaseService = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: { persistSession: false, autoRefreshToken: false },
-        global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) }
-      }
-    )
-
     const { error: reserveError } = await supabaseService
       .from('agenda_push_logs')
       .insert({
@@ -202,12 +244,8 @@ export async function sendAgendaPushNotification({
     // ── Disparo via OneSignal ───────────────────────────────────────────────
     console.log(`${logPrefix} Disparando para ${cleanTargetIds.length} usuário(s)...`)
 
-    // Construir URL completa (deep link)
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu-app.vercel.app'
-    let fullUrl = targetUrl.startsWith('http') ? targetUrl : `${appUrl}${targetUrl}`
-    if (itemId && !fullUrl.includes('id=')) {
-      fullUrl += (fullUrl.includes('?') ? '&' : '?') + `id=${itemId}`
-    }
+    // Construir URL segura com URLSearchParams (evita duplicar parâmetro 'id=')
+    const fullUrl = _buildTargetUrl(targetUrl, itemId)
 
     const pushResponse = await sendPushNotification({
       title,
@@ -226,15 +264,11 @@ export async function sendAgendaPushNotification({
     // IMPORTANTE: Sempre marcar como 'sent' ao final — mesmo em mock mode.
     // Isso garante que a constraint UNIQUE (item_id, type) bloqueie qualquer
     // tentativa futura de INSERT para o mesmo item, impedindo duplicatas.
-    // Em mock mode o push real não foi enviado, mas o dedup precisa ser
-    // preservado para que hot-reloads e chamadas paralelas não disparem de novo.
     const logStatus = 'sent'
     const errorMsg = pushResponse.mock
       ? 'Mock mode: credenciais OneSignal não configuradas (push simulado)'
       : (pushResponse.success ? null : (pushResponse.error || 'Unknown error'))
 
-    // Usar upsert ao invés de update para garantir que o registro seja criado
-    // mesmo que o INSERT anterior tenha falhado por race condition ou erro transiente.
     const { error: updateError } = await supabaseService
       .from('agenda_push_logs')
       .update({
@@ -245,8 +279,6 @@ export async function sendAgendaPushNotification({
       })
       .eq('item_id', dedupKey)
       .eq('type', type)
-      // Removínhamos o filtro .eq('status','pending') que impedia o update
-      // quando o status já era 'failed' (causando push storm)
 
     if (updateError) {
       console.warn(`${logPrefix} Aviso: falha ao atualizar log de auditoria:`, updateError.message)

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
@@ -108,19 +108,22 @@ export async function POST(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     
     if (data && data.length > 0) {
-      const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data[0].aluno_id] })
-      if (targetIds.length > 0) {
-        const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data[0].aluno_id).single()
-        const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
-        await sendAgendaPushNotification({
-          type: 'notas',
-          itemId: String(data[0].id),
-          title: '🏆 Novas Notas Lançadas!',
-          message: `O boletim de ${nomeAluno} acabou de ser atualizado.`,
-          targetUserIds: targetIds,
-          targetUrl: `/agenda-digital/notas`
-        }).catch(err => console.error('Boletins Push Error:', err))
-      }
+      // Disparar push em background para não bloquear o response
+      after(async () => {
+        const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data[0].aluno_id] })
+        if (targetIds.length > 0) {
+          const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data[0].aluno_id).single()
+          const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+          await sendAgendaPushNotification({
+            type: 'notas',
+            itemId: String(data[0].id),
+            title: '🏆 Novas Notas Lançadas!',
+            message: `O boletim de ${nomeAluno} acabou de ser atualizado.`,
+            targetUserIds: targetIds,
+            targetUrl: `/agenda-digital/notas`
+          }).catch(err => console.error('Boletins Push Error:', err))
+        }
+      })
     }
 
     return NextResponse.json({ data })

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
@@ -76,21 +76,28 @@ export async function POST(request: Request) {
       const { error } = await supabase.from('ocorrencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-      for (const row of rows) {
-        const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
-        if (targetIds.length > 0) {
-          const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.aluno_id).single()
-          const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
-          await sendAgendaPushNotification({
-            type: 'ocorrencias',
-            itemId: String(row.id),
-            title: '⚠️ Aviso de Ocorrência',
-            message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
-            targetUserIds: targetIds,
-            targetUrl: `/agenda-digital/ocorrencias`
-          }).catch(err => console.error('Ocorrencia Push Error:', err))
+      // Disparar push em background para não bloquear o response (batch)
+      after(async () => {
+        const allPushPromises: Promise<any>[] = []
+        for (const row of rows) {
+          const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
+          if (targetIds.length > 0) {
+            const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.aluno_id).single()
+            const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+            allPushPromises.push(
+              sendAgendaPushNotification({
+                type: 'ocorrencias',
+                itemId: String(row.id),
+                title: '⚠️ Aviso de Ocorrência',
+                message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
+                targetUserIds: targetIds,
+                targetUrl: `/agenda-digital/ocorrencias`
+              }).catch(err => console.error('Ocorrencia Push Error:', err))
+            )
+          }
         }
-      }
+        await Promise.allSettled(allPushPromises)
+      })
 
       return NextResponse.json({ ok: true, count: rows.length })
     }
@@ -98,19 +105,22 @@ export async function POST(request: Request) {
     const { data, error } = await supabase.from('ocorrencias').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
-    if (targetIds.length > 0) {
-      const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
-      const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
-      sendAgendaPushNotification({
-        type: 'ocorrencias',
-        itemId: String(data.id),
-        title: '⚠️ Aviso de Ocorrência',
-        message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
-        targetUserIds: targetIds,
-        targetUrl: `/agenda-digital/ocorrencias`
-      }).catch(err => console.error('Ocorrencia Push Error:', err))
-    }
+    // Disparar push em background para não bloquear o response (single)
+    after(async () => {
+      const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
+      if (targetIds.length > 0) {
+        const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
+        const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+        await sendAgendaPushNotification({
+          type: 'ocorrencias',
+          itemId: String(data.id),
+          title: '⚠️ Aviso de Ocorrência',
+          message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
+          targetUserIds: targetIds,
+          targetUrl: `/agenda-digital/ocorrencias`
+        }).catch(err => console.error('Ocorrencia Push Error:', err))
+      }
+    })
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
   } catch (e: any) {

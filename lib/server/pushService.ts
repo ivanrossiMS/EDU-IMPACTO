@@ -148,16 +148,21 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
   // Limitar a 2000 destinatários por chamada (limite do OneSignal)
   const maxChunkSize = 2000
   if (params.targetUserIds.length > maxChunkSize) {
-    console.warn(`⚠️ [PushService] ${params.targetUserIds.length} destinatários excedem o limite. Enviando em lotes...`)
-    const chunks = []
+    console.warn(`⚠️ [PushService] ${params.targetUserIds.length} destinatários excedem o limite. Enviando em lotes sequenciais para evitar rate-limit...`)
+    const chunks: string[][] = []
     for (let i = 0; i < params.targetUserIds.length; i += maxChunkSize) {
       chunks.push(params.targetUserIds.slice(i, i + maxChunkSize))
     }
-    const results = await Promise.all(
-      chunks.map(chunk =>
-        sendPushNotification({ ...params, targetUserIds: chunk })
-      )
-    )
+
+    // Envio sequencial com delay de 500ms entre lotes para respeitar rate-limit do OneSignal
+    const results: PushResult[] = []
+    for (const chunk of chunks) {
+      const result = await sendPushNotification({ ...params, targetUserIds: chunk })
+      results.push(result)
+      if (chunks.indexOf(chunk) < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+    }
     const allOk = results.every(r => r.success)
     return { success: allOk, data: results }
   }

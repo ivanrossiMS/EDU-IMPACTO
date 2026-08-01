@@ -98,15 +98,15 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
         return []
       }
 
-      const ids = Array.from(new Set(
-        (data || []).map(d => d.responsavel_id).filter(Boolean).map(String)
-      ))
+      // Usar Set durante toda a construção para eliminar duplicatas desde o início
+      const idsSet = new Set<string>(
+        (data || []).map((d: any) => d.responsavel_id).filter(Boolean).map(String)
+      )
 
-      // Inclui colaboradores diretos (se existirem)
-      colaboradoresIds.forEach(id => {
-        if (id) ids.push(id)
-      })
+      // Inclui colaboradores diretos (Set garante que não há duplicatas)
+      colaboradoresIds.forEach(id => { if (id) idsSet.add(id) })
 
+      const ids = Array.from(idsSet)
       console.log(`[NotifHelper] 'Todos' selecionado. Retornando ${ids.length} destinatários.`)
       return ids
     }
@@ -148,17 +148,18 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       const { data: allTurmas, error: turmasError } = await supabase
         .from('turmas')
         .select('id, nome, codigo, ano, dados')
+        .limit(500) // evitar full-table scan em escolas grandes
 
       if (turmasError) {
         console.error('[NotifHelper] Erro ao buscar turmas:', turmasError.message)
       } else {
         const matchedTurmaIds = (allTurmas || [])
-          .filter(t => {
+          .filter((t: any) => {
             const tId = String(t.id).toLowerCase()
             const tNome = String(t.nome || '').toLowerCase()
             const tCod = String(t.codigo || '').toLowerCase()
             const tAno = t.ano !== undefined ? String(t.ano) : (t.dados?.anoLetivo || '')
-            
+
             return allGroupTerms.some(turma => {
               const tl = turma.toLowerCase().trim()
               if (tl.startsWith('todos:')) {
@@ -169,14 +170,14 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
                 tNome.includes(tl) || tl.includes(tNome)
             })
           })
-          .map(t => String(t.id))
+          .map((t: any) => String(t.id))
 
         // Busca por ID e por nome (backward compatibility)
         const allSearchTerms = Array.from(new Set([...allGroupTerms.filter(t => !t.toLowerCase().trim().startsWith('todos:')), ...matchedTurmaIds]))
 
         if (allSearchTerms.length > 0) {
           const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id', 'turma', allSearchTerms)
-          alunosTurma.forEach(a => targetAlunosSet.add(String(a.id)))
+          alunosTurma.forEach((a: any) => targetAlunosSet.add(String(a.id)))
         }
       }
     }
@@ -254,10 +255,10 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     let alunosToProcess: { id: string, nome: string }[] = []
 
     if (isTodos && !todosAnoMatch) {
-      // Busca TODOS os alunos
-      const { data, error } = await supabase.from('alunos').select('id, nome')
+      // Busca TODOS os alunos (limit alto para escolas grandes, mas evita full scan sem limite)
+      const { data, error } = await supabase.from('alunos').select('id, nome').limit(5000)
       if (!error && data) {
-        alunosToProcess = data.map(d => ({ id: String(d.id), nome: d.nome || '' }))
+        alunosToProcess = data.map((d: any) => ({ id: String(d.id), nome: d.nome || '' }))
       }
     } else {
       let targetAlunosSet = new Map<string, string>() // id -> nome
@@ -307,7 +308,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         }
 
         // 2. Resolver nomes/IDs de turmas para IDs reais no banco
-        const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo, ano, dados')
+        const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo, ano, dados').limit(500)
         if (!turmasError && allTurmas) {
           const matchedTurmas = allTurmas.filter(t => {
             const tId = String(t.id).toLowerCase()

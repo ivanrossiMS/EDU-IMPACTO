@@ -26,9 +26,11 @@ function resolveTableName(endpointOrSheet: string): string {
   if (e.includes('comunicado')) return 'comunicados'
   if (e.includes('tarefa')) return 'tarefas'
   if (e.includes('agenda') || e.includes('evento')) return 'eventos_agenda'
-  if (e.includes('guardian') || e.includes('saida-responsav')) return 'guardians'
-  if (e.includes('call') || e.includes('saida-chamada')) return 'calls'
-  if (e.includes('saida') || e.includes('historico')) return 'saida_logs'
+  if (e.includes('guardian') || e.includes('saida-responsav') || e.includes('saida_guardian') || e.includes('saída-responsáv')) return 'saida_guardians'
+  // saida/logs e Saída-Histórico → tabela saida_calls (histórico de saídas é gravado em saida_calls)
+  if (e.includes('saida/logs') || e.includes('hist') || (e.includes('saida') && e.includes('log'))) return 'saida_calls'
+  if (e.includes('saida_call') || e.includes('saida-chamada') || e.includes('saida/call')) return 'saida_calls'
+  if (e.includes('call') || e.includes('chamada')) return 'saida_calls'
   if (e.includes('mantenedor') || e.includes('unidade')) return 'mantenedores'
   if (e.includes('log') || e.includes('auditoria')) return 'system_logs'
 

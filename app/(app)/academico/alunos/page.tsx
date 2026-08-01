@@ -205,8 +205,21 @@ export default function AlunosPage() {
     respPed_diasAcesso: true,
     respPed_proibido: true,
 
-    // Outros
-    responsaveisOutros: true
+    // Outros Responsáveis
+    respOutros_id: true,
+    respOutros_nome: true,
+    respOutros_rfid: true,
+    respOutros_email: true,
+    respOutros_telefone: true,
+    respOutros_cpf: true,
+    respOutros_rg: true,
+    respOutros_parentesco: true,
+    respOutros_profissao: true,
+    respOutros_vinculo: true,
+    respOutros_tipo: true,
+    respOutros_diasAcesso: true,
+    respOutros_proibido: true,
+    responsaveisOutros: false
   })
   const [exportFilters, setExportFilters] = useState({
     dateStart: '',
@@ -337,10 +350,26 @@ export default function AlunosPage() {
       const getPedResp = (item: any) => {
         return item.responsaveis?.find((r: any) => r.isPedagogico || r.respPedagogico)
       }
-      const getOtherRespsStr = (item: any) => {
+      const getOtherRespsList = (item: any) => {
         const fin = getFinResp(item)
         const ped = getPedResp(item)
-        const others = item.responsaveis?.filter((r: any) => r.id !== fin?.id && r.id !== ped?.id) || []
+        let others: any[] = []
+        if (Array.isArray(item.responsaveis)) {
+          others = item.responsaveis.filter((r: any) => r && r.id !== fin?.id && r.id !== ped?.id)
+        }
+        const extraOutros = item.responsaveisOutros || item.dados?.responsaveisOutros
+        if (Array.isArray(extraOutros)) {
+          extraOutros.forEach((r: any) => {
+            if (r && !others.some((o: any) => (o.id && o.id === r.id) || (o.nome && o.nome === r.nome))) {
+              others.push(r)
+            }
+          })
+        }
+        return others
+      }
+
+      const getOtherRespsStr = (item: any) => {
+        const others = getOtherRespsList(item)
         if (others.length === 0) return ''
         return others.map((r: any) => {
           const typeParts: string[] = []
@@ -349,9 +378,9 @@ export default function AlunosPage() {
           if (r.isOutro) typeParts.push('Outro')
           const tipoStr = typeParts.length > 0 ? typeParts.join('/') : 'Outro'
           
-          const formatDays = formatDiasAcesso(r.diasAcesso)
+          const formatDays = formatDiasAcesso(r.diasAcesso || r.dias_acesso)
           
-          return `ID: ${r.id || 'N/A'}, Nome: ${r.nome || 'N/A'}, Parentesco: ${formatParentesco(r.parentesco) || 'N/A'}, Tipo: ${tipoStr}, RFID: ${r.rfid || 'N/A'}, E-mail: ${r.email || 'N/A'}, Tel: ${r.telefone || r.celular || 'N/A'}, Profissão: ${r.profissao || 'N/A'}, Dias: ${formatDays || 'N/A'}, Proibido: ${r.proibido ? 'Sim' : 'Não'}`
+          return `ID: ${r.id || 'N/A'}, Nome: ${r.nome || 'N/A'}, Parentesco: ${formatParentesco(r.parentesco) || 'N/A'}, Tipo: ${tipoStr}, RFID: ${r.rfid || 'N/A'}, E-mail: ${r.email || r.dados?.email || 'N/A'}, Tel: ${r.telefone || r.celular || r.dados?.celular || r.dados?.telefone || 'N/A'}, Profissão: ${r.profissao || r.dados?.profissao || 'N/A'}, Dias: ${formatDays || 'N/A'}, Proibido: ${r.proibido ? 'Sim' : 'Não'}`
         }).join('; ')
       }
       
@@ -614,8 +643,70 @@ export default function AlunosPage() {
       }
       
       // --- OUTROS ---
+      if (exportFields.respOutros_id) {
+        headers.push('Outros: ID')
+        rowMapper.push(item => getOtherRespsList(item).map(r => r.id || '').filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_nome) {
+        headers.push('Outros: Nome')
+        rowMapper.push(item => getOtherRespsList(item).map(r => r.nome || '').filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_rfid) {
+        headers.push('Outros: RFID')
+        rowMapper.push(item => getOtherRespsList(item).map(r => r.rfid || '').filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_email) {
+        headers.push('Outros: E-mail')
+        rowMapper.push(item => getOtherRespsList(item).map(r => r.email || r.dados?.email || '').filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_telefone) {
+        headers.push('Outros: Telefone')
+        rowMapper.push(item => getOtherRespsList(item).map(r => r.telefone || r.celular || r.dados?.celular || r.dados?.telefone || '').filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_cpf) {
+        headers.push('Outros: CPF')
+        rowMapper.push(item => getOtherRespsList(item).map(r => r.dados?.cpf || r.cpf || '').filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_rg) {
+        headers.push('Outros: RG')
+        rowMapper.push(item => getOtherRespsList(item).map(r => r.dados?.rg || r.rg || '').filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_parentesco) {
+        headers.push('Outros: Parentesco')
+        rowMapper.push(item => getOtherRespsList(item).map(r => formatParentesco(r.parentesco)).filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_profissao) {
+        headers.push('Outros: Profissão')
+        rowMapper.push(item => getOtherRespsList(item).map(r => r.profissao || r.dados?.profissao || '').filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_vinculo) {
+        headers.push('Outros: Vínculo')
+        rowMapper.push(item => item.matricula || item.codigo || item.id || '')
+      }
+      if (exportFields.respOutros_tipo) {
+        headers.push('Outros: Tipo de Responsável')
+        rowMapper.push(item => getOtherRespsList(item).map(r => {
+          const parts: string[] = []
+          if (r.isFinanceiro || r.respFinanceiro) parts.push('Financeiro')
+          if (r.isPedagogico || r.respPedagogico) parts.push('Pedagógico')
+          if (r.isOutro) parts.push('Outro')
+          return parts.length > 0 ? parts.join('/') : 'Outro'
+        }).filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_diasAcesso) {
+        headers.push('Outros: Dias Permitidos Retirada')
+        rowMapper.push(item => getOtherRespsList(item).map(r => formatDiasAcesso(r.diasAcesso || r.dias_acesso)).filter(Boolean).join('; '))
+      }
+      if (exportFields.respOutros_proibido) {
+        headers.push('Outros: Acesso Restrito')
+        rowMapper.push(item => {
+          const list = getOtherRespsList(item)
+          if (list.length === 0) return ''
+          return list.map(r => r.proibido ? 'Sim' : 'Não').join('; ')
+        })
+      }
       if (exportFields.responsaveisOutros) {
-        headers.push('Outros Responsáveis')
+        headers.push('Outros Responsáveis (Resumo Completo)')
         rowMapper.push(item => getOtherRespsStr(item))
       }
       
@@ -4138,15 +4229,32 @@ export default function AlunosPage() {
                   <Users size={14} /> 5. Outros Responsáveis
                 </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
-                    <input
-                      type="checkbox"
-                      checked={exportFields.responsaveisOutros}
-                      onChange={(e) => setExportFields(prev => ({ ...prev, responsaveisOutros: e.target.checked }))}
-                      style={{ width: 15, height: 15, borderRadius: 4, accentColor: '#f59e0b' }}
-                    />
-                    Lista de Outros Responsáveis
-                  </label>
+                  {[
+                    { key: 'respOutros_id', label: 'ID do Responsável' },
+                    { key: 'respOutros_nome', label: 'Nome Completo' },
+                    { key: 'respOutros_rfid', label: 'Cartão RFID' },
+                    { key: 'respOutros_email', label: 'E-mail' },
+                    { key: 'respOutros_telefone', label: 'Telefone' },
+                    { key: 'respOutros_cpf', label: 'CPF' },
+                    { key: 'respOutros_rg', label: 'RG' },
+                    { key: 'respOutros_parentesco', label: 'Parentesco' },
+                    { key: 'respOutros_profissao', label: 'Profissão' },
+                    { key: 'respOutros_vinculo', label: 'Vínculo (Matrícula Aluno)' },
+                    { key: 'respOutros_tipo', label: 'Tipo de Responsável' },
+                    { key: 'respOutros_diasAcesso', label: 'Dias Permitidos Retirada' },
+                    { key: 'respOutros_proibido', label: 'Acesso Restrito/Proibido' },
+                    { key: 'responsaveisOutros', label: 'Texto Completo (Resumo)' },
+                  ].map((field) => (
+                    <label key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={exportFields[field.key]}
+                        onChange={(e) => setExportFields(prev => ({ ...prev, [field.key]: e.target.checked }))}
+                        style={{ width: 15, height: 15, borderRadius: 4, accentColor: '#f59e0b' }}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
                 </div>
               </div>
 
