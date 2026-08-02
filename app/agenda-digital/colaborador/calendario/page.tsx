@@ -551,15 +551,6 @@ export default function ADCalendarioPage() {
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="ad-calendar-filter-bar" style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center', padding: '12px 16px', background: 'hsl(var(--bg-elevated))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
-        <Filter size={13} style={{ color: 'hsl(var(--text-muted))' }} />
-        <select className="form-input" style={{ width: 'auto', fontSize: 12, minWidth: 160 }} value={filtroTipo} onChange={e => setFiltroTipo(e.target.value as any)}>
-          <option value="todos">Todos os tipos</option>
-          {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-      </div>
-
       {/* Main Two-Column Calendar Grid */}
       <div className="ad-calendar-grid-columns" style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, alignItems: 'start' }}>
         
@@ -695,9 +686,56 @@ export default function ADCalendarioPage() {
           {/* Birthdays and Upcoming Side-by-Side Panels */}
           <div className="ad-calendar-bottom-panels" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             
-            {/* 🎉 Birthdays Panel */}
+            {/* 📅 Upcoming Events Panel */}
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
+              className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                  <Calendar size={16} />
+                </div>
+                <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>Próximos Compromissos</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+                {proximosEventos.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Sem eventos futuros</div>
+                ) : (
+                  proximosEventos.map((ev, idx) => {
+                    const [y, m, d] = ev.data.split('-')
+                    return (
+                      <motion.div 
+                        whileHover={{ x: 5 }}
+                        key={ev.id} 
+                        style={{ 
+                          display: 'flex', gap: 10, alignItems: 'center', padding: '10px', 
+                          borderRadius: 16, background: '#f8fafc', border: '1px solid transparent'
+                        }}
+                      >
+                        <div style={{ 
+                          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+                          background: (ev.cor ?? TIPO_CORES[ev.tipo]) + '15',
+                          color: ev.cor ?? TIPO_CORES[ev.tipo],
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900
+                        }}>
+                          <span>{d}</span>
+                          <span style={{ fontSize: 8 }}>{MESES[parseInt(m)-1].slice(0,3)}</span>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.titulo}</div>
+                          <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>{TIPO_LABELS[ev.tipo]}</div>
+                        </div>
+                      </motion.div>
+                    )
+                  })
+                )}
+              </div>
+            </motion.div>
+
+            {/* 🎉 Birthdays Panel */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
               className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -751,53 +789,6 @@ export default function ADCalendarioPage() {
                       </div>
                     </motion.div>
                   ))
-                )}
-              </div>
-            </motion.div>
-
-            {/* 📅 Upcoming Events Panel */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
-              className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                  <Calendar size={16} />
-                </div>
-                <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>Próximos Compromissos</span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-                {proximosEventos.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Sem eventos futuros</div>
-                ) : (
-                  proximosEventos.map((ev, idx) => {
-                    const [y, m, d] = ev.data.split('-')
-                    return (
-                      <motion.div 
-                        whileHover={{ x: 5 }}
-                        key={ev.id} 
-                        style={{ 
-                          display: 'flex', gap: 10, alignItems: 'center', padding: '10px', 
-                          borderRadius: 16, background: '#f8fafc', border: '1px solid transparent'
-                        }}
-                      >
-                        <div style={{ 
-                          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                          background: (ev.cor ?? TIPO_CORES[ev.tipo]) + '15',
-                          color: ev.cor ?? TIPO_CORES[ev.tipo],
-                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900
-                        }}>
-                          <span>{d}</span>
-                          <span style={{ fontSize: 8 }}>{MESES[parseInt(m)-1].slice(0,3)}</span>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.titulo}</div>
-                          <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>{TIPO_LABELS[ev.tipo]}</div>
-                        </div>
-                      </motion.div>
-                    )
-                  })
                 )}
               </div>
             </motion.div>

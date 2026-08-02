@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 import fs from 'fs/promises'
 import path from 'path'
+import crypto from 'crypto'
 
 const STORE_FILE = path.join(process.cwd(), '.dre_historico_store.json')
 
@@ -149,7 +150,7 @@ export async function POST(request: Request) {
       const base64ToUse = arquivoBase64 || dadosDRE?._arquivo_base64
 
       const itemToSave: any = {
-        id: `dre_${Date.now()}`,
+        id: crypto.randomUUID(),
         nome_arquivo: nomeArquivo || 'DRE - Relatório Analítico',
         tipo_arquivo: tipoArquivo,
         dados_dre: dadosDRE,

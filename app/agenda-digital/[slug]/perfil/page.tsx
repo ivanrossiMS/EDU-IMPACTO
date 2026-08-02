@@ -83,7 +83,7 @@ export default function ADPerfilPage() {
     }
   }
 
-  const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis' | 'saude'>('geral')
+  const [activeTab, setActiveTab] = useState<'geral' | 'responsaveis'>('geral')
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
 
   const [isEditingEmail, setIsEditingEmail] = useState(false)
@@ -160,13 +160,11 @@ export default function ADPerfilPage() {
     <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 80, fontFamily: 'Outfit, Inter, sans-serif' }}>
       
 
-
       {/* Modern Tabs Navigation */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 32, overflowX: 'auto', paddingBottom: 10, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {[
           { id: 'geral', label: 'Dados Gerais', icon: <Contact size={16} /> },
           { id: 'responsaveis', label: 'Responsáveis & Autorizações', icon: <ShieldCheck size={16} /> },
-          { id: 'saude', label: 'Ficha Médica', icon: <HeartPulse size={16} /> },
         ].map(tab => (
           <button
             key={tab.id}
@@ -192,7 +190,7 @@ export default function ADPerfilPage() {
           
           {/* TAB: GERAL */}
           {activeTab === 'geral' && (
-            <motion.div key="geral" variants={itemVariants} exit={{ opacity: 0, y: -20 }} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+            <motion.div key="geral" variants={itemVariants} exit={{ opacity: 0, y: -20 }} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               
               <div style={{ background: 'hsl(var(--bg-surface))', padding: 32, borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 12px 40px rgba(0,0,0,0.02)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -266,17 +264,6 @@ export default function ADPerfilPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              <div style={{ background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', padding: 32, borderRadius: 24, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', gap: 16 }}>
-                <FileText size={48} color="#94a3b8" strokeWidth={1.5} />
-                <div>
-                  <h4 style={{ fontSize: 18, fontWeight: 800, color: '#334155', marginBottom: 8 }}>Documentos do Aluno</h4>
-                  <p style={{ fontSize: 14, color: '#64748b', margin: 0, lineHeight: 1.5 }}>Histórico escolar, certidão de nascimento e contratos estão disponíveis na central de documentos.</p>
-                </div>
-                <button style={{ background: 'white', color: '#4f46e5', border: '1px solid #c7d2fe', padding: '10px 24px', borderRadius: 100, fontSize: 14, fontWeight: 800, marginTop: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.02)', cursor: 'pointer' }}>
-                  Acessar Documentos
-                </button>
               </div>
 
             </motion.div>
@@ -430,50 +417,6 @@ export default function ADPerfilPage() {
                   <p style={{ margin: 0, fontSize: 14, color: saude.autorizaSaida ? '#15803d' : '#b91c1c', fontWeight: 500 }}>
                     {saude.autorizaSaida ? 'O aluno tem permissão para sair sozinho das dependências da escola.' : 'O aluno NÃO pode sair sozinho. Requer acompanhante autorizado para a retirada.'}
                   </p>
-                </div>
-              </div>
-
-            </motion.div>
-          )}
-
-          {/* TAB: SAÚDE */}
-          {activeTab === 'saude' && (
-            <motion.div key="saude" variants={itemVariants} exit={{ opacity: 0, y: -20 }} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
-              
-              <div style={{ background: 'hsl(var(--bg-surface))', padding: 32, borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', boxShadow: '0 12px 40px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: '#fce7f3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <HeartPulse size={20} color="#db2777" />
-                  </div>
-                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>Ficha Médica</h3>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                  
-                  {/* Alergias Card (Pulse animation if allergies exist) */}
-                  <motion.div 
-                    animate={saude.alergias ? { scale: [1, 1.02, 1] } : {}} 
-                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                    style={{ padding: 24, borderRadius: 16, background: saude.alergias ? '#fef2f2' : '#f8fafc', border: `1px solid ${saude.alergias ? '#fecaca' : '#e2e8f0'}`, position: 'relative', overflow: 'hidden' }}
-                  >
-                    {saude.alergias && <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: 6, background: '#ef4444' }} />}
-                    <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: saude.alergias ? '#dc2626' : '#64748b', letterSpacing: 0.5, marginBottom: 8 }}>Restrições Médicas / Alergias</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: saude.alergias ? '#991b1b' : '#334155' }}>
-                      {saude.alergias || 'Nenhuma restrição alimentar ou alergia reportada na matrícula.'}
-                    </div>
-                  </motion.div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <div style={{ padding: 20, borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
-                      <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', letterSpacing: 0.5, marginBottom: 4 }}>Plano de Saúde</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{saude.planoSaude || 'Não informado'}</div>
-                    </div>
-                    <div style={{ padding: 20, borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
-                      <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', letterSpacing: 0.5, marginBottom: 4 }}>Tipo Sanguíneo</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-main))' }}>{saude.tipoSanguineo || 'Não informado'}</div>
-                    </div>
-                  </div>
-
                 </div>
               </div>
 

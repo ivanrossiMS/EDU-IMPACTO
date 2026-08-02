@@ -33,7 +33,7 @@ Use AS VARIÁVEIS EXATAMENTE COMO ESTÃO ENTRE << >>. Exemplo: "Declaramos para 
 Apenas retorne o texto do documento, sem explicações adicionais, sem markdown de bloco de código (apenas o texto puro, ou HTML se você achar melhor estruturar em parágrafos, mas prefira texto simples com quebras de linha duplas para parágrafos).`
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash',
+      model: 'gemini-2.5-flash',
       contents: [
         { role: 'user', parts: [{ text: systemPrompt }] },
         { role: 'model', parts: [{ text: 'Entendido. Criarei o modelo de documento usando exatamente as variáveis fornecidas e sem texto extra.' }] },

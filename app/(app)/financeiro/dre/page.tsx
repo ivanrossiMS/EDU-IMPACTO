@@ -188,15 +188,32 @@ export default function DREPage() {
       const json = await res.json()
 
       if (res.ok && json.data && json.data.length > 0) {
-        // Mescla sem duplicados por ID
         const dbItems: DREHistoricoItem[] = json.data
+        const allItems = [...dbItems, ...localItems]
+
         const map = new Map<string, DREHistoricoItem>()
+        allItems.forEach(item => {
+          const key = item.id
+          if (!map.has(key)) {
+            map.set(key, item)
+          } else {
+            const existing = map.get(key)!
+            if (existing.total_receitas === 0 && item.total_receitas > 0) {
+              map.set(key, item)
+            }
+          }
+        })
 
-        localItems.forEach(item => map.set(item.id, item))
-        dbItems.forEach(item => map.set(item.id, item))
+        const uniqueItems = Array.from(map.values()).filter((item, index, self) => {
+          if (item.total_receitas === 0 && self.some(s => s.nome_arquivo === item.nome_arquivo && s.total_receitas > 0)) {
+            return false
+          }
+          const firstIndex = self.findIndex(s => s.nome_arquivo === item.nome_arquivo && Math.abs(new Date(s.criado_em).getTime() - new Date(item.criado_em).getTime()) < 120000)
+          return firstIndex === index
+        })
 
-        const merged = Array.from(map.values()).sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime())
-        setHistorico(merged)
+        const sorted = uniqueItems.sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime())
+        setHistorico(sorted)
       } else {
         setHistorico(localItems)
       }
@@ -307,7 +324,7 @@ export default function DREPage() {
 
   // Função para salvar no LocalStorage + Supabase
   const salvarNoHistorico = async (dados: DREDados, nomePersonalizado: string) => {
-    const idItem = `dre_${Date.now()}`
+    const idItem = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `dre_${Date.now()}`
     const tipoArq = dados._tipo_arquivo_original || file?.name?.split('.').pop()?.toLowerCase() || 'pdf'
     const novoItem: DREHistoricoItem = {
       id: idItem,
@@ -403,13 +420,22 @@ export default function DREPage() {
       try {
         result = await response.json()
       } catch (jsonErr) {
-        result = { error: `Erro de comunicação com o servidor (Status ${response.status})` }
+        if (response.status === 504) {
+          result = { error: 'Tempo limite excedido pelo servidor (Status 504). O arquivo DRE é muito extenso para processamento síncrono. Tente enviar em formato Excel (.xlsx) ou com menos abas.' }
+        } else {
+          result = { error: `Erro de comunicação com o servidor (Status ${response.status})` }
+        }
       }
 
       if (!response.ok || !result.success) {
-        const errorMsg = typeof result?.error === 'string'
+        let errorMsg = typeof result?.error === 'string'
           ? result.error
           : (result?.error?.message || result?.saveError || 'Não foi possível processar o arquivo DRE. Verifique o arquivo e tente novamente.')
+
+        if (response.status === 504) {
+          errorMsg = 'Tempo limite excedido pelo servidor (Status 504). O arquivo DRE é muito extenso. Tente enviar em formato Excel (.xlsx).'
+        }
+        
         setErrorMessage(String(errorMsg))
         return
       }
@@ -426,8 +452,7 @@ export default function DREPage() {
       setDreData(dadosEnriquecidos)
       setActiveTab('dre')
 
-      // Salva automaticamente no Histórico Híbrido
-      await salvarNoHistorico(dadosEnriquecidos, nomePadrao)
+      // O servidor já realizou a gravação do histórico no upload, atualiza a lista
       await fetchHistorico()
 
       if (dadosEnriquecidos) {
@@ -631,10 +656,30 @@ export default function DREPage() {
     return 12
   }, [dreData])
 
-  const margemOperacionalReal = useMemo(() => {
-    if (!dreData || !dreData.receitas?.total_geral) return 0
-    return Math.round(((dreData.resultado_operacional / dreData.receitas.total_geral) * 100) * 10) / 10
+  const custoOperacaoTotal = useMemo(() => {
+    if (dreData?.despesas?.total_geral && dreData.despesas.total_geral > 0) {
+      return dreData.despesas.total_geral
+    }
+    if (dreData?.despesas?.grupos && Array.isArray(dreData.despesas.grupos)) {
+      const sum = dreData.despesas.grupos.reduce((acc, g) => acc + (Number(g.total) || 0), 0)
+      if (sum > 0) return sum
+    }
+    return 0
   }, [dreData])
+
+  const resultadoOperacionalReal = useMemo(() => {
+    const rec = dreData?.receitas?.total_geral || 0
+    if (dreData?.resultado_operacional !== undefined && dreData.resultado_operacional !== 0 && dreData.resultado_operacional !== rec) {
+      return dreData.resultado_operacional
+    }
+    return rec - custoOperacaoTotal
+  }, [dreData, custoOperacaoTotal])
+
+  const margemOperacionalReal = useMemo(() => {
+    const rec = dreData?.receitas?.total_geral || 0
+    if (!rec || rec === 0) return 0
+    return Math.round(((resultadoOperacionalReal / rec) * 100) * 10) / 10
+  }, [dreData, resultadoOperacionalReal])
 
   const custoFolhaPagamento = useMemo(() => {
     if (dreData?.custos_gerenciais?.folha_pagamento !== undefined && dreData.custos_gerenciais.folha_pagamento > 0) {
@@ -644,22 +689,32 @@ export default function DREPage() {
     dreData?.despesas?.grupos?.forEach(g => {
       const descUpper = String(g.descricao || '').toUpperCase()
       const cod = String(g.codigo || '')
-      if (cod.startsWith('50') || descUpper.includes('FOLHA') || descUpper.includes('PESSOAL') || descUpper.includes('SALÁRIO') || descUpper.includes('SALARIO') || descUpper.includes('ENCARGOS')) {
+      const isGrupoFolha = cod.startsWith('50') || descUpper.includes('FOLHA') || descUpper.includes('PESSOAL') || descUpper.includes('SALÁRIO') || descUpper.includes('SALARIO') || descUpper.includes('ENCARGO') || descUpper.includes('CUSTOS OPERACIONAIS') || descUpper.includes('OPERACIONAI')
+      
+      if (g.itens && Array.isArray(g.itens)) {
+        g.itens.forEach((item: any) => {
+          const itemDescUpper = String(item.descricao || '').toUpperCase()
+          const itemCod = String(item.codigo || '')
+          const itemValor = Number(item.total) || 0
+          if (isGrupoFolha || itemCod.startsWith('50') || itemDescUpper.includes('SALÁRIO') || itemDescUpper.includes('SALARIO') || itemDescUpper.includes('FOLHA') || itemDescUpper.includes('PROFESSOR') || itemDescUpper.includes('ENCARGO') || itemDescUpper.includes('INSS') || itemDescUpper.includes('FGTS') || itemDescUpper.includes('BENEFÍCIO') || itemDescUpper.includes('ORDENADO')) {
+            sum += itemValor
+          }
+        })
+      } else if (isGrupoFolha) {
         sum += Number(g.total) || 0
       }
     })
+    if (sum === 0 && custoOperacaoTotal > 0) {
+      sum = Math.round(custoOperacaoTotal * 0.65)
+    }
     return sum
-  }, [dreData])
+  }, [dreData, custoOperacaoTotal])
 
   const pctFolhaPagamento = useMemo(() => {
     const rec = dreData?.receitas?.total_geral || 0
     if (!rec || rec === 0) return 0
     return Math.round((custoFolhaPagamento / rec) * 1000) / 10
   }, [dreData, custoFolhaPagamento])
-
-  const custoOperacaoTotal = useMemo(() => {
-    return dreData?.despesas?.total_geral || 0
-  }, [dreData])
 
   const margemContribuiçãoPct = useMemo(() => {
     return dreData?.custos_gerenciais?.margem_contribuição_pct ?? 85
@@ -673,19 +728,24 @@ export default function DREPage() {
 
   const custoOperacaoMensalMedio = useMemo(() => {
     if (dreData?.custos_gerenciais?.custo_operacao_mensal) return dreData.custos_gerenciais.custo_operacao_mensal
-    const totalDesp = dreData?.despesas?.total_geral || 0
-    return totalDesp / (numeroMeses || 12)
-  }, [dreData, numeroMeses])
+    return custoOperacaoTotal / (numeroMeses || 12)
+  }, [dreData, custoOperacaoTotal, numeroMeses])
 
   const breakEvenMensal = useMemo(() => {
-    if (dreData?.metricas_chave?.ponto_equilibrio_mensal) return dreData.metricas_chave.ponto_equilibrio_mensal
-    const custosFixos = (dreData?.custos_gerenciais?.custos_fixos || (dreData?.despesas?.total_geral || 0) * 0.9)
+    if (dreData?.metricas_chave?.ponto_equilibrio_mensal && dreData.metricas_chave.ponto_equilibrio_mensal > 0) {
+      return dreData.metricas_chave.ponto_equilibrio_mensal
+    }
+    const opex = custoOperacaoTotal
+    if (opex === 0) return 0
+    const custosFixos = opex * 0.9
     const custosFixosMensais = custosFixos / (numeroMeses || 12)
     return margemContribuiçãoPct > 0 ? (custosFixosMensais / (margemContribuiçãoPct / 100)) : custosFixosMensais
-  }, [dreData, numeroMeses, margemContribuiçãoPct])
+  }, [dreData, custoOperacaoTotal, numeroMeses, margemContribuiçãoPct])
 
   const breakEvenAnual = useMemo(() => {
-    if (dreData?.metricas_chave?.ponto_equilibrio_anual) return dreData.metricas_chave.ponto_equilibrio_anual
+    if (dreData?.metricas_chave?.ponto_equilibrio_anual && dreData.metricas_chave.ponto_equilibrio_anual > 0) {
+      return dreData.metricas_chave.ponto_equilibrio_anual
+    }
     return breakEvenMensal * 12
   }, [dreData, breakEvenMensal])
 
@@ -694,6 +754,14 @@ export default function DREPage() {
     if (!faturamentoMensalMedio || faturamentoMensalMedio === 0) return 0
     return Math.round(((faturamentoMensalMedio - breakEvenMensal) / faturamentoMensalMedio) * 1000) / 10
   }, [faturamentoMensalMedio, breakEvenMensal])
+
+  const sobraRetidaCaixa = useMemo(() => {
+    if (dreData?.destinacao_lucro?.sobra_liquida_caixa !== undefined && dreData.destinacao_lucro.sobra_liquida_caixa !== resultadoOperacionalReal) {
+      return dreData.destinacao_lucro.sobra_liquida_caixa
+    }
+    const totalDestinado = dreData?.destinacao_lucro?.total_destinado || 0
+    return resultadoOperacionalReal - totalDestinado
+  }, [dreData, resultadoOperacionalReal])
 
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', padding: '24px 16px', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
@@ -1558,11 +1626,11 @@ export default function DREPage() {
                       const groupKey = `rec_${grupo.codigo || gIdx}`
                       const isExpanded = expandedGroups[groupKey] ?? true
                       const itemsFiltrados = grupo.itens?.filter(i =>
-                        i.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        (i.codigo || '').toLowerCase().includes(searchTerm.toLowerCase())
+                        (i?.descricao || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (i?.codigo || '').toLowerCase().includes(searchTerm.toLowerCase())
                       )
 
-                      if (searchTerm && itemsFiltrados?.length === 0 && !grupo.descricao.toLowerCase().includes(searchTerm.toLowerCase())) {
+                      if (searchTerm && itemsFiltrados?.length === 0 && !(grupo?.descricao || '').toLowerCase().includes(searchTerm.toLowerCase())) {
                         return null
                       }
 
@@ -1579,7 +1647,7 @@ export default function DREPage() {
                             <td style={{ padding: '12px 16px', color: '#64748b', fontFamily: 'monospace' }}>{grupo.codigo || `00.${gIdx+1}`}</td>
                             <td style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                               {isExpanded ? <ChevronDown size={16} color="#059669" /> : <ChevronRight size={16} color="#94a3b8" />}
-                              <span>{grupo.descricao}</span>
+                              <span>{grupo.descricao || '—'}</span>
                               <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '12px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontWeight: 700 }}>
                                 {grupo.itens?.length || 0} itens
                               </span>
@@ -1591,7 +1659,7 @@ export default function DREPage() {
                           {isExpanded && itemsFiltrados?.map((item, iIdx) => (
                             <tr key={iIdx} style={{ background: '#fafafa', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#475569' }}>
                               <td style={{ padding: '10px 16px 10px 32px', color: '#94a3b8', fontFamily: 'monospace' }}>{item.codigo || '—'}</td>
-                              <td style={{ padding: '10px 16px 10px 40px', color: '#334155' }}>{item.descricao}</td>
+                              <td style={{ padding: '10px 16px 10px 40px', color: '#334155' }}>{item.descricao || '—'}</td>
                               <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#0f172a' }}>{formatCurrency(item.total)}</td>
                               <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'monospace', color: '#94a3b8' }}>
                                 {dreData.receitas?.total_geral > 0 ? ((item.total / dreData.receitas.total_geral) * 100).toFixed(1) : '0.0'}%
@@ -1616,11 +1684,11 @@ export default function DREPage() {
                       const groupKey = `desp_${grupo.codigo || gIdx}`
                       const isExpanded = expandedGroups[groupKey] ?? true
                       const itemsFiltrados = grupo.itens?.filter(i =>
-                        i.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        (i.codigo || '').toLowerCase().includes(searchTerm.toLowerCase())
+                        (i?.descricao || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (i?.codigo || '').toLowerCase().includes(searchTerm.toLowerCase())
                       )
 
-                      if (searchTerm && itemsFiltrados?.length === 0 && !grupo.descricao.toLowerCase().includes(searchTerm.toLowerCase())) {
+                      if (searchTerm && itemsFiltrados?.length === 0 && !(grupo?.descricao || '').toLowerCase().includes(searchTerm.toLowerCase())) {
                         return null
                       }
 
@@ -1637,7 +1705,7 @@ export default function DREPage() {
                             <td style={{ padding: '12px 16px', color: '#64748b', fontFamily: 'monospace' }}>{grupo.codigo || `50.${gIdx+1}`}</td>
                             <td style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                               {isExpanded ? <ChevronDown size={16} color="#dc2626" /> : <ChevronRight size={16} color="#94a3b8" />}
-                              <span>{grupo.descricao}</span>
+                              <span>{grupo.descricao || '—'}</span>
                               <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '12px', background: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca', fontWeight: 700 }}>
                                 {grupo.itens?.length || 0} itens
                               </span>
@@ -1649,7 +1717,7 @@ export default function DREPage() {
                           {isExpanded && itemsFiltrados?.map((item, iIdx) => (
                             <tr key={iIdx} style={{ background: '#fafafa', borderBottom: '1px solid #f1f5f9', fontSize: '12px', color: '#475569' }}>
                               <td style={{ padding: '10px 16px 10px 32px', color: '#94a3b8', fontFamily: 'monospace' }}>{item.codigo || '—'}</td>
-                              <td style={{ padding: '10px 16px 10px 40px', color: '#334155' }}>{item.descricao}</td>
+                              <td style={{ padding: '10px 16px 10px 40px', color: '#334155' }}>{item.descricao || '—'}</td>
                               <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#0f172a' }}>{formatCurrency(item.total)}</td>
                               <td style={{ padding: '10px 16px', textAlign: 'right', fontFamily: 'monospace', color: '#94a3b8' }}>
                                 {dreData.receitas?.total_geral > 0 ? ((item.total / dreData.receitas.total_geral) * 100).toFixed(1) : '0.0'}%
