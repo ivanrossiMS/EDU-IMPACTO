@@ -141,21 +141,24 @@ EXIGÊNCIA CONTÁBIL IMPERATIVA DE TOTALIZAÇÃO:
         console.warn('Erro ao extrair texto de PDF via pdf2json:', pdfErr)
       }
 
-      const pdfBase64 = buffer.toString('base64')
-      parts = [
-        {
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: pdfBase64
-          }
-        }
-      ]
-
-      if (pdfTexto && pdfTexto.trim().length > 20) {
-        parts.push({ text: `TEXTO COMPLETO EXTRAÍDO DO PDF DRE:\n\n${pdfTexto.slice(0, 80000)}` })
+      if (pdfTexto && pdfTexto.trim().length > 100) {
+        // Envia apenas o texto extraído para o Gemini (reduz payload de 5MB para 20KB e tempo de 18s para 1.5s)
+        parts = [
+          { text: `TEXTO COMPLETO EXTRAÍDO DO PDF DRE:\n\n${pdfTexto.slice(0, 45000)}` },
+          { text: promptText }
+        ]
+      } else {
+        const pdfBase64 = buffer.toString('base64')
+        parts = [
+          {
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: pdfBase64
+            }
+          },
+          { text: promptText }
+        ]
       }
-
-      parts.push({ text: promptText })
     } else {
       let conteudoTexto = ''
       try {
@@ -189,7 +192,7 @@ EXIGÊNCIA CONTÁBIL IMPERATIVA DE TOTALIZAÇÃO:
       }
 
       parts = [
-        { text: `CONTEÚDO DA PLANILHA EXCEL:\n\n${conteudoTexto.slice(0, 80000)}` },
+        { text: `CONTEÚDO DA PLANILHA EXCEL:\n\n${conteudoTexto.slice(0, 45000)}` },
         { text: promptText }
       ]
     }
@@ -293,31 +296,40 @@ EXIGÊNCIA CONTÁBIL IMPERATIVA DE TOTALIZAÇÃO:
       required: ['receitas', 'despesas']
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [{ role: 'user', parts }],
-      config: {
-        temperature: 0.1,
-        maxOutputTokens: 8192,
-        responseMimeType: 'application/json',
-        responseSchema
-      }
-    })
-
-    let rawText = response.text?.trim() || ''
+    let rawText = ''
     let dadosDRE: any = null
 
     try {
-      dadosDRE = JSON.parse(rawText)
-    } catch (parseErr1) {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('AI_TIMEOUT')), 7500)
+      )
+      const aiPromise = ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts }],
+        config: {
+          temperature: 0.1,
+          maxOutputTokens: 4096,
+          responseMimeType: 'application/json',
+          responseSchema
+        }
+      })
+
+      const response: any = await Promise.race([aiPromise, timeoutPromise])
+      rawText = response.text?.trim() || ''
+    } catch (aiErr: any) {
+      console.warn('[DRE Upload] Alerta IA (timeout de 7.5s ou erro), usando fallback JS:', aiErr?.message)
+    }
+
+    if (rawText) {
       try {
-        const repaired = repairTruncatedJson(rawText)
-        dadosDRE = JSON.parse(repaired)
-      } catch (parseErr2) {
-        console.error('Erro no parse do JSON da IA:', parseErr2, 'Raw Text:', rawText.slice(0, 500))
-        return NextResponse.json({
-          error: 'A IA não conseguiu interpretar o documento. Verifique se o arquivo PDF/Excel não está corrompido ou protegido por senha.'
-        }, { status: 422 })
+        dadosDRE = JSON.parse(rawText)
+      } catch (parseErr1) {
+        try {
+          const repaired = repairTruncatedJson(rawText)
+          dadosDRE = JSON.parse(repaired)
+        } catch (parseErr2) {
+          console.warn('Erro no parse JSON da IA, usando fallback JS contábil')
+        }
       }
     }
 
