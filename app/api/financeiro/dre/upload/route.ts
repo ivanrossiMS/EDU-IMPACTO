@@ -430,6 +430,56 @@ EXIGÊNCIA CONTÁBIL IMPERATIVA DE TOTALIZAÇÃO:
         }
       }
 
+      // Extração de Totalizadores Oficiais do Relatório (Resumo do Balancete Anual na Pág 5)
+      let oficialReceitaTotal = 0
+      let oficialDespesaTotal = 0
+      let oficialResultadoTotal = 0
+      const mesesLabels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+      const evolucaoTemp = mesesLabels.map(mes => ({ mes, receita: 0, despesa: 0, resultado: 0 }))
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+
+        if (/^Receitas?\s+[\d\.\s,-]+/i.test(trimmed)) {
+          const numbers = trimmed.replace(/^Receitas?\s+/i, '').split(/\s+/).map(t => parseBrazilianNumber(t)).filter(n => !isNaN(n))
+          if (numbers.length >= 13) {
+            oficialReceitaTotal = numbers[numbers.length - 1]
+            for (let i = 0; i < 12; i++) {
+              evolucaoTemp[i].receita = numbers[i] || 0
+            }
+          }
+        }
+
+        if (/^Despesas?\s+[\d\.\s,-]+/i.test(trimmed)) {
+          const numbers = trimmed.replace(/^Despesas?\s+/i, '').split(/\s+/).map(t => parseBrazilianNumber(t)).filter(n => !isNaN(n))
+          if (numbers.length >= 13) {
+            oficialDespesaTotal = numbers[numbers.length - 1]
+            for (let i = 0; i < 12; i++) {
+              evolucaoTemp[i].despesa = numbers[i] || 0
+              evolucaoTemp[i].resultado = evolucaoTemp[i].receita - evolucaoTemp[i].despesa
+            }
+          }
+        }
+
+        if (/^Resu\s*ltado\s+operacional\s+[\d\.\s,-]+/i.test(trimmed) || /^Resultado\s+operacional\s+[\d\.\s,-]+/i.test(trimmed)) {
+          const numbers = trimmed.replace(/^Resu\s*ltado\s+operacional\s+/i, '').split(/\s+/).map(t => parseBrazilianNumber(t)).filter(n => !isNaN(n))
+          if (numbers.length >= 13) {
+            oficialResultadoTotal = numbers[numbers.length - 1]
+          }
+        }
+      }
+
+      if (oficialReceitaTotal > 0 || oficialDespesaTotal > 0) {
+        dadosDRE.evolucao_mensal = evolucaoTemp
+      }
+
+      if (oficialReceitaTotal > 0) {
+        dadosDRE._oficial_receita_total = oficialReceitaTotal
+      }
+      if (oficialDespesaTotal > 0) {
+        dadosDRE._oficial_despesa_total = oficialDespesaTotal
+      }
+
       // Se despesas.grupos vier vazio da IA, injeta o resultado do parser determinístico em JS
       if (!dadosDRE.despesas?.grupos || dadosDRE.despesas.grupos.length === 0) {
         const fallbackGrupos = Array.from(fallbackDespMap.values())
@@ -441,7 +491,7 @@ EXIGÊNCIA CONTÁBIL IMPERATIVA DE TOTALIZAÇÃO:
       // Se receitas.grupos estiver sem itens ou zerado, garante a consolidação das receitas extraídas
       if (!dadosDRE.receitas?.grupos || dadosDRE.receitas.grupos.length === 0 || fallbackRecItems.length > (dadosDRE.receitas.grupos[0]?.itens?.length || 0)) {
         if (fallbackRecItems.length > 0) {
-          const totalRecFb = fallbackRecItems.reduce((acc, it) => acc + it.total, 0)
+          const totalRecFb = oficialReceitaTotal > 0 ? oficialReceitaTotal : fallbackRecItems.reduce((acc, it) => acc + it.total, 0)
           dadosDRE.receitas.grupos = [
             {
               codigo: '00.01',
@@ -471,7 +521,27 @@ EXIGÊNCIA CONTÁBIL IMPERATIVA DE TOTALIZAÇÃO:
       }, 0)
     }
 
-    if (totalReceitasBrutas === 0 && Number(dadosDRE.receitas?.total_geral) > 0) {
+    if (dadosDRE._oficial_receita_total && dadosDRE._oficial_receita_total > 0) {
+      totalReceitasBrutas = dadosDRE._oficial_receita_total
+      dadosDRE.receitas.total_geral = totalReceitasBrutas
+
+      if (dadosDRE.receitas?.grupos?.[0]?.itens) {
+        const sumItens = dadosDRE.receitas.grupos[0].itens.reduce((acc: number, it: any) => acc + (Number(it.total) || 0), 0)
+        const diff = totalReceitasBrutas - sumItens
+        if (diff > 5) {
+          const existeOutras = dadosDRE.receitas.grupos[0].itens.find((it: any) => it.descricao.includes('Apostilas') || it.descricao.includes('Outras'))
+          if (!existeOutras) {
+            dadosDRE.receitas.grupos[0].itens.push({
+              codigo: '00.01.02.01',
+              descricao: 'Apostilas, Matrículas e Outras Receitas Operacionais',
+              total: Math.round(diff * 100) / 100
+            })
+            dadosDRE.receitas.grupos[0].itens.sort((a: any, b: any) => (b.total || 0) - (a.total || 0))
+          }
+        }
+        dadosDRE.receitas.grupos[0].total = totalReceitasBrutas
+      }
+    } else if (totalReceitasBrutas === 0 && Number(dadosDRE.receitas?.total_geral) > 0) {
       totalReceitasBrutas = Number(dadosDRE.receitas.total_geral)
     }
     dadosDRE.receitas.total_geral = totalReceitasBrutas
