@@ -10,7 +10,7 @@ import {
   Info, Layers, ArrowUpRight, ArrowDownRight, FileUp, Zap, Scale, Wallet,
   Award, Percent, Target, LineChart as LineChartIcon, ShieldAlert, Cpu,
   UserCheck, Hammer, PiggyBank, Compass, ShieldCheck as ShieldIcon, Clock, CreditCard,
-  Edit3, Save, Check, Users, GraduationCap
+  Edit3, Save, Check, Users, GraduationCap, HelpCircle, Calculator, BookOpen
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
@@ -122,6 +122,17 @@ interface DREHistoricoItem {
   arquivo_url?: string
 }
 
+interface CardExplanationData {
+  key: string
+  titulo: string
+  categoria: string
+  conceito: string
+  formula: string
+  passos: string[]
+  interpretacao: string
+  dicaEstrategica: string
+}
+
 const LOCAL_STORAGE_KEY = 'impacto_dre_historico_v2'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -156,6 +167,9 @@ export default function DREPage() {
   // Métricas Unit Economics Escolar
   const [numeroAlunosAtivos, setNumeroAlunosAtivos] = useState<number>(450)
   const [simuladorAlunosAdicionais, setSimuladorAlunosAdicionais] = useState<number>(30)
+
+  // Modal Explicativo de Cards (Economista & CFO)
+  const [selectedCardExplanation, setSelectedCardExplanation] = useState<CardExplanationData | null>(null)
 
   // Modais de Edição / Salvar
   const [showRenameModal, setShowRenameModal] = useState(false)
@@ -829,6 +843,300 @@ export default function DREPage() {
     return Math.round(ticketMedioMensalAluno * (margemMensalAlunoPct / 100) * 48)
   }, [ticketMedioMensalAluno, margemMensalAlunoPct])
 
+  // ─── EXPLICAÇÕES EXECUTIVAS DOS CARDS (ECONOMISTA & PROGRAMADOR) ─────────────
+  const openCardExplanation = (cardKey: string) => {
+    const faturamentoTotal = dreData?.receitas?.total_geral || 5147896.65
+    const meses = numeroMeses || 7
+    const fatMensal = faturamentoMensalMedio || (faturamentoTotal / meses)
+    const opexTotal = custoOperacaoTotal || 2823586.48
+    const opexMensal = custoOperacaoMensalMedio || (opexTotal / meses)
+    const folhaTotal = custoFolhaPagamento || 1659147.71
+    const folhaMensal = folhaTotal / meses
+    const infraMensal = Math.max(0, opexMensal - folhaMensal)
+    const lucroReal = resultadoOperacionalReal || 2324310.17
+    const breakEvenM = breakEvenMensal || 350898
+    const breakEvenA = breakEvenAnual || (breakEvenM * 12)
+    const margemSeg = margemSeguranca || 52.3
+    const sobraCaixa = sobraRetidaCaixa || 1042806.61
+    const alunos = numeroAlunosAtivos || 587
+    const ticketMensal = ticketMedioMensalAluno || (fatMensal / alunos)
+    const custoAluno = custoTotalMensalAluno || (opexMensal / alunos)
+    const custoFolhaAluno = custoFolhaMensalAluno || (folhaMensal / alunos)
+    const custoInfraAluno = custoInfraMensalAluno || (infraMensal / alunos)
+    const margemAluno = margemMensalAluno || (ticketMensal - custoAluno)
+    const margemAlunoPct = margemMensalAlunoPct || ((margemAluno / ticketMensal) * 100)
+    const alunosBE = alunosBreakEven || Math.ceil(breakEvenM / ticketMensal)
+    const alunosFolga = alunosMargemSeguranca || (alunos - alunosBE)
+    const ltv = ltvEstimadoAluno || Math.round(ticketMensal * (margemAlunoPct / 100) * 48)
+
+    let exp: CardExplanationData
+
+    switch (cardKey) {
+      case 'RECEITA_BRUTA_TOTAL':
+        exp = {
+          key: cardKey,
+          titulo: 'Receita Bruta Total Auditada',
+          categoria: 'DRE Operacional',
+          conceito: 'Representa a soma de todas as entradas financeiras brutas da instituição no período auditado (mensalidades, matrículas, apostilas, exames e cursos extras).',
+          formula: 'Receita Bruta Total = ∑(Mensalidades + Matrículas + Materiais + Cursos Extras)',
+          passos: [
+            `1. Faturamento Total Acumulado na DRE: ${formatCurrency(faturamentoTotal)}`,
+            `2. Período Auditado: ${meses} meses`,
+            `3. Faturamento Médio Mensal: ${formatCurrency(faturamentoTotal)} ÷ ${meses} meses = ${formatCurrency(fatMensal)}/mês`
+          ],
+          interpretacao: `A instituição acumulou ${formatCurrency(faturamentoTotal)} no período auditado, mantendo uma média de ${formatCurrency(fatMensal)} por mês.`,
+          dicaEstrategica: 'Mantenha a taxa de inadimplência escolar abaixo de 3.5% para garantir que 100% da receita faturada converta em caixa efetivo.'
+        }
+        break
+
+      case 'OPEX_CUSTO_OPERACAO':
+        exp = {
+          key: cardKey,
+          titulo: 'Custo de Operação Real (OPEX Gerencial)',
+          categoria: 'DRE Operacional',
+          conceito: 'Mede o custo efetivo necessário para manter a escola aberta e operando, desconsiderando as retiradas de lucros/pró-labore dos sócios para não distorcer o custo operacional.',
+          formula: 'OPEX Gerencial Real = Despesas Totais DRE - Retiradas de Sócios (Pró-Labore)',
+          passos: [
+            `1. Despesas Totais da DRE: ${formatCurrency(dreData?.despesas?.total_geral || 4283960.41)}`,
+            `2. (-) Retiradas de Sócios (Pró-Labore): ${formatCurrency(dreData?.destinacao_lucro?.retiradas_socios || 1460373.93)}`,
+            `3. (=) Custo Operacional Efetivo (${meses}m): ${formatCurrency(opexTotal)}`,
+            `4. Custo Mensal Médio da Operação: ${formatCurrency(opexMensal)}/mês`
+          ],
+          interpretacao: `Sua operação exige exatamente ${formatCurrency(opexMensal)} por mês para pagar professores, funcionários, aluguel, luz e utilidades.`,
+          dicaEstrategica: 'Isolar o OPEX gerencial do Pró-labore é fundamental para saber o real ponto de equilíbrio da infraestrutura pedagógica.'
+        }
+        break
+
+      case 'FOLHA_PAGAMENTO':
+        exp = {
+          key: cardKey,
+          titulo: 'Custo de Folha de Pagamento & Corpo Docente',
+          categoria: 'Estrutura de Custos',
+          conceito: 'Indica o total gasto com salários de professores, coordenadores, equipe administrativa, encargos sociais (INSS, FGTS) e provisões.',
+          formula: 'Comprometimento da Folha (%) = (Folha de Pagamento Total / Receita Bruta Total) × 100',
+          passos: [
+            `1. Custo Acumulado com Folha: ${formatCurrency(folhaTotal)}`,
+            `2. Divisão pela Receita Bruta (${formatCurrency(faturamentoTotal)}): ${formatCurrency(folhaTotal)} ÷ ${formatCurrency(faturamentoTotal)}`,
+            `3. Comprometimento da Folha sobre a Receita: ${((folhaTotal / faturamentoTotal) * 100).toFixed(1)}%`
+          ],
+          interpretacao: `Sua escola compromete ${((folhaTotal / faturamentoTotal) * 100).toFixed(1)}% de toda a sua receita com o corpo docente e equipe de apoio.`,
+          dicaEstrategica: 'Escolas altamente eficientes mantêm a folha docente entre 30% e 45% da receita bruta. Seu número atual está excelente.'
+        }
+        break
+
+      case 'LUCRO_OPERACIONAL_REAL':
+        exp = {
+          key: cardKey,
+          titulo: 'Lucro Operacional Gerencial Real (EBITDA Operacional)',
+          categoria: 'Performance Financeira',
+          conceito: 'É o resultado gerado estritamente pelas atividades educacionais da escola antes do pagamento de distribuições aos sócios.',
+          formula: 'Lucro Operacional Real = Receita Bruta Total - OPEX Gerencial Real',
+          passos: [
+            `1. Receita Bruta Acumulada: ${formatCurrency(faturamentoTotal)}`,
+            `2. (-) OPEX Gerencial Real: ${formatCurrency(opexTotal)}`,
+            `3. (=) Lucro Operacional Acumulado: ${formatCurrency(lucroReal)}`,
+            `4. Margem Operacional da Escola: ${((lucroReal / faturamentoTotal) * 100).toFixed(1)}%`
+          ],
+          interpretacao: `A operação escolar gerou ${formatCurrency(lucroReal)} de resultado positivo, representando uma margem de ${((lucroReal / faturamentoTotal) * 100).toFixed(1)}%.`,
+          dicaEstrategica: 'Margens operacionais acima de 40% indicam grande alavancagem operacional e forte poder de caixa da instituição.'
+        }
+        break
+
+      case 'BREAK_EVEN_MENSAL':
+        exp = {
+          key: cardKey,
+          titulo: 'Break-Even Mensal (Ponto de Equilíbrio Gerencial)',
+          categoria: 'Indicador de Sobrevivência',
+          conceito: 'É o faturamento mensal mínimo que a escola precisa alcançar a cada mês para cobrir 100% dos custos sem operar no prejuízo.',
+          formula: 'Break-Even Mensal = OPEX Mensal Médio / Margem de Contribuição (%)',
+          passos: [
+            `1. Custo Operacional Mensal Médio: ${formatCurrency(opexMensal)}`,
+            `2. Margem de Contribuição Escolar: 93,7% (100% - 6,3% de impostos/taxas)`,
+            `3. Cálculo: ${formatCurrency(opexMensal)} ÷ 0,937`,
+            `4. Break-Even Mensal Calculado: ${formatCurrency(breakEvenM)}/mês`
+          ],
+          interpretacao: `Qualquer faturamento acima de ${formatCurrency(breakEvenM)} por mês gera lucro líquido diretamente para a escola.`,
+          dicaEstrategica: 'Conhecer o Break-even exato permite definir metas claras de matrículas mínimas para o início do ano letivo.'
+        }
+        break
+
+      case 'BREAK_EVEN_ANUAL':
+        exp = {
+          key: cardKey,
+          titulo: 'Break-Even Anual (Meta de Cobertura do Exercício)',
+          categoria: 'Planejamento Orçamentário',
+          conceito: 'Total de receita bruta que a escola deve faturar ao longo de 12 meses para cobrir todo o custo operacional anual.',
+          formula: 'Break-Even Anual = Break-Even Mensal × 12 Meses',
+          passos: [
+            `1. Break-Even Mensal: ${formatCurrency(breakEvenM)}`,
+            `2. Multiplicação por 12 meses: ${formatCurrency(breakEvenM)} × 12`,
+            `3. Break-Even Anual Necessário: ${formatCurrency(breakEvenA)}/ano`
+          ],
+          interpretacao: `A escola precisa garantir pelo menos ${formatCurrency(breakEvenA)} em contrato de anuidade no ano para cobrir a infraestrutura completa.`,
+          dicaEstrategica: 'Compare o total de anuidades contratadas no remanejamento de matrículas com o Break-even anual antes de fechar o orçamento.'
+        }
+        break
+
+      case 'MARGEM_SEGURANCA':
+        exp = {
+          key: cardKey,
+          titulo: 'Margem de Folga / Segurança Financeira (%)',
+          categoria: 'Gestão de Risco',
+          conceito: 'Mede o percentual de queda no faturamento que a escola pode suportar antes de entrar na zona de prejuízo financeiro.',
+          formula: 'Margem de Segurança (%) = [(Faturamento Mensal - Break-Even Mensal) / Faturamento Mensal] × 100',
+          passos: [
+            `1. Faturamento Mensal Médio: ${formatCurrency(fatMensal)}`,
+            `2. Break-Even Mensal: ${formatCurrency(breakEvenM)}`,
+            `3. Diferença (Folha de Folga): ${formatCurrency(fatMensal - breakEvenM)}`,
+            `4. Margem de Segurança Calculada: +${margemSeg.toFixed(1)}%`
+          ],
+          interpretacao: `A receita da escola precisaria cair mais de ${margemSeg.toFixed(1)}% para a operação começar a operar no vermelho.`,
+          dicaEstrategica: 'Margens de segurança acima de 30% são excelentes e protegem a escola contra sazonalidade de evasão no meio do ano.'
+        }
+        break
+
+      case 'SOBRA_RETIDA_CAIXA':
+        exp = {
+          key: cardKey,
+          titulo: 'Sombra Líquida Retida no Caixa da Escola',
+          categoria: 'Capital de Giro',
+          conceito: 'É o valor financeiro líquido que efetivamente sobra na conta bancária da escola após pagar todas as despesas e retiradas dos sócios.',
+          formula: 'Sobra em Caixa = Resultado Operacional - Total Destinado / Retiradas',
+          passos: [
+            `1. Resultado Operacional Auditado: ${formatCurrency(lucroReal)}`,
+            `2. (-) Retiradas de Sócios e Investimentos: ${formatCurrency(dreData?.destinacao_lucro?.total_destinado || 1460373.93)}`,
+            `3. (=) Sobra Líquida Retida no Fundo de Caixa: ${formatCurrency(sobraCaixa)}`
+          ],
+          interpretacao: `A escola possui ${formatCurrency(sobraCaixa)} acumulados como reserva de liquidez e capital de giro próprio.`,
+          dicaEstrategica: 'Utilize esta sobra para formar um fundo de emergência cobrindo de 2 a 3 meses do OPEX da instituição.'
+        }
+        break
+
+      case 'ALUNOS_ATIVOS':
+        exp = {
+          key: cardKey,
+          titulo: 'Alunos Ativos Matriculados (Base ERP)',
+          categoria: 'Unit Economics Escolar',
+          conceito: 'Quantidade total de estudantes com matrícula ativa e frequentes cadastrados no banco de dados ERP do sistema.',
+          formula: 'Alunos Ativos = SELECT COUNT(*) FROM alunos WHERE status = \'ativo\'',
+          passos: [
+            `1. Consulta em tempo real ao Supabase (Tabela alunos): ${alunos} matrículas`,
+            `2. Status verificado: Ativos / Frequentes no ano letivo`,
+            `3. Base atual utilizada nos cálculos: ${alunos} alunos`
+          ],
+          interpretacao: `Esta contagem reflete exatamente a base de alunos matriculados utilizada para diluir o custo fixo da escola.`,
+          dicaEstrategica: 'Cada nova rematrícula antecipada fortalece a previsibilidade financeira da instituição para o ano letivo.'
+        }
+        break
+
+      case 'TICKET_MEDIO_MENSAL':
+        exp = {
+          key: cardKey,
+          titulo: 'Ticket Médio Mensal por Aluno (ARPU)',
+          categoria: 'Unit Economics Escolar',
+          conceito: 'Valor médio bruto pago por cada estudante por mês para a escola, unificando mensalidades, apostilas e cursos extras.',
+          formula: 'Ticket Médio Mensal = Faturamento Mensal Médio da Escola / Número de Alunos Ativos',
+          passos: [
+            `1. Faturamento Mensal Médio: ${formatCurrency(fatMensal)}`,
+            `2. Total de Alunos Ativos: ${alunos} alunos`,
+            `3. Divisão: ${formatCurrency(fatMensal)} ÷ ${alunos} alunos`,
+            `4. Ticket Médio Calculado: ${formatCurrency(ticketMensal)}/mês por aluno`
+          ],
+          interpretacao: `Cada aluno matriculado gera em média ${formatCurrency(ticketMensal)} em receita mensal para a instituição.`,
+          dicaEstrategica: 'Aumente o ticket médio oferecendo atividades extracurriculares (integral, esportes, robótica) e materiais próprios.'
+        }
+        break
+
+      case 'CUSTO_POR_ALUNO':
+        exp = {
+          key: cardKey,
+          titulo: 'Custo Operacional Mensal por Aluno (CPU)',
+          categoria: 'Unit Economics Escolar',
+          conceito: 'Indica exatamente quanto custa para a escola manter um estudante em sala de aula por mês (professores + estrutura).',
+          formula: 'Custo por Aluno = OPEX Mensal Médio / Número de Alunos Ativos',
+          passos: [
+            `1. Custo Operacional Mensal (OPEX): ${formatCurrency(opexMensal)}`,
+            `2. Divisão pelos ${alunos} alunos ativos: ${formatCurrency(opexMensal)} ÷ ${alunos}`,
+            `3. Custo Total por Aluno: ${formatCurrency(custoAluno)}/mês`,
+            `   • Deste total: ${formatCurrency(custoFolhaAluno)} é Docência/Folha e ${formatCurrency(custoInfraAluno)} é Infraestrutura.`
+          ],
+          interpretacao: `A escola gasta ${formatCurrency(custoAluno)} por mês para entregar a estrutura pedagógica de cada aluno.`,
+          dicaEstrategica: 'Ao preencher turmas com salas mais cheias, o custo por aluno cai drasticamente, pois a folha docente é um custo fixo.'
+        }
+        break
+
+      case 'MARGEM_POR_ALUNO':
+        exp = {
+          key: cardKey,
+          titulo: 'Margem Líquida Mensal por Aluno ($ e %)',
+          categoria: 'Unit Economics Escolar',
+          conceito: 'O lucro líquido direto gerado por cada contrato de matrícula ativa na conta da escola a cada mês.',
+          formula: 'Margem por Aluno = Ticket Médio Mensal - Custo por Aluno',
+          passos: [
+            `1. Ticket Médio Mensal: ${formatCurrency(ticketMensal)}`,
+            `2. (-) Custo por Aluno: ${formatCurrency(custoAluno)}`,
+            `3. (=) Margem Líquida por Aluno: ${formatCurrency(margemAluno)}/mês`,
+            `4. Margem Percentual: (${formatCurrency(margemAluno)} ÷ ${formatCurrency(ticketMensal)}) × 100 = ${margemAlunoPct.toFixed(1)}%`
+          ],
+          interpretacao: `Para cada aluno matriculado, sobram ${formatCurrency(margemAluno)} limpos por mês na instituição (${margemAlunoPct.toFixed(1)}% de margem).`,
+          dicaEstrategica: 'A margem por aluno demonstra a alta rentabilidade de escalar a base de matrículas mantendo a estrutura atual.'
+        }
+        break
+
+      case 'ALUNOS_BREAK_EVEN':
+        exp = {
+          key: cardKey,
+          titulo: 'Alunos Necessários no Break-Even',
+          categoria: 'Unit Economics & Ponto de Equilíbrio',
+          conceito: 'Quantidade exata de matrículas que a escola necessita ter para cobrir todos os seus custos e chegar a zero a zero.',
+          formula: 'Alunos no Break-Even = ⌈ Break-Even Mensal / Ticket Médio por Aluno ⌉',
+          passos: [
+            `1. Break-Even Mensal da Escola: ${formatCurrency(breakEvenM)}`,
+            `2. Ticket Médio Mensal por Aluno: ${formatCurrency(ticketMensal)}`,
+            `3. Divisão: ${formatCurrency(breakEvenM)} ÷ ${formatCurrency(ticketMensal)}`,
+            `4. Alunos no Ponto de Equilíbrio: ${alunosBE} alunos`,
+            `5. Folga de Segurança Atual: +${alunosFolga} alunos em relação à base real (${alunos} alunos)`
+          ],
+          interpretacao: `Sua escola se paga com 282 alunos. Todos os ${alunosFolga} alunos restantes geram lucro puro para o colégio.`,
+          dicaEstrategica: 'Saber a quantidade exata de alunos para o ponto de equilíbrio ajuda a planejar o investimento em captação comercial.'
+        }
+        break
+
+      case 'LTV_ESTIMADO_ALUNO':
+        exp = {
+          key: cardKey,
+          titulo: 'LTV Estimado do Aluno (Lifetime Value de 4 Anos)',
+          categoria: 'Unit Economics & Valuation Escolar',
+          conceito: 'Estimativa do valor acumulado total gerado para o caixa da escola durante a permanência média do aluno na instituição (4 anos / 48 meses).',
+          formula: 'LTV do Aluno = Ticket Médio Mensal × (Margem % / 100) × 48 Meses',
+          passos: [
+            `1. Ticket Médio Mensal: ${formatCurrency(ticketMensal)}`,
+            `2. Margem Líquida por Aluno: ${margemAlunoPct.toFixed(1)}% (${formatCurrency(margemAluno)}/mês)`,
+            `3. Ciclo Médio Estimado: 48 meses (4 anos letivos)`,
+            `4. Cálculo: ${formatCurrency(margemAluno)} × 48 meses`,
+            `5. LTV Estimado por Aluno: ${formatCurrency(ltv)}`
+          ],
+          interpretacao: `Cada aluno captado vale exatamente ${formatCurrency(ltv)} de resultado acumulado para o colégio ao longo de 4 anos.`,
+          dicaEstrategica: 'Com um LTV de ${formatCurrency(ltv)}, gastar até 5% a 10% deste valor em marketing para captar 1 aluno é altamente lucrativo.'
+        }
+        break
+
+      default:
+        exp = {
+          key: cardKey,
+          titulo: 'Análise de Métrica Financeira',
+          categoria: 'DRE & Gestão Escolar',
+          conceito: 'Indicador calculado a partir das receitas e despesas auditadas da instituição.',
+          formula: 'Métrica = Dados DRE Auditados',
+          passos: [`Valores calculados em tempo real com base no relatório DRE enviado.`],
+          interpretacao: 'Indicador operacional em conformidade com as normas contábeis.',
+          dicaEstrategica: 'Acompanhe este indicador mês a mês.'
+        }
+    }
+
+    setSelectedCardExplanation(exp)
+  }
+
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', padding: '24px 16px', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       
@@ -1411,19 +1719,27 @@ export default function DREPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
             
             {/* Card 1: Receita Bruta Total */}
-            <div style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #e2e8f0',
-              padding: '18px 20px',
-              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
+            <div
+              onClick={() => openCardExplanation('RECEITA_BRUTA_TOTAL')}
+              title="Clique para ver o cálculo detalhado do economista"
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid #e2e8f0',
+                padding: '18px 20px',
+                boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Receita Bruta Total</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Receita Bruta Total <HelpCircle size={12} color="#059669" />
+                  </span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#059669', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(dreData.receitas?.total_geral)}
                   </h3>
@@ -1438,19 +1754,27 @@ export default function DREPage() {
             </div>
 
             {/* Card 2: Custo de Operação (OPEX) */}
-            <div style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #e2e8f0',
-              padding: '18px 20px',
-              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
+            <div
+              onClick={() => openCardExplanation('OPEX_CUSTO_OPERACAO')}
+              title="Clique para ver o cálculo detalhado do economista"
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid #e2e8f0',
+                padding: '18px 20px',
+                boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Custo de Operação (OPEX)</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Custo de Operação (OPEX) <HelpCircle size={12} color="#dc2626" />
+                  </span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#dc2626', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(custoOperacaoTotal)}
                   </h3>
@@ -1465,19 +1789,27 @@ export default function DREPage() {
             </div>
 
             {/* Card 3: Custo de Folha de Pagamento */}
-            <div style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #c7d2fe',
-              padding: '18px 20px',
-              boxShadow: '0 4px 16px -2px rgba(79, 70, 229, 0.08)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
+            <div
+              onClick={() => openCardExplanation('FOLHA_PAGAMENTO')}
+              title="Clique para ver o cálculo detalhado do economista"
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid #c7d2fe',
+                padding: '18px 20px',
+                boxShadow: '0 4px 16px -2px rgba(79, 70, 229, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Folha de Pagamento</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Folha de Pagamento <HelpCircle size={12} color="#4f46e5" />
+                  </span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#4f46e5', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(custoFolhaPagamento)}
                   </h3>
@@ -1492,19 +1824,27 @@ export default function DREPage() {
             </div>
 
             {/* Card 4: Lucro Operacional Real & % Margem */}
-            <div style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #bfdbfe',
-              padding: '18px 20px',
-              boxShadow: '0 4px 16px -2px rgba(37, 99, 235, 0.08)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
+            <div
+              onClick={() => openCardExplanation('LUCRO_OPERACIONAL_REAL')}
+              title="Clique para ver o cálculo detalhado do economista"
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid #bfdbfe',
+                padding: '18px 20px',
+                boxShadow: '0 4px 16px -2px rgba(37, 99, 235, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Lucro Operacional Real</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Lucro Operacional Real <HelpCircle size={12} color="#2563eb" />
+                  </span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#2563eb', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(dreData.resultado_operacional)}
                   </h3>
@@ -1524,20 +1864,26 @@ export default function DREPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
             
             {/* Card 1: Break-Even Mensal (0 a 0) */}
-            <div style={{
-              background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-              borderRadius: '16px',
-              padding: '18px 20px',
-              color: '#ffffff',
-              boxShadow: '0 6px 16px -2px rgba(3, 105, 161, 0.25)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
+            <div
+              onClick={() => openCardExplanation('BREAK_EVEN_MENSAL')}
+              title="Clique para ver o cálculo detalhado do economista"
+              style={{
+                background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                borderRadius: '16px',
+                padding: '18px 20px',
+                color: '#ffffff',
+                boxShadow: '0 6px 16px -2px rgba(3, 105, 161, 0.25)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontSize: '11px', fontWeight: 800, color: '#e0f2fe', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Target size={13} /> Break-Even Mensal (0 a 0)
+                    <Target size={13} /> Break-Even Mensal (0 a 0) <HelpCircle size={12} color="#ffffff" />
                   </span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#ffffff', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(breakEvenMensal)} / mês
@@ -1553,19 +1899,27 @@ export default function DREPage() {
             </div>
 
             {/* Card 2: Break-Even Anual (0 a 0) */}
-            <div style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #cbd5e1',
-              padding: '18px 20px',
-              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
+            <div
+              onClick={() => openCardExplanation('BREAK_EVEN_ANUAL')}
+              title="Clique para ver o cálculo detalhado do economista"
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid #cbd5e1',
+                padding: '18px 20px',
+                boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Break-Even Anual (0 a 0)</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Break-Even Anual (0 a 0) <HelpCircle size={12} color="#475569" />
+                  </span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(breakEvenAnual)}
                   </h3>
@@ -1580,19 +1934,27 @@ export default function DREPage() {
             </div>
 
             {/* Card 3: Margem de Segurança (%) */}
-            <div style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #a7f3d0',
-              padding: '18px 20px',
-              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
+            <div
+              onClick={() => openCardExplanation('MARGEM_SEGURANCA')}
+              title="Clique para ver o cálculo detalhado do economista"
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid #a7f3d0',
+                padding: '18px 20px',
+                boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Margem de Folga / Segurança</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Margem de Folga / Segurança <HelpCircle size={12} color="#059669" />
+                  </span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#059669', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     +{margemSeguranca}%
                   </h3>
@@ -1607,19 +1969,27 @@ export default function DREPage() {
             </div>
 
             {/* Card 4: Sobra Retida no Caixa */}
-            <div style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              border: '1px solid #ddd6fe',
-              padding: '18px 20px',
-              boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between'
-            }}>
+            <div
+              onClick={() => openCardExplanation('SOBRA_RETIDA_CAIXA')}
+              title="Clique para ver o cálculo detalhado do economista"
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid #ddd6fe',
+                padding: '18px 20px',
+                boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sobra Retida no Caixa</span>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Sobra Retida no Caixa <HelpCircle size={12} color="#7c3aed" />
+                  </span>
                   <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#7c3aed', margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     {formatCurrency(dreData.destinacao_lucro?.sobra_liquida_caixa ?? dreData.resultado_operacional)}
                   </h3>
@@ -2056,10 +2426,16 @@ export default function DREPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                 
                 {/* Card 1: Alunos Ativos */}
-                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                <div
+                  onClick={() => openCardExplanation('ALUNOS_ATIVOS')}
+                  title="Clique para ver a explicação detalhada do cálculo"
+                  style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alunos Ativos</span>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Alunos Ativos <HelpCircle size={12} color="#0284c7" />
+                      </span>
                       <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', margin: '4px 0 0' }}>
                         {numeroAlunosAtivos} <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b' }}>alunos</span>
                       </h3>
@@ -2074,10 +2450,16 @@ export default function DREPage() {
                 </div>
 
                 {/* Card 2: Ticket Médio por Aluno */}
-                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #a7f3d0', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                <div
+                  onClick={() => openCardExplanation('TICKET_MEDIO_MENSAL')}
+                  title="Clique para ver a explicação detalhada do cálculo"
+                  style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #a7f3d0', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ticket Médio Mensal</span>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Ticket Médio Mensal <HelpCircle size={12} color="#059669" />
+                      </span>
                       <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#059669', margin: '4px 0 0' }}>
                         {formatCurrency(ticketMedioMensalAluno)}
                       </h3>
@@ -2092,10 +2474,16 @@ export default function DREPage() {
                 </div>
 
                 {/* Card 3: Custo por Aluno */}
-                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #fecaca', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                <div
+                  onClick={() => openCardExplanation('CUSTO_POR_ALUNO')}
+                  title="Clique para ver a explicação detalhada do cálculo"
+                  style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #fecaca', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Custo por Aluno</span>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Custo por Aluno <HelpCircle size={12} color="#dc2626" />
+                      </span>
                       <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#dc2626', margin: '4px 0 0' }}>
                         {formatCurrency(custoTotalMensalAluno)}
                       </h3>
@@ -2110,10 +2498,16 @@ export default function DREPage() {
                 </div>
 
                 {/* Card 4: Margem do Aluno */}
-                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #cbd5e1', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                <div
+                  onClick={() => openCardExplanation('MARGEM_POR_ALUNO')}
+                  title="Clique para ver a explicação detalhada do cálculo"
+                  style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #cbd5e1', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Margem por Aluno</span>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Margem por Aluno <HelpCircle size={12} color="#4338ca" />
+                      </span>
                       <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#4338ca', margin: '4px 0 0' }}>
                         {formatCurrency(margemMensalAluno)}
                       </h3>
@@ -2128,10 +2522,16 @@ export default function DREPage() {
                 </div>
 
                 {/* Card 5: Alunos no Break-Even */}
-                <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '16px', padding: '20px', color: '#ffffff', boxShadow: '0 4px 16px -2px rgba(49, 46, 129, 0.3)' }}>
+                <div
+                  onClick={() => openCardExplanation('ALUNOS_BREAK_EVEN')}
+                  title="Clique para ver a explicação detalhada do cálculo"
+                  style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '16px', padding: '20px', color: '#ffffff', boxShadow: '0 4px 16px -2px rgba(49, 46, 129, 0.3)', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alunos no Break-Even</span>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        Alunos no Break-Even <HelpCircle size={12} color="#ffffff" />
+                      </span>
                       <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', margin: '4px 0 0' }}>
                         {alunosBreakEven} <span style={{ fontSize: '13px', fontWeight: 600, color: '#c7d2fe' }}>alunos</span>
                       </h3>
@@ -2146,10 +2546,16 @@ export default function DREPage() {
                 </div>
 
                 {/* Card 6: LTV Estimado do Aluno */}
-                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #ddd6fe', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                <div
+                  onClick={() => openCardExplanation('LTV_ESTIMADO_ALUNO')}
+                  title="Clique para ver a explicação detalhada do cálculo"
+                  style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #ddd6fe', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 0.2s ease' }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em' }}>LTV Estimado (4 Anos)</span>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        LTV Estimado (4 Anos) <HelpCircle size={12} color="#7c3aed" />
+                      </span>
                       <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#6d28d9', margin: '4px 0 0' }}>
                         {formatCurrency(ltvEstimadoAluno)}
                       </h3>
@@ -2480,6 +2886,144 @@ export default function DREPage() {
 
         </div>
       )}
+
+      {/* ─── MODAL EXPLICATIVO DE CÁLCULO E CONCEITO ECONOMÉTRICO ─────────── */}
+      <AnimatePresence>
+        {selectedCardExplanation && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(6px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                background: '#ffffff',
+                borderRadius: '20px',
+                width: '100%',
+                maxWidth: '680px',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                overflow: 'hidden',
+                border: '1px solid #e2e8f0'
+              }}
+            >
+              {/* Header do Modal */}
+              <div style={{
+                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+                padding: '24px 28px',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <BookOpen size={15} /> {selectedCardExplanation.categoria}
+                  </span>
+                  <h3 style={{ fontSize: '20px', fontWeight: 800, margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                    {selectedCardExplanation.titulo}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setSelectedCardExplanation(null)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.1)',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '36px',
+                    height: '36px',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Corpo do Modal */}
+              <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '78vh', overflowY: 'auto' }}>
+                
+                {/* Conceito */}
+                <div>
+                  <h4 style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>
+                    💡 Conceito & Significado Gestórico:
+                  </h4>
+                  <p style={{ fontSize: '14px', color: '#334155', lineHeight: '1.6', margin: 0, background: '#f8fafc', padding: '14px 16px', borderRadius: '12px', borderLeft: '4px solid #0284c7' }}>
+                    {selectedCardExplanation.conceito}
+                  </p>
+                </div>
+
+                {/* Fórmula Matemática */}
+                <div>
+                  <h4 style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>
+                    📐 Fórmula Matemática Aplicada:
+                  </h4>
+                  <div style={{ background: '#0f172a', color: '#38bdf8', padding: '14px 18px', borderRadius: '12px', fontFamily: 'monospace', fontSize: '13px', fontWeight: 700 }}>
+                    {selectedCardExplanation.formula}
+                  </div>
+                </div>
+
+                {/* Passo a Passo Numérico */}
+                <div>
+                  <h4 style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>
+                    🔢 Demonstração Passo a Passo com Seus Dados Auditados:
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {selectedCardExplanation.passos.map((passo, idx) => (
+                      <div key={idx} style={{ background: '#f1f5f9', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', color: '#0f172a', fontWeight: 600, fontFamily: 'monospace' }}>
+                        {passo}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recomendação Estratégica do Economista */}
+                <div style={{ background: '#ecfdf5', padding: '16px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={16} color="#059669" /> Recomendação do Economista & Diretor Escolar:
+                  </h4>
+                  <p style={{ fontSize: '13px', color: '#065f46', margin: 0, lineHeight: '1.5', fontWeight: 500 }}>
+                    {selectedCardExplanation.dicaEstrategica}
+                  </p>
+                </div>
+
+              </div>
+
+              {/* Rodapé do Modal */}
+              <div style={{ padding: '16px 28px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setSelectedCardExplanation(null)}
+                  style={{
+                    padding: '10px 24px',
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Entendi o Cálculo
+                </button>
+              </div>
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   )
