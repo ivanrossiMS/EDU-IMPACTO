@@ -41,11 +41,41 @@ export async function GET(request: Request) {
     }
 
     let queryExec = query.order('nome')
-    if (!all) {
-      queryExec = queryExec.range(from, to)
-    }
+    let responsaveisData: any[] = []
+    let respError: any = null
+    let count: number | null = null
 
-    const { data: responsaveisData, error: respError, count } = await queryExec
+    if (!all) {
+      const { data, error, count: c } = await queryExec.range(from, to)
+      responsaveisData = data || []
+      respError = error
+      count = c
+    } else {
+      let hasMore = true
+      let offset = 0
+      const limitVal = 1000
+      while (hasMore) {
+        const { data: chunk, error } = await query
+          .order('nome')
+          .range(offset, offset + limitVal - 1)
+        
+        if (error) {
+          respError = error
+          break
+        }
+        
+        if (chunk && chunk.length > 0) {
+          responsaveisData.push(...chunk)
+          offset += limitVal
+          if (chunk.length < limitVal) {
+            hasMore = false
+          }
+        } else {
+          hasMore = false
+        }
+      }
+      count = responsaveisData.length
+    }
 
     if (respError) return NextResponse.json({ error: respError.message }, { status: 400 })
     

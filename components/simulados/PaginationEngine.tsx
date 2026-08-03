@@ -40,8 +40,15 @@ interface PaginationEngineProps {
 export function cleanEnunciadoHtml(html: string): string {
   if (!html) return '';
 
+  let hasWrapper = false;
+  let cleaned = html;
+  if (cleaned.startsWith('<div style="white-space: pre-wrap;">') && cleaned.endsWith('</div>')) {
+    hasWrapper = true;
+    cleaned = cleaned.substring('<div style="white-space: pre-wrap;">'.length, cleaned.length - '</div>'.length);
+  }
+
   const metaTags: string[] = [];
-  let cleaned = html.replace(/^(?:\s*<meta[^>]+>)+/gi, (match) => {
+  cleaned = cleaned.replace(/^(?:\s*<meta[^>]+>)+/gi, (match) => {
     metaTags.push(match);
     return '';
   });
@@ -88,7 +95,8 @@ export function cleanEnunciadoHtml(html: string): string {
   }
 
   const prefix = metaTags.length > 0 ? metaTags.join('\n') + '\n' : '';
-  return prefix + cleaned;
+  const result = prefix + cleaned;
+  return hasWrapper ? `<div style="white-space: pre-wrap;">${result}</div>` : result;
 }
 
 export function parseEnunciadoParts(enunciado: string, imagens: any[]) {

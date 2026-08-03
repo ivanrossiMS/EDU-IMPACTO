@@ -301,7 +301,7 @@ export async function GET(request: Request) {
         if (respIds.length > 0) {
           const { data: respData } = await supabase
             .from('responsaveis')
-            .select('id, nome, parentesco, telefone, email, rfid, proibido, dias_acesso, status, observacao')
+            .select('id, nome, telefone, email, rfid, proibido, dias_acesso, obs')
             .in('id', respIds)
           responsaveisTable = respData || []
         }

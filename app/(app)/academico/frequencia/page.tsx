@@ -779,7 +779,8 @@ export default function FrequenciaPage() {
   const { data: apiResponse, isLoading: loadingAlunos, isFetching: fetchingAlunos } = useApiQuery<{data: any[], meta: any}>(
     ['alunos-core-frequencia'], 
     '/api/alunos', 
-    { lightweight: true, all: true, limit: 2000 }
+    { lightweight: true, all: true, limit: 2000 },
+    { noCache: true }
   )
   const alunos = apiResponse?.data || []
 
@@ -787,7 +788,8 @@ export default function FrequenciaPage() {
   const { data: allResponsaveisResp } = useApiQuery<any>(
     ['all-responsaveis-frequencia'],
     '/api/responsaveis',
-    { all: true, limit: 5000 }
+    { all: true, limit: 5000 },
+    { noCache: true }
   )
 
   const allResponsaveisList = useMemo(() => {
