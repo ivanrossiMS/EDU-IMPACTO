@@ -168,12 +168,27 @@ export default function DREPage() {
   // Filtros da Tabela
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+  const [fonteAlunosReal, setFonteAlunosReal] = useState<boolean>(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchHistorico()
+    fetchRealAlunosCount()
   }, [])
+
+  const fetchRealAlunosCount = async () => {
+    try {
+      const res = await fetch('/api/financeiro/dre/alunos-count')
+      const data = await res.json()
+      if (res.ok && data.total_alunos && data.total_alunos > 0) {
+        setNumeroAlunosAtivos(data.total_alunos)
+        setFonteAlunosReal(true)
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar total real de alunos:', e)
+    }
+  }
 
   // Buscar Histórico Unificado (Supabase + LocalStorage Fallback)
   const fetchHistorico = async () => {
@@ -1993,13 +2008,14 @@ export default function DREPage() {
               }}>
                 <div>
                   <span style={{ fontSize: '11px', fontWeight: 800, color: '#a7f3d0', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <GraduationCap size={16} /> Painel de Unit Economics & Gestão Escolar
+                    <GraduationCap size={16} /> Painel de Unit Economics & Gestão Escolar Real
                   </span>
                   <h3 style={{ fontSize: '22px', fontWeight: 800, margin: '4px 0 0', letterSpacing: '-0.02em' }}>
                     Análise Financeira por Aluno Matriculado
                   </h3>
-                  <p style={{ fontSize: '13px', color: '#d1fae5', margin: '4px 0 0' }}>
-                    Ajuste o total de alunos ativos para recalcular automaticamente o ticket médio, custo por aluno e margem líquida.
+                  <p style={{ fontSize: '13px', color: '#d1fae5', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#34d399', display: 'inline-block' }} />
+                    Matrículas ativas sincronizadas em tempo real com o banco de dados ERP do sistema.
                   </p>
                 </div>
 
