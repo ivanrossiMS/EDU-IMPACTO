@@ -10,7 +10,7 @@ import {
   Info, Layers, ArrowUpRight, ArrowDownRight, FileUp, Zap, Scale, Wallet,
   Award, Percent, Target, LineChart as LineChartIcon, ShieldAlert, Cpu,
   UserCheck, Hammer, PiggyBank, Compass, ShieldCheck as ShieldIcon, Clock, CreditCard,
-  Edit3, Save, Check, Users
+  Edit3, Save, Check, Users, GraduationCap
 } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
@@ -151,7 +151,11 @@ export default function DREPage() {
 
   const [dreData, setDreData] = useState<DREDados | null>(null)
   const [nomeRelatorio, setNomeRelatorio] = useState<string>('')
-  const [activeTab, setActiveTab] = useState<'dre' | 'cfo' | 'graficos' | 'insights' | 'historico'>('dre')
+  const [activeTab, setActiveTab] = useState<'dre' | 'cfo' | 'alunos' | 'graficos' | 'insights' | 'historico'>('dre')
+
+  // Métricas Unit Economics Escolar
+  const [numeroAlunosAtivos, setNumeroAlunosAtivos] = useState<number>(450)
+  const [simuladorAlunosAdicionais, setSimuladorAlunosAdicionais] = useState<number>(30)
 
   // Modais de Edição / Salvar
   const [showRenameModal, setShowRenameModal] = useState(false)
@@ -763,6 +767,53 @@ export default function DREPage() {
     return resultadoOperacionalReal - totalDestinado
   }, [dreData, resultadoOperacionalReal])
 
+  // ─── MÉTRICAS UNIT ECONOMICS POR ALUNO (CFO & DIRETOR ESCOLAR) ─────────────
+  const ticketMedioMensalAluno = useMemo(() => {
+    if (!numeroAlunosAtivos || numeroAlunosAtivos <= 0) return 0
+    return faturamentoMensalMedio / numeroAlunosAtivos
+  }, [faturamentoMensalMedio, numeroAlunosAtivos])
+
+  const custoTotalMensalAluno = useMemo(() => {
+    if (!numeroAlunosAtivos || numeroAlunosAtivos <= 0) return 0
+    return custoOperacaoMensalMedio / numeroAlunosAtivos
+  }, [custoOperacaoMensalMedio, numeroAlunosAtivos])
+
+  const custoFolhaMensalAluno = useMemo(() => {
+    if (!numeroAlunosAtivos || numeroAlunosAtivos <= 0) return 0
+    const folhaMensal = custoFolhaPagamento / (numeroMeses || 12)
+    return folhaMensal / numeroAlunosAtivos
+  }, [custoFolhaPagamento, numeroMeses, numeroAlunosAtivos])
+
+  const custoInfraMensalAluno = useMemo(() => {
+    if (!numeroAlunosAtivos || numeroAlunosAtivos <= 0) return 0
+    const opexMensal = custoOperacaoMensalMedio
+    const folhaMensal = custoFolhaPagamento / (numeroMeses || 12)
+    const infraMensal = Math.max(0, opexMensal - folhaMensal)
+    return infraMensal / numeroAlunosAtivos
+  }, [custoOperacaoMensalMedio, custoFolhaPagamento, numeroMeses, numeroAlunosAtivos])
+
+  const margemMensalAluno = useMemo(() => {
+    return ticketMedioMensalAluno - custoTotalMensalAluno
+  }, [ticketMedioMensalAluno, custoTotalMensalAluno])
+
+  const margemMensalAlunoPct = useMemo(() => {
+    if (!ticketMedioMensalAluno || ticketMedioMensalAluno <= 0) return 0
+    return (margemMensalAluno / ticketMedioMensalAluno) * 100
+  }, [margemMensalAluno, ticketMedioMensalAluno])
+
+  const alunosBreakEven = useMemo(() => {
+    if (!ticketMedioMensalAluno || ticketMedioMensalAluno <= 0) return 0
+    return Math.ceil(breakEvenMensal / ticketMedioMensalAluno)
+  }, [breakEvenMensal, ticketMedioMensalAluno])
+
+  const alunosMargemSeguranca = useMemo(() => {
+    return numeroAlunosAtivos - alunosBreakEven
+  }, [numeroAlunosAtivos, alunosBreakEven])
+
+  const ltvEstimadoAluno = useMemo(() => {
+    return Math.round(ticketMedioMensalAluno * (margemMensalAlunoPct / 100) * 48)
+  }, [ticketMedioMensalAluno, margemMensalAlunoPct])
+
   return (
     <div style={{ maxWidth: '1400px', margin: '0 auto', width: '100%', padding: '24px 16px', fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}>
       
@@ -1252,6 +1303,27 @@ export default function DREPage() {
                 }}
               >
                 <Award size={14} color="#6366f1" /> Painel CFO & Break-Even
+              </button>
+
+              <button
+                onClick={() => setActiveTab('alunos')}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: activeTab === 'alunos' ? '#ffffff' : 'transparent',
+                  color: activeTab === 'alunos' ? '#059669' : '#64748b',
+                  boxShadow: activeTab === 'alunos' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <GraduationCap size={14} color="#059669" /> Alunos & Unit Economics
               </button>
 
               <button
@@ -1895,6 +1967,270 @@ export default function DREPage() {
                   <p style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
                     Valor total retirado pelos mantenedores a partir do lucro
                   </p>
+                </div>
+
+              </div>
+
+            </div>
+          )}
+
+          {/* ─── ABA DE ALUNOS & UNIT ECONOMICS ESCOLAR ─────────────────────── */}
+          {activeTab === 'alunos' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* PAINEL DE CONTROLE DE ALUNOS ATIVOS */}
+              <div style={{
+                background: 'linear-gradient(135deg, #064e3b 0%, #047857 100%)',
+                borderRadius: '16px',
+                padding: '24px 28px',
+                color: '#ffffff',
+                boxShadow: '0 8px 24px -4px rgba(4, 120, 87, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '20px'
+              }}>
+                <div>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#a7f3d0', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <GraduationCap size={16} /> Painel de Unit Economics & Gestão Escolar
+                  </span>
+                  <h3 style={{ fontSize: '22px', fontWeight: 800, margin: '4px 0 0', letterSpacing: '-0.02em' }}>
+                    Análise Financeira por Aluno Matriculado
+                  </h3>
+                  <p style={{ fontSize: '13px', color: '#d1fae5', margin: '4px 0 0' }}>
+                    Ajuste o total de alunos ativos para recalcular automaticamente o ticket médio, custo por aluno e margem líquida.
+                  </p>
+                </div>
+
+                <div style={{ background: 'rgba(255, 255, 255, 0.15)', backdropFilter: 'blur(8px)', padding: '16px 20px', borderRadius: '14px', border: '1px solid rgba(255, 255, 255, 0.25)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#e6f4ea', display: 'block', marginBottom: '4px' }}>
+                      NÚMERO DE ALUNOS ATIVOS:
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        onClick={() => setNumeroAlunosAtivos(Math.max(10, numeroAlunosAtivos - 10))}
+                        style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ffffff', color: '#047857', border: 'none', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        value={numeroAlunosAtivos}
+                        onChange={(e) => setNumeroAlunosAtivos(Math.max(1, parseInt(e.target.value) || 0))}
+                        style={{ width: '90px', height: '32px', textAlign: 'center', fontWeight: 900, fontSize: '16px', borderRadius: '8px', border: 'none', color: '#0f172a', outline: 'none' }}
+                      />
+                      <button
+                        onClick={() => setNumeroAlunosAtivos(numeroAlunosAtivos + 10)}
+                        style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ffffff', color: '#047857', border: 'none', fontWeight: 900, cursor: 'pointer', fontSize: '16px' }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ borderLeft: '1px solid rgba(255, 255, 255, 0.2)', paddingLeft: '16px' }}>
+                    <span style={{ fontSize: '10px', color: '#a7f3d0', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>Ticket Mensal Estimado</span>
+                    <strong style={{ fontSize: '18px', color: '#ffffff' }}>{formatCurrency(ticketMedioMensalAluno)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* GRID DOS 6 CARDS PRINCIPAIS DE UNIT ECONOMICS */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                
+                {/* Card 1: Alunos Ativos */}
+                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alunos Ativos</span>
+                      <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#0f172a', margin: '4px 0 0' }}>
+                        {numeroAlunosAtivos} <span style={{ fontSize: '13px', fontWeight: 600, color: '#64748b' }}>alunos</span>
+                      </h3>
+                    </div>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0284c7' }}>
+                      <GraduationCap size={20} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>
+                    Base ativa de matrículas auditada
+                  </p>
+                </div>
+
+                {/* Card 2: Ticket Médio por Aluno */}
+                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #a7f3d0', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ticket Médio Mensal</span>
+                      <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#059669', margin: '4px 0 0' }}>
+                        {formatCurrency(ticketMedioMensalAluno)}
+                      </h3>
+                    </div>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669' }}>
+                      <CreditCard size={20} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>
+                    Faturamento médio mensal por aluno
+                  </p>
+                </div>
+
+                {/* Card 3: Custo por Aluno */}
+                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #fecaca', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Custo por Aluno</span>
+                      <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#dc2626', margin: '4px 0 0' }}>
+                        {formatCurrency(custoTotalMensalAluno)}
+                      </h3>
+                    </div>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
+                      <TrendingDown size={20} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>
+                    Custos operacionais (OPEX) por aluno
+                  </p>
+                </div>
+
+                {/* Card 4: Margem do Aluno */}
+                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #cbd5e1', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Margem por Aluno</span>
+                      <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#4338ca', margin: '4px 0 0' }}>
+                        {formatCurrency(margemMensalAluno)}
+                      </h3>
+                    </div>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4338ca' }}>
+                      <Zap size={20} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>
+                    Margem líquida de <strong>{margemMensalAlunoPct.toFixed(1)}%</strong> por aluno
+                  </p>
+                </div>
+
+                {/* Card 5: Alunos no Break-Even */}
+                <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)', borderRadius: '16px', padding: '20px', color: '#ffffff', boxShadow: '0 4px 16px -2px rgba(49, 46, 129, 0.3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alunos no Break-Even</span>
+                      <h3 style={{ fontSize: '24px', fontWeight: 900, color: '#ffffff', margin: '4px 0 0' }}>
+                        {alunosBreakEven} <span style={{ fontSize: '13px', fontWeight: 600, color: '#c7d2fe' }}>alunos</span>
+                      </h3>
+                    </div>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
+                      <Target size={20} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#c7d2fe', margin: '12px 0 0' }}>
+                    Folha de segurança: <strong style={{ color: '#6ee7b7' }}>+{alunosMargemSeguranca} alunos</strong>
+                  </p>
+                </div>
+
+                {/* Card 6: LTV Estimado do Aluno */}
+                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #ddd6fe', padding: '20px', boxShadow: '0 4px 16px -2px rgba(0,0,0,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.05em' }}>LTV Estimado (4 Anos)</span>
+                      <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#6d28d9', margin: '4px 0 0' }}>
+                        {formatCurrency(ltvEstimadoAluno)}
+                      </h3>
+                    </div>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
+                      <Award size={20} />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '11px', color: '#64748b', margin: '12px 0 0' }}>
+                    Valor gerado por aluno ao longo do ciclo
+                  </p>
+                </div>
+
+              </div>
+
+              {/* PAINEL DE DECOMPOSIÇÃO DE CUSTOS POR ALUNO E SIMULADOR */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+                
+                {/* Decomposição do Custo por Aluno */}
+                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <PieChartIcon size={18} color="#4f46e5" /> Onde vai o Custo de Cada Aluno?
+                  </h4>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
+                        <span style={{ color: '#334155' }}>👨‍🏫 Folha de Pagamento & Corpo Docente</span>
+                        <span style={{ color: '#2563eb' }}>{formatCurrency(custoFolhaMensalAluno)} / mês</span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, (custoFolhaMensalAluno / (custoTotalMensalAluno || 1)) * 100)}%`, height: '100%', background: '#2563eb' }} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
+                        <span style={{ color: '#334155' }}>🏫 Infraestrutura, Aluguel & Utilidades</span>
+                        <span style={{ color: '#d97706' }}>{formatCurrency(custoInfraMensalAluno)} / mês</span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, (custoInfraMensalAluno / (custoTotalMensalAluno || 1)) * 100)}%`, height: '100%', background: '#d97706' }} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>
+                        <span style={{ color: '#334155' }}>💰 Margem Líquida Retida da Escola</span>
+                        <span style={{ color: '#059669' }}>{formatCurrency(margemMensalAluno)} / mês</span>
+                      </div>
+                      <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.min(100, (margemMensalAluno / (ticketMedioMensalAluno || 1)) * 100)}%`, height: '100%', background: '#059669' }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Simulador Interativo de Expansão de Matrículas */}
+                <div style={{ background: '#ffffff', borderRadius: '16px', border: '1px solid #cbd5e1', padding: '24px', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Sparkles size={18} color="#7c3aed" /> Simulador de Expansão de Matrículas
+                  </h4>
+                  <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 16px' }}>
+                    Simule a captação de novas matrículas e veja o impacto no resultado anual da escola:
+                  </p>
+
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
+                      <span>Novos Alunos a Captar:</span>
+                      <span style={{ color: '#7c3aed', fontSize: '16px', fontWeight: 900 }}>+{simuladorAlunosAdicionais} alunos</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="150"
+                      step="5"
+                      value={simuladorAlunosAdicionais}
+                      onChange={(e) => setSimuladorAlunosAdicionais(parseInt(e.target.value))}
+                      style={{ width: '100%', accentColor: '#7c3aed', cursor: 'pointer' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ background: '#f5f3ff', padding: '14px', borderRadius: '12px', border: '1px solid #ddd6fe' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#6d28d9', textTransform: 'uppercase', display: 'block' }}>Receita Adicional Anual</span>
+                      <strong style={{ fontSize: '16px', color: '#7c3aed', marginTop: '2px', display: 'block' }}>
+                        +{formatCurrency(simuladorAlunosAdicionais * ticketMedioMensalAluno * 12)}
+                      </strong>
+                    </div>
+
+                    <div style={{ background: '#ecfdf5', padding: '14px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: '#047857', textTransform: 'uppercase', display: 'block' }}>Lucro Adicional Anual</span>
+                      <strong style={{ fontSize: '16px', color: '#059669', marginTop: '2px', display: 'block' }}>
+                        +{formatCurrency(simuladorAlunosAdicionais * margemMensalAluno * 12)}
+                      </strong>
+                    </div>
+                  </div>
                 </div>
 
               </div>
