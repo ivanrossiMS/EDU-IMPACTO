@@ -530,6 +530,7 @@ export default function UploadProvaPage() {
             questoes={questoes}
             setQuestoes={setQuestoes}
             prova={{ 
+              id: provaId,
               ...prova, 
               isProva: true,
               formattedDate: prova?.data_aplicacao ? prova.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',

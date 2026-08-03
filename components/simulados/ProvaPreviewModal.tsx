@@ -50,70 +50,146 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
     nota: { label: "Nota", x: 75.8, y: 18.0, fontSize: 8, width: 10, align: "left" },
     orientacoes: { label: "Orientações Aluno", x: 60, y: 22.0, fontSize: 10, width: 35, align: "left", whiteSpace: "pre-wrap" }
   }
-  const [headerLayout, setHeaderLayout] = useState<any>(() => {
-    let layout = prova?.config_estudio?.header_layout || config?.provas_header_layout || defaultHeaderLayout
-    layout = { ...defaultHeaderLayout, ...layout }
-    if (layout && layout.title) {
-      layout.title.fontSize = 13
-    }
-    if (layout && layout.orientacoes) {
-      layout.orientacoes.whiteSpace = 'pre-wrap'
-    }
-    return layout
-  })
-  const [isEditHeaderMode, setIsEditHeaderMode] = useState(false)
-  const [showMargins, setShowMargins] = useState(true)
-  const itemId = prova?.id
-  const [leftMarginOffset, setLeftMarginOffset] = useState<number>(() => {
-    if (prova?.config_estudio?.config_margin_left !== undefined) return prova.config_estudio.config_margin_left
-    if (typeof window !== 'undefined' && itemId) {
-      const saved = localStorage.getItem(`simulador_margins_${itemId}`)
-      if (saved) {
-        try {
+  const getAllItemIds = () => {
+    const ids = [
+      prova?.id,
+      prova?.id_prova,
+      prova?.id_prova_upload,
+      prova?.id_simulado,
+      prova?.id_redacao,
+      (prova as any)?.simulado_id
+    ].filter(Boolean)
+    return Array.from(new Set(ids))
+  }
+
+  const itemId = getAllItemIds()[0]
+
+  const saveToLocalStorage = (keyPrefix: string, data: any) => {
+    if (typeof window === 'undefined') return
+    const json = JSON.stringify(data)
+    getAllItemIds().forEach(id => {
+      try {
+        localStorage.setItem(`${keyPrefix}_${id}`, json)
+      } catch (e) {}
+    })
+  }
+
+  const readFromLocalStorage = (keyPrefix: string) => {
+    if (typeof window === 'undefined') return null
+    for (const id of getAllItemIds()) {
+      try {
+        const saved = localStorage.getItem(`${keyPrefix}_${id}`)
+        if (saved) {
           const parsed = JSON.parse(saved)
-          if (parsed.left !== undefined) return parsed.left
-        } catch (e) {}
+          if (parsed) return parsed
+        }
+      } catch (e) {}
+    }
+    return null
+  }
+
+  const saveToDatabaseTables = async (updatedConfigEstudio: any) => {
+    const ids = getAllItemIds()
+    for (const targetId of ids) {
+      try {
+        await (supabase as any)
+          .from('provas_upload')
+          .update({
+            config_estudio: updatedConfigEstudio,
+            ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {}),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetId)
+      } catch (e) {}
+
+      try {
+        await (supabase as any)
+          .from('simulados_upload')
+          .update({
+            config_estudio: updatedConfigEstudio,
+            ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {}),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetId)
+      } catch (e) {}
+
+      try {
+        await (supabase as any)
+          .from('redacao_upload')
+          .update({
+            config_estudio: updatedConfigEstudio,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetId)
+      } catch (e) {}
+
+      try {
+        await (supabase as any)
+          .from('simulados')
+          .update({
+            config_estudio: updatedConfigEstudio,
+            ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {}),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetId)
+      } catch (e) {}
+    }
+  }
+
+  const getInitialHeaderLayout = () => {
+    const savedLocal = readFromLocalStorage('simulador_header')
+    let configEstudio = prova?.config_estudio
+    if (typeof configEstudio === 'string') {
+      try {
+        configEstudio = JSON.parse(configEstudio)
+      } catch (e) {}
+    }
+    const baseLayout = configEstudio?.header_layout || savedLocal || config?.provas_header_layout
+    if (!baseLayout || typeof baseLayout !== 'object') return defaultHeaderLayout
+    const merged: any = {}
+    for (const key of Object.keys(defaultHeaderLayout)) {
+      merged[key] = {
+        ...(defaultHeaderLayout as any)[key],
+        ...(baseLayout[key] || {})
       }
     }
+    if (merged.title) merged.title.fontSize = merged.title.fontSize || 13
+    if (merged.orientacoes) merged.orientacoes.whiteSpace = 'pre-wrap'
+    return merged
+  }
+
+  const [hasUserEdited, setHasUserEdited] = useState(false)
+  const [headerLayout, setHeaderLayout] = useState<any>(getInitialHeaderLayout)
+
+  useEffect(() => {
+    if (itemId && !hasUserEdited) {
+      setHeaderLayout(getInitialHeaderLayout())
+    }
+  }, [itemId, JSON.stringify(prova?.config_estudio?.header_layout), config?.provas_header_layout])
+  const [isEditHeaderMode, setIsEditHeaderMode] = useState(false)
+  const [showMargins, setShowMargins] = useState(true)
+  const [leftMarginOffset, setLeftMarginOffset] = useState<number>(() => {
+    if (prova?.config_estudio?.config_margin_left !== undefined) return prova.config_estudio.config_margin_left
+    const savedMargins = readFromLocalStorage('simulador_margins')
+    if (savedMargins?.left !== undefined) return savedMargins.left
     return -25
   });
   const [rightMarginOffset, setRightMarginOffset] = useState<number>(() => {
     if (prova?.config_estudio?.config_margin_right !== undefined) return prova.config_estudio.config_margin_right
-    if (typeof window !== 'undefined' && itemId) {
-      const saved = localStorage.getItem(`simulador_margins_${itemId}`)
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          if (parsed.right !== undefined) return parsed.right
-        } catch (e) {}
-      }
-    }
+    const savedMargins = readFromLocalStorage('simulador_margins')
+    if (savedMargins?.right !== undefined) return savedMargins.right
     return -20
   });
   const [topMarginOffset, setTopMarginOffset] = useState<number>(() => {
     if (prova?.config_estudio?.config_margin_top !== undefined) return prova.config_estudio.config_margin_top
-    if (typeof window !== 'undefined' && itemId) {
-      const saved = localStorage.getItem(`simulador_margins_${itemId}`)
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          if (parsed.top !== undefined) return parsed.top
-        } catch (e) {}
-      }
-    }
+    const savedMargins = readFromLocalStorage('simulador_margins')
+    if (savedMargins?.top !== undefined) return savedMargins.top
     return -10
   });
   const [bottomMarginOffset, setBottomMarginOffset] = useState<number>(() => {
     if (prova?.config_estudio?.config_margin_bottom !== undefined) return prova.config_estudio.config_margin_bottom
-    if (typeof window !== 'undefined' && itemId) {
-      const saved = localStorage.getItem(`simulador_margins_${itemId}`)
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved)
-          if (parsed.bottom !== undefined) return parsed.bottom
-        } catch (e) {}
-      }
-    }
+    const savedMargins = readFromLocalStorage('simulador_margins')
+    if (savedMargins?.bottom !== undefined) return savedMargins.bottom
     return -90
   });
   const [adicionarPaginaRedacao, setAdicionarPaginaRedacao] = useState<boolean>(prova?.config_estudio?.adicionar_pagina_redacao || false);
@@ -132,9 +208,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         bottom: bottomMarginOffset
       }
 
-      if (itemId) {
-        localStorage.setItem(`simulador_margins_${itemId}`, JSON.stringify(margins))
-      }
+      saveToLocalStorage('simulador_margins', margins)
 
       const updatedConfigEstudio = {
         ...(prova?.config_estudio || {}),
@@ -146,23 +220,15 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         config_margin_right: rightMarginOffset,
         config_margin_top: topMarginOffset,
         config_margin_bottom: bottomMarginOffset,
-        adicionar_pagina_redacao: adicionarPaginaRedacao
+        adicionar_pagina_redacao: adicionarPaginaRedacao,
+        header_layout: headerLayout
       }
 
       if (prova) {
         prova.config_estudio = updatedConfigEstudio
       }
 
-      if (itemId) {
-        const { error } = await (supabase as any)
-          .from('provas_upload')
-          .update({ config_estudio: updatedConfigEstudio, updated_at: new Date().toISOString() })
-          .eq('id', itemId)
-
-        if (error) {
-          console.error('Erro ao salvar margens no banco:', error)
-        }
-      }
+      await saveToDatabaseTables(updatedConfigEstudio)
 
       alert('Margens salvas para esta prova com sucesso!')
     } catch (e: any) {
@@ -173,47 +239,41 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
   }
 
   const handleSaveHeaderLayout = async () => {
-    if (!config || !config.id) return
     setSavingHeader(true)
     try {
-      const { error } = await (supabase as any)
-        .from('simulados_configuracoes')
-        .update({ provas_header_layout: headerLayout })
-        .eq('id', config.id)
-      
-      if (error) throw error
+      saveToLocalStorage('simulador_header', headerLayout)
 
-      if (config) {
-        config.provas_header_layout = headerLayout
+      const updatedConfigEstudio = {
+        ...(prova?.config_estudio || {}),
+        config_fonte_enunciado: enunciadoFontSize,
+        config_fonte_alternativa: alternativasFontSize,
+        config_colunas: columns,
+        config_layout_alternativas: alternativasLayout,
+        config_margin_left: leftMarginOffset,
+        config_margin_right: rightMarginOffset,
+        config_margin_top: topMarginOffset,
+        config_margin_bottom: bottomMarginOffset,
+        adicionar_pagina_redacao: adicionarPaginaRedacao,
+        header_layout: headerLayout
       }
 
-      if (itemId) {
-        const updatedConfigEstudio = {
-          ...(prova?.config_estudio || {}),
-          header_layout: headerLayout
-        }
-        if (prova) prova.config_estudio = updatedConfigEstudio;
-
-        await (supabase as any)
-          .from('provas_upload')
-          .update({
-            config_estudio: updatedConfigEstudio,
-            ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {}),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', itemId)
+      if (prova) {
+        prova.config_estudio = updatedConfigEstudio
       }
 
-      alert('Posições do cabeçalho salvas com sucesso!')
-      setIsEditHeaderMode(false)
+      await saveToDatabaseTables(updatedConfigEstudio)
+
+      setHasUserEdited(false)
+      alert('Posições do cabeçalho salvas para esta prova com sucesso!')
     } catch (e: any) {
-      alert('Erro ao salvar: ' + e.message)
+      alert('Erro ao salvar cabeçalho: ' + e.message)
     } finally {
       setSavingHeader(false)
     }
   }
 
   const handleUpdateHeaderField = (key: string, newField: any) => {
+    setHasUserEdited(true)
     setHeaderLayout((prev: any) => ({ ...prev, [key]: newField }))
   }
 
@@ -662,15 +722,16 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
               disabled={saving}
               onClick={async () => {
                 setQuestoes(localQuestoes)
-                if (itemId) {
-                  localStorage.setItem(`simulador_margins_${itemId}`, JSON.stringify({
-                    left: leftMarginOffset,
-                    right: rightMarginOffset,
-                    top: topMarginOffset,
-                    bottom: bottomMarginOffset
-                  }))
-                }
-                if (onSave) await onSave(localQuestoes, {
+                saveToLocalStorage('simulador_margins', {
+                  left: leftMarginOffset,
+                  right: rightMarginOffset,
+                  top: topMarginOffset,
+                  bottom: bottomMarginOffset
+                })
+                saveToLocalStorage('simulador_header', headerLayout)
+
+                const updatedConfigEstudio = {
+                  ...(prova?.config_estudio || {}),
                   config_fonte_enunciado: enunciadoFontSize,
                   config_fonte_alternativa: alternativasFontSize,
                   config_colunas: columns,
@@ -681,7 +742,11 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                   config_margin_bottom: bottomMarginOffset,
                   adicionar_pagina_redacao: adicionarPaginaRedacao,
                   header_layout: headerLayout
-                })
+                }
+
+                await saveToDatabaseTables(updatedConfigEstudio)
+
+                if (onSave) await onSave(localQuestoes, updatedConfigEstudio)
                 onClose()
               }} 
               style={{ flex: 1, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', borderRadius: 12, border: 'none', cursor: saving ? 'wait' : 'pointer', transition: 'all 0.2s', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)', fontWeight: 700, fontSize: 13, padding: '0 12px' }}

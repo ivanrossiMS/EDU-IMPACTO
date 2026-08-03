@@ -198,9 +198,16 @@ export function splitTextIntoChunks(htmlText: string): string[] {
     cleanText = cleanText.replace(metaRegex, '');
   }
 
-  // 1. Split by HTML block tags: <p>, <div>, <blockquote>, <h1-6>, <ul>, <ol>, <table>, <section>, <article>
   const blockRegex = /(?=(?:<p[ >]|<div[ >]|<blockquote[ >]|<h[1-6][ >]|<ul[ >]|<ol[ >]|<table[ >]|<section[ >]|<article[ >]|<hr[ >]))/gi;
-  let rawChunks = cleanText.split(blockRegex).filter(c => c.trim().length > 0);
+  const isEmptyChunk = (str: string) => {
+    if (/<img|video|iframe|audio/i.test(str)) return false;
+    const textOnly = str
+      .replace(/<[^>]+>/g, '')
+      .replace(/[\s\u00a0\ufeff]/g, '')
+      .replace(/&(nbsp|amp|quot|lt|gt|#160);/gi, '');
+    return textOnly.length === 0;
+  };
+  let rawChunks = cleanText.split(blockRegex).filter(c => !isEmptyChunk(c));
 
   if (rawChunks.length === 0) {
     rawChunks = [cleanText];
@@ -291,7 +298,62 @@ export function PaginationEngine({
   leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange,
   readOnly = false, adicionarPaginaRedacao
 }: PaginationEngineProps) {
-  
+  const getAllItemIds = () => {
+    const ids = [
+      simulado?.id,
+      simulado?.id_prova,
+      simulado?.id_prova_upload,
+      simulado?.id_simulado,
+      simulado?.id_redacao,
+      (simulado as any)?.simulado_id
+    ].filter(Boolean)
+    return Array.from(new Set(ids))
+  }
+
+  const resolvedHeaderLayout = headerLayout || (() => {
+    let savedLocal: any = null
+    if (typeof window !== 'undefined') {
+      for (const id of getAllItemIds()) {
+        try {
+          const saved = localStorage.getItem(`simulador_header_${id}`)
+          if (saved) {
+            const parsed = JSON.parse(saved)
+            if (parsed) {
+              savedLocal = parsed
+              break
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    const defaultHeaderLayout = {
+      title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },
+      disciplina: { label: "Disciplina", x: 62.3, y: 8.9, fontSize: 8, width: 15, align: "left" },
+      professor: { label: "Professor", x: 84.2, y: 8.9, fontSize: 8, width: 10, align: "left" },
+      data: { label: "Data", x: 59.5, y: 11.4, fontSize: 8, width: 15, align: "left" },
+      turma: { label: "Turma", x: 81.9, y: 11.4, fontSize: 8, width: 10, align: "left" },
+      valor: { label: "Valor", x: 75.8, y: 16.5, fontSize: 8, width: 10, align: "left" },
+      nota: { label: "Nota", x: 75.8, y: 18.0, fontSize: 8, width: 10, align: "left" },
+      orientacoes: { label: "Orientações Aluno", x: 60, y: 22.0, fontSize: 10, width: 35, align: "left", whiteSpace: "pre-wrap" }
+    }
+    let configEstudio = simulado?.config_estudio
+    if (typeof configEstudio === 'string') {
+      try { configEstudio = JSON.parse(configEstudio) } catch (e) {}
+    }
+    const baseLayout = configEstudio?.header_layout || savedLocal || (simulado?.isRedacao ? config?.redacao_enem_header_layout : config?.provas_header_layout)
+    if (!baseLayout || typeof baseLayout !== 'object') return defaultHeaderLayout
+    const merged: any = {}
+    for (const key of Object.keys(defaultHeaderLayout)) {
+      merged[key] = {
+        ...(defaultHeaderLayout as any)[key],
+        ...(baseLayout[key] || {})
+      }
+    }
+    if (merged.title) merged.title.fontSize = merged.title.fontSize || 13
+    if (merged.orientacoes) merged.orientacoes.whiteSpace = 'pre-wrap'
+    return merged
+  })()
+
   const [pages, setPages] = useState<any[]>([]);
   const [isPaginating, setIsPaginating] = useState(true);
   const [trigger, setTrigger] = useState(0); // For forcing re-pagination on edits
@@ -316,8 +378,8 @@ export function PaginationEngine({
 
       const avail1El = shadow.querySelector('[data-measure-avail-1]');
       const availNEl = shadow.querySelector('[data-measure-avail-n]');
-      const avail1Px = (avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 42) * 3.7795) - (bottomMarginOffset ?? -90) - (topMarginOffset ?? -10);
-      const availNPx = (availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 42) * 3.7795) - (bottomMarginOffset ?? -90) - (topMarginOffset ?? -10);
+      const avail1Px = (avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 42) * 3.7795) - (topMarginOffset ?? -10) - (bottomMarginOffset ?? -90);
+      const availNPx = (availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 42) * 3.7795) - (topMarginOffset ?? -10) - (bottomMarginOffset ?? -90);
 
       const newPages: any[] = [];
       let currentCols: any[][] = Array.from({length: columns}, () => []);
@@ -327,7 +389,7 @@ export function PaginationEngine({
 
       function getAvailableHeight() {
         const baseAvail = pageIndex === 0 ? avail1Px : availNPx;
-        return Math.max(100, baseAvail - 40);
+        return Math.max(100, baseAvail);
       }
 
       function advanceCol() {
@@ -516,10 +578,14 @@ export function PaginationEngine({
             const nextBlock = i + 1 < renderBlocks.length ? renderBlocks[i + 1] : null;
 
             // Heuristic 0: Orphan Question Header Protection
-            // If this block starts a question (isFirst is true) and remaining space is < 130px, move question start to next column/page
+            // If this block starts a question (isFirst is true) and remaining space cannot fit header + next block + minimum content (240px for lined/redação, 140px for normal), move question start to next column/page
             if (block.item?.isFirst && currentY > 0) {
               const remainingSpace = getAvailableHeight() - currentY;
-              if (remainingSpace < 130) {
+              const hasLines = renderBlocks.some(b => b.category === 'enunciado_lines' || b.category === 'descritiva_line');
+              const minRequired = hasLines ? 240 : 140;
+              const nextH = nextBlock ? (nextBlock.h + (nextBlock.margin || 0)) : 0;
+              const neededSpace = Math.max(minRequired, block.h + (block.margin || 0) + nextH);
+              if (remainingSpace < neededSpace) {
                 advanceCol();
                 block.margin = 0;
               }
@@ -578,12 +644,13 @@ export function PaginationEngine({
                }
             }
 
-            // Heuristic C: Descritiva lines "Rule of Minimum 3"
-            if (block.category === 'descritiva_line') {
-               const linesRemaining = renderBlocks.slice(i).filter(b => b.category === 'descritiva_line');
+            // Heuristic C: Lines smart pagination (for descritiva_line and enunciado_lines)
+            if (block.category === 'descritiva_line' || block.category === 'enunciado_lines') {
+               const cat = block.category;
+               const linesRemaining = renderBlocks.slice(i).filter(b => b.category === cat);
                const N = linesRemaining.length;
                
-               if (N > 3) {
+               if (N > 2) {
                  let fitCount = 0;
                  let tempY = currentY;
                  for (let j = 0; j < N; j++) {
@@ -597,12 +664,33 @@ export function PaginationEngine({
                  }
                  
                  let K = fitCount;
+                 
+                 // Check if there are subsequent non-line blocks after all lines of this question (e.g., Texto de Apoio / "PARA USO DA PROFESSORA")
+                 const afterBlocks = renderBlocks.slice(i + N);
+                 let afterH = 0;
+                 afterBlocks.forEach(b => {
+                   afterH += b.h + (b.margin || 0);
+                 });
+                 
                  if (K > 0 && K < N) {
-                    if (K < 3) {
-                       K = 0;
-                    } else if (K > N - 3) {
-                       K = N - 3;
-                    }
+                   if (afterH > 0 && afterH < getAvailableHeight()) {
+                     // Subsequent content exists (like "PARA USO DA PROFESSORA").
+                     // Calculate maximum lines that fit on the next page ALONG WITH the subsequent content
+                     const maxNextLines = Math.floor((getAvailableHeight() - afterH - 16) / 28);
+                     if (maxNextLines >= 4 && maxNextLines < N) {
+                       const targetNextLines = Math.min(N - 2, maxNextLines);
+                       K = N - targetNextLines;
+                     }
+                   } else {
+                     // No subsequent block. Prevent tiny line orphans (less than 4 lines on next page)
+                     if (N - K < 4) {
+                       K = Math.max(2, N - 4);
+                     }
+                   }
+                   
+                   if (K < 2) {
+                     K = 0;
+                   }
                  }
                  
                  if (K === 0 && currentY > 0) {
@@ -862,7 +950,24 @@ export function PaginationEngine({
                         </div>
                         <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
                           {a.imagem_url && <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
-                          <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
+                          {(() => {
+                            const altParts = parseEnunciadoParts(a.texto || '', []);
+                            return altParts.map((part: any, pIdx: number) => {
+                              if (part.type === 'text') {
+                                return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word' }} />;
+                              }
+                              if (part.type === 'lines') {
+                                return (
+                                  <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
+                                    {Array.from({ length: part.count }).map((_, li: number) => (
+                                      <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            });
+                          })()}
                         </div>
                       </div>
                     );
@@ -909,7 +1014,24 @@ export function PaginationEngine({
                             </div>
                           </div>
                         )}
-                        <HtmlContent html={a.texto} style={{ wordBreak: 'break-word' }} />
+                        {(() => {
+                          const altParts = parseEnunciadoParts(a.texto || '', []);
+                          return altParts.map((part: any, pIdx: number) => {
+                            if (part.type === 'text') {
+                              return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word' }} />;
+                            }
+                            if (part.type === 'lines') {
+                              return (
+                                <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
+                                  {Array.from({ length: part.count }).map((_, li: number) => (
+                                    <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return null;
+                          });
+                        })()}
                       </div>
                     </div>
                   );
@@ -960,7 +1082,7 @@ export function PaginationEngine({
               onToggleQuestion={onToggleQuestion} 
               forceRepaginate={forceRepaginate} 
               isEditHeaderMode={isEditHeaderMode} 
-              headerLayout={headerLayout} 
+              headerLayout={resolvedHeaderLayout} 
               onUpdateHeaderField={onUpdateHeaderField} 
               pageA4Ref={pIndex === 0 ? pageA4Ref : undefined}
               alternativasLayout={alternativasLayout} 
@@ -1010,7 +1132,7 @@ export function PaginationEngine({
                 onToggleQuestion={onToggleQuestion} 
                 forceRepaginate={forceRepaginate} 
                 isEditHeaderMode={isEditHeaderMode} 
-                headerLayout={headerLayout} 
+                headerLayout={resolvedHeaderLayout} 
                 onUpdateHeaderField={onUpdateHeaderField}
                 alternativasLayout={alternativasLayout} 
                 onEditAlternativaImage={onEditAlternativaImage}

@@ -1601,7 +1601,61 @@ export function PageContent({
                                 )}
                               </div>
                             )}
-                            <HtmlContent editable={!readOnly} html={a.texto} onBlurHtml={(newHtml) => { onEditAlternativa(qId, a.id, newHtml); forceRepaginate(); }} style={{ wordBreak: 'break-word', outline: 'none' }} />
+                            {(() => {
+                              const altParts = parseEnunciadoParts(a.texto || '', []);
+                              const saveAltParts = (newParts: any[]) => {
+                                const newTexto = newParts.map((p: any) => {
+                                  if (p.type === 'text') return p.content || '';
+                                  if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
+                                  return '';
+                                }).join('');
+                                onEditAlternativa(qId, a.id, newTexto);
+                                forceRepaginate();
+                              };
+                              return (
+                                <div style={{ position: 'relative' }}>
+                                  {altParts.map((part: any, pIdx: number) => {
+                                    if (part.type === 'text') {
+                                      return (
+                                        <HtmlContent 
+                                          key={`alt-text-${pIdx}`}
+                                          editable={!readOnly}
+                                          html={part.content || ''}
+                                          onBlurHtml={(newHtml) => {
+                                            const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
+                                            saveAltParts(updated);
+                                          }}
+                                          style={{ wordBreak: 'break-word', outline: 'none' }}
+                                        />
+                                      );
+                                    }
+                                    if (part.type === 'lines') {
+                                      return (
+                                        <div key={`alt-lines-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
+                                          {Array.from({ length: part.count }).map((_: any, li: number) => (
+                                            <div key={li} style={{ position: 'relative', width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }}>
+                                              {part.style !== 'branco' && (
+                                                <div style={{ position: 'absolute', left: -22, bottom: 0, width: 18, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', paddingRight: 4, fontSize: '8pt', color: '#a1a1aa', fontWeight: 500, userSelect: 'none', height: 22 }}>
+                                                  {li + 1}
+                                                </div>
+                                              )}
+                                            </div>
+                                          ))}
+                                          {!readOnly && (
+                                            <div className="no-print alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
+                                              <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Remover uma linha">-</button>
+                                              <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Adicionar uma linha">+</button>
+                                              <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  })}
+                                </div>
+                              );
+                            })()}
                             {onEditAlternativaImage && !readOnly && (
                               <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
                                 <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }} title="Adicionar/Editar Imagem"><ImageIcon size={12} /></button>
@@ -1746,12 +1800,61 @@ export function PageContent({
                                   )}
                                 </div>
                               )}
-                              <HtmlContent 
-                                editable={!readOnly}
-                                html={a.texto}
-                                onBlurHtml={(newHtml) => { onEditAlternativa(q.id, a.id, newHtml); forceRepaginate(); }}
-                                style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
-                              />
+                              {(() => {
+                                const altParts = parseEnunciadoParts(a.texto || '', []);
+                                const saveAltParts = (newParts: any[]) => {
+                                  const newTexto = newParts.map((p: any) => {
+                                    if (p.type === 'text') return p.content || '';
+                                    if (p.type === 'lines') return p.style === 'branco' ? `[ESPACO_BRANCO:${p.count}]` : `[LINHAS_PAUTADAS:${p.count}]`;
+                                    return '';
+                                  }).join('');
+                                  onEditAlternativa(q.id, a.id, newTexto);
+                                  forceRepaginate();
+                                };
+                                return (
+                                  <div style={{ position: 'relative' }}>
+                                    {altParts.map((part: any, pIdx: number) => {
+                                      if (part.type === 'text') {
+                                        return (
+                                          <HtmlContent 
+                                            key={`alt-text-${pIdx}`}
+                                            editable={!readOnly}
+                                            html={part.content || ''}
+                                            onBlurHtml={(newHtml) => {
+                                              const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
+                                              saveAltParts(updated);
+                                            }}
+                                            style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
+                                          />
+                                        );
+                                      }
+                                      if (part.type === 'lines') {
+                                        return (
+                                          <div key={`alt-lines-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', width: '100%', marginTop: 4 }}>
+                                            {Array.from({ length: part.count }).map((_: any, li: number) => (
+                                              <div key={li} style={{ position: 'relative', width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }}>
+                                                {part.style !== 'branco' && (
+                                                  <div style={{ position: 'absolute', left: -22, bottom: 0, width: 18, display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end', paddingRight: 4, fontSize: '8pt', color: '#a1a1aa', fontWeight: 500, userSelect: 'none', height: 22 }}>
+                                                    {li + 1}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))}
+                                            {!readOnly && (
+                                              <div className="no-print alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
+                                                <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Remover uma linha">-</button>
+                                                <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Adicionar uma linha">+</button>
+                                                <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })}
+                                  </div>
+                                );
+                              })()}
                               {onEditAlternativaImage && !readOnly && (
                                 <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: -12, right: 0, zIndex: 10, opacity: imgMenuOpen === a.id ? 1 : undefined, pointerEvents: imgMenuOpen === a.id ? 'auto' : undefined }}>
                                   <button onClick={() => setImgMenuOpen(imgMenuOpen === a.id ? null : a.id)} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(59,130,246,0.3)' }} title="Adicionar/Editar Imagem"><ImageIcon size={12} /></button>
