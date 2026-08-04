@@ -15,9 +15,13 @@ let _adminClient: SupabaseClient | null = null
 
 export function getAdminClient(): SupabaseClient {
   if (!_adminClient) {
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
+    if (!serviceKey) {
+      console.warn('[SUPABASE ADMIN WARNING] Missing SUPABASE_SERVICE_ROLE_KEY in environment variables!')
+    }
     _adminClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      serviceKey || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         auth: {
           autoRefreshToken: false,
@@ -36,13 +40,10 @@ export function getAdminClient(): SupabaseClient {
  */
 export async function getAuthUserByEmail(email: string) {
   const admin = getAdminClient()
-  // Supabase Admin SDK v2 não tem getUserByEmail direto, mas podemos
-  // buscar via system_users (fonte de verdade interna) ou usar filter da listagem
-  // com página pequena. A alternativa correta é buscar na tabela system_users primeiro.
   const { data: systemUser } = await admin
     .from('system_users')
-    .select('id, email, nome, cargo, perfil, status')
-    .eq('email', email.toLowerCase().trim())
+    .select('id, auth_id, email, nome, cargo, perfil, status')
+    .ilike('email', email.toLowerCase().trim())
     .maybeSingle()
 
   return systemUser
@@ -55,18 +56,17 @@ export async function getAuthUserByEmail(email: string) {
  */
 export async function lookupAuthUserByEmail(email: string) {
   const admin = getAdminClient()
-  // Busca na tabela interna — sempre consistente e indexada
   const { data: found } = await admin
     .from('system_users')
-    .select('id, email, nome, cargo, perfil, status')
-    .eq('email', email.toLowerCase().trim())
+    .select('id, auth_id, email, nome, cargo, perfil, status')
+    .ilike('email', email.toLowerCase().trim())
     .maybeSingle()
   
   if (!found) return null
   
-  // Se precisar dos dados completos do Supabase Auth, busca só esse usuário
   try {
-    const { data: authUser } = await admin.auth.admin.getUserById(found.id)
+    const authId = found.auth_id || found.id
+    const { data: authUser } = await admin.auth.admin.getUserById(authId)
     return authUser?.user || null
   } catch {
     return null
