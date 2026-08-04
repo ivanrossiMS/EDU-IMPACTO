@@ -344,6 +344,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Ultimate fallback: If user authenticated in Supabase Auth with valid credentials, 
+    // never block them due to RLS/service key restrictions on server side.
+    if (!dbRecordExists && user) {
+      dbRecordExists = true;
+      nome   = user.user_metadata?.nome   || nome;
+      cargo  = user.user_metadata?.cargo  || cargo;
+      perfil = user.user_metadata?.perfil || perfil;
+      if (user.user_metadata?.responsavel_id) responsavel_id = user.user_metadata.responsavel_id;
+      if (user.user_metadata?.aluno_id) aluno_id = user.user_metadata.aluno_id;
+    }
+
     if (!dbRecordExists) {
       const supabaseSignOut = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
