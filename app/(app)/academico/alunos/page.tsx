@@ -1207,7 +1207,6 @@ export default function AlunosPage() {
           { registroId: realId, detalhesDepois: newAluno }
         )
         queryClient.invalidateQueries({ queryKey: ['alunos'] })
-        queryClient.invalidateQueries({ queryKey: ['turmas-paginadas'] })
         toggleModal()
         setEditingAlunoId(null)
       } else {
@@ -1332,29 +1331,15 @@ export default function AlunosPage() {
           };
         });
       })(),
-      historicoTurmas: (() => {
-        const rawHist = (aluno.dados?.historicoTurmas && aluno.dados.historicoTurmas.length > 0) 
-          ? aluno.dados.historicoTurmas 
-          : (aluno.historicoTurmas && aluno.historicoTurmas.length > 0)
-          ? aluno.historicoTurmas
-          : (aluno.turma ? [{
-              id: `HIST-${Date.now()}`,
-              anoLetivo: aluno.dados?.anoLetivo || aluno.ano_letivo || new Date().getFullYear().toString(),
-              segmento: segmento,
-              serieTurma: turmaDoAluno?.id || aluno.turma || '',
-              status: 'Matriculado'
-            }] : []);
-
-        const rawTurmaName = aluno.turma_nome || aluno.turma || '';
-        const inferredModalidade = rawTurmaName.includes('INTEGRAL/INTERMEDIÁRIO') ? 'INTEGRAL/INTERMEDIÁRIO' :
-                                rawTurmaName.includes('INTEGRAL') ? 'INTEGRAL' :
-                                rawTurmaName.includes('INTERMEDIÁRIO') ? 'INTERMEDIÁRIO' : '';
-
-        return rawHist.map((ht: any, idx: number) => ({
-          ...ht,
-          modalidade: ht.modalidade || (idx === rawHist.length - 1 ? inferredModalidade : '')
-        }));
-      })(),
+      historicoTurmas: (aluno.dados?.historicoTurmas && aluno.dados.historicoTurmas.length > 0) 
+        ? aluno.dados.historicoTurmas 
+        : (aluno.turma ? [{
+            id: `HIST-${Date.now()}`,
+            anoLetivo: aluno.dados?.anoLetivo || aluno.ano_letivo || new Date().getFullYear().toString(),
+            segmento: segmento,
+            serieTurma: turmaDoAluno?.id || aluno.turma || '',
+            status: 'Matriculado'
+          }] : []),
       observacoes: obsList
     })
     resetObsInput()
@@ -2117,66 +2102,7 @@ export default function AlunosPage() {
                         </div>
                       </td>
                       <td style={{ fontWeight: 600, color: '#1d4ed8', fontSize: 12, whiteSpace: 'nowrap' }}>
-                        {(() => {
-                          const rawTurmaName = aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma || '';
-                          const vinculos = aluno.historicoTurmas || aluno.dados?.historicoTurmas || [];
-                          const activeVinculo = vinculos.length > 0 ? vinculos[vinculos.length - 1] : null;
-                          
-                          let modalidadeBadge = activeVinculo?.modalidade || activeVinculo?.tipoVinculo || '';
-
-                          if (!modalidadeBadge && rawTurmaName) {
-                            if (rawTurmaName.includes('INTEGRAL/INTERMEDIÁRIO') || rawTurmaName.includes('INTEGRAL_INTERMEDIARIO')) {
-                              modalidadeBadge = 'INTEGRAL/INTERMEDIÁRIO';
-                            } else if (rawTurmaName.includes('INTEGRAL')) {
-                              modalidadeBadge = 'INTEGRAL';
-                            } else if (rawTurmaName.includes('INTERMEDIÁRIO')) {
-                              modalidadeBadge = 'INTERMEDIÁRIO';
-                            }
-                          }
-
-                          let displayBadge = '';
-                          if (modalidadeBadge === 'INTEGRAL_INTERMEDIARIO' || modalidadeBadge === 'INTEGRAL/INTERMEDIÁRIO') {
-                            displayBadge = 'INTEGRAL/INTERMEDIÁRIO';
-                          } else if (modalidadeBadge === 'INTEGRAL') {
-                            displayBadge = 'INTEGRAL';
-                          } else if (modalidadeBadge === 'INTERMEDIARIO' || modalidadeBadge === 'INTERMEDIÁRIO') {
-                            displayBadge = 'INTEGRAL/INTERMEDIÁRIO';
-                          }
-
-                          return (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                              <span style={{ lineHeight: 1.2 }}>{rawTurmaName}</span>
-                              {displayBadge && (
-                                <span style={{ 
-                                  padding: '2px 8px', 
-                                  borderRadius: '12px', 
-                                  fontSize: '9px', 
-                                  fontWeight: 800, 
-                                  textTransform: 'uppercase',
-                                  letterSpacing: '0.3px',
-                                  background: displayBadge === 'INTEGRAL/INTERMEDIÁRIO'
-                                    ? 'linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%)' 
-                                    : displayBadge === 'INTEGRAL' 
-                                      ? '#dbeafe' 
-                                      : '#f3e8ff',
-                                  color: displayBadge === 'INTEGRAL/INTERMEDIÁRIO'
-                                    ? '#1e40af' 
-                                    : displayBadge === 'INTEGRAL' 
-                                      ? '#1e40af' 
-                                      : '#7e22ce',
-                                  border: displayBadge === 'INTEGRAL/INTERMEDIÁRIO'
-                                    ? '1px solid #bfdbfe' 
-                                    : displayBadge === 'INTEGRAL' 
-                                      ? '1px solid #bfdbfe' 
-                                      : '1px solid #e9d5ff',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                                }}>
-                                  {displayBadge}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        {aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma}
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <span style={{ 
@@ -3098,62 +3024,6 @@ export default function AlunosPage() {
                           </select>
                         </div>
 
-                      </div>
-
-                      {/* Seleção Única: INTEGRAL/INTERMEDIÁRIO */}
-                      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'flex-start' }}>
-                        {(() => {
-                          const isSelected = (hist.modalidade || '') === 'INTEGRAL/INTERMEDIÁRIO' || (hist.modalidade || '') === 'INTEGRAL_INTERMEDIARIO';
-                          return (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                const newHist = [...formData.historicoTurmas];
-                                newHist[index].modalidade = isSelected ? '' : 'INTEGRAL/INTERMEDIÁRIO';
-                                setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
-                              }}
-                              style={{
-                                padding: '8px 16px',
-                                borderRadius: '10px',
-                                fontSize: '12px',
-                                fontWeight: 800,
-                                background: isSelected 
-                                  ? 'linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%)' 
-                                  : '#ffffff',
-                                border: isSelected 
-                                  ? '1.5px solid #2563eb' 
-                                  : '1.5px solid #cbd5e1',
-                                color: isSelected ? '#1d4ed8' : '#64748b',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease',
-                                boxShadow: isSelected ? '0 2px 8px rgba(37, 99, 235, 0.2)' : '0 1px 2px rgba(0,0,0,0.04)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 8
-                              }}
-                            >
-                              <span style={{
-                                width: 16,
-                                height: 16,
-                                borderRadius: '4px',
-                                border: isSelected ? 'none' : '1.5px solid #94a3b8',
-                                background: isSelected ? '#2563eb' : '#fff',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'all 0.15s'
-                              }}>
-                                {isSelected && (
-                                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                                    <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                )}
-                              </span>
-                              <span>INTEGRAL/INTERMEDIÁRIO</span>
-                            </button>
-                          );
-                        })()}
                       </div>
                     </div>
                   );

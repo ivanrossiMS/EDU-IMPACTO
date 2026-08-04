@@ -79,21 +79,21 @@ export async function POST(request: NextRequest) {
       const alunoPromise = supabaseAdmin
         .from('alunos')
         .select('id, nome, email, matricula, dados, status')
-        .ilike('email', loginInput)
+        .eq('email', loginInput)
         .maybeSingle()
         .then(r => r.data || null)
         
       const respPromise = supabaseAdmin
         .from('responsaveis')
         .select('id, nome, email')
-        .ilike('email', loginInput)
+        .eq('email', loginInput)
         .maybeSingle()
         .then(r => r.data || null)
         
       const sysUserPromise = supabaseAdmin
         .from('system_users')
         .select('id, nome, email')
-        .ilike('email', loginInput)
+        .eq('email', loginInput)
         .limit(1)
         .then(r => r.data?.[0] || null)
         
@@ -221,8 +221,8 @@ export async function POST(request: NextRequest) {
     if (userType === 'system_user') {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
-        .select('id, nome, email, cargo, perfil, status, auth_id')
-        .or(`email.ilike.${resolvedEmail},auth_id.eq.${user.id},id.eq.${user.id}`)
+        .select('id, nome, email, cargo, perfil, status')
+        .eq('email', resolvedEmail)
         .limit(1)
 
       const dbSystemUser = dbSystemUserRows?.[0]
@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
         const { data: respFound } = await supabaseAdmin
           .from('responsaveis')
           .select('id')
-          .ilike('email', dbSystemUser.email || resolvedEmail)
+          .eq('email', resolvedEmail)
           .limit(1)
         if (respFound && respFound.length > 0) hasDualRole = true
       }
@@ -265,94 +265,13 @@ export async function POST(request: NextRequest) {
       nome   = responsavelRecord.nome || nome
       cargo  = 'Responsável'
       perfil = 'Família'
+      // As permissões financeiro/pedagógico já foram checadas na linha 129
     } else if (userType === 'aluno' && alunoRecord) {
       dbRecordExists = true
       aluno_id = alunoRecord.id
       nome   = alunoRecord.nome || nome
       cargo  = 'Aluno'
       perfil = 'Família'
-    }
-
-    // Comprehensive fallback if dbRecordExists is false (e.g., pre-auth categorization misclassified user or RLS issue)
-    if (!dbRecordExists && user) {
-      const userAuthEmail = user.email || resolvedEmail
-      
-      // 1. Try system_users by email or auth_id
-      const { data: sysFb } = await supabaseAdmin
-        .from('system_users')
-        .select('id, nome, email, cargo, perfil, status, auth_id')
-        .or(`email.ilike.${userAuthEmail},auth_id.eq.${user.id},id.eq.${user.id}`)
-        .limit(1)
-      const sysFbUser = sysFb?.[0]
-
-      if (sysFbUser) {
-        if (sysFbUser.status === 'inativo') {
-          const supabaseSignOut = createServerClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            {
-              cookies: {
-                getAll() { return cookieStore.getAll() },
-                setAll(cookiesToSet) {
-                  cookiesToSet.forEach(({ name, value, options }) => {
-                    cookieStore.set({ name, value, ...options, maxAge: 0 })
-                  })
-                },
-              },
-            }
-          )
-          await supabaseSignOut.auth.signOut()
-          return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 200 })
-        }
-        dbRecordExists = true
-        userType = 'system_user'
-        nome   = sysFbUser.nome   || nome
-        cargo  = sysFbUser.cargo  || cargo
-        perfil = sysFbUser.perfil || perfil
-      } else {
-        // 2. Try responsaveis by email
-        const { data: respFb } = await supabaseAdmin
-          .from('responsaveis')
-          .select('id, nome, email')
-          .ilike('email', userAuthEmail)
-          .limit(1)
-        const respFbRecord = respFb?.[0]
-        if (respFbRecord) {
-          dbRecordExists = true
-          userType = 'responsavel'
-          responsavel_id = respFbRecord.id
-          nome   = respFbRecord.nome || nome
-          cargo  = 'Responsável'
-          perfil = 'Família'
-        } else {
-          // 3. Try alunos by email
-          const { data: aluFb } = await supabaseAdmin
-            .from('alunos')
-            .select('id, nome, email')
-            .ilike('email', userAuthEmail)
-            .limit(1)
-          const aluFbRecord = aluFb?.[0]
-          if (aluFbRecord) {
-            dbRecordExists = true
-            userType = 'aluno'
-            aluno_id = aluFbRecord.id
-            nome   = aluFbRecord.nome || nome
-            cargo  = 'Aluno'
-            perfil = 'Família'
-          }
-        }
-      }
-    }
-
-    // Ultimate fallback: If user authenticated in Supabase Auth with valid credentials, 
-    // never block them due to RLS/service key restrictions on server side.
-    if (!dbRecordExists && user) {
-      dbRecordExists = true;
-      nome   = user.user_metadata?.nome   || nome;
-      cargo  = user.user_metadata?.cargo  || cargo;
-      perfil = user.user_metadata?.perfil || perfil;
-      if (user.user_metadata?.responsavel_id) responsavel_id = user.user_metadata.responsavel_id;
-      if (user.user_metadata?.aluno_id) aluno_id = user.user_metadata.aluno_id;
     }
 
     if (!dbRecordExists) {

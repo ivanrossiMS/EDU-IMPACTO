@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     let query = supabase
       .from('alunos')
       .select(`
-        id, nome, matricula, turma, serie, status, foto, dados,
+        id, nome, matricula, turma, status, foto, 
         anoLetivo:dados->>anoLetivo, 
         anoLetivoAlt:dados->>ano_letivo, 
         fotoAlt:dados->>foto, 
@@ -88,8 +88,6 @@ export async function GET(req: Request) {
       nome: String(aluno.nome || ''),
       matricula: aluno.matricula || '',
       turma: aluno.turma || '',
-      serie: aluno.serie || '',
-      dados: aluno.dados || {},
       anoLetivo: (aluno as any).anoLetivo || (aluno as any).anoLetivoAlt || '',
       foto: (aluno as any).foto || (aluno as any).fotoAlt || (aluno as any).fotoUrlAlt || null,
       responsaveis: (aluno as any).responsaveis || [],

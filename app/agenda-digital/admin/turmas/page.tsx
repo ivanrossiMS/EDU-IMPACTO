@@ -3,7 +3,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useData } from '@/lib/dataContext'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { 
   BookOpen, Users, Search, Plus, 
@@ -107,220 +107,47 @@ export default function ADAdminTurmas() {
     return grupo.colaboradoresIds || []
   }
 
-  // ── Resolver alunos efetivos de um grupo ───────────────────────────────────────
-  const resolveAlunosGrupo = useCallback((grupo: GrupoDigital): any[] => {
-    if (!grupo) return []
-    let tId = grupo.syncId ? grupo.syncId.replace('sync-', '') : (grupo.id.startsWith('sync-') ? grupo.id.replace('sync-', '') : grupo.id)
-    let turmaERP = (turmas || []).find(t => String(t.id) === String(tId) || (t.codigo && String(t.codigo) === String(tId)))
-    if (!turmaERP) {
-      turmaERP = (turmas || []).find(t => String(t.nome || '').trim().toLowerCase() === String(grupo.nome || '').trim().toLowerCase())
-    }
-
-    const studentIds = new Set<string>((grupo.alunosIds || []).map(id => String(id)))
-
-    if (turmaERP) {
-      const targetId = String(turmaERP.id).trim().toLowerCase()
-      const targetNome = String(turmaERP.nome || '').trim().toLowerCase()
-      const targetCod = String(turmaERP.codigo || '').trim().toLowerCase()
-      const targetNomeNorm = targetNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
-
-      const isIntegralTurma = (turmaERP.turno || '').toLowerCase().includes('integral') || (turmaERP.turno || '').toLowerCase().includes('intermediar')
-      const anoTurma = String(turmaERP.ano || '')
-
-      const normalizeSegmento = (str: string): string => {
-        if (!str) return ''
-        const norm = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
-        if (norm.includes('infantil')) return 'infantil'
-        if (norm.includes('fundamental 1') || norm.includes('fundamental i') || norm.includes('anos iniciais')) return 'fundamental_1'
-        if (norm.includes('fundamental 2') || norm.includes('fundamental ii') || norm.includes('anos finais')) return 'fundamental_2'
-        if (norm.includes('medio')) return 'medio'
-        return norm.replace(/[^a-z0-9]/g, '')
-      }
-
-      const extractSerieKey = (str: string): string => {
-        if (!str) return ''
-        const norm = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
-        const anoMatch = norm.match(/(\d+)\s*(?:º|ª|o|a)?\s*(?:ano|serie|nivel|ano\/serie)?/)
-        if (anoMatch && anoMatch[1]) return anoMatch[1]
-        const numMatch = norm.match(/(\d+)/)
-        return numMatch ? numMatch[1] : norm
-      }
-
-      const targetSegmentoKey = normalizeSegmento((turmaERP as any).dados?.segmento || (turmaERP as any).segmento || '')
-      const targetSerieKey = extractSerieKey(turmaERP.serie || turmaERP.nome || '')
-
-      const turmasLookup = new Map<string, any>()
-      ;(turmas || []).forEach(t => {
-        if (t.id) turmasLookup.set(String(t.id).trim().toLowerCase(), t)
-        if (t.codigo) turmasLookup.set(String(t.codigo).trim().toLowerCase(), t)
-        if (t.nome) turmasLookup.set(String(t.nome).trim().toLowerCase(), t)
-      })
-
-      const getVinculoFullKey = (h: any, aluno: any): { segmentoKey: string; serieKey: string } => {
-        let segmentoKey = ''
-        let serieKey = ''
-
-        const rawRef = String(h?.serieTurma || h?.turmaId || '').trim().toLowerCase()
-        if (rawRef && turmasLookup.has(rawRef)) {
-          const tObj = turmasLookup.get(rawRef)
-          if (String(tObj?.id) !== targetId) {
-            const segStr = tObj?.dados?.segmento || tObj?.segmento || ''
-            if (segStr) segmentoKey = normalizeSegmento(segStr)
-            const serStr = tObj?.serie || tObj?.nome || ''
-            if (serStr) serieKey = extractSerieKey(serStr)
-          }
-        }
-
-        if (!segmentoKey && h?.segmento) segmentoKey = normalizeSegmento(h.segmento)
-        if (!serieKey && h?.serie) serieKey = extractSerieKey(String(h.serie).trim())
-
-        if (!segmentoKey || !serieKey) {
-          const mainRef = String(aluno?.turma || '').trim().toLowerCase()
-          if (mainRef && turmasLookup.has(mainRef)) {
-            const tObj = turmasLookup.get(mainRef)
-            if (String(tObj?.id) !== targetId) {
-              if (!segmentoKey) {
-                const segStr = tObj?.dados?.segmento || tObj?.segmento || ''
-                if (segStr) segmentoKey = normalizeSegmento(segStr)
-              }
-              if (!serieKey) {
-                const serStr = tObj?.serie || tObj?.nome || ''
-                if (serStr) serieKey = extractSerieKey(serStr)
-              }
-            }
-          }
-        }
-
-        if (!segmentoKey) segmentoKey = normalizeSegmento(aluno?.dados?.segmento || aluno?.segmento || '')
-        if (!serieKey) serieKey = extractSerieKey(aluno?.serie || '')
-
-        return { segmentoKey, serieKey }
-      }
-
-      const getActiveVinculos = (aluno: any): any[] => {
-        const dados = aluno?.dados || {}
-        const hList: any[] = Array.isArray(dados.historicoTurmas)
-          ? dados.historicoTurmas
-          : (Array.isArray(aluno?.historicoTurmas) ? aluno.historicoTurmas : [])
-
-        if (hList.length === 0) return []
-
-        const explicitActive = hList.filter((h: any) => {
-          const st = String(h?.status || '').toLowerCase()
-          return st.includes('matriculado') || st.includes('cursando')
-        })
-
-        if (explicitActive.length > 0) {
-          return explicitActive
-        }
-
-        const lastIndex = hList.length - 1
-        const lastItem = hList[lastIndex]
-        const lastSt = String(lastItem?.status || '').toLowerCase()
-
-        if (lastSt.includes('historico') || lastSt.includes('anterior') || lastSt.includes('inativo') || lastSt.includes('cancelado')) {
-          return []
-        }
-
-        return [lastItem]
-      }
-
-      ;(alunos || []).forEach((a: any) => {
-        const aTurma = String(a.turma || '').trim().toLowerCase()
-        const aTurmaNorm = aTurma.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
-        
-        let isMatch = aTurma === targetId || aTurma === targetNome || aTurma === targetCod || String(a.turmaId || '').trim().toLowerCase() === targetId
-        if (!isMatch && aTurmaNorm && targetNomeNorm && aTurmaNorm === targetNomeNorm && aTurmaNorm !== '') {
-          isMatch = true
-        }
-
-        const activeVinculos = getActiveVinculos(a)
-
-        if (!isMatch) {
-          for (const h of activeVinculos) {
-            const hId = String(h.serieTurma || h.turmaId || '').trim().toLowerCase()
-            if (hId === targetId || hId === targetCod) {
-              isMatch = true
-              break
-            }
-
-            if (isIntegralTurma) {
-              const hAno = String(h.anoLetivo || h.ano_letivo || '')
-              const hModalidade = (h.modalidade || h.tipoVinculo || '').toUpperCase()
-
-              const isSameAno = !anoTurma || !hAno || hAno === anoTurma
-              const isIntegralModal = hModalidade.includes('INTEGRAL') || hModalidade.includes('INTERMEDIAR')
-
-              if (isSameAno && isIntegralModal) {
-                const { segmentoKey, serieKey } = getVinculoFullKey(h, a)
-
-                const isSameSegmento = !targetSegmentoKey || !segmentoKey || targetSegmentoKey === segmentoKey
-                const isSameSerie = targetSerieKey && serieKey && targetSerieKey === serieKey
-
-                if (isSameSegmento && isSameSerie) {
-                  isMatch = true
-                  break
-                }
-              }
-            }
-          }
-        }
-
-        if (isMatch) {
-          studentIds.add(String(a.id))
-        }
-      })
-    }
-
-    return (alunos || []).filter((a: any) => studentIds.has(String(a.id)))
-  }, [turmas, alunos])
-
   useEffect(() => {
     if (turmas.length > 0 && (alunos || []).length > 0) setIsLoaded(true)
   }, [turmas, alunos, grupos])
 
+  useEffect(() => {
+    if (isLoaded && (grupos || []).length === 0 && turmas.length > 0 && (alunos || []).length > 0) {
+      handleAutoSync()
+    }
+  }, [isLoaded])
+
   // ─── Sincronização com ERP ───────────────────────────────────────────────────
-  const handleAutoSync = useCallback(() => {
+  const handleAutoSync = () => {
     if (!turmas?.length || !alunos?.length) return
     const turmasFiltradas = turmas.filter(t => !anoParaImportar || String(t.ano) === String(anoParaImportar))
     const novos: GrupoDigital[] = turmasFiltradas.map(t => {
+      const alunosDaTurma = (alunos || []).filter(a => {
+        const aTurma = String(a.turma || '').trim().toLowerCase()
+        const tNome = String(t.nome || '').trim().toLowerCase()
+        const tId = String(t.id || '').trim().toLowerCase()
+        const tCod = String(t.codigo || '').trim().toLowerCase()
+        if (aTurma === tNome || aTurma === tId || aTurma === tCod || String(a.turmaId || '').trim().toLowerCase() === tId) return true
+        const aTurmaNorm = aTurma.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+        const tNomeNorm = tNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+        return aTurmaNorm === tNomeNorm && aTurmaNorm !== ''
+      })
       const grupoExistente = (grupos || []).find(g => g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}` || g.nome === t.nome)
-      const gTemp: GrupoDigital = {
-        id: grupoExistente?.id || `sync-${t.id}`,
+      return {
+        id: grupoExistente?.id || crypto.randomUUID(),
         syncId: `sync-${t.id}`,
         nome: t.nome,
         cor: grupoExistente?.cor || DEFAULT_COLORS[Math.floor(Math.random() * DEFAULT_COLORS.length)],
-        alunosIds: grupoExistente?.alunosIds || [],
+        alunosIds: alunosDaTurma.map(a => a.id),
         colaboradoresIds: grupoExistente?.colaboradoresIds || [],
         equipesIds: grupoExistente?.equipesIds || [],
         ano: String(t.ano),
-      }
-      const alunosResolvidos = resolveAlunosGrupo(gTemp)
-      return {
-        ...gTemp,
-        alunosIds: alunosResolvidos.map(a => String(a.id))
       }
     })
     // Preservar grupos criados manualmente
     const gruposManuais = (grupos || []).filter(g => !g.syncId && !g.id.startsWith('sync-'))
     setGrupos([...gruposManuais, ...novos])
-  }, [turmas, alunos, anoParaImportar, grupos, resolveAlunosGrupo, setGrupos])
-
-  useEffect(() => {
-    if (isLoaded && turmas.length > 0 && (alunos || []).length > 0) {
-      const precisaSync = (grupos || []).length === 0 || (grupos || []).some(g => {
-        const isSynced = g.syncId || g.id.startsWith('sync-')
-        if (isSynced) {
-          const resolved = resolveAlunosGrupo(g)
-          return resolved.length > (g.alunosIds || []).length
-        }
-        return false
-      })
-      if (precisaSync) {
-        handleAutoSync()
-      }
-    }
-  }, [isLoaded, turmas, alunos, grupos, resolveAlunosGrupo, handleAutoSync])
+  }
 
   // ─── Ações de Grupo de Turma ─────────────────────────────────────────────────
   const excluirGrupo = (id: string) => {
@@ -368,7 +195,7 @@ export default function ADAdminTurmas() {
   // TELA DETALHE DO GRUPO DE TURMA
   // ═══════════════════════════════════════════════════════════════════
   if (telaAtual === 'detalhe-grupo' && activeGrupo) {
-    const alunosVinculados = resolveAlunosGrupo(activeGrupo)
+    const alunosVinculados = (alunos || []).filter((a: any) => (activeGrupo.alunosIds || []).includes(a.id))
     const colsDiretos = (funcionarios || []).filter((u: any) => (activeGrupo.colaboradoresIds || []).includes(u.id))
     const todosCols = resolveColaboradoresGrupo(activeGrupo)
     const todosFuncionarios = (funcionarios || []).filter((u: any) => todosCols.includes(u.id))
@@ -453,7 +280,7 @@ export default function ADAdminTurmas() {
                         {searchResultsAlunos.map((a: any) => (
                           <div key={a.id} onClick={() => adicionarAluno(a.id)} style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
                             <div style={{ fontWeight: 700, fontSize: 13 }}>{a.nome}</div>
-                            {(activeGrupo.alunosIds || []).includes(a.id) || alunosVinculados.some((av: any) => av.id === a.id) ? <Check size={14} color="#10b981" /> : <Plus size={14} />}
+                            {(activeGrupo.alunosIds || []).includes(a.id) ? <Check size={14} color="#10b981" /> : <Plus size={14} />}
                           </div>
                         ))}
                       </div>
@@ -733,7 +560,7 @@ export default function ADAdminTurmas() {
                               <td style={{ padding: '16px 20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <Users size={14} color="hsl(var(--text-muted))" />
-                                  <span style={{ fontWeight: 700, fontSize: 14 }}>{resolveAlunosGrupo(g).length}</span>
+                                  <span style={{ fontWeight: 700, fontSize: 14 }}>{(g.alunosIds || []).length}</span>
                                 </div>
                               </td>
                             )}

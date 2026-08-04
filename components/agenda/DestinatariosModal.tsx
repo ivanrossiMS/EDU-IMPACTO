@@ -124,171 +124,21 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     return { alunosByTurmaRef: byTurmaRef, alunosById: aById, colaboradoresById: cById, colaboradoresByTurmaId: cByTurmaId }
   }, [alunos, colaboradores, gruposManuais])
 
-  const getTurmaAlunos = (t: any): any[] => {
-    if (!t) return []
-    const targetId = String(t.id || '').trim().toLowerCase()
-    const targetNome = String(t.nome || '').trim().toLowerCase()
-    const targetCod = String(t.codigo || '').trim().toLowerCase()
-    const targetNomeNorm = targetNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
-
-    const isIntegralTurma = (t.turno || '').toLowerCase().includes('integral') || (t.turno || '').toLowerCase().includes('intermediar')
-    const anoTurma = String(t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || ''))
-
-    const normalizeSegmento = (str: string): string => {
-      if (!str) return ''
-      const norm = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
-      if (norm.includes('infantil')) return 'infantil'
-      if (norm.includes('fundamental 1') || norm.includes('fundamental i') || norm.includes('anos iniciais')) return 'fundamental_1'
-      if (norm.includes('fundamental 2') || norm.includes('fundamental ii') || norm.includes('anos finais')) return 'fundamental_2'
-      if (norm.includes('medio')) return 'medio'
-      return norm.replace(/[^a-z0-9]/g, '')
-    }
-
-    const extractSerieKey = (str: string): string => {
-      if (!str) return ''
-      const norm = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
-      const anoMatch = norm.match(/(\d+)\s*(?:º|ª|o|a)?\s*(?:ano|serie|nivel|ano\/serie)?/)
-      if (anoMatch && anoMatch[1]) return anoMatch[1]
-      const numMatch = norm.match(/(\d+)/)
-      return numMatch ? numMatch[1] : norm
-    }
-
-    const targetSegmentoKey = normalizeSegmento(t.dados?.segmento || t.segmento || '')
-    const targetSerieKey = extractSerieKey(t.serie || t.nome || '')
-
-    const studentIds = new Set<string>()
-
-    let aIds = t.alunosIds || []
-    if (typeof aIds === 'string') {
-      try { aIds = JSON.parse(aIds) } catch { aIds = [] }
-    }
-    if (Array.isArray(aIds)) {
-      aIds.forEach((id: any) => studentIds.add(String(id)))
-    }
-
-    const turmasLookup = new Map<string, any>()
-    ;(turmas || []).forEach((tr: any) => {
-      if (tr.id) turmasLookup.set(String(tr.id).trim().toLowerCase(), tr)
-      if (tr.codigo) turmasLookup.set(String(tr.codigo).trim().toLowerCase(), tr)
-      if (tr.nome) turmasLookup.set(String(tr.nome).trim().toLowerCase(), tr)
+  const getTurmaAlunos = (t: any) => {
+    const refs = new Set<string>()
+    if (t.id) refs.add(String(t.id).trim().toLowerCase())
+    if (t.codigo) refs.add(String(t.codigo).trim().toLowerCase())
+    if (t.nome) refs.add(String(t.nome).trim().toLowerCase())
+    
+    const all: any[] = []
+    refs.forEach(ref => {
+      const list = alunosByTurmaRef.get(ref)
+      if (list) all.push(...list)
     })
-
-    const getVinculoFullKey = (h: any, aluno: any): { segmentoKey: string; serieKey: string } => {
-      let segmentoKey = ''
-      let serieKey = ''
-
-      const rawRef = String(h?.serieTurma || h?.turmaId || '').trim().toLowerCase()
-      if (rawRef && turmasLookup.has(rawRef)) {
-        const tObj = turmasLookup.get(rawRef)
-        if (String(tObj?.id) !== targetId) {
-          const segStr = tObj?.dados?.segmento || tObj?.segmento || ''
-          if (segStr) segmentoKey = normalizeSegmento(segStr)
-          const serStr = tObj?.serie || tObj?.nome || ''
-          if (serStr) serieKey = extractSerieKey(serStr)
-        }
-      }
-
-      if (!segmentoKey && h?.segmento) segmentoKey = normalizeSegmento(h.segmento)
-      if (!serieKey && h?.serie) serieKey = extractSerieKey(String(h.serie).trim())
-
-      if (!segmentoKey || !serieKey) {
-        const mainRef = String(aluno?.turma || '').trim().toLowerCase()
-        if (mainRef && turmasLookup.has(mainRef)) {
-          const tObj = turmasLookup.get(mainRef)
-          if (String(tObj?.id) !== targetId) {
-            if (!segmentoKey) {
-              const segStr = tObj?.dados?.segmento || tObj?.segmento || ''
-              if (segStr) segmentoKey = normalizeSegmento(segStr)
-            }
-            if (!serieKey) {
-              const serStr = tObj?.serie || tObj?.nome || ''
-              if (serStr) serieKey = extractSerieKey(serStr)
-            }
-          }
-        }
-      }
-
-      if (!segmentoKey) segmentoKey = normalizeSegmento(aluno?.dados?.segmento || aluno?.segmento || '')
-      if (!serieKey) serieKey = extractSerieKey(aluno?.serie || '')
-
-      return { segmentoKey, serieKey }
-    }
-
-    const getActiveVinculos = (aluno: any): any[] => {
-      const dados = aluno?.dados || {}
-      const hList: any[] = Array.isArray(dados.historicoTurmas)
-        ? dados.historicoTurmas
-        : (Array.isArray(aluno?.historicoTurmas) ? aluno.historicoTurmas : [])
-
-      if (hList.length === 0) return []
-
-      const explicitActive = hList.filter((h: any) => {
-        const st = String(h?.status || '').toLowerCase()
-        return st.includes('matriculado') || st.includes('cursando')
-      })
-
-      if (explicitActive.length > 0) {
-        return explicitActive
-      }
-
-      const lastIndex = hList.length - 1
-      const lastItem = hList[lastIndex]
-      const lastSt = String(lastItem?.status || '').toLowerCase()
-
-      if (lastSt.includes('historico') || lastSt.includes('anterior') || lastSt.includes('inativo') || lastSt.includes('cancelado')) {
-        return []
-      }
-
-      return [lastItem]
-    }
-
-    ;(alunos || []).forEach((a: any) => {
-      const aTurma = String(a.turma || '').trim().toLowerCase()
-      const aTurmaNorm = aTurma.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
-      
-      let isMatch = aTurma === targetId || aTurma === targetNome || aTurma === targetCod || String(a.turmaId || '').trim().toLowerCase() === targetId
-      if (!isMatch && aTurmaNorm && targetNomeNorm && aTurmaNorm === targetNomeNorm && aTurmaNorm !== '') {
-        isMatch = true
-      }
-
-      const activeVinculos = getActiveVinculos(a)
-
-      if (!isMatch) {
-        for (const h of activeVinculos) {
-          const hId = String(h.serieTurma || h.turmaId || '').trim().toLowerCase()
-          if (hId === targetId || hId === targetCod) {
-            isMatch = true
-            break
-          }
-
-          if (isIntegralTurma) {
-            const hAno = String(h.anoLetivo || h.ano_letivo || '')
-            const hModalidade = (h.modalidade || h.tipoVinculo || '').toUpperCase()
-
-            const isSameAno = !anoTurma || !hAno || hAno === anoTurma
-            const isIntegralModal = hModalidade.includes('INTEGRAL') || hModalidade.includes('INTERMEDIAR')
-
-            if (isSameAno && isIntegralModal) {
-              const { segmentoKey, serieKey } = getVinculoFullKey(h, a)
-
-              const isSameSegmento = !targetSegmentoKey || !segmentoKey || targetSegmentoKey === segmentoKey
-              const isSameSerie = targetSerieKey && serieKey && targetSerieKey === serieKey
-
-              if (isSameSegmento && isSameSerie) {
-                isMatch = true
-                break
-              }
-            }
-          }
-        }
-      }
-
-      if (isMatch) {
-        studentIds.add(String(a.id))
-      }
-    })
-
-    return (alunos || []).filter((a: any) => studentIds.has(String(a.id)))
+    
+    const unique = new Map()
+    all.forEach(a => unique.set(a.id, a))
+    return Array.from(unique.values())
   }
 
   // Retorna colaboradores vinculados à turma via grupos sincronizados
