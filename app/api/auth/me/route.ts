@@ -1,7 +1,6 @@
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton';
+import { createProtectedClient } from '@/lib/server/supabaseServerFactory';
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -9,25 +8,7 @@ export const revalidate = 0
 export async function GET(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
 
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet) {
-          try { 
-            cookiesToSet.forEach(({ name, value, options }) => {
-              const expires = new Date();
-              expires.setFullYear(expires.getFullYear() + 1);
-              cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 315360000, expires })
-            }) 
-          } catch {}
-        },
-      },
-    }
-  );
+  const supabase = await createProtectedClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {

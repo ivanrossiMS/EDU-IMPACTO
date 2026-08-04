@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,10 +17,7 @@ export async function POST(request: Request) {
 
     const q = query.trim().toLowerCase()
 
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabaseAdmin = getAdminClient()
     
     // ── 1. Check system_users by email ──────────────────────────────
     const { data: sysUserRows } = await supabaseAdmin
