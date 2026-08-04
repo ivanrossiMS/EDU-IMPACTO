@@ -13,14 +13,22 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 let _adminClient: SupabaseClient | null = null
 
+function cleanEnvKey(key?: string): string {
+  if (!key) return ''
+  return key.trim().replace(/^['"]|['"]$/g, '')
+}
+
 export function getAdminClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lrpwerkkqrjkcauofhph.supabase.co'
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  const url = cleanEnvKey(process.env.NEXT_PUBLIC_SUPABASE_URL) || 'https://lrpwerkkqrjkcauofhph.supabase.co'
+  const serviceRole = cleanEnvKey(process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const anonKey = cleanEnvKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  const defaultAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxycHdlcmtrcXJqa2NhdW9maHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MDAzMjYsImV4cCI6MjA5MDk3NjMyNn0.1-_0vMiLn0Y9piS90150Ur7qx8ic1Kz64RuhiaVGLhg'
+  const key = serviceRole || anonKey || defaultAnonKey
 
   if (!_adminClient) {
     _adminClient = createClient(
       url,
-      serviceKey,
+      key,
       {
         auth: {
           autoRefreshToken: false,

@@ -13,13 +13,23 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+function cleanEnvKey(key?: string): string {
+  if (!key) return ''
+  return key.trim().replace(/^['"]|['"]$/g, '')
+}
+
+const defaultUrl = 'https://lrpwerkkqrjkcauofhph.supabase.co'
+const defaultAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxycHdlcmtrcXJqa2NhdW9maHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MDAzMjYsImV4cCI6MjA5MDk3NjMyNn0.1-_0vMiLn0Y9piS90150Ur7qx8ic1Kz64RuhiaVGLhg'
+
 /** Client autenticado — respeita Row Level Security. Use na maioria das API routes. */
 export async function createProtectedClient() {
   const cookieStore = await cookies()
-  
+  const url = cleanEnvKey(process.env.NEXT_PUBLIC_SUPABASE_URL) || defaultUrl
+  const anonKey = cleanEnvKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) || defaultAnonKey
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {
@@ -58,9 +68,14 @@ export async function createProtectedClient() {
  * NUNCA use em rotas onde o payload vem do usuário final.
  */
 export function createAdminClient() {
+  const url = cleanEnvKey(process.env.NEXT_PUBLIC_SUPABASE_URL) || defaultUrl
+  const serviceRole = cleanEnvKey(process.env.SUPABASE_SERVICE_ROLE_KEY)
+  const anonKey = cleanEnvKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  const key = serviceRole || anonKey || defaultAnonKey
+
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    url,
+    key,
     {
       auth: {
         autoRefreshToken: false,
