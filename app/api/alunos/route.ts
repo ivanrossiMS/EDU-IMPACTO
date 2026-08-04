@@ -168,7 +168,172 @@ export async function GET(request: Request) {
     // se for todos_com_inativos, não aplica filtro de status
 
     if (turma) {
-      query = query.eq('turma', turma)
+      const { data: targetTurma } = await supabase
+        .from('turmas')
+        .select('*')
+        .eq('id', turma)
+        .maybeSingle()
+
+      const isIntegralTurma = targetTurma && (
+        (targetTurma.turno || '').toLowerCase().includes('integral') ||
+        (targetTurma.turno || '').toLowerCase().includes('intermediar')
+      )
+
+      if (isIntegralTurma) {
+        // Pre-fetch todas as turmas para resolver IDs em h.serieTurma
+        const { data: allTurmas } = await supabase
+          .from('turmas')
+          .select('id, nome, serie, ano, turno, dados')
+
+        const turmasMap = new Map<string, any>()
+        if (allTurmas) {
+          allTurmas.forEach((t: any) => {
+            if (t.id !== undefined && t.id !== null) {
+              turmasMap.set(String(t.id), t)
+            }
+            if (t.codigo) {
+              turmasMap.set(String(t.codigo), t)
+            }
+            if (t.nome) {
+              turmasMap.set(String(t.nome).trim(), t)
+              turmasMap.set(String(t.nome).trim().toLowerCase(), t)
+            }
+          })
+        }
+
+        const normalizeSegmento = (str: string): string => {
+          if (!str) return ''
+          const norm = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+          if (norm.includes('infantil')) return 'infantil'
+          if (norm.includes('fundamental 1') || norm.includes('fundamental i') || norm.includes('anos iniciais')) return 'fundamental_1'
+          if (norm.includes('fundamental 2') || norm.includes('fundamental ii') || norm.includes('anos finais')) return 'fundamental_2'
+          if (norm.includes('medio')) return 'medio'
+          return norm.replace(/[^a-z0-9]/g, '')
+        }
+
+        const extractSerieKey = (str: string): string => {
+          if (!str) return ''
+          const norm = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+          const anoMatch = norm.match(/(\d+)\s*(?:º|ª|o|a)?\s*(?:ano|serie|nivel|ano\/serie)?/)
+          if (anoMatch && anoMatch[1]) return anoMatch[1]
+          const numMatch = norm.match(/(\d+)/)
+          return numMatch ? numMatch[1] : norm
+        }
+
+        const getVinculoFullKey = (h: any, aluno: any, targetId?: string): { segmentoKey: string; serieKey: string } => {
+          let segmentoKey = ''
+          let serieKey = ''
+
+          const rawRef = String(h?.serieTurma || h?.turmaId || '').trim()
+          if (rawRef && (turmasMap.has(rawRef) || turmasMap.has(rawRef.toLowerCase()))) {
+            const tObj = turmasMap.get(rawRef) || turmasMap.get(rawRef.toLowerCase())
+            if (!targetId || String(tObj?.id) !== String(targetId)) {
+              const segStr = tObj?.dados?.segmento || tObj?.segmento || ''
+              if (segStr) segmentoKey = normalizeSegmento(segStr)
+              const serStr = tObj?.serie || tObj?.nome || ''
+              if (serStr) serieKey = extractSerieKey(serStr)
+            }
+          }
+
+          if (!segmentoKey && h?.segmento) {
+            segmentoKey = normalizeSegmento(h.segmento)
+          }
+
+          if (!serieKey && h?.serie) {
+            const str = String(h.serie).trim()
+            serieKey = extractSerieKey(str)
+          }
+
+          if (!segmentoKey || !serieKey) {
+            const mainRef = String(aluno?.turma || '').trim()
+            if (mainRef && (turmasMap.has(mainRef) || turmasMap.has(mainRef.toLowerCase()))) {
+              const tObj = turmasMap.get(mainRef) || turmasMap.get(mainRef.toLowerCase())
+              if (!targetId || String(tObj?.id) !== String(targetId)) {
+                if (!segmentoKey) {
+                  const segStr = tObj?.dados?.segmento || tObj?.segmento || ''
+                  if (segStr) segmentoKey = normalizeSegmento(segStr)
+                }
+                if (!serieKey) {
+                  const serStr = tObj?.serie || tObj?.nome || ''
+                  if (serStr) serieKey = extractSerieKey(serStr)
+                }
+              }
+            }
+          }
+
+          if (!segmentoKey) {
+            segmentoKey = normalizeSegmento(aluno?.dados?.segmento || aluno?.segmento || '')
+          }
+          if (!serieKey) {
+            serieKey = extractSerieKey(aluno?.serie || aluno?.turma_nome || '')
+          }
+
+          return { segmentoKey, serieKey }
+        }
+
+        const anoTurma = String(targetTurma.ano || '')
+        const targetSegmentoKey = normalizeSegmento(targetTurma.dados?.segmento || targetTurma.segmento || '')
+        const targetSerieKey = extractSerieKey(targetTurma.serie || targetTurma.nome || '')
+        const turmaId = String(targetTurma.id)
+
+        const { data: rawStudents } = await supabase
+          .from('alunos')
+          .select(queryFields as any)
+          .or('status.neq.inativo,status.is.null')
+
+        const matchedStudents = (rawStudents || []).filter((aluno: any) => {
+          if (String(aluno.turma) === turmaId) return true
+
+          const dados = aluno.dados || {}
+          const hList: any[] = Array.isArray(dados.historicoTurmas) 
+            ? dados.historicoTurmas 
+            : (Array.isArray(aluno.historicoTurmas) ? aluno.historicoTurmas : [])
+
+          for (const h of hList) {
+            if (String(h.serieTurma) === turmaId || String(h.turmaId) === turmaId) {
+              return true
+            }
+
+            const hAno = String(h.anoLetivo || h.ano_letivo || '')
+            const hModalidade = (h.modalidade || h.tipoVinculo || '').toUpperCase()
+
+            const isSameAno = !anoTurma || !hAno || hAno === anoTurma
+            const isIntegralModal = hModalidade.includes('INTEGRAL') || hModalidade.includes('INTERMEDIAR')
+            
+            if (isSameAno && isIntegralModal) {
+              const { segmentoKey, serieKey } = getVinculoFullKey(h, aluno, turmaId)
+              const isSameSegmento = !targetSegmentoKey || !segmentoKey || targetSegmentoKey === segmentoKey
+              const isSameSerie = targetSerieKey && serieKey && targetSerieKey === serieKey
+
+              if (isSameSegmento && isSameSerie) {
+                return true
+              }
+            }
+          }
+
+          return false
+        })
+
+        return NextResponse.json({
+          data: matchedStudents,
+          total: matchedStudents.length,
+          page,
+          limit
+        })
+      } else {
+        const terms = [
+          `turma.eq.${turma}`,
+          `dados->historicoTurmas.cs.[{"serieTurma":"${turma}"}]`,
+          `dados->historicoTurmas.cs.[{"turmaId":"${turma}"}]`
+        ]
+        if (targetTurma?.nome) {
+          terms.push(`turma.ilike.${targetTurma.nome}`)
+        }
+        if (targetTurma?.codigo && targetTurma.codigo !== turma) {
+          terms.push(`turma.eq.${targetTurma.codigo}`)
+        }
+        query = query.or(terms.join(','))
+      }
     }
 
     // Aplicação de Filtros Avançados

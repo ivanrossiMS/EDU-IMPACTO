@@ -83,8 +83,40 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
 
   // Mapear turnos do ERP
   const TURNOS = useMemo(() => {
-    if (!cfgTurnos || cfgTurnos.length === 0) return ['Matutino', 'Vespertino', 'Noturno', 'Integral']
-    return cfgTurnos.filter(t => t.situacao === 'ativo').map(t => t.nome)
+    const rawList = (!cfgTurnos || cfgTurnos.length === 0) 
+      ? ['Matutino', 'Vespertino', 'Integral/Intermediário']
+      : cfgTurnos.filter(t => t.situacao === 'ativo').map(t => t.nome)
+
+    const result: string[] = []
+    const seen = new Set<string>()
+
+    rawList.forEach(raw => {
+      const lower = raw.trim().toLowerCase()
+      if (
+        lower.includes('noturno') || 
+        lower.includes('noite') || 
+        lower.includes('intermediário mat') || 
+        lower.includes('intermediario mat') || 
+        lower.includes('intermediário vesp') || 
+        lower.includes('intermediario vesp')
+      ) {
+        return
+      }
+      let name = raw.trim()
+      if (lower === 'integral' || lower === 'integral/intermediário' || lower === 'integral/intermediario') {
+        name = 'Integral/Intermediário'
+      } else if (lower === 'manhã' || lower === 'manha') {
+        name = 'Matutino'
+      } else if (lower === 'tarde') {
+        name = 'Vespertino'
+      }
+      if (name && !seen.has(name)) {
+        seen.add(name)
+        result.push(name)
+      }
+    })
+
+    return result.length > 0 ? result : ['Matutino', 'Vespertino', 'Integral/Intermediário']
   }, [cfgTurnos])
 
 

@@ -60,7 +60,8 @@ export default function TurmasPage() {
   const { data: apiResponse, isLoading: loading, isFetching } = useApiQuery<{ data: any[], total: number }>(
     ['turmas-paginadas'],
     '/api/turmas',
-    { page: paginaAtual, limit: itensPorPagina, search: searchQuery, ano: ano, segmento: segmento }
+    { page: paginaAtual, limit: itensPorPagina, search: searchQuery, ano: ano, segmento: segmento },
+    { noCache: true, staleTime: 0 }
   )
 
   const turmas = apiResponse?.data || []
@@ -120,7 +121,7 @@ export default function TurmasPage() {
       
       if (res.ok) {
         const savedData = await res.json()
-        const realId = savedData.id || selectedTurma?.id
+        const realId = savedData.data?.id || savedData.id || selectedTurma?.id
         logSystemAction(
           'Acadêmico (Turmas)',
           isEditing ? 'Edição' : 'Cadastro',
@@ -128,6 +129,12 @@ export default function TurmasPage() {
           { registroId: realId, detalhesDepois: formData }
         )
         
+        if (savedData.syncedAlunos && savedData.syncedAlunos > 0) {
+          setTimeout(() => {
+            alert(`Turma salva com sucesso!\n\n✨ ${savedData.syncedAlunos} aluno(s) com vínculo INTEGRAL/INTERMEDIÁRIO foram sincronizados automaticamente para esta turma.`)
+          }, 200)
+        }
+
         setIsModalOpen(false)
         setIsEditing(false)
         setSelectedTurma(null)
@@ -142,6 +149,7 @@ export default function TurmasPage() {
         setValidationErrors([])
         setIsValidationModalOpen(false)
         queryClient.invalidateQueries({ queryKey: ['turmas-paginadas'] })
+        queryClient.invalidateQueries({ queryKey: ['alunos'] })
       }
     } catch (error) {
       console.error('Erro ao salvar turma:', error)
@@ -719,8 +727,59 @@ export default function TurmasPage() {
                     }}
                   >
                     <option value="">Selecione…</option>
-                    {cfgTurnos?.map((t: any) => (
-                      <option key={t.id} value={t.nome}>{t.nome}</option>
+                    {(() => {
+                      const rawList = (cfgTurnos && cfgTurnos.length > 0) 
+                        ? cfgTurnos 
+                        : [
+                            { id: 'T1', nome: 'Matutino' },
+                            { id: 'T2', nome: 'Vespertino' },
+                            { id: 'T3', nome: 'Integral/Intermediário' }
+                          ];
+                          
+                      const filtered: any[] = [];
+                      const seen = new Set<string>();
+
+                      rawList.forEach((t: any) => {
+                        const rawNome = typeof t === 'string' ? t : (t.nome || t.label || '');
+                        const lower = rawNome.trim().toLowerCase();
+
+                        if (
+                          lower.includes('noturno') || 
+                          lower.includes('noite') || 
+                          lower.includes('intermediário mat') || 
+                          lower.includes('intermediario mat') || 
+                          lower.includes('intermediário vesp') || 
+                          lower.includes('intermediario vesp')
+                        ) {
+                          return;
+                        }
+
+                        let finalNome = rawNome.trim();
+                        if (lower === 'integral' || lower === 'integral/intermediário' || lower === 'integral/intermediario') {
+                          finalNome = 'Integral/Intermediário';
+                        } else if (lower === 'manhã' || lower === 'manha') {
+                          finalNome = 'Matutino';
+                        } else if (lower === 'tarde') {
+                          finalNome = 'Vespertino';
+                        }
+
+                        if (finalNome && !seen.has(finalNome)) {
+                          seen.add(finalNome);
+                          filtered.push(typeof t === 'string' ? { id: finalNome, nome: finalNome } : { ...t, nome: finalNome });
+                        }
+                      });
+
+                      if (filtered.length === 0) {
+                        return [
+                          { id: 'T1', nome: 'Matutino' },
+                          { id: 'T2', nome: 'Vespertino' },
+                          { id: 'T3', nome: 'Integral/Intermediário' }
+                        ];
+                      }
+
+                      return filtered;
+                    })().map((t: any) => (
+                      <option key={t.id || t.nome} value={t.nome}>{t.nome}</option>
                     ))}
                   </select>
                 </div>
