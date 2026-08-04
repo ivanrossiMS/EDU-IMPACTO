@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { createClient } from '@supabase/supabase-js'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
@@ -14,7 +13,9 @@ export async function GET(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = getAdminClient()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const supabase = createClient(supabaseUrl, supabaseKey)
     
     let accessStartDate = await getLoggedUserAccessStartDate()
     const url = new URL(request.url)
@@ -206,7 +207,9 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const supabase = getAdminClient()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
@@ -260,7 +263,9 @@ export async function DELETE(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = getAdminClient()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Apenas para garantir que não dê erro no delete (Supabase exige filtro no delete)
     const { error } = await supabase.from('eventos_agenda').delete().neq('id', '00000000-0000-0000-0000-000000000000')

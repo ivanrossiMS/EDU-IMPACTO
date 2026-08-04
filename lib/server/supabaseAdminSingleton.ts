@@ -13,38 +13,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 let _adminClient: SupabaseClient | null = null
 
-const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxycHdlcmtrcXJqa2NhdW9maHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MDAzMjYsImV4cCI6MjA5MDk3NjMyNn0.1-_0vMiLn0Y9piS90150Ur7qx8ic1Kz64RuhiaVGLhg'
-
-export function getValidSupabaseKey(primaryKey?: string, fallbackKey?: string): string {
-  const cleanKey = (k?: string) => k ? k.trim().replace(/^['"]|['"]$/g, '') : ''
-  const candidate1 = cleanKey(primaryKey)
-  const candidate2 = cleanKey(fallbackKey)
-
-  const isValid = (k: string) => {
-    if (!k || k.length < 50) return false
-    try {
-      const parts = k.split('.')
-      if (parts.length !== 3) return false
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'))
-      return payload.ref === 'lrpwerkkqrjkcauofhph'
-    } catch {
-      return false
-    }
-  }
-
-  if (isValid(candidate1)) return candidate1
-  if (isValid(candidate2)) return candidate2
-  return DEFAULT_ANON_KEY
-}
-
 export function getAdminClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/^['"]|['"]$/g, '') || 'https://lrpwerkkqrjkcauofhph.supabase.co'
-  const key = getValidSupabaseKey(process.env.SUPABASE_SERVICE_ROLE_KEY, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-
   if (!_adminClient) {
     _adminClient = createClient(
-      url,
-      key,
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         auth: {
           autoRefreshToken: false,

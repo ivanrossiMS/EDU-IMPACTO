@@ -13,19 +13,13 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-import { getValidSupabaseKey } from '@/lib/server/supabaseAdminSingleton'
-
-const defaultUrl = 'https://lrpwerkkqrjkcauofhph.supabase.co'
-
 /** Client autenticado — respeita Row Level Security. Use na maioria das API routes. */
 export async function createProtectedClient() {
   const cookieStore = await cookies()
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/^['"]|['"]$/g, '') || defaultUrl
-  const anonKey = getValidSupabaseKey(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-
+  
   return createServerClient(
-    url,
-    anonKey,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
@@ -64,12 +58,9 @@ export async function createProtectedClient() {
  * NUNCA use em rotas onde o payload vem do usuário final.
  */
 export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/^['"]|['"]$/g, '') || defaultUrl
-  const key = getValidSupabaseKey(process.env.SUPABASE_SERVICE_ROLE_KEY, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-
   return createClient(
-    url,
-    key,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       auth: {
         autoRefreshToken: false,

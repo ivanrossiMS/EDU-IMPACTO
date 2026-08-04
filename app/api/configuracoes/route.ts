@@ -55,10 +55,7 @@ export async function GET(request: Request) {
       .select('chave, valor')
       .in('chave', keys)
 
-    if (error) {
-      console.warn('[API configuracoes] Erro ao buscar chaves:', error.message)
-      return NextResponse.json({}, { status: 200 })
-    }
+    if (error) return NextResponse.json({}, { status: 500 })
 
     // Return as { chave: valor } map
     const result: Record<string, any> = {}

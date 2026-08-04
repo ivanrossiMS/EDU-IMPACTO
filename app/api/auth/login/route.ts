@@ -75,25 +75,25 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      // Email format — check se é aluno, responsavel ou system_user (Paralelo case-insensitive)
+      // Email format — check se é aluno, responsavel ou system_user (Paralelo)
       const alunoPromise = supabaseAdmin
         .from('alunos')
         .select('id, nome, email, matricula, dados, status')
-        .ilike('email', loginInput)
-        .limit(1)
-        .then(r => r.data?.[0] || null)
+        .eq('email', loginInput)
+        .maybeSingle()
+        .then(r => r.data || null)
         
       const respPromise = supabaseAdmin
         .from('responsaveis')
         .select('id, nome, email')
-        .ilike('email', loginInput)
-        .limit(1)
-        .then(r => r.data?.[0] || null)
+        .eq('email', loginInput)
+        .maybeSingle()
+        .then(r => r.data || null)
         
       const sysUserPromise = supabaseAdmin
         .from('system_users')
         .select('id, nome, email')
-        .ilike('email', loginInput)
+        .eq('email', loginInput)
         .limit(1)
         .then(r => r.data?.[0] || null)
         
@@ -215,79 +215,63 @@ export async function POST(request: NextRequest) {
     let dbRecordExists = false
     let responsavel_id = ''
     let aluno_id = ''
+
+    // 1. Check system_users
     let hasDualRole = false
+    if (userType === 'system_user') {
+      const { data: dbSystemUserRows } = await supabaseAdmin
+        .from('system_users')
+        .select('id, nome, email, cargo, perfil, status')
+        .eq('email', resolvedEmail)
+        .limit(1)
 
-    // Busca unificada por ID, auth_id ou ilike email nas 3 tabelas
-    const userId = user.id
-    const userAuthEmail = user.email || resolvedEmail
+      const dbSystemUser = dbSystemUserRows?.[0]
 
-    const sysUserQuery = supabaseAdmin
-      .from('system_users')
-      .select('id, nome, email, cargo, perfil, status')
-      .or(`auth_id.eq.${userId},id.eq.${userId},email.ilike.${userAuthEmail}`)
-      .limit(1)
-      .then(r => r.data?.[0] || null)
-
-    const respQuery = supabaseAdmin
-      .from('responsaveis')
-      .select('id, nome, email')
-      .or(`auth_id.eq.${userId},id.eq.${userId},email.ilike.${userAuthEmail}`)
-      .limit(1)
-      .then(r => r.data?.[0] || null)
-
-    const alunoQuery = supabaseAdmin
-      .from('alunos')
-      .select('id, nome, email')
-      .or(`auth_id.eq.${userId},id.eq.${userId},email.ilike.${userAuthEmail}`)
-      .limit(1)
-      .then(r => r.data?.[0] || null)
-
-    const [dbSystemUser, dbRespUser, dbAlunoUser] = await Promise.all([sysUserQuery, respQuery, alunoQuery])
-
-    if (dbSystemUser) {
-      dbRecordExists = true
-      if (dbSystemUser.status === 'inativo') {
-        const supabaseSignOut = createServerClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-          {
-            cookies: {
-              getAll() { return cookieStore.getAll() },
-              setAll(cookiesToSet) {
-                cookiesToSet.forEach(({ name, value, options }) => {
-                  cookieStore.set({ name, value, ...options, maxAge: 0 })
-                })
+      if (dbSystemUser) {
+        dbRecordExists = true
+        if (dbSystemUser.status === 'inativo') {
+          const supabaseSignOut = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+              cookies: {
+                getAll() { return cookieStore.getAll() },
+                setAll(cookiesToSet) {
+                  cookiesToSet.forEach(({ name, value, options }) => {
+                    cookieStore.set({ name, value, ...options, maxAge: 0 })
+                  })
+                },
               },
-            },
-          }
-        )
-        await supabaseSignOut.auth.signOut()
-        return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 200 })
+            }
+          )
+          await supabaseSignOut.auth.signOut()
+          return NextResponse.json({ error: 'Acesso bloqueado: Usuário inativo. Contate o suporte.' }, { status: 200 })
+        }
+        nome   = dbSystemUser.nome   || nome
+        cargo  = dbSystemUser.cargo  || cargo
+        perfil = dbSystemUser.perfil || perfil
+        
+        // Verifica papel duplo para colaboradores rapidamente
+        const { data: respFound } = await supabaseAdmin
+          .from('responsaveis')
+          .select('id')
+          .eq('email', resolvedEmail)
+          .limit(1)
+        if (respFound && respFound.length > 0) hasDualRole = true
       }
-      nome   = dbSystemUser.nome   || nome
-      cargo  = dbSystemUser.cargo  || cargo
-      perfil = dbSystemUser.perfil || perfil
-      if (dbRespUser) hasDualRole = true
-    } else if (dbRespUser || (userType === 'responsavel' && responsavelRecord)) {
-      const respRec = dbRespUser || responsavelRecord
+    } else if (userType === 'responsavel' && responsavelRecord) {
       dbRecordExists = true
-      responsavel_id = respRec.id
-      nome   = respRec.nome || nome
+      responsavel_id = responsavelRecord.id
+      nome   = responsavelRecord.nome || nome
       cargo  = 'Responsável'
       perfil = 'Família'
-    } else if (dbAlunoUser || (userType === 'aluno' && alunoRecord)) {
-      const aluRec = dbAlunoUser || alunoRecord
+      // As permissões financeiro/pedagógico já foram checadas na linha 129
+    } else if (userType === 'aluno' && alunoRecord) {
       dbRecordExists = true
-      aluno_id = aluRec.id
-      nome   = aluRec.nome || nome
+      aluno_id = alunoRecord.id
+      nome   = alunoRecord.nome || nome
       cargo  = 'Aluno'
       perfil = 'Família'
-    } else if (user) {
-      // Fallback de resiliência: se o usuário autenticou no Supabase Auth com sucesso
-      dbRecordExists = true
-      nome   = user.user_metadata?.nome || nome
-      cargo  = user.user_metadata?.cargo || cargo
-      perfil = user.user_metadata?.perfil || perfil
     }
 
     if (!dbRecordExists) {

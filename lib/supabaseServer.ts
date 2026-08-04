@@ -10,14 +10,11 @@ import { createClient } from '@supabase/supabase-js'
  * Routes that do system-level ops (backfill, webhooks) should use:
  *   import { createAdminClient } from '@/lib/server/supabaseServerFactory'
  */
-import { getValidSupabaseKey } from '@/lib/server/supabaseAdminSingleton'
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim().replace(/^['"]|['"]$/g, '') || 'https://lrpwerkkqrjkcauofhph.supabase.co'
-const key = getValidSupabaseKey(process.env.SUPABASE_SERVICE_ROLE_KEY, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-
 export const supabaseServer = createClient(
-  url,
-  key,
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  // Use service role key on server so writes succeeded even without a session cookie
+  // (many routes run in Next.js Edge/Node context without the user cookie)
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   {
     auth: {
       autoRefreshToken: false,
