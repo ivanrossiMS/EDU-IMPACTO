@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useData } from '@/lib/dataContext'
 import { useState, useEffect, useMemo } from 'react'
 import { LoadingGlass } from '@/components/LoadingGlass'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { 
   BookOpen, Users, Search, Plus, 
   ArrowLeft, X, Trash2, Check,
@@ -122,16 +123,9 @@ export default function ADAdminTurmas() {
     if (!turmas?.length || !alunos?.length) return
     const turmasFiltradas = turmas.filter(t => !anoParaImportar || String(t.ano) === String(anoParaImportar))
     const novos: GrupoDigital[] = turmasFiltradas.map(t => {
-      const alunosDaTurma = (alunos || []).filter(a => {
-        const aTurma = String(a.turma || '').trim().toLowerCase()
-        const tNome = String(t.nome || '').trim().toLowerCase()
-        const tId = String(t.id || '').trim().toLowerCase()
-        const tCod = String(t.codigo || '').trim().toLowerCase()
-        if (aTurma === tNome || aTurma === tId || aTurma === tCod || String(a.turmaId || '').trim().toLowerCase() === tId) return true
-        const aTurmaNorm = aTurma.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
-        const tNomeNorm = tNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
-        return aTurmaNorm === tNomeNorm && aTurmaNorm !== ''
-      })
+      // O aluno só é incluído na turma se a turma `t` for a turma CURSANDO (matriculado atual) do aluno no ano letivo.
+      // Turmas de HISTÓRICO (ANTERIOR) são ignoradas.
+      const alunosDaTurma = (alunos || []).filter(a => isAlunoCursandoTurma(a, t, t.ano))
       const grupoExistente = (grupos || []).find(g => g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}` || g.nome === t.nome)
       return {
         id: grupoExistente?.id || crypto.randomUUID(),
@@ -195,7 +189,12 @@ export default function ADAdminTurmas() {
   // TELA DETALHE DO GRUPO DE TURMA
   // ═══════════════════════════════════════════════════════════════════
   if (telaAtual === 'detalhe-grupo' && activeGrupo) {
-    const alunosVinculados = (alunos || []).filter((a: any) => (activeGrupo.alunosIds || []).includes(a.id))
+    // Filtrar para exibir apenas alunos cuja turma CURSANDO seja este grupo/turma (ignora turmas de HISTÓRICO ANTERIOR)
+    const alunosVinculados = (alunos || []).filter((a: any) => {
+      if (!(activeGrupo.alunosIds || []).includes(a.id)) return false
+      const turmaERP = turmas.find(t => (activeGrupo.syncId && (activeGrupo.syncId === `sync-${t.id}` || activeGrupo.id === `sync-${t.id}`)) || t.nome === activeGrupo.nome)
+      return isAlunoCursandoTurma(a, turmaERP || activeGrupo.nome, activeGrupo.ano || turmaERP?.ano)
+    })
     const colsDiretos = (funcionarios || []).filter((u: any) => (activeGrupo.colaboradoresIds || []).includes(u.id))
     const todosCols = resolveColaboradoresGrupo(activeGrupo)
     const todosFuncionarios = (funcionarios || []).filter((u: any) => todosCols.includes(u.id))

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
+import { getAlunoTurmaCursando } from '@/lib/studentTurmaUtils';
 
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -199,9 +200,10 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   
   const todasTurmasDoAluno = useMemo(() => {
     const list: string[] = []
-    if (aluno?.turma) {
-      list.push(String(aluno.turma).toLowerCase())
-      const tObj = turmas.find((t: any) => String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma))
+    const turmaCursando = getAlunoTurmaCursando(aluno)
+    if (turmaCursando) {
+      list.push(turmaCursando.toLowerCase())
+      const tObj = turmas.find((t: any) => String(t.id) === turmaCursando || String(t.codigo) === turmaCursando || String(t.nome) === turmaCursando)
       if (tObj?.nome) list.push(String(tObj.nome).toLowerCase())
     }
     if (nomeTurmaDoAluno) list.push(nomeTurmaDoAluno.toLowerCase())

@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { useState } from 'react'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 
 interface SysUser { id: string; nome: string; email: string; cargo: string; status: 'ativo' | 'inativo' }
 
@@ -26,18 +27,8 @@ export default function ADAdminTurmaDetail() {
 
   const turma = (turmas || []).find(t => t.id === id)
   const alunosDaTurma = (alunos || []).filter(a => {
-    const aTurma = String(a.turma || '').trim().toLowerCase();
-    const tNome = String(turma?.nome || '').trim().toLowerCase();
-    const tId = String(turma?.id || '').trim().toLowerCase();
-    const tCod = String(turma?.codigo || '').trim().toLowerCase();
-
-    const matchDirect = aTurma === tNome || aTurma === tId || aTurma === tCod || String(a.turmaId || '').trim().toLowerCase() === tId;
-    if (matchDirect) return true;
-
-    // Normalização extra
-    const aTurmaNorm = aTurma.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
-    const tNomeNorm = tNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
-    return aTurmaNorm === tNomeNorm && aTurmaNorm !== '';
+    if (!turma) return false;
+    return isAlunoCursandoTurma(a, turma, turma.ano);
   })
 
   if (!turma) {

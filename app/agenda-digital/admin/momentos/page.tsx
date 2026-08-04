@@ -24,6 +24,7 @@ import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 
 export default function ADAdminMomentos() {
   const { momentosFeed: feed, setMomentosFeed: setFeed, setMomentosFeedLocally, adAlert, adConfirm, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
@@ -205,14 +206,7 @@ export default function ADAdminMomentos() {
         const matchedAlunos = (alunos || []).filter((a: any) => 
           targetAlunos.some((idRaw: string) => String(idRaw).replace(/^_*(ALU)?/, '') === String(a.id).replace(/^_*(ALU)?/, ''))
         )
-        const hasAlunoInSelectedTurma = matchedAlunos.some((a: any) => {
-          const turmaObj = turmas.find((t: any) => 
-            String(t.id) === String(a.turma) || 
-            String(t.codigo) === String(a.turma) || 
-            String(t.nome) === String(a.turma)
-          )
-          return turmaObj?.nome === filterTurma || a.turma === filterTurma
-        })
+        const hasAlunoInSelectedTurma = matchedAlunos.some((a: any) => isAlunoCursandoTurma(a, filterTurma))
         if (hasAlunoInSelectedTurma) return true
       }
 

@@ -47,7 +47,8 @@ export async function GET(req: Request) {
         anoLetivoAlt:dados->>ano_letivo, 
         fotoAlt:dados->>foto, 
         fotoUrlAlt:dados->>avatarUrl, 
-        responsaveis:dados->responsaveis
+        responsaveis:dados->responsaveis,
+        historicoTurmas:dados->historicoTurmas
       `, { count: 'exact' })
       .or('status.neq.inativo,status.is.null')
       .order('nome')
@@ -91,6 +92,7 @@ export async function GET(req: Request) {
       anoLetivo: (aluno as any).anoLetivo || (aluno as any).anoLetivoAlt || '',
       foto: (aluno as any).foto || (aluno as any).fotoAlt || (aluno as any).fotoUrlAlt || null,
       responsaveis: (aluno as any).responsaveis || [],
+      historicoTurmas: (aluno as any).historicoTurmas || [],
       status: aluno.status || 'ativo'
     }))
 

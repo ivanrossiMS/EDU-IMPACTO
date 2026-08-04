@@ -19,10 +19,12 @@ import { DestinatariosModal } from '../../components/agenda/DestinatariosModal'
 import NovoComunicadoModal from '../../components/agenda/NovoComunicadoModal'
 import { ComunicadoReportModal } from '@/components/agenda/ComunicadoReportModal'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { createPortal } from 'react-dom';
 import { UserAvatar } from '@/components/UserAvatar'
+
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
@@ -284,7 +286,7 @@ export default function ADAdminComunicados() {
                targets = alunosAtivos;
             } else {
                targets = alunosAtivos.filter(a => {
-                  if (newCom.turmas.includes(a.turma)) return true;
+                  if (newCom.turmas.some(t => isAlunoCursandoTurma(a, t))) return true;
                   const aIdPlain = a.id.replace(/^_*(ALU)?/, '')
                   return newCom.alunosIds.some(idRaw => idRaw.replace(/^_*(ALU)?/, '') === aIdPlain)
                });

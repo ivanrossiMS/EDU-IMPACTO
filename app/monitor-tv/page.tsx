@@ -101,7 +101,7 @@ function MonitorStudentCard({ call, index }: { call: PickupCall, index: number }
 
       {/* Floating Status Tag (Top-Right) */}
       <div className={`tv-card-tag-badge ${urgent ? 'badge-urgent' : 'badge-waiting'}`}>
-        {urgent ? 'ATRASADO' : 'LIBERADO'}
+        {urgent ? 'ATRASADO' : 'CHAMANDO'}
       </div>
 
       {/* Text Details & Metadata Container */}
@@ -1115,8 +1115,25 @@ function MonitorContent() {
           box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
 
+        @keyframes pulseWaiting {
+          0% {
+            transform: scale(1);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+          }
+          50% {
+            transform: scale(1.06);
+            box-shadow: 0 4px 20px rgba(245, 158, 11, 0.8);
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+          }
+        }
+
         .badge-waiting {
-          background: #10b981;
+          background: #f59e0b;
+          color: #ffffff;
+          animation: pulseWaiting 1.5s infinite ease-in-out;
         }
 
         .badge-urgent {

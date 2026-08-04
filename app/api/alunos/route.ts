@@ -1227,6 +1227,72 @@ export async function PUT(request: Request) {
       console.error('[Portaria Sync Error]', err.message)
     )
 
+    // Sincronizar grupos da Agenda Digital para garantir que o aluno esteja APENAS na turma CURSANDO
+    if (savedStudent && savedStudent.id && savedStudent.turma) {
+      try {
+        const { data: groups } = await supabase.from('agenda_grupos').select('*')
+        if (groups && Array.isArray(groups)) {
+          const studentId = String(savedStudent.id)
+          const activeTurma = String(savedStudent.turma || '').trim()
+          const hist = savedStudent.dados?.historicoTurmas || savedStudent.historicoTurmas || []
+          
+          for (const group of groups) {
+            const gDados = group.dados || {}
+            const gAlunosIds: string[] = Array.isArray(gDados.alunosIds) ? gDados.alunosIds : []
+            const gSyncId = String(gDados.syncId || '').replace('sync-', '')
+            const gNome = String(gDados.nome || '').trim()
+            const gAno = String(gDados.ano || '').trim()
+
+            let isCursando = false
+            if (activeTurma) {
+              let cursandoNome = activeTurma
+              if (Array.isArray(hist) && hist.length > 0) {
+                if (gAno) {
+                  const matchingYear = hist.filter((h: any) => String(h.anoLetivo || '').trim() === gAno)
+                  if (matchingYear.length > 0) {
+                    cursandoNome = String(matchingYear[matchingYear.length - 1].serieTurma || '').trim()
+                  }
+                } else {
+                  cursandoNome = String(hist[hist.length - 1].serieTurma || '').trim()
+                }
+              }
+
+              const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '').toLowerCase()
+              const cNorm = norm(cursandoNome)
+              const gNomeNorm = norm(gNome)
+              const gSyncNorm = norm(gSyncId)
+              
+              if (cNorm !== '' && (cNorm === gNomeNorm || cNorm === gSyncNorm)) {
+                isCursando = true
+              }
+            }
+
+            let updatedIds = [...gAlunosIds]
+            let changed = false
+
+            if (isCursando) {
+              if (!updatedIds.includes(studentId)) {
+                updatedIds.push(studentId)
+                changed = true
+              }
+            } else if (gSyncId || gNome) {
+              // Se o grupo é de uma turma específica e o aluno NÃO é cursando nela (ex: histórico anterior)
+              if (updatedIds.includes(studentId)) {
+                updatedIds = updatedIds.filter(id => id !== studentId)
+                changed = true
+              }
+            }
+
+            if (changed) {
+              await supabase.from('agenda_grupos').update({ dados: { ...gDados, alunosIds: updatedIds } }).eq('id', group.id)
+            }
+          }
+        }
+      } catch (errSync) {
+        console.error('[Agenda Digital Sync Error]', errSync)
+      }
+    }
+
     return NextResponse.json(savedStudent)
   } catch (e: any) {
     console.error(`[${new Date().toISOString()}] Error Alunos PUT: ${e.message}\n`)
