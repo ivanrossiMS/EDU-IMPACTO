@@ -26,6 +26,7 @@ const PUBLIC_PATHS = [
   '/api/auth/verify-first-access',
   '/api/auth/update-password',
   '/api/auth/reset-access',
+  '/api/auth/debug-db',
   '/api/test',
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
