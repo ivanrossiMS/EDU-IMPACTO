@@ -192,7 +192,8 @@ export default function ADAdminTurmas() {
     // Filtrar para exibir apenas alunos cuja turma CURSANDO seja este grupo/turma (ignora turmas de HISTÓRICO ANTERIOR)
     const alunosVinculados = (alunos || []).filter((a: any) => {
       const turmaERP = turmas.find(t => (activeGrupo.syncId && (activeGrupo.syncId === `sync-${t.id}` || activeGrupo.id === `sync-${t.id}`)) || t.nome === activeGrupo.nome)
-      return (activeGrupo.alunosIds || []).includes(a.id) || isAlunoCursandoTurma(a, turmaERP || activeGrupo, activeGrupo.ano || turmaERP?.ano)
+      if (turmaERP) return isAlunoCursandoTurma(a, turmaERP, activeGrupo.ano || turmaERP?.ano)
+      return (activeGrupo.alunosIds || []).includes(a.id) || isAlunoCursandoTurma(a, activeGrupo, activeGrupo.ano)
     })
     const colsDiretos = (funcionarios || []).filter((u: any) => (activeGrupo.colaboradoresIds || []).includes(u.id))
     const todosCols = resolveColaboradoresGrupo(activeGrupo)
@@ -538,8 +539,8 @@ export default function ADAdminTurmas() {
                         const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (funcionarios || []).some((f: any) => f.id === colId))
                         const turmaERP = turmas.find(t => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome)
                         const alunosDoGrupoCount = (alunos || []).filter((a: any) => {
-                          if ((g.alunosIds || []).includes(a.id)) return true
-                          return isAlunoCursandoTurma(a, turmaERP || g, g.ano || turmaERP?.ano)
+                          if (turmaERP) return isAlunoCursandoTurma(a, turmaERP, g.ano || turmaERP?.ano)
+                          return (g.alunosIds || []).includes(a.id) || isAlunoCursandoTurma(a, g, g.ano)
                         }).length
 
                         return (

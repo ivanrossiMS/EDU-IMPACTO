@@ -833,10 +833,44 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
               }))
             }}
             onRemoveAlternativa={isReadOnly ? () => {} : (qId, aId) => {
-              const aIdx = parseInt(aId.replace('alt-preview-', ''))
               setLocalQuestoes(prev => prev.map(q => {
                 if ((q._internalId || q.id) !== qId) return q
-                return { ...q, alternativas: q.alternativas.filter((_: any, ai: number) => ai !== aIdx) }
+                let aIdx = q.alternativas.findIndex((a: any) => a.id === aId)
+                if (aIdx === -1 && typeof aId === 'string' && aId.startsWith('alt-preview-')) {
+                  aIdx = parseInt(aId.replace('alt-preview-', ''))
+                }
+                if (aIdx === -1 || isNaN(aIdx)) return q
+                const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+                const remaining = q.alternativas.filter((_: any, ai: number) => ai !== aIdx)
+                const relettered = remaining.map((a: any, idx: number) => ({
+                  ...a,
+                  letter: LETTERS[idx] || String.fromCharCode(65 + idx)
+                }))
+                return { ...q, alternativas: relettered }
+              }))
+            }}
+            onMoveAlternativa={isReadOnly ? () => {} : (qId, aId, direction) => {
+              setLocalQuestoes(prev => prev.map(q => {
+                if ((q._internalId || q.id) !== qId) return q
+                const alts = q.alternativas || []
+                let aIdx = alts.findIndex((a: any) => a.id === aId)
+                if (aIdx === -1 && typeof aId === 'string' && aId.startsWith('alt-preview-')) {
+                  aIdx = parseInt(aId.replace('alt-preview-', ''))
+                }
+                if (aIdx === -1 || isNaN(aIdx)) return q
+                const targetIdx = direction === 'up' ? aIdx - 1 : aIdx + 1
+                if (targetIdx < 0 || targetIdx >= alts.length) return q
+                
+                const newAlts = [...alts]
+                const [moved] = newAlts.splice(aIdx, 1)
+                newAlts.splice(targetIdx, 0, moved)
+                
+                const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+                const relettered = newAlts.map((alt: any, idx: number) => ({
+                  ...alt,
+                  letter: LETTERS[idx] || String.fromCharCode(65 + idx)
+                }))
+                return { ...q, alternativas: relettered }
               }))
             }}
             onEditAlternativaImage={isReadOnly ? () => {} : (qId, aId, url) => {

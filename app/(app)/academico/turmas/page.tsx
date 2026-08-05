@@ -31,6 +31,11 @@ export default function TurmasPage() {
   const [selectedTurma, setSelectedTurma] = useState<any>(null)
   const [isEditing, setIsEditing] = useState(false)
   
+  const [isIntegralModalOpen, setIsIntegralModalOpen] = useState(false)
+  const [alunosIntegralList, setAlunosIntegralList] = useState<any[]>([])
+  const [loadingIntegralAlunos, setLoadingIntegralAlunos] = useState(false)
+  const [searchIntegralModal, setSearchIntegralModal] = useState('')
+  
   const [turmaToDelete, setTurmaToDelete] = useState<any>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -261,6 +266,30 @@ export default function TurmasPage() {
     }
   }
 
+  const handleOpenIntegralModal = async () => {
+    setIsIntegralModalOpen(true)
+    setLoadingIntegralAlunos(true)
+    setSearchIntegralModal('')
+    try {
+      const res = await fetch('/api/alunos?integralIntermediario=sim&limit=1000')
+      const data = await res.json()
+      setAlunosIntegralList(data.data || [])
+    } catch (error) {
+      console.error('Erro ao buscar alunos do integral/intermediário:', error)
+    } finally {
+      setLoadingIntegralAlunos(false)
+    }
+  }
+
+  const filteredIntegralAlunos = alunosIntegralList.filter((aluno: any) => {
+    if (!searchIntegralModal.trim()) return true
+    const q = searchIntegralModal.toLowerCase()
+    const nomeMatch = (aluno.nome || '').toLowerCase().includes(q)
+    const matriculaMatch = (aluno.matricula || aluno.id || '').toString().toLowerCase().includes(q)
+    const turmaMatch = (aluno.turma_nome || aluno.turma || '').toLowerCase().includes(q)
+    return nomeMatch || matriculaMatch || turmaMatch
+  })
+
 
   const totalPaginas = Math.ceil(totalItens / itensPorPagina)
 
@@ -326,15 +355,41 @@ export default function TurmasPage() {
         </div>
 
         {/* Alunos INTEGRAL / INTERMEDIÁRIO (Novo Card!) */}
-        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '10px', borderRadius: '8px' }}>
-              <Sparkles size={20} />
+        <div 
+          onClick={handleOpenIntegralModal}
+          style={{ 
+            background: '#fff', 
+            padding: '16px', 
+            borderRadius: '12px', 
+            border: '1px solid #e2e8f0', 
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-2px)'
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(139, 92, 246, 0.15)'
+            e.currentTarget.style.borderColor = '#c084fc'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0)'
+            e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)'
+            e.currentTarget.style.borderColor = '#e2e8f0'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '10px', borderRadius: '8px' }}>
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Integral / Intermediário</p>
+                <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosIntegral ?? 0}</h3>
+              </div>
             </div>
-            <div>
-              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Integral / Intermediário</p>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosIntegral ?? 0}</h3>
-            </div>
+            <span style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: 600, background: 'rgba(139, 92, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
+              Ver alunos &rarr;
+            </span>
           </div>
         </div>
 
@@ -1011,6 +1066,192 @@ export default function TurmasPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Alunos Integral / Intermediário */}
+      {isIntegralModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '750px', maxHeight: '85vh', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}>
+            
+            {/* Header Gradiente Roxo / Violeta */}
+            <div style={{ background: 'linear-gradient(135deg, #6d28d9 0%, #8b5cf6 100%)', padding: '24px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', zIndex: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 0 10px rgba(255,255,255,0.3)' }}>
+                  <Sparkles size={24} color="#fff" />
+                </div>
+                <div>
+                  <h2 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 22, color: '#fff', margin: 0, letterSpacing: '-0.5px' }}>
+                    Alunos Integral / Intermediário
+                  </h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', fontSize: '13px', color: 'rgba(255,255,255,0.85)' }}>
+                    <span>Total de alunos no Integral/Intermediário:</span>
+                    <span style={{ fontWeight: 800, color: '#fff', background: 'rgba(255,255,255,0.25)', padding: '2px 8px', borderRadius: '12px', fontSize: '12px' }}>
+                      {stats?.totalAlunosIntegral ?? alunosIntegralList.length} Alunos
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsIntegralModalOpen(false)} 
+                style={{ border: 'none', background: 'rgba(255,255,255,0.15)', width: '36px', height: '36px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff', transition: 'all 0.2s' }} 
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'} 
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Barra de Busca e Filtro interno do Modal */}
+            <div style={{ padding: '16px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input 
+                  type="text"
+                  className="form-input" 
+                  style={{ paddingLeft: '36px', width: '100%', height: '38px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', background: '#fff' }} 
+                  placeholder="Buscar por nome do aluno, matrícula ou turma..." 
+                  value={searchIntegralModal}
+                  onChange={e => setSearchIntegralModal(e.target.value)}
+                />
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {filteredIntegralAlunos.length} de {alunosIntegralList.length} alunos
+              </div>
+            </div>
+
+            {/* Conteúdo da Lista de Alunos */}
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+              {loadingIntegralAlunos ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#64748b', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '24px', height: '24px', border: '3px solid #8b5cf6', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                  <span>Carregando alunos do Integral / Intermediário...</span>
+                </div>
+              ) : filteredIntegralAlunos.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                  <Users size={36} style={{ margin: '0 auto 12px auto', opacity: 0.4, color: '#8b5cf6' }} />
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: '15px' }}>Nenhum aluno encontrado</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#94a3b8' }}>
+                    {searchIntegralModal ? 'Nenhum resultado corresponde à sua busca.' : 'Não há alunos cadastrados no Integral / Intermediário.'}
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {filteredIntegralAlunos.map((aluno: any) => {
+                    const turmaDisplay = aluno.turma_nome || turmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma || 'Sem Turma';
+                    return (
+                      <div 
+                        key={aluno.id} 
+                        style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          padding: '12px 16px', 
+                          border: '1px solid #e2e8f0', 
+                          borderRadius: '12px', 
+                          background: '#ffffff', 
+                          transition: 'all 0.2s ease',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                        }} 
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = '#faf5ff';
+                          e.currentTarget.style.borderColor = '#d8b4fe';
+                        }} 
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = '#ffffff';
+                          e.currentTarget.style.borderColor = '#e2e8f0';
+                        }}
+                      >
+                        {/* Aluno (Foto + Nome + Matrícula) */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1.5 }}>
+                          <div style={{ 
+                            width: '44px', 
+                            height: '44px', 
+                            borderRadius: '50%', 
+                            background: aluno.foto ? `url(${aluno.foto}) center/cover` : 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            color: '#fff', 
+                            fontWeight: 700, 
+                            fontSize: '16px',
+                            flexShrink: 0
+                          }}>
+                            {!aluno.foto && (aluno.nome ? aluno.nome.charAt(0).toUpperCase() : 'A')}
+                          </div>
+                          <div>
+                            <p style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{aluno.nome}</p>
+                            <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0 0' }}>
+                              Matrícula: <span style={{ fontWeight: 600, color: '#475569' }}>{aluno.matricula || aluno.id}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Turma do Aluno */}
+                        <div style={{ flex: 1.2, padding: '0 12px' }}>
+                          <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Turma / Série</span>
+                          <span style={{ 
+                            fontSize: '12px', 
+                            fontWeight: 700, 
+                            color: '#1e40af', 
+                            background: '#eff6ff', 
+                            padding: '3px 10px', 
+                            borderRadius: '6px', 
+                            border: '1px solid #bfdbfe',
+                            display: 'inline-block' 
+                          }}>
+                            {turmaDisplay}
+                          </span>
+                        </div>
+
+                        {/* Badge Modalidade & Status */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ 
+                            padding: '3px 10px', 
+                            background: '#f3e8ff', 
+                            color: '#7e22ce', 
+                            borderRadius: '20px', 
+                            fontSize: '11px', 
+                            fontWeight: 700,
+                            border: '1px solid #e9d5ff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <Sparkles size={12} /> Integral / Intermediário
+                          </span>
+                          <span style={{ 
+                            padding: '3px 8px', 
+                            background: (aluno.status === 'inativo' || aluno.status === 'Inativo') ? '#fef2f2' : '#dcfce7', 
+                            color: (aluno.status === 'inativo' || aluno.status === 'Inativo') ? '#991b1b' : '#15803d', 
+                            borderRadius: '12px', 
+                            fontSize: '11px', 
+                            fontWeight: 700 
+                          }}>
+                            {aluno.status || 'Ativo'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer com resumo e botão Fechar */}
+            <div style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+                Total de alunos no Integral / Intermediário: <strong style={{ color: '#6d28d9' }}>{alunosIntegralList.length}</strong>
+              </span>
+              <button 
+                onClick={() => setIsIntegralModalOpen(false)}
+                style={{ height: '38px', padding: '0 24px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: '#334155', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+              >
+                Fechar
+              </button>
+            </div>
+
           </div>
         </div>
       )}

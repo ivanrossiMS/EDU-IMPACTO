@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import { requireAuth, requireProfile } from '@/lib/server/authGuard'
 import { isValidStudentPhoto } from '@/lib/utils'
+import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 
@@ -517,44 +518,19 @@ export async function GET(request: Request) {
       }
 
       if (turma) {
-        const isIntegralTurma = targetTurma ? (
-          (targetTurma.turno || '').toLowerCase().includes('integral') ||
-          (targetTurma.turno || '').toLowerCase().includes('intermediário') ||
-          (targetTurma.nome || '').toLowerCase().includes('integral')
-        ) : false
-
-        finalLightweight = finalLightweight.filter((student: any) => {
-          if (String(student.turma) === String(turma) || String(student.turma_nome) === String(turma) || (targetTurma && String(student.turma) === String(targetTurma.id))) return true;
-          const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
-          if (Array.isArray(hList) && hList.length > 0) {
-            const activeVinculo = hList[hList.length - 1];
-            if (activeVinculo) {
-              if (String(activeVinculo.serieTurma) === String(turma) || (targetTurma && String(activeVinculo.serieTurma) === String(targetTurma.id))) return true;
-              if (targetTurma && isIntegralTurma) {
-                const anoMatch = !targetTurma.ano || !activeVinculo.anoLetivo || String(activeVinculo.anoLetivo) === String(targetTurma.ano);
-                const serieMatch = !targetTurma.serie || !activeVinculo.serie || activeVinculo.serie.toLowerCase() === targetTurma.serie.toLowerCase();
-                const isIntegralSel = activeVinculo.isIntegralIntermediario === true || activeVinculo.modalidade === 'INTEGRAL/INTERMEDIÁRIO';
-                if (anoMatch && serieMatch && isIntegralSel) return true;
-              }
-            }
-          }
-          return false;
-        });
+        finalLightweight = finalLightweight.filter((student: any) =>
+          isAlunoCursandoTurma(student, targetTurma || turma)
+        );
       }
 
       if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
-        finalLightweight = finalLightweight.filter((student: any) => {
-          const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
-          const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
-          return activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || student.isIntegralIntermediario || student.dados?.isIntegralIntermediario || (student.turma_nome && String(student.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
-        });
+        finalLightweight = finalLightweight.filter((student: any) =>
+          isAlunoIntegralIntermediario(student)
+        );
       } else if (integralIntermediario === 'nao' || integralIntermediario === 'false') {
-        finalLightweight = finalLightweight.filter((student: any) => {
-          const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
-          const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
-          const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || student.isIntegralIntermediario || student.dados?.isIntegralIntermediario || (student.turma_nome && String(student.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
-          return !isIntegralInt;
-        });
+        finalLightweight = finalLightweight.filter((student: any) =>
+          !isAlunoIntegralIntermediario(student)
+        );
       }
 
       return NextResponse.json({
@@ -757,44 +733,19 @@ export async function GET(request: Request) {
     }
 
     if (turma) {
-      const isIntegralTurma = targetTurma ? (
-        (targetTurma.turno || '').toLowerCase().includes('integral') ||
-        (targetTurma.turno || '').toLowerCase().includes('intermediário') ||
-        (targetTurma.nome || '').toLowerCase().includes('integral')
-      ) : false
-
-      finalFormattedData = finalFormattedData.filter((student: any) => {
-        if (String(student.turma) === String(turma) || String(student.turma_nome) === String(turma) || (targetTurma && String(student.turma) === String(targetTurma.id))) return true;
-        const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
-        if (Array.isArray(hList) && hList.length > 0) {
-          const activeVinculo = hList[hList.length - 1];
-          if (activeVinculo) {
-            if (String(activeVinculo.serieTurma) === String(turma) || (targetTurma && String(activeVinculo.serieTurma) === String(targetTurma.id))) return true;
-            if (targetTurma && isIntegralTurma) {
-              const anoMatch = !targetTurma.ano || !activeVinculo.anoLetivo || String(activeVinculo.anoLetivo) === String(targetTurma.ano);
-              const serieMatch = !targetTurma.serie || !activeVinculo.serie || activeVinculo.serie.toLowerCase() === targetTurma.serie.toLowerCase();
-              const isIntegralSel = activeVinculo.isIntegralIntermediario === true || activeVinculo.modalidade === 'INTEGRAL/INTERMEDIÁRIO';
-              if (anoMatch && serieMatch && isIntegralSel) return true;
-            }
-          }
-        }
-        return false;
-      });
+      finalFormattedData = finalFormattedData.filter((student: any) =>
+        isAlunoCursandoTurma(student, targetTurma || turma)
+      );
     }
 
     if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
-      finalFormattedData = finalFormattedData.filter((student: any) => {
-        const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
-        const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
-        return activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || student.isIntegralIntermediario || student.dados?.isIntegralIntermediario || (student.turma_nome && String(student.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
-      });
+      finalFormattedData = finalFormattedData.filter((student: any) =>
+        isAlunoIntegralIntermediario(student)
+      );
     } else if (integralIntermediario === 'nao' || integralIntermediario === 'false') {
-      finalFormattedData = finalFormattedData.filter((student: any) => {
-        const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
-        const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
-        const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || student.isIntegralIntermediario || student.dados?.isIntegralIntermediario || (student.turma_nome && String(student.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
-        return !isIntegralInt;
-      });
+      finalFormattedData = finalFormattedData.filter((student: any) =>
+        !isAlunoIntegralIntermediario(student)
+      );
     }
 
     return NextResponse.json({

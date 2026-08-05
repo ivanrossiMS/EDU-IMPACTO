@@ -56,64 +56,137 @@ export function getAlunoVinculosAtivos(aluno: any, anoLetivo?: string | number):
   }]
 }
 
+export function getSerieKey(str: any): string {
+  if (!str) return ''
+  const s = String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+  const matchNum = s.match(/(\d+)/)
+  const num = matchNum ? matchNum[1] : ''
+
+  if (s.includes('nivel') || s.includes('infantil') || s.includes('maternal') || s.includes('bercario')) {
+    return num ? `nivel_${num}` : s.replace(/[^a-z0-9]/g, '')
+  }
+  if (s.includes('serie')) {
+    return num ? `serie_${num}` : s.replace(/[^a-z0-9]/g, '')
+  }
+  if (s.includes('ano') || num) {
+    return num ? `ano_${num}` : s.replace(/[^a-z0-9]/g, '')
+  }
+  return s.replace(/[^a-z0-9]/g, '')
+}
+
 /**
  * Checks if the given class (`turmaRef`) is a active/cursando class for the student.
  * Supports dual-enrollment for Integral/Intermediário students.
  */
-export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: string | number): boolean {
+export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: string | number, turmasList?: any[]): boolean {
   if (!aluno || !turmaRef) return false
 
-  const norm = (str: any) => String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '').toLowerCase()
+  const norm = (str: any) => String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
 
-  const tNome = typeof turmaRef === 'string' ? turmaRef.trim() : String(turmaRef.nome || '').trim()
-  const tId = typeof turmaRef === 'string' ? turmaRef.trim() : String(turmaRef.id || '').trim()
-  const tCod = typeof turmaRef === 'object' && turmaRef && turmaRef.codigo ? String(turmaRef.codigo).trim() : ''
-  const tSerie = typeof turmaRef === 'object' && turmaRef ? (turmaRef.serie || turmaRef.dados?.serie || '') : ''
-  const tAno = typeof turmaRef === 'object' && turmaRef ? (turmaRef.ano || turmaRef.anoLetivo || '') : (anoLetivo || '')
-  const tTurno = typeof turmaRef === 'object' && turmaRef ? String(turmaRef.turno || '').toLowerCase() : (typeof turmaRef === 'string' ? turmaRef.toLowerCase() : '')
+  // Resolve string turmaRef if turmasList provided
+  let resolvedTurma = turmaRef
+  if (typeof turmaRef === 'string' && Array.isArray(turmasList) && turmasList.length > 0) {
+    const found = turmasList.find(t => String(t.id) === turmaRef || String(t.nome) === turmaRef || String(t.codigo) === turmaRef)
+    if (found) resolvedTurma = found
+  }
 
-  const isIntegralTurma = tTurno.includes('integral') || tTurno.includes('intermediario') || tTurno.includes('intermediário') || norm(tNome).includes('integral')
+  const tNome = typeof resolvedTurma === 'string' ? resolvedTurma.trim() : String(resolvedTurma.nome || '').trim()
+  const tId = typeof resolvedTurma === 'string' ? resolvedTurma.trim() : String(resolvedTurma.id || '').trim()
+  const tCod = typeof resolvedTurma === 'object' && resolvedTurma && resolvedTurma.codigo ? String(resolvedTurma.codigo).trim() : ''
+  const tTurno = typeof resolvedTurma === 'object' && resolvedTurma && resolvedTurma.turno ? String(resolvedTurma.turno).trim() : ''
+  const tSerie = typeof resolvedTurma === 'object' && resolvedTurma && (resolvedTurma.serie || resolvedTurma.dados?.serie) ? String(resolvedTurma.serie || resolvedTurma.dados?.serie).trim() : ''
+  const tSegmento = typeof resolvedTurma === 'object' && resolvedTurma && (resolvedTurma.segmento || resolvedTurma.dados?.segmento) ? String(resolvedTurma.segmento || resolvedTurma.dados?.segmento).trim() : ''
+  const tAno = typeof resolvedTurma === 'object' && resolvedTurma ? (resolvedTurma.ano || resolvedTurma.anoLetivo || '') : (anoLetivo || '')
 
+  // 1. Check direct property aluno.turma
+  const directTurma = String(aluno.turma || '').trim()
+  if (directTurma !== '') {
+    const directNorm = norm(directTurma)
+    if (directNorm === norm(tNome) || directNorm === norm(tId) || (tCod && directNorm === norm(tCod))) {
+      return true
+    }
+  }
+
+  // 2. Check direct property aluno.turma_nome
+  const directTurmaNome = String(aluno.turma_nome || '').trim()
+  if (directTurmaNome !== '') {
+    const directNorm = norm(directTurmaNome)
+    if (directNorm === norm(tNome) || directNorm === norm(tId) || (tCod && directNorm === norm(tCod))) {
+      return true
+    }
+  }
+
+  // 3. Check active vinculos in historicoTurmas & turmasAdicionais
   const vinculos = getAlunoVinculosAtivos(aluno, anoLetivo || tAno)
 
   for (const v of vinculos) {
-    const vTurma = String(v.serieTurma || v.turma || aluno.turma || '').trim()
-    const vTurmaNorm = norm(vTurma)
-
-    // 1. Direct match by ID, Nome, or Codigo
-    if (vTurmaNorm !== '' && (
-      vTurmaNorm === norm(tNome) || 
-      vTurmaNorm === norm(tId) || 
-      (tCod && vTurmaNorm === norm(tCod))
-    )) {
-      return true
+    const vTurma = String(v.serieTurma || v.turma || '').trim()
+    if (vTurma !== '') {
+      const vNorm = norm(vTurma)
+      if (vNorm === norm(tNome) || vNorm === norm(tId) || (tCod && vNorm === norm(tCod))) {
+        return true
+      }
     }
 
-    // Direct match on student.turma property
-    const directTurmaNorm = norm(aluno.turma)
-    if (directTurmaNorm !== '' && (
-      directTurmaNorm === norm(tNome) || 
-      directTurmaNorm === norm(tId) || 
-      (tCod && directTurmaNorm === norm(tCod))
-    )) {
-      return true
+    if (Array.isArray(v.turmasAdicionais)) {
+      for (const sub of v.turmasAdicionais) {
+        const subTurma = String(sub.serieTurma || sub.turma || sub.nome || '').trim()
+        if (subTurma !== '') {
+          const subNorm = norm(subTurma)
+          if (subNorm === norm(tNome) || subNorm === norm(tId) || (tCod && subNorm === norm(tCod))) {
+            return true
+          }
+        }
+      }
     }
+  }
 
-    // 2. Integral / Intermediário dual-enrollment check
-    const isIntegralSel = v.isIntegralIntermediario === true || 
-                          v.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || 
-                          aluno.isIntegralIntermediario === true || 
-                          aluno.dados?.isIntegralIntermediario === true ||
-                          aluno.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO'
+  // 4. Dual-Enrollment check for Integral/Intermediário classes!
+  const tNormNome = norm(tNome)
+  const tNormTurno = norm(tTurno)
+  const isIntegralTurma = tNormNome.includes('integral') || tNormNome.includes('intermediario') ||
+                          tNormTurno.includes('integral') || tNormTurno.includes('intermediario') ||
+                          (typeof resolvedTurma === 'object' && Boolean(resolvedTurma.isIntegralIntermediario || resolvedTurma.dados?.isIntegralIntermediario))
 
-    if (isIntegralSel && isIntegralTurma) {
-      const vAno = v.anoLetivo || aluno.dados?.anoLetivo || aluno.ano_letivo
-      const anoMatch = !tAno || !vAno || String(vAno).trim() === String(tAno).trim()
+  if (isIntegralTurma) {
+    const hasExplicitIntegral = Boolean(
+      aluno.isIntegralIntermediario === true ||
+      aluno.dados?.isIntegralIntermediario === true ||
+      aluno.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+      aluno.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO'
+    ) || vinculos.some(v => 
+      v.isIntegralIntermediario === true || 
+      v.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+      v.modalidade === 'Integral/Intermediário'
+    )
 
-      const vSerie = v.serie || aluno.serie || aluno.dados?.serie || ''
-      const serieMatch = !tSerie || !vSerie || norm(tSerie) === norm(vSerie) || norm(tNome).includes(norm(vSerie))
+    if (hasExplicitIntegral) {
+      const targetSerieKey = getSerieKey(tSerie) || getSerieKey(tNome)
 
-      if (anoMatch && serieMatch) {
+      if (targetSerieKey) {
+        for (const v of vinculos) {
+          const isVinculoIntegral = v.isIntegralIntermediario === true ||
+                                    v.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+                                    v.modalidade === 'Integral/Intermediário' ||
+                                    hasExplicitIntegral
+
+          if (isVinculoIntegral) {
+            const vSegmento = v.segmento || aluno.segmento || aluno.dados?.segmento || ''
+            if (tSegmento && vSegmento) {
+              const normVSeg = norm(vSegmento)
+              const normTSeg = norm(tSegmento)
+              if (normVSeg && normTSeg && normVSeg !== normTSeg) {
+                continue
+              }
+            }
+
+            const vinculoSerieKey = getSerieKey(v.serie) || getSerieKey(aluno.serie) || getSerieKey(aluno.dados?.serie)
+            if (vinculoSerieKey && vinculoSerieKey === targetSerieKey) {
+              return true
+            }
+          }
+        }
+      } else {
         return true
       }
     }

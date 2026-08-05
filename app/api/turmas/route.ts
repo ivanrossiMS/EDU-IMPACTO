@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,21 +60,7 @@ export async function GET(request: Request) {
     const activeAlunos = (alunosData || []).filter((a: any) => a.status !== 'inativo' && a.status !== 'Inativo')
     const totalAlunosMatriculados = activeAlunos.length
 
-    const isIntegralStudent = (student: any) => {
-      const hList = student.dados?.historicoTurmas || []
-      const activeHist = Array.isArray(hList) && hList.length > 0 ? hList[hList.length - 1] : null
-
-      return Boolean(
-        activeHist?.isIntegralIntermediario ||
-        activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-        activeHist?.modalidade === 'INTEGRAL' ||
-        student.dados?.isIntegralIntermediario ||
-        student.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-        student.dados?.modalidade === 'INTEGRAL'
-      )
-    }
-
-    const totalAlunosIntegral = activeAlunos.filter(isIntegralStudent).length
+    const totalAlunosIntegral = activeAlunos.filter((a: any) => isAlunoIntegralIntermediario(a)).length
 
     // Buscar capacidade total de todas as turmas
     const { data: allTurmasCap } = await supabaseServer
@@ -86,34 +73,7 @@ export async function GET(request: Request) {
     // Calcular matriculados por turma em tempo real para os itens da tabela
     if (data && data.length > 0) {
       data.forEach((t: any) => {
-        const isIntegralTurma = (t.turno || '').toLowerCase().includes('integral') ||
-                                (t.turno || '').toLowerCase().includes('intermediário') ||
-                                (t.nome || '').toLowerCase().includes('integral');
-
-        const countAlunos = activeAlunos.filter((a: any) => {
-          if (String(a.turma) === String(t.id) || String(a.turma) === String(t.nome)) return true;
-
-          const hList = a.dados?.historicoTurmas || [];
-          if (Array.isArray(hList) && hList.length > 0) {
-            const activeVinculo = hList[hList.length - 1];
-            if (activeVinculo) {
-              if (String(activeVinculo.serieTurma) === String(t.id) || String(activeVinculo.serieTurma) === String(t.nome)) {
-                return true;
-              }
-
-              if (isIntegralTurma) {
-                const anoMatch = !t.ano || !activeVinculo.anoLetivo || String(activeVinculo.anoLetivo) === String(t.ano);
-                const serieMatch = !t.serie || !activeVinculo.serie || activeVinculo.serie.toLowerCase() === t.serie.toLowerCase();
-                const isIntegralSel = activeVinculo.isIntegralIntermediario === true || activeVinculo.modalidade === 'INTEGRAL/INTERMEDIÁRIO';
-                if (anoMatch && serieMatch && isIntegralSel) {
-                  return true;
-                }
-              }
-            }
-          }
-          return false;
-        }).length;
-
+        const countAlunos = activeAlunos.filter((a: any) => isAlunoCursandoTurma(a, t, t.ano)).length;
         t.matriculados = countAlunos;
       })
     }

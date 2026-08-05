@@ -150,12 +150,38 @@ export default function AdaptarSimuladoPage() {
     setQuestoes(prev => prev.map(q => {
       if (q.id === qId) {
         const remaining = q.simulados_alternativas.filter((a: any) => a.id !== altId)
-        const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
         return {
           ...q,
           simulados_alternativas: remaining.map((a: any, idx: number) => ({
             ...a,
-            letra: letters[idx] || a.letra
+            letra: letters[idx] || String.fromCharCode(65 + idx)
+          }))
+        }
+      }
+      return q
+    }))
+  }
+
+  const handleMoveAlternativa = (qId: string, altId: string, direction: 'up' | 'down') => {
+    setQuestoes(prev => prev.map(q => {
+      if (q.id === qId) {
+        const alts = q.simulados_alternativas || []
+        const index = alts.findIndex((a: any) => a.id === altId)
+        if (index === -1) return q
+        const targetIndex = direction === 'up' ? index - 1 : index + 1
+        if (targetIndex < 0 || targetIndex >= alts.length) return q
+        
+        const newAlts = [...alts]
+        const [moved] = newAlts.splice(index, 1)
+        newAlts.splice(targetIndex, 0, moved)
+        
+        const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+        return {
+          ...q,
+          simulados_alternativas: newAlts.map((a: any, idx: number) => ({
+            ...a,
+            letra: letters[idx] || String.fromCharCode(65 + idx)
           }))
         }
       }
@@ -380,6 +406,7 @@ export default function AdaptarSimuladoPage() {
             onEditEnunciado={handleEditEnunciado}
             onEditAlternativa={handleEditAlternativa}
             onRemoveAlternativa={handleRemoveAlternativa}
+            onMoveAlternativa={handleMoveAlternativa}
             onToggleQuestion={handleToggleQuestion}
           />
         </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, Plus, Minus, FileText, LayoutList } from 'lucide-react';
+import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, Plus, Minus, FileText, LayoutList, ChevronUp, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { HtmlContent } from '../HtmlContent';
 import { DraggableHeaderField } from './DraggableHeaderField';
@@ -16,6 +16,7 @@ export function PageContent({
   onEditEnunciado, 
   onEditAlternativa, 
   onRemoveAlternativa, 
+  onMoveAlternativa,
   onToggleQuestion, 
   forceRepaginate,
   isEditHeaderMode,
@@ -794,7 +795,8 @@ export function PageContent({
                               }) || [];
                             const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
 
-                            return q.simulados_alternativas?.map((a: any) => {
+                            return q.simulados_alternativas?.map((a: any, aIndex: number) => {
+                              const totalAlts = q.simulados_alternativas?.length || 0;
                               const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
                               const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
                               const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
@@ -1019,32 +1021,92 @@ export function PageContent({
                                 )}
                               </div>
 
-                              {onRemoveAlternativa && !readOnly && (
-                                <button
-                                  className="no-print alt-delete-btn"
-                                  onClick={() => {
-                                    onRemoveAlternativa(q.id, a.id);
-                                    forceRepaginate();
-                                  }}
-                                  title="Remover alternativa"
-                                  style={{
-                                    position: 'absolute',
-                                    left: -28,
-                                    top: 4,
-                                    background: '#fee2e2',
-                                    color: '#ef4444',
-                                    border: 'none',
-                                    borderRadius: 20,
-                                    width: 18,
-                                    height: 18,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                  }}
-                                >
-                                  <X size={12} />
-                                </button>
+                              {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
+                                <div className="no-print alt-control-btns" style={{
+                                  position: 'absolute',
+                                  left: onMoveAlternativa ? -72 : -28,
+                                  top: 4,
+                                  display: 'flex',
+                                  gap: 3,
+                                  alignItems: 'center',
+                                  zIndex: 20
+                                }}>
+                                  {onMoveAlternativa && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onMoveAlternativa(q.id, a.id, 'up');
+                                          forceRepaginate?.();
+                                        }}
+                                        disabled={aIndex === 0}
+                                        title="Subir alternativa"
+                                        style={{
+                                          background: aIndex === 0 ? '#f1f5f9' : '#e0f2fe',
+                                          color: aIndex === 0 ? '#cbd5e1' : '#0284c7',
+                                          border: 'none',
+                                          borderRadius: 20,
+                                          width: 18,
+                                          height: 18,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: aIndex === 0 ? 'not-allowed' : 'pointer',
+                                        }}
+                                      >
+                                        <ChevronUp size={12} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          onMoveAlternativa(q.id, a.id, 'down');
+                                          forceRepaginate?.();
+                                        }}
+                                        disabled={aIndex === totalAlts - 1}
+                                        title="Descer alternativa"
+                                        style={{
+                                          background: aIndex === totalAlts - 1 ? '#f1f5f9' : '#e0f2fe',
+                                          color: aIndex === totalAlts - 1 ? '#cbd5e1' : '#0284c7',
+                                          border: 'none',
+                                          borderRadius: 20,
+                                          width: 18,
+                                          height: 18,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: aIndex === totalAlts - 1 ? 'not-allowed' : 'pointer',
+                                        }}
+                                      >
+                                        <ChevronDown size={12} />
+                                      </button>
+                                    </>
+                                  )}
+                                  {onRemoveAlternativa && (
+                                    <button
+                                      type="button"
+                                      className="no-print alt-delete-btn"
+                                      onClick={() => {
+                                        onRemoveAlternativa(q.id, a.id);
+                                        forceRepaginate?.();
+                                      }}
+                                      title="Remover alternativa"
+                                      style={{
+                                        background: '#fee2e2',
+                                        color: '#ef4444',
+                                        border: 'none',
+                                        borderRadius: 20,
+                                        width: 18,
+                                        height: 18,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      <X size={12} />
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </div>
                           )
@@ -1481,7 +1543,8 @@ export function PageContent({
                       }) || [];
                     const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
 
-                    return block.q.simulados_alternativas?.map((a: any) => {
+                    return block.q.simulados_alternativas?.map((a: any, aIndex: number) => {
+                      const totalAlts = block.q.simulados_alternativas?.length || 0;
                       const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
                       const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
                       const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
@@ -1668,8 +1731,70 @@ export function PageContent({
                               </div>
                             )}
                           </div>
-                          {onRemoveAlternativa && !readOnly && (
-                            <button className="no-print alt-delete-btn" onClick={() => { onRemoveAlternativa(qId, a.id); forceRepaginate(); }} title="Remover alternativa" style={{ position: 'absolute', left: -28, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button>
+                          {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
+                            <div className="no-print alt-control-btns" style={{
+                              position: 'absolute',
+                              left: onMoveAlternativa ? -72 : -28,
+                              top: 4,
+                              display: 'flex',
+                              gap: 3,
+                              alignItems: 'center',
+                              zIndex: 20
+                            }}>
+                              {onMoveAlternativa && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onMoveAlternativa(qId, a.id, 'up');
+                                      forceRepaginate?.();
+                                    }}
+                                    disabled={aIndex === 0}
+                                    title="Subir alternativa"
+                                    style={{
+                                      background: aIndex === 0 ? '#f1f5f9' : '#e0f2fe',
+                                      color: aIndex === 0 ? '#cbd5e1' : '#0284c7',
+                                      border: 'none',
+                                      borderRadius: 20,
+                                      width: 18,
+                                      height: 18,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: aIndex === 0 ? 'not-allowed' : 'pointer',
+                                    }}
+                                  >
+                                    <ChevronUp size={12} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onMoveAlternativa(qId, a.id, 'down');
+                                      forceRepaginate?.();
+                                    }}
+                                    disabled={aIndex === totalAlts - 1}
+                                    title="Descer alternativa"
+                                    style={{
+                                      background: aIndex === totalAlts - 1 ? '#f1f5f9' : '#e0f2fe',
+                                      color: aIndex === totalAlts - 1 ? '#cbd5e1' : '#0284c7',
+                                      border: 'none',
+                                      borderRadius: 20,
+                                      width: 18,
+                                      height: 18,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: aIndex === totalAlts - 1 ? 'not-allowed' : 'pointer',
+                                    }}
+                                  >
+                                    <ChevronDown size={12} />
+                                  </button>
+                                </>
+                              )}
+                              {onRemoveAlternativa && (
+                                <button className="no-print alt-delete-btn" onClick={() => { onRemoveAlternativa(qId, a.id); forceRepaginate(); }} title="Remover alternativa" style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button>
+                              )}
+                            </div>
                           )}
                         </div>
                       );
@@ -1683,6 +1808,9 @@ export function PageContent({
           if (block.type === 'part_alt') {
                 const q = block.q;
                 const a = block.alt;
+                const alts = q.simulados_alternativas || [];
+                const aIndex = alts.findIndex((item: any) => item.id === a.id);
+                const totalAlts = alts.length;
                 return (
                   <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
                     <div style={{ width: '28px', minWidth: '28px' }}></div>
@@ -1870,18 +1998,80 @@ export function PageContent({
                           );
                         })()}
                       </div>
-                      {onRemoveAlternativa && !readOnly && (
-                        <button
-                          className="no-print alt-delete-btn"
-                          onClick={() => {
-                            onRemoveAlternativa(q.id, a.id);
-                            forceRepaginate();
-                          }}
-                          style={{ position: 'absolute', left: -28, top: 4, background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                          title="Remover alternativa"
-                        >
-                          <X size={12} />
-                        </button>
+                      {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
+                        <div className="no-print alt-control-btns" style={{
+                          position: 'absolute',
+                          left: onMoveAlternativa ? -72 : -28,
+                          top: 4,
+                          display: 'flex',
+                          gap: 3,
+                          alignItems: 'center',
+                          zIndex: 20
+                        }}>
+                          {onMoveAlternativa && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onMoveAlternativa(q.id, a.id, 'up');
+                                  forceRepaginate?.();
+                                }}
+                                disabled={aIndex === 0}
+                                title="Subir alternativa"
+                                style={{
+                                  background: aIndex === 0 ? '#f1f5f9' : '#e0f2fe',
+                                  color: aIndex === 0 ? '#cbd5e1' : '#0284c7',
+                                  border: 'none',
+                                  borderRadius: 20,
+                                  width: 18,
+                                  height: 18,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: aIndex === 0 ? 'not-allowed' : 'pointer',
+                                }}
+                              >
+                                <ChevronUp size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onMoveAlternativa(q.id, a.id, 'down');
+                                  forceRepaginate?.();
+                                }}
+                                disabled={aIndex === totalAlts - 1}
+                                title="Descer alternativa"
+                                style={{
+                                  background: aIndex === totalAlts - 1 ? '#f1f5f9' : '#e0f2fe',
+                                  color: aIndex === totalAlts - 1 ? '#cbd5e1' : '#0284c7',
+                                  border: 'none',
+                                  borderRadius: 20,
+                                  width: 18,
+                                  height: 18,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: aIndex === totalAlts - 1 ? 'not-allowed' : 'pointer',
+                                }}
+                              >
+                                <ChevronDown size={12} />
+                              </button>
+                            </>
+                          )}
+                          {onRemoveAlternativa && (
+                            <button
+                              className="no-print alt-delete-btn"
+                              onClick={() => {
+                                onRemoveAlternativa(q.id, a.id);
+                                forceRepaginate();
+                              }}
+                              style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              title="Remover alternativa"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

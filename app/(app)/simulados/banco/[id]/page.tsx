@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, Bold, Italic, Underline, Subscript, Superscript, RemoveFormatting, List, CheckCircle2, Sparkles, X, Bot } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Image as ImageIcon, Bold, Italic, Underline, Subscript, Superscript, RemoveFormatting, List, CheckCircle2, Sparkles, X, Bot, ChevronUp, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -235,6 +235,16 @@ export default function EditarQuestaoPage() {
     setAlternativas(prev => prev.map((alt, i) => i === index ? { ...alt, texto: text } : alt))
   }
 
+  const handleMoveAlt = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= alternativas.length) return
+    const newAlts = [...alternativas]
+    const [moved] = newAlts.splice(index, 1)
+    newAlts.splice(targetIndex, 0, moved)
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+    setAlternativas(newAlts.map((a, idx) => ({ ...a, letra: letters[idx] || String.fromCharCode(65 + idx) })))
+  }
+
   const handleUpdate = async () => {
     if (!enunciado.trim() || !disciplinaId || !turma || !dificuldade) {
       alert('Preencha o enunciado, disciplina, dificuldade e turma.')
@@ -456,10 +466,53 @@ export default function EditarQuestaoPage() {
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {alternativas.map((alt, index) => (
-                <div key={alt.letra} style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveAlt(index, 'up')}
+                      disabled={index === 0}
+                      title="Subir alternativa"
+                      style={{
+                        background: index === 0 ? 'rgba(100,116,139,0.05)' : 'rgba(59,130,246,0.1)',
+                        color: index === 0 ? '#cbd5e1' : '#3b82f6',
+                        border: 'none',
+                        borderRadius: 6,
+                        width: 24,
+                        height: 18,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: index === 0 ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      <ChevronUp size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMoveAlt(index, 'down')}
+                      disabled={index === alternativas.length - 1}
+                      title="Descer alternativa"
+                      style={{
+                        background: index === alternativas.length - 1 ? 'rgba(100,116,139,0.05)' : 'rgba(59,130,246,0.1)',
+                        color: index === alternativas.length - 1 ? '#cbd5e1' : '#3b82f6',
+                        border: 'none',
+                        borderRadius: 6,
+                        width: 24,
+                        height: 18,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: index === alternativas.length - 1 ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      <ChevronDown size={12} />
+                    </button>
+                  </div>
                   <button 
                     type="button"
                     onClick={() => handleSetCorreta(index)}
+                    title={alt.correta ? 'Alternativa correta' : 'Marcar como correta'}
                     style={{ 
                       width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                       background: alt.correta ? 'rgba(16,185,129,0.15)' : 'rgba(100, 116, 139, 0.1)',

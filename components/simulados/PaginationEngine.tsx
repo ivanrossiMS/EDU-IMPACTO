@@ -16,6 +16,7 @@ interface PaginationEngineProps {
   onEditEnunciadoImage?: (qId: string, imgIndex: number, url: string) => void;
   onEditAlternativa: (qId: string, altId: string, newText: string) => void;
   onRemoveAlternativa: (qId: string, altId: string) => void;
+  onMoveAlternativa?: (qId: string, altId: string, direction: 'up' | 'down') => void;
   onToggleQuestion: (qId: string) => void;
   isEditHeaderMode?: boolean;
   headerLayout?: any;
@@ -300,7 +301,7 @@ const CHUNK_SPACING = 6;
 
 export function PaginationEngine({
   questoes, columns, enunciadoFontSize, alternativasFontSize, config, simulado,
-  onEditEnunciado, onEditEnunciadoImage, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onToggleQuestion,
+  onEditEnunciado, onEditEnunciadoImage, onEditAlternativa, onEditAlternativaImage, onRemoveAlternativa, onMoveAlternativa, onToggleQuestion,
   isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage,
   showMargins, topMarginOffset, onTopMarginOffsetChange, bottomMarginOffset, onBottomMarginOffsetChange,
   leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange,
@@ -1087,6 +1088,7 @@ export function PaginationEngine({
               onEditEnunciadoImage={onEditEnunciadoImage}
               onEditAlternativa={onEditAlternativa} 
               onRemoveAlternativa={onRemoveAlternativa} 
+              onMoveAlternativa={onMoveAlternativa}
               onToggleQuestion={onToggleQuestion} 
               forceRepaginate={forceRepaginate} 
               isEditHeaderMode={isEditHeaderMode} 
@@ -1137,6 +1139,7 @@ export function PaginationEngine({
                 onEditEnunciadoImage={onEditEnunciadoImage}
                 onEditAlternativa={onEditAlternativa} 
                 onRemoveAlternativa={onRemoveAlternativa} 
+                onMoveAlternativa={onMoveAlternativa}
                 onToggleQuestion={onToggleQuestion} 
                 forceRepaginate={forceRepaginate} 
                 isEditHeaderMode={isEditHeaderMode} 
