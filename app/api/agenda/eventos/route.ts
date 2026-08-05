@@ -267,7 +267,25 @@ export async function DELETE(request: Request) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Apenas para garantir que não dê erro no delete (Supabase exige filtro no delete)
+    const url = new URL(request.url)
+    let id = url.searchParams.get('id')
+
+    if (!id) {
+      try {
+        const body = await request.json()
+        if (body?.id) id = body.id
+      } catch (e) {
+        // Sem corpo JSON
+      }
+    }
+
+    if (id) {
+      const { error } = await supabase.from('eventos_agenda').delete().eq('id', id)
+      if (error) throw new Error(error.message)
+      return NextResponse.json({ ok: true, id })
+    }
+
+    // Se nenhum id for especificado, realiza a limpeza total
     const { error } = await supabase.from('eventos_agenda').delete().neq('id', '00000000-0000-0000-0000-000000000000')
     
     if (error) throw new Error(error.message)
@@ -277,3 +295,4 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
 }
+

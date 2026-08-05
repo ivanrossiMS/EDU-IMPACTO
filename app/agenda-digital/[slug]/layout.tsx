@@ -3,6 +3,7 @@ import { performLogout } from "@/lib/auth/logout";
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
+import { getAlunoTurnoDisplay } from '@/lib/studentTurmaUtils';
 
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -671,6 +672,7 @@ export default function ADInnerLayout({
   const specialAuthTextRef = useRef<HTMLTextAreaElement>(null)
 
   const { turmas = [] } = useData();
+  const [grupos = []] = useSupabaseArray<any>('agenda/grupos');
   const { adConfig, setAdLoading } = useAgendaDigital();
   const { currentUser, hydrated, setCurrentUser, setLoadingPath } = useApp()
   const { callStudent, addSpecialAuth, activeCalls = [] } = useSaida()
@@ -790,13 +792,7 @@ export default function ADInnerLayout({
     return nomeTurma.split('-')[0].trim()
   })()
 
-  const cleanTurno = (() => {
-    if (!aluno) return 'Vespertino'
-    if (aluno.turno_nome) return aluno.turno_nome
-    if (aluno.turno && aluno.turno.trim() !== '') return aluno.turno
-    const turmaObj = (turmas || []).find(t => t && (String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma)))
-    return turmaObj?.turno || 'Vespertino'
-  })()
+  const cleanTurno = getAlunoTurnoDisplay(aluno, turmas, grupos)
 
   const userAccessRole = React.useMemo(() => {
     if (!isMirrorModeActive && (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria')) {

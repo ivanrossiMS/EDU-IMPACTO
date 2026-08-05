@@ -293,7 +293,17 @@ export default function CalendarioPage() {
     setShowModal(false)
   }
 
-  const handleDelete = (id: string) => setEventosAgenda(prev => prev.filter(e => e.id !== id))
+  const handleDelete = async (id: string) => {
+    setEventosAgenda(prev => prev.filter(e => e.id !== id))
+    try {
+      const res = await fetch(`/api/agenda/eventos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!res.ok) {
+        console.error('[Calendario] Erro ao excluir no servidor:', await res.text())
+      }
+    } catch (err) {
+      console.error('[Calendario] Erro de rede ao excluir evento:', err)
+    }
+  }
 
   const handleEdit = (ev: EventoAgenda) => {
     setForm({

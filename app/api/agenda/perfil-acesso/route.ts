@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -73,6 +74,16 @@ export async function GET(request: Request) {
        }
     } else {
        (aluno as any).turma_nome = 'S/T'
+    }
+
+    // Checar se o aluno tem vínculo com turmas ou grupos de modalidade Integral/Intermediário
+    const [allTurmasDb, allGruposDb] = await Promise.all([
+      supabase.from('turmas').select('*'),
+      supabase.from('agenda_grupos').select('*')
+    ]);
+    if (isAlunoIntegralIntermediario(aluno, allTurmasDb.data || [], allGruposDb.data || [])) {
+      (aluno as any).turno_nome = 'Integral/Intermediário';
+      (aluno as any).turno = 'Integral/Intermediário';
     }
 
     // 2. Buscar vínculos do aluno

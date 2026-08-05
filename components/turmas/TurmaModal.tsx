@@ -83,9 +83,8 @@ export default function TurmaModal({ open, onClose, editingId }: Props) {
 
   // Mapear turnos do ERP
   const TURNOS = useMemo(() => {
-    if (!cfgTurnos || cfgTurnos.length === 0) return ['Matutino', 'Vespertino', 'Noturno', 'Integral']
-    return cfgTurnos.filter(t => t.situacao === 'ativo').map(t => t.nome)
-  }, [cfgTurnos])
+    return ['Matutino', 'Vespertino', 'Integral/Intermediário']
+  }, [])
 
 
   // Unidades reais cadastradas no sistema

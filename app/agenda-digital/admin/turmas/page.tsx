@@ -191,9 +191,8 @@ export default function ADAdminTurmas() {
   if (telaAtual === 'detalhe-grupo' && activeGrupo) {
     // Filtrar para exibir apenas alunos cuja turma CURSANDO seja este grupo/turma (ignora turmas de HISTÓRICO ANTERIOR)
     const alunosVinculados = (alunos || []).filter((a: any) => {
-      if (!(activeGrupo.alunosIds || []).includes(a.id)) return false
       const turmaERP = turmas.find(t => (activeGrupo.syncId && (activeGrupo.syncId === `sync-${t.id}` || activeGrupo.id === `sync-${t.id}`)) || t.nome === activeGrupo.nome)
-      return isAlunoCursandoTurma(a, turmaERP || activeGrupo.nome, activeGrupo.ano || turmaERP?.ano)
+      return (activeGrupo.alunosIds || []).includes(a.id) || isAlunoCursandoTurma(a, turmaERP || activeGrupo, activeGrupo.ano || turmaERP?.ano)
     })
     const colsDiretos = (funcionarios || []).filter((u: any) => (activeGrupo.colaboradoresIds || []).includes(u.id))
     const todosCols = resolveColaboradoresGrupo(activeGrupo)
@@ -537,6 +536,12 @@ export default function ADAdminTurmas() {
                     <tbody>
                       {gruposPorAno[ano].map(g => {
                         const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (funcionarios || []).some((f: any) => f.id === colId))
+                        const turmaERP = turmas.find(t => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome)
+                        const alunosDoGrupoCount = (alunos || []).filter((a: any) => {
+                          if ((g.alunosIds || []).includes(a.id)) return true
+                          return isAlunoCursandoTurma(a, turmaERP || g, g.ano || turmaERP?.ano)
+                        }).length
+
                         return (
                           <tr key={g.id} onClick={() => { setActiveGrupoId(g.id); setTelaAtual('detalhe-grupo'); setTabDetalheGrupo('alunos') }} style={{ borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer', transition: 'background 0.15s' }}
                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.02)'}
@@ -559,7 +564,7 @@ export default function ADAdminTurmas() {
                               <td style={{ padding: '16px 20px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <Users size={14} color="hsl(var(--text-muted))" />
-                                  <span style={{ fontWeight: 700, fontSize: 14 }}>{(g.alunosIds || []).length}</span>
+                                  <span style={{ fontWeight: 700, fontSize: 14 }}>{alunosDoGrupoCount}</span>
                                 </div>
                               </td>
                             )}

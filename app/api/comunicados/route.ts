@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
@@ -107,34 +108,38 @@ export async function GET(request: Request) {
 
   // ── Resolução paralela de turma, grupos e data de acesso ──────────────────
   // Antes: 4 queries sequenciais. Agora: 2 batches paralelos.
-  let resolvedTurma = turmaId;
+  let resolvedTurmas: string[] = [];
+  if (turmaId) resolvedTurmas.push(turmaId);
   let studentGroups: string[] = [];
   let accessStartDate = await getLoggedUserAccessStartDate();
 
   if (alunoId) {
-    // Batch 1: busca dados do aluno e todos grupos ao mesmo tempo
-    const [alunoRes, gruposRes] = await Promise.all([
-      supabase.from('alunos').select('turma, created_at, dados').eq('id', alunoId).maybeSingle(),
-      supabase.from('agenda_grupos').select('id, dados'),
+    // Batch 1: busca dados do aluno, todas as turmas e todos os grupos ao mesmo tempo
+    const [alunoRes, turmasRes, gruposRes] = await Promise.all([
+      supabase.from('alunos').select('id, turma, created_at, dados').eq('id', alunoId).maybeSingle(),
+      supabase.from('turmas').select('*'),
+      supabase.from('agenda_grupos').select('id, dados, nome, alunosIds'),
     ]);
 
     const alunoData = alunoRes.data;
-    const allGrupos = gruposRes.data;
+    const allTurmas = turmasRes.data || [];
+    const allGrupos = gruposRes.data || [];
 
     if (alunoData) {
-      // Resolver turma
-      const turmaBruta = alunoData.turma;
-      if (turmaBruta) {
-        // Batch 2: resolver nome da turma (por id ou código)
-        const { data: tData } = await supabase
-          .from('turmas')
-          .select('nome')
-          .or(`id.eq."${turmaBruta}",codigo.eq."${turmaBruta}",nome.eq."${turmaBruta}"`)
-          .maybeSingle();
-        resolvedTurma = tData?.nome || turmaBruta;
+      // 1. Resolver todas as turmas que o aluno está cursando (incluindo turmas regulares e Integral/Intermediário)
+      allTurmas.forEach((t: any) => {
+        if (isAlunoCursandoTurma(alunoData, t, t.ano)) {
+          if (t.nome) resolvedTurmas.push(t.nome);
+          if (t.id) resolvedTurmas.push(String(t.id));
+          if (t.codigo) resolvedTurmas.push(String(t.codigo));
+        }
+      });
+
+      if (alunoData.turma && !resolvedTurmas.includes(alunoData.turma)) {
+        resolvedTurmas.push(alunoData.turma);
       }
 
-      // Resolver data de acesso
+      // 2. Resolver data de acesso
       const dateStr = alunoData.dados?.data_matricula || alunoData.dados?.data_inicio || alunoData.dados?.data_ingresso || alunoData.created_at;
       if (dateStr) {
         const studentEntryDate = new Date(dateStr);
@@ -142,21 +147,32 @@ export async function GET(request: Request) {
           accessStartDate = studentEntryDate;
         }
       }
-    }
 
-    // Resolver grupos do aluno (filter local é barato, dados já vierem no batch 1)
-    if (allGrupos) {
+      // 3. Resolver grupos do aluno em agenda_grupos
       const cleanId = alunoId.replace(/^(a_|_ALU)/, '');
-      allGrupos.forEach(g => {
-        const alunosIdsList = g.dados?.alunosIds || [];
-        if (alunosIdsList.some((aId: string) => String(aId).replace(/^(a_|_ALU)/, '') === cleanId)) {
-          if (g.dados?.nome) studentGroups.push(g.dados.nome);
+      allGrupos.forEach((g: any) => {
+        const gAlunosIds = g.alunosIds || g.dados?.alunosIds || [];
+        const isMember = gAlunosIds.some((aId: string) => String(aId).replace(/^(a_|_ALU)/, '') === cleanId);
+
+        const gTurmaRef = allTurmas.find((t: any) => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome || t.nome === g.dados?.nome);
+        const isCursandoGrupo = gTurmaRef ? isAlunoCursandoTurma(alunoData, gTurmaRef, gTurmaRef.ano) : false;
+
+        if (isMember || isCursandoGrupo) {
+          const gNome = g.nome || g.dados?.nome;
+          if (gNome && !studentGroups.includes(gNome)) {
+            studentGroups.push(gNome);
+          }
         }
       });
     }
   } else if (turmaId) {
-    const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${turmaId}",codigo.eq."${turmaId}"`).maybeSingle();
-    if (tData?.nome) resolvedTurma = tData.nome;
+    const { data: tData } = await supabase.from('turmas').select('id, nome').or(`id.eq."${turmaId}",codigo.eq."${turmaId}",nome.eq."${turmaId}"`).maybeSingle();
+    if (tData) {
+      if (tData.nome) resolvedTurmas.push(tData.nome);
+      if (tData.id) resolvedTurmas.push(String(tData.id));
+    } else {
+      resolvedTurmas.push(turmaId);
+    }
   }
 
   let query = supabase.from('comunicados').select('*');
@@ -168,12 +184,10 @@ export async function GET(request: Request) {
   
   if (turmaId || alunoId) {
     const conditions = [`destino.eq.todos`];
-    if (resolvedTurma) {
-      conditions.push(`dados->turmas.cs.["${resolvedTurma}"]`);
-      if (turmaId && resolvedTurma !== turmaId) {
-        conditions.push(`dados->turmas.cs.["${turmaId}"]`);
-      }
-    }
+    const uniqueTurmas = Array.from(new Set(resolvedTurmas.filter(Boolean)));
+    uniqueTurmas.forEach(tName => {
+      conditions.push(`dados->turmas.cs.["${tName}"]`);
+    });
     
     studentGroups.forEach(gNome => {
       conditions.push(`dados->grupos.cs.["${gNome}"]`);

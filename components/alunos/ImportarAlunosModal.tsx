@@ -86,6 +86,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
     { value: 'aluno_uf', label: 'ESTADO (UF)' },
     { value: 'aluno_ativo', label: 'ALUNO ATIVO' },
     { value: 'aluno_autorizadoSairSozinho', label: 'Pode Sair Sozinho' },
+    { value: 'aluno_isIntegralIntermediario', label: 'INTEGRAL/INTERMEDIÁRIO' },
     { value: 'aluno_ano_letivo', label: 'ANO LETIVO' },
     { value: 'aluno_segmento', label: 'SEGMENTO' },
     { value: 'aluno_serie', label: 'SÉRIE' },
@@ -125,6 +126,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           'EMAIL',
           'ALUNO ATIVO',
           'Pode Sair Sozinho',
+          'INTEGRAL/INTERMEDIÁRIO',
           'ANO LETIVO',
           'SEGMENTO',
           'SÉRIE',
@@ -138,6 +140,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           'arthur.souza@impacto.com.br',
           'Sim',
           'Não',
+          'Sim',
           '2026',
           'Ensino Fundamental I',
           '5º Ano',
@@ -151,6 +154,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           'bianca.duarte@impacto.com.br',
           'Sim',
           'Sim',
+          'Não',
           '2026',
           'Ensino Fundamental I',
           '4º Ano',
@@ -253,7 +257,10 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
         detHeaders.forEach((h, idx) => {
           const key = hasHeaders ? h : String(idx)
           const normH = normalize(String(h))
-          const matched = fields.find(f => normalize(f.label).includes(normH) || normH.includes(normalize(f.label)))
+          let matched = fields.find(f => normalize(f.label).includes(normH) || normH.includes(normalize(f.label)))
+          if (!matched && (normH.includes('integral') || normH.includes('intermediario'))) {
+            matched = fields.find(f => f.value === 'aluno_isIntegralIntermediario')
+          }
           if (matched) initMapping[key] = matched.value
         })
         setMapping(initMapping)

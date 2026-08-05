@@ -53,24 +53,41 @@ export async function GET(request: Request) {
 
     // Calcular matriculados em tempo real
     if (data && data.length > 0) {
-      const turmasIds = data.map(t => t.id)
-      
-      // Busca alunos que pertencem a essas turmas
-      // Usamos o cliente protegido (supabase) pois se o usuário pode ver os alunos no modal,
-      // ele também poderá vê-los aqui!
       const { data: alunosData } = await supabase
         .from('alunos')
-        .select('id, turma')
-        .in('turma', turmasIds)
+        .select('id, turma, status, dados')
         .or('status.neq.inativo,status.is.null')
-        
-      // Mapeia a contagem para cada turma
+
       data.forEach((t: any) => {
+        const isIntegralTurma = (t.turno || '').toLowerCase().includes('integral') ||
+                                (t.turno || '').toLowerCase().includes('intermediário') ||
+                                (t.nome || '').toLowerCase().includes('integral');
+
         const countAlunos = (alunosData || []).filter((a: any) => {
-          return String(a.turma) === String(t.id)
-        }).length
-        
-        t.matriculados = countAlunos
+          if (String(a.turma) === String(t.id) || String(a.turma) === String(t.nome)) return true;
+
+          const hList = a.dados?.historicoTurmas || [];
+          if (Array.isArray(hList) && hList.length > 0) {
+            const activeVinculo = hList[hList.length - 1];
+            if (activeVinculo) {
+              if (String(activeVinculo.serieTurma) === String(t.id) || String(activeVinculo.serieTurma) === String(t.nome)) {
+                return true;
+              }
+
+              if (isIntegralTurma) {
+                const anoMatch = !t.ano || !activeVinculo.anoLetivo || String(activeVinculo.anoLetivo) === String(t.ano);
+                const serieMatch = !t.serie || !activeVinculo.serie || activeVinculo.serie.toLowerCase() === t.serie.toLowerCase();
+                const isIntegralSel = activeVinculo.isIntegralIntermediario === true || activeVinculo.modalidade === 'INTEGRAL/INTERMEDIÁRIO';
+                if (anoMatch && serieMatch && isIntegralSel) {
+                  return true;
+                }
+              }
+            }
+          }
+          return false;
+        }).length;
+
+        t.matriculados = countAlunos;
       })
     }
 

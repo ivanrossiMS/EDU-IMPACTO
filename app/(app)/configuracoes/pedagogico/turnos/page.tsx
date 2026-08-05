@@ -13,8 +13,7 @@ const BLANK: Omit<ConfigTurno, 'id' | 'createdAt'> = {
 const PADROES_TURNOS = [
   { codigo: '1', nome: 'Matutino', horarioInicio: '07:00', horarioFim: '12:00', situacao: 'ativo' },
   { codigo: '2', nome: 'Vespertino', horarioInicio: '13:00', horarioFim: '18:00', situacao: 'ativo' },
-  { codigo: '3', nome: 'Noturno', horarioInicio: '19:00', horarioFim: '22:30', situacao: 'ativo' },
-  { codigo: '4', nome: 'Integral', horarioInicio: '07:00', horarioFim: '17:00', situacao: 'ativo' },
+  { codigo: '4', nome: 'Integral/Intermediário', horarioInicio: '07:00', horarioFim: '17:00', situacao: 'ativo' },
 ] as const
 
 export default function TurnosPage() {

@@ -403,7 +403,17 @@ export default function ADCalendarioPage() {
     setShowModal(false)
   }
 
-  const handleDelete = (id: string) => setEventosAgenda((prev: any) => prev.filter((e: any) => e.id !== id))
+  const handleDelete = async (id: string) => {
+    setEventosAgenda((prev: any) => prev.filter((e: any) => e.id !== id))
+    try {
+      const res = await fetch(`/api/agenda/eventos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      if (!res.ok) {
+        console.error('[Calendario Colaborador] Erro ao excluir no servidor:', await res.text())
+      }
+    } catch (err) {
+      console.error('[Calendario Colaborador] Erro de rede ao excluir evento:', err)
+    }
+  }
 
   const handleEdit = (ev: EventoAgenda) => {
     setForm({

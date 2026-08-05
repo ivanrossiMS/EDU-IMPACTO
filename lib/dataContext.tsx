@@ -1004,11 +1004,9 @@ type Setter<T> = (v: T | ((p: T) => T)) => void
 
 
 const TURNOS_DEFAULT: ConfigTurno[] = [
-  { id: 'T1', codigo: 'MN', nome: 'Manhã', horarioInicio: '07:00', horarioFim: '12:00', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'T2', codigo: 'TD', nome: 'Tarde', horarioInicio: '13:00', horarioFim: '18:00', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'T3', codigo: 'NT', nome: 'Noite', horarioInicio: '19:00', horarioFim: '22:30', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'T4', codigo: 'IN', nome: 'Intermediário', horarioInicio: '10:00', horarioFim: '15:00', situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'T5', codigo: 'IG', nome: 'Integral', horarioInicio: '08:00', horarioFim: '17:00', situacao: 'ativo', createdAt: new Date().toISOString() },
+  { id: 'T1', codigo: 'MN', nome: 'Matutino', horarioInicio: '07:00', horarioFim: '12:00', situacao: 'ativo', createdAt: new Date().toISOString() },
+  { id: 'T2', codigo: 'TD', nome: 'Vespertino', horarioInicio: '13:00', horarioFim: '18:00', situacao: 'ativo', createdAt: new Date().toISOString() },
+  { id: 'T5', codigo: 'II', nome: 'Integral/Intermediário', horarioInicio: '08:00', horarioFim: '17:00', situacao: 'ativo', createdAt: new Date().toISOString() },
 ]
 
 const SITUACOES_DEFAULT: ConfigSituacaoAluno[] = [

@@ -5,6 +5,7 @@ import { X, Search, Users, Check, Building2, GraduationCap, Calendar, ArrowLeft,
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '@/lib/dataContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 
 interface DestinatariosModalProps {
   isOpen: boolean
@@ -190,20 +191,62 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   }, [alunos, colaboradores, gruposManuais])
 
   const getTurmaAlunos = (t: any) => {
-    const refs = new Set<string>()
-    if (t.id) refs.add(String(t.id).trim().toLowerCase())
-    if (t.codigo) refs.add(String(t.codigo).trim().toLowerCase())
-    if (t.nome) refs.add(String(t.nome).trim().toLowerCase())
-    
-    const all: any[] = []
-    refs.forEach(ref => {
-      const list = alunosByTurmaRef.get(ref)
-      if (list) all.push(...list)
+    const tAno = t?.ano !== undefined ? String(t.ano) : (t?.anoLetivo || t?.ano_letivo || selectedAno)
+    const tIdStr = String(t.id)
+
+    // Buscar grupo sincronizado em agenda/grupos (se existir)
+    const syncGroup = (gruposManuais || []).find((g: any) => {
+      const gSync = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
+      return gSync === `sync-${tIdStr}` || g.id === `sync-${tIdStr}` || (g.nome && g.nome.toLowerCase() === String(t.nome || '').toLowerCase())
     })
     
-    const unique = new Map()
-    all.forEach(a => unique.set(a.id, a))
-    return Array.from(unique.values())
+    let extraAlunosIds: string[] = []
+    if (syncGroup) {
+      let aIds = syncGroup.alunosIds || []
+      if (typeof aIds === 'string') {
+        try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+      }
+      if (Array.isArray(aIds)) extraAlunosIds = aIds.map(String)
+    }
+
+    return (alunos || []).filter((a: any) => {
+      const aIdStr = String(a.id)
+      if (extraAlunosIds.includes(aIdStr)) return true
+      if (isAlunoCursandoTurma(a, t, tAno)) return true
+      const directTurma = String(a.turma || '').trim().toLowerCase()
+      const directTurmaId = String((a as any).turmaId || '').trim().toLowerCase()
+      const tIdLower = tIdStr.toLowerCase()
+      const tNomeLower = String(t.nome || '').trim().toLowerCase()
+      const tCodLower = String(t.codigo || '').trim().toLowerCase()
+      if (directTurma && (directTurma === tIdLower || directTurma === tNomeLower || (tCodLower && directTurma === tCodLower))) return true
+      if (directTurmaId && (directTurmaId === tIdLower || directTurmaId === tNomeLower || (tCodLower && directTurmaId === tCodLower))) return true
+      return false
+    })
+  }
+
+  const getGrupoAlunos = (g: any): any[] => {
+    let aIds = g.alunosIds || []
+    if (typeof aIds === 'string') {
+      try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+    }
+    const directStudents = (Array.isArray(aIds) ? aIds : []).map((id: any) => alunosById.get(String(id))).filter(Boolean)
+
+    const syncId = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
+    const turmaId = syncId ? syncId.replace(/^sync-/, '') : null
+    const turmaERP = turmaId 
+      ? turmas.find((tx: any) => String(tx.id) === turmaId || tx.nome === g.nome) 
+      : turmas.find((tx: any) => tx.nome === g.nome)
+
+    if (turmaERP) {
+      const tAno = g.ano || turmaERP.ano || selectedAno
+      const extraCursando = (alunos || []).filter((a: any) => isAlunoCursandoTurma(a, turmaERP, tAno))
+      const map = new Map<string, any>()
+      directStudents.forEach((a: any) => map.set(String(a.id), a))
+      extraCursando.forEach((a: any) => map.set(String(a.id), a))
+      return Array.from(map.values())
+    }
+
+    return directStudents
   }
 
   // Retorna colaboradores vinculados à turma via grupos sincronizados
@@ -399,7 +442,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
         try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
       }
       
-      const gAlunos = (Array.isArray(aIds) ? aIds : []).map((id:any) => alunosById.get(String(id))).filter(Boolean)
+      const gAlunos = getGrupoAlunos(g)
       const gColabs = (Array.isArray(cIds) ? cIds : []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
       
       const payloads = [

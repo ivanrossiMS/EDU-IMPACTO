@@ -139,7 +139,8 @@ export default function AlunosPage() {
     turno: 'todos',
     autorizadoSairSozinho: 'todos',
     foto: 'todos',
-    observacoes: 'todos'
+    observacoes: 'todos',
+    integralIntermediario: 'todos'
   })
   
   // Sorting State
@@ -159,6 +160,7 @@ export default function AlunosPage() {
     dataNasc: true,
     status: true,
     sairSozinho: true,
+    isIntegralIntermediario: true,
     unidade: false,
     turno: false,
     serie: false,
@@ -253,6 +255,7 @@ export default function AlunosPage() {
       if (filtrosAvancados.autorizadoSairSozinho !== 'todos') activeFilters.autorizadoSairSozinho = filtrosAvancados.autorizadoSairSozinho
       if (filtrosAvancados.foto !== 'todos') activeFilters.foto = filtrosAvancados.foto
       if (filtrosAvancados.observacoes !== 'todos') activeFilters.observacoes = filtrosAvancados.observacoes
+      if (filtrosAvancados.integralIntermediario && filtrosAvancados.integralIntermediario !== 'todos') activeFilters.integralIntermediario = filtrosAvancados.integralIntermediario
 
       const params = new URLSearchParams(activeFilters)
       
@@ -417,6 +420,15 @@ export default function AlunosPage() {
         rowMapper.push(item => {
           const val = item.autorizadoSairSozinho !== undefined ? item.autorizadoSairSozinho : item.dados?.autorizadoSairSozinho
           return val ? 'Sim' : 'Não'
+        })
+      }
+      if (exportFields.isIntegralIntermediario) {
+        headers.push('INTEGRAL/INTERMEDIÁRIO')
+        rowMapper.push(item => {
+          const hList = item.historicoTurmas || item.dados?.historicoTurmas || [];
+          const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
+          const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || item.isIntegralIntermediario || item.dados?.isIntegralIntermediario || (item.turma_nome && String(item.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
+          return isIntegralInt ? 'SIM' : 'NÃO';
         })
       }
       if (exportFields.unidade) {
@@ -867,7 +879,8 @@ export default function AlunosPage() {
       ...(filtrosAvancados.turno !== 'todos' ? { turno: filtrosAvancados.turno } : {}),
       ...(filtrosAvancados.autorizadoSairSozinho !== 'todos' ? { autorizadoSairSozinho: filtrosAvancados.autorizadoSairSozinho } : {}),
       ...(filtrosAvancados.foto !== 'todos' ? { foto: filtrosAvancados.foto } : {}),
-      ...(filtrosAvancados.observacoes !== 'todos' ? { observacoes: filtrosAvancados.observacoes } : {})
+      ...(filtrosAvancados.observacoes !== 'todos' ? { observacoes: filtrosAvancados.observacoes } : {}),
+      ...(filtrosAvancados.integralIntermediario && filtrosAvancados.integralIntermediario !== 'todos' ? { integralIntermediario: filtrosAvancados.integralIntermediario } : {})
     }
   )
 
@@ -1156,7 +1169,9 @@ export default function AlunosPage() {
       formData.historicoTurmas.forEach((hist, index) => {
         const suffix = ` (Vínculo #${index + 1})`
         if (!hist.anoLetivo) errors.push({ field: `hist_${index}_anoLetivo`, label: `Ano Letivo${suffix}`, tab: 'turma', tabLabel: 'Vínculo de Turma' })
-        if (!hist.serieTurma) errors.push({ field: `hist_${index}_serieTurma`, label: `Série / Turma${suffix}`, tab: 'turma', tabLabel: 'Vínculo de Turma' })
+        if (!hist.segmento) errors.push({ field: `hist_${index}_segmento`, label: `Segmento${suffix}`, tab: 'turma', tabLabel: 'Vínculo de Turma' })
+        if (!hist.serie) errors.push({ field: `hist_${index}_serie`, label: `Série${suffix}`, tab: 'turma', tabLabel: 'Vínculo de Turma' })
+        if (!hist.serieTurma) errors.push({ field: `hist_${index}_serieTurma`, label: `Turma${suffix}`, tab: 'turma', tabLabel: 'Vínculo de Turma' })
       })
     }
 
@@ -1331,15 +1346,31 @@ export default function AlunosPage() {
           };
         });
       })(),
-      historicoTurmas: (aluno.dados?.historicoTurmas && aluno.dados.historicoTurmas.length > 0) 
-        ? aluno.dados.historicoTurmas 
-        : (aluno.turma ? [{
-            id: `HIST-${Date.now()}`,
-            anoLetivo: aluno.dados?.anoLetivo || aluno.ano_letivo || new Date().getFullYear().toString(),
-            segmento: segmento,
-            serieTurma: turmaDoAluno?.id || aluno.turma || '',
-            status: 'Matriculado'
-          }] : []),
+      historicoTurmas: (() => {
+        const rawList = (aluno.dados?.historicoTurmas && aluno.dados.historicoTurmas.length > 0) 
+          ? aluno.dados.historicoTurmas 
+          : (aluno.turma ? [{
+              id: `HIST-${Date.now()}`,
+              anoLetivo: aluno.dados?.anoLetivo || aluno.ano_letivo || new Date().getFullYear().toString(),
+              segmento: segmento,
+              serie: aluno.serie || aluno.dados?.serie || turmaDoAluno?.serie || turmaDoAluno?.dados?.serie || '',
+              serieTurma: turmaDoAluno?.id || aluno.turma || '',
+              modalidade: aluno.dados?.modalidade || 'INTEGRAL',
+              status: 'Matriculado'
+            }] : []);
+
+        return rawList.map((h: any) => {
+          const tObj = todasTurmas.find((t: any) => String(t.id) === String(h.serieTurma || h.turma || aluno.turma));
+          const resolvedSerie = h.serie || aluno.serie || aluno.dados?.serie || tObj?.serie || tObj?.dados?.serie || '';
+          const resolvedSegmento = h.segmento || aluno.segmento || aluno.dados?.segmento || tObj?.segmento || tObj?.dados?.segmento || '';
+          return {
+            ...h,
+            serie: resolvedSerie,
+            segmento: resolvedSegmento,
+            serieTurma: h.serieTurma || h.turma || tObj?.id || ''
+          };
+        });
+      })(),
       observacoes: obsList
     })
     resetObsInput()
@@ -1904,6 +1935,8 @@ export default function AlunosPage() {
               <option value="matriculado_vazio">Matriculado ou Vazio</option>
               <option value="pode_sair_sim">Pode Sair Sozinho (SIM)</option>
               <option value="pode_sair_nao">Pode Sair Sozinho (NÃO)</option>
+              <option value="integral_sim">Integral/Intermediário (SIM)</option>
+              <option value="integral_nao">Integral/Intermediário (NÃO)</option>
               <option value="com_responsaveis">Com Responsáveis</option>
               <option value="sem_responsaveis">Sem Responsáveis</option>
               <option value="com_turma">Com Turma</option>
@@ -2102,7 +2135,35 @@ export default function AlunosPage() {
                         </div>
                       </td>
                       <td style={{ fontWeight: 600, color: '#1d4ed8', fontSize: 12, whiteSpace: 'nowrap' }}>
-                        {aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma}
+                        {(() => {
+                          const hList = aluno.historicoTurmas || aluno.dados?.historicoTurmas || [];
+                          const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
+                          const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || aluno.dados?.isIntegralIntermediario || aluno.turma_nome?.includes('INTEGRAL/INTERMEDIÁRIO');
+                          const turmaNome = aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma;
+
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <span>{turmaNome}</span>
+                              {isIntegralInt && (
+                                <div>
+                                  <span style={{ 
+                                    background: '#dbeafe', 
+                                    color: '#1d4ed8', 
+                                    fontSize: 10, 
+                                    fontWeight: 700, 
+                                    padding: '2px 8px', 
+                                    borderRadius: 6, 
+                                    border: '1px solid #bfdbfe',
+                                    textTransform: 'uppercase',
+                                    display: 'inline-block'
+                                  }}>
+                                    INTEGRAL/INTERMEDIÁRIO
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td style={{ whiteSpace: 'nowrap' }}>
                         <span style={{ 
@@ -2909,7 +2970,7 @@ export default function AlunosPage() {
                     <button 
                       onClick={(e) => {
                         e.preventDefault();
-                        const novoHist = [...formData.historicoTurmas, { id: `HIST-${Date.now()}`, anoLetivo: '', segmento: '', serieTurma: '' }];
+                        const novoHist = [...formData.historicoTurmas, { id: `HIST-${Date.now()}`, anoLetivo: '', segmento: '', serie: '', serieTurma: '', modalidade: 'INTEGRAL' }];
                         setFormData(prev => ({ ...prev, historicoTurmas: novoHist }));
                       }}
                       style={{ background: '#f8fafc', color: '#3b82f6', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
@@ -2961,7 +3022,7 @@ export default function AlunosPage() {
                             </span>
                           </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '0.9fr 1.1fr 1.1fr 1.3fr auto', gap: 12, alignItems: 'end' }}>
                         <div>
                           <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Ano Letivo *</label>
                           <select 
@@ -2983,47 +3044,212 @@ export default function AlunosPage() {
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Segmento</label>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Segmento *</label>
                           <select 
                             className="form-input" 
-                            value={hist.segmento} 
+                            style={{ 
+                              borderColor: hasError(`hist_${index}_segmento`) ? '#ef4444' : undefined, 
+                              boxShadow: hasError(`hist_${index}_segmento`) ? '0 0 0 1px #ef4444' : undefined,
+                              opacity: !hist.anoLetivo ? 0.6 : 1,
+                              cursor: !hist.anoLetivo ? 'not-allowed' : 'pointer'
+                            }}
+                            disabled={!hist.anoLetivo}
+                            value={(() => {
+                              if (!hist.segmento) return '';
+                              const match = cfgNiveisEnsino?.find((n: any) => 
+                                n.nome === hist.segmento || 
+                                cleanName(n.nome) === cleanName(hist.segmento) ||
+                                cleanName(n.nome).includes(cleanName(hist.segmento)) ||
+                                cleanName(hist.segmento).includes(cleanName(n.nome))
+                              );
+                              return match ? match.nome : hist.segmento;
+                            })()} 
                             onChange={e => {
                               const newHist = [...formData.historicoTurmas];
-                              newHist[index].segmento = e.target.value;
-                              newHist[index].serieTurma = ''; // Reset turma ao mudar segmento
+                              const val = e.target.value;
+                              newHist[index].segmento = val;
+                              newHist[index].serie = '';
+                              newHist[index].serieTurma = '';
                               setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
+                              if (hasError(`hist_${index}_segmento`)) setValidationErrors(prev => prev.filter(err => err.field !== `hist_${index}_segmento`));
                             }}
                           >
                             <option value="">Selecione o segmento...</option>
-                            {cfgNiveisEnsino?.map((n: any) => (
-                              <option key={n.id} value={n.nome}>{n.nome}</option>
-                            ))}
+                            {(() => {
+                              const hasExact = cfgNiveisEnsino?.some((n: any) => 
+                                n.nome === hist.segmento || 
+                                cleanName(n.nome) === cleanName(hist.segmento) ||
+                                cleanName(n.nome).includes(cleanName(hist.segmento)) ||
+                                cleanName(hist.segmento).includes(cleanName(n.nome))
+                              );
+                              return (
+                                <>
+                                  {cfgNiveisEnsino?.map((n: any) => (
+                                    <option key={n.id} value={n.nome}>{n.nome}</option>
+                                  ))}
+                                  {hist.segmento && !hasExact && (
+                                    <option key={hist.segmento} value={hist.segmento}>{hist.segmento}</option>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </select>
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Série / Turma *</label>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Série *</label>
                           <select 
                             className="form-input" 
-                            style={{ borderColor: hasError(`hist_${index}_serieTurma`) ? '#ef4444' : undefined, boxShadow: hasError(`hist_${index}_serieTurma`) ? '0 0 0 1px #ef4444' : undefined }}
-                            value={hist.serieTurma} 
+                            style={{ 
+                              borderColor: hasError(`hist_${index}_serie`) ? '#ef4444' : undefined, 
+                              boxShadow: hasError(`hist_${index}_serie`) ? '0 0 0 1px #ef4444' : undefined,
+                              opacity: (!hist.anoLetivo || !hist.segmento) ? 0.6 : 1,
+                              cursor: (!hist.anoLetivo || !hist.segmento) ? 'not-allowed' : 'pointer'
+                            }}
+                            disabled={!hist.anoLetivo || !hist.segmento}
+                            value={(() => {
+                              if (!hist.serie) return '';
+                              const selectedNivel = cfgNiveisEnsino?.find((n: any) => n.nome === hist.segmento || cleanName(n.nome) === cleanName(hist.segmento || '') || cleanName(n.nome).includes(cleanName(hist.segmento || '')) || cleanName(hist.segmento || '').includes(cleanName(n.nome)));
+                              const seriesDisponiveis = selectedNivel?.series || [];
+                              const match = seriesDisponiveis.find((s: any) => 
+                                s.nome === hist.serie || 
+                                cleanName(s.nome) === cleanName(hist.serie)
+                              );
+                              return match ? match.nome : hist.serie;
+                            })()} 
                             onChange={e => {
                               const newHist = [...formData.historicoTurmas];
-                              newHist[index].serieTurma = e.target.value;
+                              const val = e.target.value;
+                              newHist[index].serie = val;
+                              newHist[index].serieTurma = '';
                               setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
-                              if (hasError(`hist_${index}_serieTurma`)) setValidationErrors(prev => prev.filter(err => err.field !== `hist_${index}_serieTurma`));
+                              if (hasError(`hist_${index}_serie`)) setValidationErrors(prev => prev.filter(err => err.field !== `hist_${index}_serie`));
                             }}
-                            disabled={!hist.segmento}
                           >
-                            <option value="">Selecione a turma...</option>
-                            {todasTurmas
-                              .filter((t: any) => t.dados?.segmento === hist.segmento)
-                              .map((t: any) => (
-                                <option key={t.id} value={t.id}>{t.nome} ({t.serie})</option>
-                              ))}
+                            <option value="">Selecione a série...</option>
+                            {(() => {
+                              const selectedNivel = cfgNiveisEnsino?.find((n: any) => n.nome === hist.segmento || cleanName(n.nome) === cleanName(hist.segmento || '') || cleanName(n.nome).includes(cleanName(hist.segmento || '')) || cleanName(hist.segmento || '').includes(cleanName(n.nome)));
+                              const seriesDisponiveis = selectedNivel?.series || [];
+                              const hasExact = seriesDisponiveis.some((s: any) => s.nome === hist.serie || cleanName(s.nome) === cleanName(hist.serie));
+                              return (
+                                <>
+                                  {seriesDisponiveis.map((s: any) => (
+                                    <option key={s.id || s.nome} value={s.nome}>{s.nome}</option>
+                                  ))}
+                                  {hist.serie && !hasExact && (
+                                    <option key={hist.serie} value={hist.serie}>{hist.serie}</option>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </select>
                         </div>
 
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Turma *</label>
+                          <select 
+                            className="form-input" 
+                            style={{ 
+                              borderColor: hasError(`hist_${index}_serieTurma`) ? '#ef4444' : undefined, 
+                              boxShadow: hasError(`hist_${index}_serieTurma`) ? '0 0 0 1px #ef4444' : undefined,
+                              opacity: (!hist.anoLetivo || !hist.segmento || !hist.serie) ? 0.6 : 1,
+                              cursor: (!hist.anoLetivo || !hist.segmento || !hist.serie) ? 'not-allowed' : 'pointer'
+                            }}
+                            disabled={!hist.anoLetivo || !hist.segmento || !hist.serie}
+                            value={hist.serieTurma} 
+                            onChange={e => {
+                              const newHist = [...formData.historicoTurmas];
+                              const val = e.target.value;
+                              newHist[index].serieTurma = val;
+                              if (val) {
+                                const tObj = todasTurmas.find((t: any) => String(t.id) === String(val));
+                                if (tObj) {
+                                  if (tObj.segmento || tObj.dados?.segmento) {
+                                    newHist[index].segmento = tObj.segmento || tObj.dados?.segmento;
+                                  }
+                                  if (tObj.serie || tObj.dados?.serie) {
+                                    newHist[index].serie = tObj.serie || tObj.dados?.serie;
+                                  }
+                                }
+                              }
+                              setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
+                              if (hasError(`hist_${index}_serieTurma`)) setValidationErrors(prev => prev.filter(err => err.field !== `hist_${index}_serieTurma`));
+                            }}
+                          >
+                            <option value="">Selecione a turma...</option>
+                            {(() => {
+                              const cleanHistSeg = cleanName(hist.segmento || '');
+                              const cleanHistSerie = cleanName(hist.serie || '');
+
+                              let filtered = todasTurmas.filter((t: any) => {
+                                const tSeg = cleanName(t.dados?.segmento || t.segmento || '');
+                                const tSerie = cleanName(t.dados?.serie || t.serie || '');
+                                const tAno = String(t.dados?.anoLetivo || t.anoLetivo || t.ano || '');
+
+                                const anoMatch = !hist.anoLetivo || !tAno || tAno === String(hist.anoLetivo);
+                                const segMatch = !hist.segmento || tSeg === cleanHistSeg || tSeg.includes(cleanHistSeg) || cleanHistSeg.includes(tSeg);
+                                const serieMatch = !hist.serie || tSerie === cleanHistSerie || tSerie.includes(cleanHistSerie) || cleanHistSerie.includes(tSerie);
+                                return anoMatch && segMatch && serieMatch;
+                              });
+
+                              if (filtered.length === 0 && hist.serie) {
+                                filtered = todasTurmas.filter((t: any) => {
+                                  const tSerie = cleanName(t.dados?.serie || t.serie || '');
+                                  return tSerie === cleanHistSerie || tSerie.includes(cleanHistSerie) || cleanHistSerie.includes(tSerie);
+                                });
+                              }
+
+                              if (filtered.length === 0) {
+                                filtered = todasTurmas;
+                              }
+
+                              if (hist.serieTurma && !filtered.some((t: any) => String(t.id) === String(hist.serieTurma))) {
+                                const selObj = todasTurmas.find((t: any) => String(t.id) === String(hist.serieTurma));
+                                if (selObj) filtered.push(selObj);
+                              }
+
+                              return filtered.map((t: any) => (
+                                <option key={t.id} value={t.id}>{t.nome} ({t.serie || t.dados?.serie || 'Geral'})</option>
+                              ));
+                            })()}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 6 }}>Turno / Modalidade</label>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const newHist = [...formData.historicoTurmas];
+                              const isSel = newHist[index].isIntegralIntermediario || newHist[index].modalidade === 'INTEGRAL/INTERMEDIÁRIO';
+                              newHist[index].isIntegralIntermediario = !isSel;
+                              newHist[index].modalidade = !isSel ? 'INTEGRAL/INTERMEDIÁRIO' : '';
+                              setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
+                            }}
+                            style={{
+                              border: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? 'none' : '1px solid #cbd5e1',
+                              borderRadius: 10,
+                              padding: '0 16px',
+                              height: 40,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              background: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '#2563eb' : '#f8fafc',
+                              color: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '#ffffff' : '#64748b',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              whiteSpace: 'nowrap',
+                              boxShadow: (hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') ? '0 2px 6px rgba(37,99,235,0.35)' : 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 6
+                            }}
+                          >
+                            {(hist.isIntegralIntermediario || hist.modalidade === 'INTEGRAL/INTERMEDIÁRIO') && <span>✓</span>}
+                            INTEGRAL/INTERMEDIÁRIO
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -3906,6 +4132,31 @@ export default function AlunosPage() {
                   })}
                 </div>
               </div>
+
+              {/* INTEGRAL / INTERMEDIÁRIO (Ocupa largura total) */}
+              <div className="filterCard-fa filterCardFull-fa">
+                <h4 className="text-[13px] font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2 mb-4">
+                  <Tag size={16} className="text-blue-600" /> Integral / Intermediário
+                </h4>
+                <div className="optionGroup-fa">
+                  {[
+                    { val: 'todos', label: 'Todos' },
+                    { val: 'sim', label: 'Integral / Intermediário (SIM)' },
+                    { val: 'nao', label: 'Não Integral / Intermediário' },
+                  ].map(item => {
+                    const isActive = (filtrosAvancados.integralIntermediario || 'todos') === item.val;
+                    return (
+                      <button
+                        key={item.val}
+                        onClick={() => setFiltrosAvancados(prev => ({ ...prev, integralIntermediario: item.val }))}
+                        className={`optionButton-fa ${isActive ? 'active' : ''}`}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
@@ -3913,7 +4164,7 @@ export default function AlunosPage() {
               <button 
                 onClick={() => {
                   setFiltrosAvancados({
-                    dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos', foto: 'todos', observacoes: 'todos'
+                    dataCadastroInicio: '', dataCadastroFim: '', inadimplente: 'todos', riscoEvasao: 'todos', turno: 'todos', autorizadoSairSozinho: 'todos', foto: 'todos', observacoes: 'todos', integralIntermediario: 'todos'
                   })
                   setPaginaAtual(1)
                 }}
@@ -4119,6 +4370,7 @@ export default function AlunosPage() {
                     { key: 'dataNasc', label: 'Data de Nascimento' },
                     { key: 'status', label: 'Status' },
                     { key: 'sairSozinho', label: 'Autorização Saída' },
+                    { key: 'isIntegralIntermediario', label: 'INTEGRAL/INTERMEDIÁRIO' },
                     { key: 'unidade', label: 'Unidade Escolar' },
                     { key: 'turno', label: 'Turno' },
                     { key: 'serie', label: 'Série' },

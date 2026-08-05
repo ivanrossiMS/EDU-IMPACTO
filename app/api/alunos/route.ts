@@ -89,6 +89,7 @@ export async function GET(request: Request) {
     const autorizadoSairSozinho = url.searchParams.get('autorizadoSairSozinho') // 'true' | 'false' | null
     const foto = url.searchParams.get('foto') || 'todos'
     const observacoesParam = url.searchParams.get('observacoes') || 'todos'
+    let integralIntermediario = url.searchParams.get('integralIntermediario') || ''
 
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -134,6 +135,10 @@ export async function GET(request: Request) {
       query = query.filter('dados->autorizadoSairSozinho', 'eq', 'true')
     } else if (status === 'pode_sair_nao') {
       query = query.or('dados->autorizadoSairSozinho.eq.false,dados->autorizadoSairSozinho.is.null')
+    } else if (status === 'integral_sim') {
+      integralIntermediario = 'sim'
+    } else if (status === 'integral_nao') {
+      integralIntermediario = 'nao'
     } else if (status === 'com_responsaveis' || status === 'sem_responsaveis') {
       // Como os responsáveis estão em uma tabela de relacionamento (aluno_responsavel) e também em campos de texto,
       // buscamos os alunos que possuem vínculo ativo na tabela para cruzar com a query principal.
@@ -167,8 +172,15 @@ export async function GET(request: Request) {
     }
     // se for todos_com_inativos, não aplica filtro de status
 
+    let targetTurma: any = null
     if (turma) {
-      query = query.eq('turma', turma)
+      const { data: tRes1 } = await supabase.from('turmas').select('*').eq('id', turma).maybeSingle()
+      if (tRes1) {
+        targetTurma = tRes1
+      } else {
+        const { data: tRes2 } = await supabase.from('turmas').select('*').eq('nome', turma).maybeSingle()
+        targetTurma = tRes2
+      }
     }
 
     // Aplicação de Filtros Avançados
@@ -239,8 +251,11 @@ export async function GET(request: Request) {
     } else {
       queryExec = query.order(dbSortField, { ascending: sortOrder === 'asc' });
     }
-    // Sempre aplicar range limit
-    queryExec = queryExec.range(from, from + limit - 1)
+    if (!turma) {
+      queryExec = queryExec.range(from, from + limit - 1)
+    } else {
+      queryExec = queryExec.limit(10000)
+    }
 
     const { data: students, error: studentsError, count } = await queryExec
 
@@ -501,9 +516,50 @@ export async function GET(request: Request) {
         finalLightweight = formatted.filter((s: any) => !isValidStudentPhoto(s.foto))
       }
 
+      if (turma) {
+        const isIntegralTurma = targetTurma ? (
+          (targetTurma.turno || '').toLowerCase().includes('integral') ||
+          (targetTurma.turno || '').toLowerCase().includes('intermediário') ||
+          (targetTurma.nome || '').toLowerCase().includes('integral')
+        ) : false
+
+        finalLightweight = finalLightweight.filter((student: any) => {
+          if (String(student.turma) === String(turma) || String(student.turma_nome) === String(turma) || (targetTurma && String(student.turma) === String(targetTurma.id))) return true;
+          const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
+          if (Array.isArray(hList) && hList.length > 0) {
+            const activeVinculo = hList[hList.length - 1];
+            if (activeVinculo) {
+              if (String(activeVinculo.serieTurma) === String(turma) || (targetTurma && String(activeVinculo.serieTurma) === String(targetTurma.id))) return true;
+              if (targetTurma && isIntegralTurma) {
+                const anoMatch = !targetTurma.ano || !activeVinculo.anoLetivo || String(activeVinculo.anoLetivo) === String(targetTurma.ano);
+                const serieMatch = !targetTurma.serie || !activeVinculo.serie || activeVinculo.serie.toLowerCase() === targetTurma.serie.toLowerCase();
+                const isIntegralSel = activeVinculo.isIntegralIntermediario === true || activeVinculo.modalidade === 'INTEGRAL/INTERMEDIÁRIO';
+                if (anoMatch && serieMatch && isIntegralSel) return true;
+              }
+            }
+          }
+          return false;
+        });
+      }
+
+      if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
+        finalLightweight = finalLightweight.filter((student: any) => {
+          const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
+          const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
+          return activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || student.isIntegralIntermediario || student.dados?.isIntegralIntermediario || (student.turma_nome && String(student.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
+        });
+      } else if (integralIntermediario === 'nao' || integralIntermediario === 'false') {
+        finalLightweight = finalLightweight.filter((student: any) => {
+          const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
+          const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
+          const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || student.isIntegralIntermediario || student.dados?.isIntegralIntermediario || (student.turma_nome && String(student.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
+          return !isIntegralInt;
+        });
+      }
+
       return NextResponse.json({
         data: finalLightweight,
-        total: count || 0,
+        total: turma ? finalLightweight.length : (count || 0),
         page,
         limit
       }, {
@@ -700,9 +756,50 @@ export async function GET(request: Request) {
       finalFormattedData = formattedData.filter((s: any) => !isValidStudentPhoto(s.foto))
     }
 
+    if (turma) {
+      const isIntegralTurma = targetTurma ? (
+        (targetTurma.turno || '').toLowerCase().includes('integral') ||
+        (targetTurma.turno || '').toLowerCase().includes('intermediário') ||
+        (targetTurma.nome || '').toLowerCase().includes('integral')
+      ) : false
+
+      finalFormattedData = finalFormattedData.filter((student: any) => {
+        if (String(student.turma) === String(turma) || String(student.turma_nome) === String(turma) || (targetTurma && String(student.turma) === String(targetTurma.id))) return true;
+        const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
+        if (Array.isArray(hList) && hList.length > 0) {
+          const activeVinculo = hList[hList.length - 1];
+          if (activeVinculo) {
+            if (String(activeVinculo.serieTurma) === String(turma) || (targetTurma && String(activeVinculo.serieTurma) === String(targetTurma.id))) return true;
+            if (targetTurma && isIntegralTurma) {
+              const anoMatch = !targetTurma.ano || !activeVinculo.anoLetivo || String(activeVinculo.anoLetivo) === String(targetTurma.ano);
+              const serieMatch = !targetTurma.serie || !activeVinculo.serie || activeVinculo.serie.toLowerCase() === targetTurma.serie.toLowerCase();
+              const isIntegralSel = activeVinculo.isIntegralIntermediario === true || activeVinculo.modalidade === 'INTEGRAL/INTERMEDIÁRIO';
+              if (anoMatch && serieMatch && isIntegralSel) return true;
+            }
+          }
+        }
+        return false;
+      });
+    }
+
+    if (integralIntermediario === 'sim' || integralIntermediario === 'true') {
+      finalFormattedData = finalFormattedData.filter((student: any) => {
+        const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
+        const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
+        return activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || student.isIntegralIntermediario || student.dados?.isIntegralIntermediario || (student.turma_nome && String(student.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
+      });
+    } else if (integralIntermediario === 'nao' || integralIntermediario === 'false') {
+      finalFormattedData = finalFormattedData.filter((student: any) => {
+        const hList = student.historicoTurmas || student.dados?.historicoTurmas || [];
+        const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
+        const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || student.isIntegralIntermediario || student.dados?.isIntegralIntermediario || (student.turma_nome && String(student.turma_nome).includes('INTEGRAL/INTERMEDIÁRIO'));
+        return !isIntegralInt;
+      });
+    }
+
     return NextResponse.json({
       data: finalFormattedData,
-      total: count || 0,
+      total: turma ? finalFormattedData.length : (count || 0),
       page,
       limit
     })
@@ -1667,6 +1764,7 @@ function buildRow(a: any) {
   }
 
   let activeTurma = turma || '';
+  let activeSerie = serie || '';
   
   if (historicoTurmas && Array.isArray(historicoTurmas) && historicoTurmas.length > 0) {
     rest.historicoTurmas = historicoTurmas;
@@ -1674,6 +1772,7 @@ function buildRow(a: any) {
     const mainTurma = historicoTurmas[historicoTurmas.length - 1];
       
     activeTurma = mainTurma.serieTurma || activeTurma;
+    activeSerie = mainTurma.serie || activeSerie;
     rest.anoLetivo = mainTurma.anoLetivo;
   }
 
@@ -1682,7 +1781,7 @@ function buildRow(a: any) {
     nome: mappedNome,
     matricula: mappedMatricula,
     turma: activeTurma,
-    serie: serie || '',
+    serie: activeSerie || serie || '',
     turno: turno || '',
     status: mappedStatus || 'matriculado',
     email: mappedEmail,

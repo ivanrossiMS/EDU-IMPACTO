@@ -6,6 +6,7 @@ import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
+import { getAlunoTodasTurmasEGrupos } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -68,15 +69,21 @@ export async function GET(request: Request) {
 
     // Filtragem segura no Backend
     if (isFamilyOrStudent && alunoId) {
-      let resolvedTurma = null;
-      const { data: alunoRes } = await supabase.from('alunos').select('turma, created_at, dados').eq('id', alunoId).maybeSingle();
-      if (alunoRes) {
-        if (alunoRes.turma) {
-          const { data: tData } = await supabase.from('turmas').select('nome').or(`id.eq."${alunoRes.turma}",codigo.eq."${alunoRes.turma}",nome.eq."${alunoRes.turma}"`).maybeSingle();
-          resolvedTurma = tData?.nome || alunoRes.turma;
-        }
+      let resolvedTargets: string[] = [];
+      const [alunoRes, turmasRes, gruposRes] = await Promise.all([
+        supabase.from('alunos').select('*').eq('id', alunoId).maybeSingle(),
+        supabase.from('turmas').select('*'),
+        supabase.from('agenda_grupos').select('*')
+      ]);
 
-        const dateStr = alunoRes.dados?.data_matricula || alunoRes.dados?.data_inicio || alunoRes.dados?.data_ingresso || alunoRes.created_at;
+      const alunoData = alunoRes.data;
+      if (alunoData) {
+        const turmasList = (turmasRes.data || []).map(t => ({ id: t.id, nome: t.nome, codigo: t.codigo, ano: t.ano, dados: t.dados }));
+        const gruposList = (gruposRes.data || []).map(g => ({ id: g.id, nome: g.nome || g.dados?.nome, alunosIds: g.alunosIds || g.dados?.alunosIds, syncId: g.syncId || g.dados?.syncId, dados: g.dados }));
+        
+        resolvedTargets = getAlunoTodasTurmasEGrupos(alunoData, turmasList, gruposList);
+
+        const dateStr = alunoData.dados?.data_matricula || alunoData.dados?.data_inicio || alunoData.dados?.data_ingresso || alunoData.created_at;
         if (dateStr) {
           const studentEntryDate = new Date(dateStr);
           if (accessStartDate === null || studentEntryDate > accessStartDate) {
@@ -89,19 +96,21 @@ export async function GET(request: Request) {
       // Momentos públicos para "Toda a escola", "TODOS" ou sem array (empty array)
       conditions.push(`dados->targetClasses.eq."[]"`);
       conditions.push(`dados->targetClasses.is.null`);
-      // Se tiver turma
-      if (resolvedTurma) {
-        conditions.push(`dados->targetClasses.cs.["${resolvedTurma}"]`);
-        conditions.push(`dados->targetClasses.cs.["Todos"]`);
-        conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
-        conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
-        conditions.push(`dados->targetClasses.cs.["Todas"]`);
-      }
+      conditions.push(`dados->targetClasses.cs.["Todos"]`);
+      conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
+      conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
+      conditions.push(`dados->targetClasses.cs.["Todas"]`);
+
       // Se tiver aluno especifico
       conditions.push(`dados->alunosIds.cs.["${alunoId}"]`);
       conditions.push(`dados->alunosIds.cs.["a_${alunoId}"]`);
       conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
-      
+
+      // Incluir todas as turmas e grupos ativos do aluno no filtro
+      resolvedTargets.forEach(target => {
+        conditions.push(`dados->targetClasses.cs.["${target}"]`);
+      });
+
       query = query.or(conditions.join(','));
     } else if (!isFamilyOrStudent) {
        // Se for colaborador

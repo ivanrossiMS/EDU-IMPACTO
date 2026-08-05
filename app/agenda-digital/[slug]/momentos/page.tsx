@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-import { getAlunoTurmaCursando } from '@/lib/studentTurmaUtils';
+import { getAlunoTurmaCursando, getAlunoTodasTurmasEGrupos, getAlunoNomesTurmasEGrupos } from '@/lib/studentTurmaUtils';
 
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -65,6 +65,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
   const { data: fetchMomentosData, isLoading: loading, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(endpoint, 20)
   const fetchMomentos = fetchMomentosData?.pages?.flat() || []
+  
+  const [grupos = []] = useSupabaseArray<any>('agenda/grupos');
   const dataCtx = useData();
   const turmas = dataCtx?.turmas || [];
 
@@ -103,7 +105,6 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       window.removeEventListener('ad:momentos-delete', handleUpdate)
     }
   }, [refetch])
-
 
   const handleLike = async (momentId: number | string) => {
     const myName = currentUser?.nome || 'Você'
@@ -197,28 +198,20 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       console.error("Error deleting momento comment:", err)
     }
   }
-  
-  const todasTurmasDoAluno = useMemo(() => {
-    const list: string[] = []
-    const turmaCursando = getAlunoTurmaCursando(aluno)
-    if (turmaCursando) {
-      list.push(turmaCursando.toLowerCase())
-      const tObj = turmas.find((t: any) => String(t.id) === turmaCursando || String(t.codigo) === turmaCursando || String(t.nome) === turmaCursando)
-      if (tObj?.nome) list.push(String(tObj.nome).toLowerCase())
-    }
-    if (nomeTurmaDoAluno) list.push(nomeTurmaDoAluno.toLowerCase())
-    
-    if (aluno?.dados?.historicoTurmas) {
-      aluno.dados.historicoTurmas.forEach((ht: any) => {
-        if (ht.serieTurma) {
-          list.push(String(ht.serieTurma).toLowerCase())
-          const tObj = turmas.find((t: any) => String(t.id) === String(ht.serieTurma) || String(t.codigo) === String(ht.serieTurma))
-          if (tObj?.nome) list.push(String(tObj.nome).toLowerCase())
-        }
-      })
-    }
-    return list.filter(Boolean)
-  }, [aluno, nomeTurmaDoAluno, turmas])
+
+  const todasTurmasDoAluno = useMemo<string[]>(() => {
+    if (!aluno) return []
+    return getAlunoTodasTurmasEGrupos(aluno, turmas, grupos).map((x: string) => x.toLowerCase())
+  }, [aluno, turmas, grupos])
+
+  const nomesTurmasEGruposDoAluno = useMemo<string>(() => {
+    if (!aluno) return 'Sem Turma'
+    const namesList = getAlunoNomesTurmasEGrupos(aluno, turmas, grupos)
+    if (namesList.length === 0) return String(aluno.turma || 'Sem Turma').split('-')[0].trim()
+    if (namesList.length === 1) return namesList[0]
+    if (namesList.length === 2) return `${namesList[0]} e ${namesList[1]}`
+    return `${namesList.slice(0, -1).join(', ')} e ${namesList[namesList.length - 1]}`
+  }, [aluno, turmas, grupos])
 
   // Filtrar momentos aprovados
   // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'
@@ -264,7 +257,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           }
           
           // Check if it matches any of the student's classes (current or historical)
-          const isMatch = todasTurmasDoAluno.some(minhaTurma => 
+          const isMatch = todasTurmasDoAluno.some((minhaTurma: string) => 
             minhaTurma.includes(tcl) || tcl.includes(minhaTurma)
           )
           
@@ -538,7 +531,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
               lineHeight: 1.5,
               fontWeight: 500
             }}>
-              Acompanhe o dia a dia, sorrisos e as atividades incríveis de <strong style={{ color: '#4f46e5', fontWeight: 800 }}>{nomeTurmaDoAluno}</strong>.
+              Acompanhe o dia a dia, sorrisos e as atividades incríveis de <strong style={{ color: '#4f46e5', fontWeight: 800 }}>{nomesTurmasEGruposDoAluno}</strong>.
             </p>
           </div>
         </div>
@@ -621,7 +614,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                   transition={{ delay: 0.4, duration: 0.5 }}
                   style={{ fontSize: 15, color: '#64748b', lineHeight: 1.6, margin: 0, maxWidth: 400, position: 'relative', zIndex: 1 }}
                 >
-                  Ainda não há fotos publicadas para a turma <strong style={{ color: '#0f172a' }}>{nomeTurmaDoAluno}</strong> hoje. Fique de olho, em breve novidades aparecerão por aqui!
+                  Ainda não há fotos publicadas para a turma <strong style={{ color: '#0f172a' }}>{nomesTurmasEGruposDoAluno}</strong> hoje. Fique de olho, em breve novidades aparecerão por aqui!
                 </motion.p>
               </motion.div>
             )}

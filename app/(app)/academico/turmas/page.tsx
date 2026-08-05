@@ -719,8 +719,8 @@ export default function TurmasPage() {
                     }}
                   >
                     <option value="">Selecione…</option>
-                    {cfgTurnos?.map((t: any) => (
-                      <option key={t.id} value={t.nome}>{t.nome}</option>
+                    {['Matutino', 'Vespertino', 'Integral/Intermediário'].map((t: string) => (
+                      <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
                 </div>

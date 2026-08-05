@@ -51,13 +51,18 @@ export async function POST(request: Request) {
     const processedAlunoIds: string[] = [...(accumulatedIds || [])]
     
     // Carregar todas as turmas em memória para vinculação flexível (Insensível a acentos/caixa)
-    const { data: allTurmas } = await supabase.from('turmas').select('id, nome, dados')
-    const turmasMap = new Map<string, { id: string, segmento?: string }>()
-    allTurmas?.forEach(t => {
-      turmasMap.set(normalize(t.nome), { 
+    const { data: allTurmas } = await supabase.from('turmas').select('id, nome, serie, turno, dados')
+    const turmasMap = new Map<string, { id: string, nome: string, segmento?: string, serie?: string }>()
+    allTurmas?.forEach((t: any) => {
+      const tSeg = t.segmento || t.dados?.segmento || ''
+      const tSerie = t.serie || t.dados?.serie || ''
+      const tObj = { 
         id: t.id, 
-        segmento: t.dados?.segmento 
-      })
+        nome: t.nome,
+        segmento: tSeg,
+        serie: tSerie
+      }
+      turmasMap.set(normalize(t.nome), tObj)
     })
 
     for (const [index, row] of rows.entries()) {
@@ -154,17 +159,43 @@ export async function POST(request: Request) {
         // Resolver nome da turma para ID (Normalizado)
         let resolvedTurmaId = ''
         let resolvedSegmento = ''
+        let resolvedSerie = ''
         if (alunoData.turma) {
-          const found = turmasMap.get(normalize(alunoData.turma))
+          const normTurma = normalize(alunoData.turma)
+          let found: any = turmasMap.get(normTurma)
+
+          if (!found && allTurmas) {
+            const matched: any = allTurmas.find((t: any) => {
+              const nName = normalize(t.nome)
+              return nName === normTurma || nName.includes(normTurma) || normTurma.includes(nName)
+            })
+            if (matched) {
+              found = {
+                id: matched.id,
+                nome: matched.nome,
+                segmento: matched.segmento || matched.dados?.segmento || '',
+                serie: matched.serie || matched.dados?.serie || ''
+              }
+            }
+          }
+
           if (found) {
             resolvedTurmaId = found.id
             resolvedSegmento = found.segmento || ''
+            resolvedSerie = found.serie || ''
             filteredAlunoData.turma = found.id
             if (found.segmento) {
               if (!filteredAlunoData.dados) filteredAlunoData.dados = {}
               filteredAlunoData.dados.segmento = found.segmento
             }
           }
+        }
+
+        const finalSerie = alunoData.serie || resolvedSerie || filteredAlunoData.serie || ''
+        if (finalSerie) {
+          filteredAlunoData.serie = finalSerie
+          if (!filteredAlunoData.dados) filteredAlunoData.dados = {}
+          filteredAlunoData.dados.serie = finalSerie
         }
 
         const identifier = alunoData.codigo
@@ -249,13 +280,45 @@ export async function POST(request: Request) {
           finalAlunoData.dados.autorizadoSairSozinho = String(alunoData.autorizadoSairSozinho).toLowerCase() === 'sim' || alunoData.autorizadoSairSozinho === true
         }
 
+        const rawIntegral = alunoData.isIntegralIntermediario ?? alunoData.aluno_isIntegralIntermediario ?? alunoData.integralIntermediario ?? alunoData.integral_intermediario
+
+        if (rawIntegral !== undefined && rawIntegral !== null) {
+          if (!finalAlunoData.dados) finalAlunoData.dados = {}
+          const normStr = String(rawIntegral).toLowerCase().trim()
+          const isIntegralBool = normStr === 'sim' || normStr === 's' || normStr === 'true' || normStr === '1' || normStr === 'integral/intermediário' || rawIntegral === true
+
+          finalAlunoData.dados.isIntegralIntermediario = isIntegralBool
+
+          let historico = Array.isArray(finalAlunoData.dados.historicoTurmas) ? [...finalAlunoData.dados.historicoTurmas] : []
+          if (historico.length === 0 && Array.isArray(existingAluno?.dados?.historicoTurmas)) {
+            historico = [...existingAluno.dados.historicoTurmas]
+          }
+
+          if (historico.length > 0) {
+            const lastIndex = historico.length - 1
+            historico[lastIndex] = {
+              ...historico[lastIndex],
+              isIntegralIntermediario: isIntegralBool,
+              modalidade: isIntegralBool ? 'INTEGRAL/INTERMEDIÁRIO' : (historico[lastIndex].modalidade || ''),
+              serie: finalSerie || historico[lastIndex].serie || ''
+            }
+            finalAlunoData.dados.historicoTurmas = historico
+          }
+        }
+
         // Processar Histórico de Turmas
         if (alunoData.turma && resolvedTurmaId) {
-          const novoVinculo = {
+          const isIntegralBool = finalAlunoData.dados?.isIntegralIntermediario === true
+          const novoVinculo: any = {
             id: `HIST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             anoLetivo: alunoData.ano_letivo || new Date().getFullYear().toString(),
-            segmento: resolvedSegmento,
+            segmento: resolvedSegmento || finalAlunoData.dados?.segmento || '',
+            serie: finalSerie,
             serieTurma: resolvedTurmaId
+          }
+          if (isIntegralBool) {
+            novoVinculo.isIntegralIntermediario = true
+            novoVinculo.modalidade = 'INTEGRAL/INTERMEDIÁRIO'
           }
           
           if (!finalAlunoData.dados) finalAlunoData.dados = {}
@@ -265,15 +328,44 @@ export async function POST(request: Request) {
             finalAlunoData.dados.historicoTurmas = [novoVinculo]
           } else {
             // Evita duplicar se já existir exatamente a mesma turma e ano letivo
-            const jaExiste = historicoAnterior.some((h: any) => h.serieTurma === resolvedTurmaId && String(h.anoLetivo) === String(novoVinculo.anoLetivo))
+            const jaExisteIndex = historicoAnterior.findIndex((h: any) => h.serieTurma === resolvedTurmaId && String(h.anoLetivo) === String(novoVinculo.anoLetivo))
             
-            if (!jaExiste) {
+            if (jaExisteIndex === -1) {
               finalAlunoData.dados.historicoTurmas = [...historicoAnterior, novoVinculo]
+            } else {
+              historicoAnterior[jaExisteIndex].serie = finalSerie || historicoAnterior[jaExisteIndex].serie || ''
+              if (isIntegralBool) {
+                historicoAnterior[jaExisteIndex].isIntegralIntermediario = true
+                historicoAnterior[jaExisteIndex].modalidade = 'INTEGRAL/INTERMEDIÁRIO'
+              }
+              finalAlunoData.dados.historicoTurmas = [...historicoAnterior]
             }
           }
           
           // Sempre define a turma recém importada como a turma atual
           finalAlunoData.turma = resolvedTurmaId
+        } else if (finalSerie) {
+          if (!finalAlunoData.dados) finalAlunoData.dados = {}
+          let historico = Array.isArray(finalAlunoData.dados.historicoTurmas) ? [...finalAlunoData.dados.historicoTurmas] : []
+          if (historico.length === 0 && Array.isArray(existingAluno?.dados?.historicoTurmas)) {
+            historico = [...existingAluno.dados.historicoTurmas]
+          }
+          if (historico.length > 0) {
+            historico[historico.length - 1] = {
+              ...historico[historico.length - 1],
+              serie: finalSerie,
+              segmento: resolvedSegmento || historico[historico.length - 1].segmento || ''
+            }
+            finalAlunoData.dados.historicoTurmas = historico
+          } else {
+            finalAlunoData.dados.historicoTurmas = [{
+              id: `HIST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              anoLetivo: alunoData.ano_letivo || new Date().getFullYear().toString(),
+              segmento: resolvedSegmento || '',
+              serie: finalSerie,
+              serieTurma: ''
+            }]
+          }
         }
 
         // Salvar Aluno
