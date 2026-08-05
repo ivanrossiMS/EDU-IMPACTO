@@ -43,6 +43,8 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
   // States para Fotos
   const [photos, setPhotos] = useState<PhotoItem[]>([])
   const [photoLoading, setPhotoLoading] = useState(false)
+  const [rawData, setRawData] = useState<any[][]>([])
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null)
 
   const getValidationWarnings = () => {
     if (!file) return []
@@ -236,6 +238,44 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
     return systemFields
   }
 
+  const processFileData = (data: any[][], useHeaders: boolean) => {
+    if (data.length === 0) return
+    let detHeaders = useHeaders 
+      ? (data[0] as any[]).map(h => String(h ?? '').trim()) 
+      : Array.from({ length: Math.max(...data.map(r => r.length)) }, (_, i) => `Coluna ${i + 1}`)
+    setHeaders(detHeaders)
+    // Carrega TODOS os registros na vertical para pré-visualização completa
+    setPreviewData(data.slice(useHeaders ? 1 : 0))
+    const initMapping: Record<string, string> = {}
+    const fields = getFilteredFields(step)
+    detHeaders.forEach((h, idx) => {
+      const key = useHeaders ? h : String(idx)
+      const normH = normalize(String(h))
+      let matched = fields.find(f => normalize(f.label).includes(normH) || normH.includes(normalize(f.label)))
+      if (!matched) {
+        if (['id', 'matricula', 'ra', 'codigo', 'cod'].some(k => normH.includes(k))) {
+          matched = fields.find(f => f.value === 'aluno_codigo')
+        } else if (['nome', 'aluno', 'estudante'].some(k => normH.includes(k))) {
+          matched = fields.find(f => f.value === 'aluno_nome')
+        } else if (['nascimento', 'nasc', 'data_nasc', 'dtnasc'].some(k => normH.includes(k))) {
+          matched = fields.find(f => f.value === 'aluno_data_nascimento')
+        } else if (['telefone', 'tel', 'celular', 'fone'].some(k => normH.includes(k))) {
+          matched = fields.find(f => f.value === 'aluno_telefone')
+        } else if (['email', 'e-mail'].some(k => normH.includes(k))) {
+          matched = fields.find(f => f.value === 'aluno_email')
+        } else if (['integral', 'intermediario'].some(k => normH.includes(k))) {
+          matched = fields.find(f => f.value === 'aluno_isIntegralIntermediario')
+        } else if (['cpf'].some(k => normH.includes(k))) {
+          matched = fields.find(f => f.value === 'aluno_cpf')
+        } else if (['rg'].some(k => normH.includes(k))) {
+          matched = fields.find(f => f.value === 'aluno_rg')
+        }
+      }
+      if (matched) initMapping[key] = matched.value
+    })
+    setMapping(initMapping)
+  }
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = e.target.files?.[0]
     if (!uploadedFile) return
@@ -246,33 +286,24 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
       const wb = XLSX.read(bstr, { type: 'binary' })
       const ws = wb.Sheets[wb.SheetNames[0]]
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
-      if (data.length > 0) {
-        let detHeaders = hasHeaders 
-          ? (data[0] as any[]).map(h => String(h ?? '').trim()) 
-          : Array.from({ length: Math.max(...data.map(r => r.length)) }, (_, i) => `Coluna ${i + 1}`)
-        setHeaders(detHeaders)
-        setPreviewData(data.slice(hasHeaders ? 1 : 0, 6))
-        const initMapping: Record<string, string> = {}
-        const fields = getFilteredFields(step)
-        detHeaders.forEach((h, idx) => {
-          const key = hasHeaders ? h : String(idx)
-          const normH = normalize(String(h))
-          let matched = fields.find(f => normalize(f.label).includes(normH) || normH.includes(normalize(f.label)))
-          if (!matched && (normH.includes('integral') || normH.includes('intermediario'))) {
-            matched = fields.find(f => f.value === 'aluno_isIntegralIntermediario')
-          }
-          if (matched) initMapping[key] = matched.value
-        })
-        setMapping(initMapping)
-      }
+      setRawData(data)
+      processFileData(data, hasHeaders)
     }
     reader.readAsBinaryString(uploadedFile)
+  }
+
+  const toggleHasHeaders = (val: boolean) => {
+    setHasHeaders(val)
+    if (rawData.length > 0) {
+      processFileData(rawData, val)
+    }
   }
 
   const handleImport = async () => {
     if (!file) return
     setLoading(true)
     setErrors([])
+    setImportProgress({ current: 0, total: 0 })
     try {
       const reader = new FileReader()
       reader.onload = async (evt) => {
@@ -281,6 +312,8 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
         const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 }) as any[][]
         
         const rowsToProcess = hasHeaders ? data.slice(1) : data;
+        setImportProgress({ current: 0, total: rowsToProcess.length });
+
         const chunkSize = 25; // Chunk pequeno para evitar timeout (504) no serverless
         let totalInseridos = 0;
         let totalAtualizados = 0;
@@ -292,6 +325,8 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
           const chunk = rowsToProcess.slice(i, i + chunkSize);
           const isLastChunk = i + chunkSize >= rowsToProcess.length;
           
+          setImportProgress({ current: Math.min(i + chunkSize, rowsToProcess.length), total: rowsToProcess.length });
+
           const res = await fetch('/api/importacao/alunos', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -344,11 +379,13 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
         }
         onSuccess()
         setLoading(false)
+        setImportProgress(null)
       }
       reader.readAsBinaryString(file)
     } catch (e: any) {
       setErrors([{ linha: 0, msg: e.message }])
       setLoading(false)
+      setImportProgress(null)
     }
   }
 
@@ -413,6 +450,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
   const resetForNextStep = (next: number) => {
     setStep(next)
     setFile(null)
+    setRawData([])
     setHeaders([])
     setPreviewData([])
     setMapping({})
@@ -420,6 +458,7 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
     setErrorQuery('')
     setImportedSummary(null)
     setPhotos([])
+    setImportProgress(null)
   }
 
   const steps = [
@@ -721,27 +760,66 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
                     </div>
                   ))}
 
-                  <div style={{ overflowX: 'auto', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead style={{ background: 'hsl(var(--bg-elevated))' }}>
+                  {/* Top Bar for Table Summary & Header Toggle */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                      <span style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', padding: '4px 10px', borderRadius: 8 }}>
+                        📊 Planilha carregada
+                      </span>
+                      <span>
+                        {previewData.length} {previewData.length === 1 ? 'registro' : 'registros na vertical'} ({headers.length} colunas)
+                      </span>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', userSelect: 'none' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={hasHeaders} 
+                        onChange={(e) => toggleHasHeaders(e.target.checked)} 
+                        style={{ width: 16, height: 16, accentColor: '#2563eb' }} 
+                      />
+                      <span style={{ fontWeight: 600 }}>Primeira linha contém cabeçalhos</span>
+                    </label>
+                  </div>
+
+                  <div style={{ 
+                    overflowX: 'auto', 
+                    maxHeight: 480, 
+                    overflowY: 'auto', 
+                    borderRadius: 16, 
+                    border: '1px solid hsl(var(--border-subtle))',
+                    position: 'relative'
+                  }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead style={{ position: 'sticky', top: 0, zIndex: 20, background: 'hsl(var(--bg-elevated))', boxShadow: '0 2px 6px rgba(0,0,0,0.12)' }}>
                         <tr>
+                          <th style={{ 
+                            padding: '12px 8px', 
+                            width: 50, 
+                            textAlign: 'center', 
+                            borderRight: '1px solid hsl(var(--border-subtle))', 
+                            background: 'hsl(var(--bg-elevated))',
+                            color: 'hsl(var(--text-muted))',
+                            fontSize: 11,
+                            fontWeight: 800
+                          }}>#</th>
                           {headers.map((h, i) => {
                             const isMapped = !!mapping[h];
                             return (
                               <th key={i} style={{ 
-                                padding: 16, 
+                                padding: 12, 
                                 textAlign: 'left', 
                                 borderRight: '1px solid hsl(var(--border-subtle))',
                                 borderTop: isMapped ? '3px solid #2563eb' : 'none',
-                                background: isMapped ? 'rgba(37, 99, 235, 0.04)' : 'transparent',
-                                opacity: isMapped ? 1 : 0.6,
-                                transition: 'all 0.2s ease-in-out'
+                                background: isMapped ? 'rgba(37, 99, 235, 0.04)' : 'hsl(var(--bg-elevated))',
+                                opacity: isMapped ? 1 : 0.7,
+                                transition: 'all 0.2s ease-in-out',
+                                whiteSpace: 'nowrap'
                               }}>
-                                <select className="form-input" style={{ marginBottom: 8, borderColor: isMapped ? '#2563eb' : 'hsl(var(--border-subtle))' }} value={mapping[h] || ''} onChange={(e) => setMapping({...mapping, [h]: e.target.value})}>
+                                <select className="form-input" style={{ marginBottom: 6, fontSize: 11, padding: '4px 8px', borderColor: isMapped ? '#2563eb' : 'hsl(var(--border-subtle))' }} value={mapping[h] || ''} onChange={(e) => setMapping({...mapping, [h]: e.target.value})}>
                                   <option value="">Ignorar</option>
                                   {getFilteredFields(step).map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                                 </select>
-                                <div style={{ fontSize: 11, fontWeight: isMapped ? 800 : 500, color: isMapped ? '#2563eb' : 'hsl(var(--text-muted))' }}>{h}</div>
+                                <div style={{ fontSize: 11, fontWeight: isMapped ? 800 : 600, color: isMapped ? '#2563eb' : 'hsl(var(--text-muted))' }}>{h}</div>
                               </th>
                             );
                           })}
@@ -750,16 +828,21 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
                       <tbody>
                         {previewData.map((row, ri) => (
                           <tr key={ri} style={{ borderTop: '1px solid hsl(var(--border-subtle))' }}>
+                            <td style={{ textAlign: 'center', fontWeight: 700, color: 'hsl(var(--text-muted))', fontSize: 11, padding: 8, background: 'hsl(var(--bg-elevated))' }}>
+                              {ri + 1}
+                            </td>
                             {headers.map((h, ci) => {
                               const isMapped = !!mapping[h];
                               return (
                                 <td key={ci} style={{ 
-                                  padding: 12, 
+                                  padding: 10, 
                                   fontSize: 12,
                                   background: isMapped ? 'rgba(37, 99, 235, 0.01)' : 'transparent',
                                   color: isMapped ? 'hsl(var(--text-primary))' : 'hsl(var(--text-muted))',
-                                  opacity: isMapped ? 1 : 0.65,
-                                  transition: 'all 0.2s ease-in-out'
+                                  whiteSpace: 'nowrap',
+                                  maxWidth: 220,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
                                 }}>
                                   {String(row[ci] || '')}
                                 </td>
@@ -934,7 +1017,16 @@ export default function ImportarAlunosModal({ isOpen, onClose, onSuccess }: Impo
             
             {step <= 4 && file && !importedSummary && (
               <button className="btn btn-primary" onClick={handleImport} disabled={loading}>
-                {loading ? <Loader2 size={16} className="animate-spin" /> : `Importar ${steps.find(s => s.num === step)?.label}`}
+                {loading ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Loader2 size={16} className="animate-spin" />
+                    {importProgress && importProgress.total > 0
+                      ? `Importando... (${importProgress.current}/${importProgress.total})`
+                      : 'Processando...'}
+                  </span>
+                ) : (
+                  `Importar ${previewData.length > 0 ? previewData.length : ''} ${steps.find(s => s.num === step)?.label}`
+                )}
               </button>
             )}
 

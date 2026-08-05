@@ -99,6 +99,12 @@ export async function POST(request: Request) {
         }
         console.log(`[Import] Linha ${index + 2} respData extraído:`, respData)
 
+        // Checar se a linha inteira é vazia (linhas em branco no final da planilha)
+        const isRowEmpty = row.every((cell: any) => cell === undefined || cell === null || String(cell).trim() === '')
+        if (isRowEmpty) {
+          continue
+        }
+
         const isOnlyRespUpdate = (step === 3 || step === 4) && !alunoData.nome && !alunoData.codigo && respData.nome && respData.rfid !== undefined;
 
         if (!alunoData.nome && !alunoData.codigo && !isOnlyRespUpdate) {
@@ -614,10 +620,11 @@ export async function POST(request: Request) {
 
     if (step === 2 && inativarAusentes && processedAlunoIds.length > 0) {
       console.log(`[Import] Inativando alunos ausentes... Mantendo ativos apenas os ${processedAlunoIds.length} alunos processados.`)
+      const formattedIds = processedAlunoIds.map(id => `'${String(id).replace(/'/g, "''")}'`).join(',')
       const { error: inativacaoError } = await supabase
         .from('alunos')
         .update({ status: 'inativo' })
-        .not('id', 'in', `(${processedAlunoIds.join(',')})`)
+        .not('id', 'in', `(${formattedIds})`)
         .neq('status', 'inativo') // opcional, para não atualizar atoa
 
       if (inativacaoError) {

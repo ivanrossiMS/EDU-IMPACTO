@@ -5,7 +5,7 @@ import {
   Users, Search, Plus, Filter, 
   School, Calendar, BookOpen, 
   ChevronLeft, ChevronRight, Edit, Trash2,
-  FileSpreadsheet, AlertTriangle, X
+  FileSpreadsheet, AlertTriangle, X, Sparkles
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
@@ -30,6 +30,10 @@ export default function TurmasPage() {
   const [loadingAlunos, setLoadingAlunos] = useState(false)
   const [selectedTurma, setSelectedTurma] = useState<any>(null)
   const [isEditing, setIsEditing] = useState(false)
+  
+  const [turmaToDelete, setTurmaToDelete] = useState<any>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   
   const [validationErrors, setValidationErrors] = useState<any[]>([])
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false)
@@ -57,7 +61,17 @@ export default function TurmasPage() {
   const [itensPorPagina, setItensPorPagina] = useState(50)
 
   // Query para buscar turmas (Cache via React Query)
-  const { data: apiResponse, isLoading: loading, isFetching } = useApiQuery<{ data: any[], total: number }>(
+  const { data: apiResponse, isLoading: loading, isFetching } = useApiQuery<{ 
+    data: any[], 
+    total: number,
+    stats?: {
+      totalTurmas: number,
+      totalAlunosMatriculados: number,
+      totalAlunosIntegral: number,
+      capacidadeTotal: number,
+      vagasOcupadasPercent: number
+    }
+  }>(
     ['turmas-paginadas'],
     '/api/turmas',
     { page: paginaAtual, limit: itensPorPagina, search: searchQuery, ano: ano, segmento: segmento }
@@ -65,6 +79,7 @@ export default function TurmasPage() {
 
   const turmas = apiResponse?.data || []
   const totalItens = apiResponse?.total || 0
+  const stats = apiResponse?.stats
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -148,25 +163,38 @@ export default function TurmasPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta turma?')) return
+  const handleOpenDeleteModal = (turma: any) => {
+    setTurmaToDelete(turma)
+    setDeleteError(null)
+  }
+
+  const handleExecuteDelete = async () => {
+    if (!turmaToDelete) return
+    setIsDeleting(true)
+    setDeleteError(null)
     try {
-      const res = await fetch(`/api/turmas?id=${id}`, {
+      const res = await fetch(`/api/turmas?id=${turmaToDelete.id}`, {
         method: 'DELETE'
       })
-      if (res.ok) {
-        const turmaExcluida = apiResponse?.data?.find((t: any) => t.id === id)
-        const nomeTurma = turmaExcluida?.nome || id
+      const resData = await res.json().catch(() => ({}))
+
+      if (res.ok && resData.success) {
         logSystemAction(
           'Acadêmico (Turmas)',
           'Exclusão',
-          `Exclusão da turma ${nomeTurma}`,
-          { registroId: id, detalhesAntes: turmaExcluida }
+          `Exclusão da turma ${turmaToDelete.nome || turmaToDelete.id}`,
+          { registroId: turmaToDelete.id, detalhesAntes: turmaToDelete }
         )
         queryClient.invalidateQueries({ queryKey: ['turmas-paginadas'] })
+        setTurmaToDelete(null)
+      } else {
+        setDeleteError(resData.error || 'Erro ao excluir turma. Verifique se a turma possui registros vinculados.')
       }
     } catch (error) {
       console.error('Erro ao excluir turma:', error)
+      setDeleteError('Erro de conexão ao se comunicar com o servidor.')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -270,32 +298,48 @@ export default function TurmasPage() {
       </div>
 
       {/* Stats Cards */}
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
-        <div style={{ flex: 1, background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        {/* Total de Turmas */}
+        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', padding: '10px', borderRadius: '8px' }}>
               <School size={20} />
             </div>
             <div>
               <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Total de Turmas</p>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{totalItens}</h3>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalTurmas ?? totalItens}</h3>
             </div>
           </div>
         </div>
         
-        <div style={{ flex: 1, background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        {/* Alunos Matriculados (Total Único Real de Alunos Ativos) */}
+        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '10px', borderRadius: '8px' }}>
               <Users size={20} />
             </div>
             <div>
               <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Alunos Matriculados</p>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{turmas.reduce((acc, t) => acc + (t.matriculados || 0), 0)}</h3>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosMatriculados ?? 0}</h3>
             </div>
           </div>
         </div>
 
-        <div style={{ flex: 1, background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        {/* Alunos INTEGRAL / INTERMEDIÁRIO (Novo Card!) */}
+        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '10px', borderRadius: '8px' }}>
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Integral / Intermediário</p>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosIntegral ?? 0}</h3>
+            </div>
+          </div>
+        </div>
+
+        {/* Vagas Ocupadas */}
+        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '10px', borderRadius: '8px' }}>
               <BookOpen size={20} />
@@ -303,7 +347,7 @@ export default function TurmasPage() {
             <div>
               <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Vagas Ocupadas</p>
               <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                {Math.round((turmas.reduce((acc, t) => acc + (t.matriculados || 0), 0) / turmas.reduce((acc, t) => acc + (t.capacidade || 30), 0)) * 100) || 0}%
+                {stats?.vagasOcupadasPercent ?? 0}%
               </h3>
             </div>
           </div>
@@ -427,7 +471,7 @@ export default function TurmasPage() {
                       <button 
                         style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} 
                         title="Excluir"
-                        onClick={() => handleDelete(turma.id)}
+                        onClick={() => handleOpenDeleteModal(turma)}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -976,6 +1020,209 @@ export default function TurmasPage() {
         onClose={() => setIsImportModalOpen(false)}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['turmas-paginadas'] })}
       />
+
+      {/* Modal Ultra Moderno de Confirmação de Exclusão */}
+      {turmaToDelete && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '24px',
+            maxWidth: '460px',
+            width: '100%',
+            padding: '32px',
+            boxShadow: '0 25px 60px -15px rgba(239, 68, 68, 0.25), 0 10px 30px rgba(0, 0, 0, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            overflow: 'hidden'
+          }}>
+            {/* Ambient Background Glow */}
+            <div style={{
+              position: 'absolute',
+              top: '-60px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '180px',
+              height: '180px',
+              background: 'radial-gradient(circle, rgba(239, 68, 68, 0.15) 0%, rgba(255,255,255,0) 70%)',
+              pointerEvents: 'none',
+              borderRadius: '50%'
+            }} />
+
+            {/* Ícone com gradiente e borda brilhante */}
+            <div style={{
+              width: '72px',
+              height: '72px',
+              borderRadius: '24px',
+              background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+              border: '2px solid rgba(239, 68, 68, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#dc2626',
+              marginBottom: '20px',
+              boxShadow: '0 12px 24px -6px rgba(239, 68, 68, 0.25)'
+            }}>
+              <AlertTriangle size={36} />
+            </div>
+
+            {/* Título & Descrição */}
+            <h3 style={{
+              fontFamily: 'Outfit, sans-serif',
+              fontWeight: 800,
+              fontSize: '22px',
+              color: '#0f172a',
+              margin: '0 0 8px 0',
+              letterSpacing: '-0.5px'
+            }}>
+              Excluir Turma Definitivamente?
+            </h3>
+            
+            <p style={{ fontSize: '14px', color: '#64748b', margin: '0 0 20px 0', lineHeight: 1.5 }}>
+              Você está prestes a remover permanentemente a turma abaixo. Esta ação não poderá ser desfeita.
+            </p>
+
+            {/* Card com Detalhes da Turma */}
+            <div style={{
+              width: '100%',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '16px',
+              padding: '16px',
+              marginBottom: '20px',
+              textAlign: 'left',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  ID #{turmaToDelete.id}
+                </span>
+                <span style={{
+                  padding: '3px 10px',
+                  background: turmaToDelete.turno === 'Matutino' ? '#dbeafe' : '#fef3c7',
+                  color: turmaToDelete.turno === 'Matutino' ? '#1e40af' : '#b45309',
+                  borderRadius: '20px',
+                  fontSize: '11px',
+                  fontWeight: 700
+                }}>
+                  {turmaToDelete.turno || 'Turno N/A'}
+                </span>
+              </div>
+
+              <h4 style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', margin: '0 0 6px 0' }}>
+                {turmaToDelete.nome}
+              </h4>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '13px', color: '#475569' }}>
+                <span>Série: <strong>{turmaToDelete.serie || 'N/A'}</strong></span>
+                <span>•</span>
+                <span>Alunos: <strong>{turmaToDelete.matriculados || 0} / {turmaToDelete.capacidade || 30}</strong></span>
+              </div>
+            </div>
+
+            {/* Alerta de erro se houver */}
+            {deleteError && (
+              <div style={{
+                width: '100%',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#991b1b',
+                padding: '12px 14px',
+                borderRadius: '12px',
+                fontSize: '13px',
+                marginBottom: '20px',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                boxSizing: 'border-box'
+              }}>
+                <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            {/* Botões de Ação */}
+            <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setTurmaToDelete(null)}
+                style={{
+                  flex: 1,
+                  height: '46px',
+                  borderRadius: '12px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                  opacity: isDeleting ? 0.6 : 1
+                }}
+                onMouseEnter={e => { if (!isDeleting) e.currentTarget.style.background = '#f1f5f9' }}
+                onMouseLeave={e => { if (!isDeleting) e.currentTarget.style.background = '#ffffff' }}
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleExecuteDelete}
+                style={{
+                  flex: 1,
+                  height: '46px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '14px',
+                  cursor: isDeleting ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s ease',
+                  opacity: isDeleting ? 0.8 : 1
+                }}
+                onMouseEnter={e => { if (!isDeleting) e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => { if (!isDeleting) e.currentTarget.style.transform = 'translateY(0)' }}
+              >
+                {isDeleting ? (
+                  <>
+                    <div style={{ width: '16px', height: '16px', border: '2px solid #ffffff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    Excluindo...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={18} />
+                    Sim, Excluir
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

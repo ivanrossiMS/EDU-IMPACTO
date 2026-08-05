@@ -51,19 +51,46 @@ export async function GET(request: Request) {
 
     if (error) throw error
 
-    // Calcular matriculados em tempo real
-    if (data && data.length > 0) {
-      const { data: alunosData } = await supabase
-        .from('alunos')
-        .select('id, turma, status, dados')
-        .or('status.neq.inativo,status.is.null')
+    // Buscar todos os alunos ativos para cálculo dos KPIs gerais (Alunos Matriculados e Alunos Integral/Intermediário)
+    const { data: alunosData } = await supabaseServer
+      .from('alunos')
+      .select('id, turma, status, dados')
 
+    const activeAlunos = (alunosData || []).filter((a: any) => a.status !== 'inativo' && a.status !== 'Inativo')
+    const totalAlunosMatriculados = activeAlunos.length
+
+    const isIntegralStudent = (student: any) => {
+      const hList = student.dados?.historicoTurmas || []
+      const activeHist = Array.isArray(hList) && hList.length > 0 ? hList[hList.length - 1] : null
+
+      return Boolean(
+        activeHist?.isIntegralIntermediario ||
+        activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+        activeHist?.modalidade === 'INTEGRAL' ||
+        student.dados?.isIntegralIntermediario ||
+        student.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+        student.dados?.modalidade === 'INTEGRAL'
+      )
+    }
+
+    const totalAlunosIntegral = activeAlunos.filter(isIntegralStudent).length
+
+    // Buscar capacidade total de todas as turmas
+    const { data: allTurmasCap } = await supabaseServer
+      .from('turmas')
+      .select('capacidade')
+
+    const capacidadeTotal = (allTurmasCap || []).reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
+    const vagasOcupadasPercent = capacidadeTotal > 0 ? Math.round((totalAlunosMatriculados / capacidadeTotal) * 100) : 0
+
+    // Calcular matriculados por turma em tempo real para os itens da tabela
+    if (data && data.length > 0) {
       data.forEach((t: any) => {
         const isIntegralTurma = (t.turno || '').toLowerCase().includes('integral') ||
                                 (t.turno || '').toLowerCase().includes('intermediário') ||
                                 (t.nome || '').toLowerCase().includes('integral');
 
-        const countAlunos = (alunosData || []).filter((a: any) => {
+        const countAlunos = activeAlunos.filter((a: any) => {
           if (String(a.turma) === String(t.id) || String(a.turma) === String(t.nome)) return true;
 
           const hList = a.dados?.historicoTurmas || [];
@@ -94,10 +121,17 @@ export async function GET(request: Request) {
     return NextResponse.json({
       data: data || [],
       total: count || 0,
+      stats: {
+        totalTurmas: count || 0,
+        totalAlunosMatriculados,
+        totalAlunosIntegral,
+        capacidadeTotal,
+        vagasOcupadasPercent
+      },
       page,
       limit
     }, {
-      headers: { 'Cache-Control': 'public, max-age=300, stale-while-revalidate=600' }
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' }
     })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
@@ -109,7 +143,6 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
     const body = await request.json()
     const { nome, serie, segmento, turno, sala, capacidade, professor, unidade, ano } = body
 
@@ -122,7 +155,7 @@ export async function POST(request: Request) {
     let attempts = 0
     while (exists && attempts < 10) {
       id = Math.floor(1000 + Math.random() * 9000).toString() // 4 dígitos
-      const { data } = await supabase.from('turmas').select('id').eq('id', id)
+      const { data } = await supabaseServer.from('turmas').select('id').eq('id', id)
       if (!data || data.length === 0) exists = false
       attempts++
     }
@@ -150,7 +183,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('turmas')
       .insert(newTurma)
       .select()
@@ -168,7 +201,6 @@ export async function PUT(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
     const body = await request.json()
     const { id, nome, serie, segmento, turno, sala, capacidade, professor, unidade, ano } = body
 
@@ -190,7 +222,7 @@ export async function PUT(request: Request) {
       }
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from('turmas')
       .update(updatedTurma)
       .eq('id', id)
@@ -209,7 +241,6 @@ export async function DELETE(request: Request) {
   if (errorResponse) return errorResponse
 
   try {
-    const supabase = await createProtectedClient()
     const url = new URL(request.url)
     const id = url.searchParams.get('id')
 
@@ -217,14 +248,19 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'ID da turma é obrigatório' }, { status: 400 })
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabaseServer
       .from('turmas')
       .delete()
       .eq('id', id)
+      .select()
 
     if (error) throw error
 
-    return NextResponse.json({ success: true })
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'Turma não encontrada ou já excluída.' }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true, data })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 400 })
   }
