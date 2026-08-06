@@ -63,7 +63,7 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files --type IOS_APP_STORE
           keychain add-certificates
-          xcode-project use-profiles --profile "Impacto Edu AppStore"
+          xcode-project use-profiles
       - name: Build iOS App (.ipa)
         script: |
           mkdir -p build/ios/xcarchive build/ios/ipa
@@ -76,7 +76,6 @@ workflows:
             CODE_SIGN_STYLE="Manual" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="45SB74BPSM" \
-            PROVISIONING_PROFILE_SPECIFIER="Impacto Edu AppStore" \
             COMPILER_INDEX_STORE_ENABLE=NO
           xcodebuild \
             -exportArchive \
