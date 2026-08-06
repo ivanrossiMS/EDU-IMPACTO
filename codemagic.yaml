@@ -48,6 +48,9 @@ workflows:
     integrations:
       app_store_connect: AppStoreKey
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: br.com.impactoedu.agenda
       node: latest
       xcode: latest
       cocoapods: default
@@ -63,7 +66,7 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files --type IOS_APP_STORE --create
           keychain add-certificates
-          xcode-project use-profiles
+          xcode-project use-profiles --profile "Impacto Edu AppStore"
       - name: Build iOS App (.ipa)
         script: |
           xcode-project build-ipa \
