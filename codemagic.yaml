@@ -59,9 +59,14 @@ workflows:
         script: npm install
       - name: Sync Capacitor iOS
         script: npx cap sync ios
-      - name: Set up Code Signing
+      - name: Set up keychain and signing
         script: |
-          xcode-project use-profiles --create
+          keychain initialize
+          app-store-connect fetch-signing-files "br.com.impactoedu.agenda" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: Build iOS App (.ipa)
         script: |
           xcode-project build-ipa \
