@@ -48,6 +48,9 @@ workflows:
     integrations:
       app_store_connect: AppStoreKey
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: br.com.impactoedu.agenda
       node: latest
       xcode: latest
       cocoapods: default
@@ -58,30 +61,13 @@ workflows:
         script: |
           mkdir -p out
           npx cap sync ios
-      - name: Set up keychain and fetch signing files from Apple
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files --type IOS_APP_STORE
-          keychain add-certificates
-          xcode-project use-profiles
+      - name: Set up code signing
+        script: xcode-project use-profiles
       - name: Build iOS App (.ipa)
         script: |
-          mkdir -p build/ios/xcarchive build/ios/ipa
-          xcodebuild \
-            -project "ios/App/App.xcodeproj" \
-            -scheme "App" \
-            -configuration "Release" \
-            -archivePath "build/ios/xcarchive/App.xcarchive" \
-            archive \
-            CODE_SIGN_STYLE="Manual" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="45SB74BPSM" \
-            COMPILER_INDEX_STORE_ENABLE=NO
-          xcodebuild \
-            -exportArchive \
-            -archivePath "build/ios/xcarchive/App.xcarchive" \
-            -exportPath "build/ios/ipa" \
-            -exportOptionsPlist "ios/App/ExportOptions.plist"
+          xcode-project build-ipa \
+            --project "ios/App/App.xcodeproj" \
+            --scheme "App"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
