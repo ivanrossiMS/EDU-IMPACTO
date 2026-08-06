@@ -6,7 +6,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2, Clock, MapPin } from 'lucide-react'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -342,276 +342,492 @@ export default function CalendarioPage() {
     fetchNivers()
   }, [month])
 
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Events of the selected month filtered by search and type
+  const meventosNoMes = useMemo(() => {
+    return (eventosAgenda || [])
+      .filter(e => {
+        if (!e.data) return false
+        const [y, m] = e.data.split('-')
+        return parseInt(y) === year && parseInt(m) === month + 1
+      })
+      .filter(e => {
+        if (filtroTipo !== 'todos' && e.tipo !== filtroTipo) return false
+        if (!searchQuery) return true
+        const q = searchQuery.toLowerCase()
+        return (
+          e.titulo?.toLowerCase().includes(q) ||
+          e.local?.toLowerCase().includes(q) ||
+          e.descricao?.toLowerCase().includes(q)
+        )
+      })
+      .sort((a, b) => (a.data + (a.horaInicio || '')).localeCompare(b.data + (b.horaInicio || '')))
+  }, [eventosAgenda, year, month, filtroTipo, searchQuery])
+
+  // Grouped by date for list presentation
+  const meventosAgrupados = useMemo(() => {
+    const groups: Record<string, typeof meventosNoMes> = {}
+    meventosNoMes.forEach(ev => {
+      if (!groups[ev.data]) groups[ev.data] = []
+      groups[ev.data].push(ev)
+    })
+    return groups
+  }, [meventosNoMes])
+
+  const tiposList: Array<{ id: TipoEvento | 'todos'; label: string; color: string }> = [
+    { id: 'todos', label: 'Todos os eventos', color: '#6366f1' },
+    { id: 'prova', label: 'Provas & Testes', color: '#ef4444' },
+    { id: 'aula', label: 'Aulas', color: '#3b82f6' },
+    { id: 'evento', label: 'Eventos', color: '#f59e0b' },
+    { id: 'reuniao', label: 'Reuniões', color: '#8b5cf6' },
+    { id: 'feriado', label: 'Feriados', color: '#6b7280' },
+    { id: 'excursao', label: 'Excursões', color: '#10b981' },
+    { id: 'entrega', label: 'Entregas', color: '#06b6d4' },
+    { id: 'atividade', label: 'Atividades', color: '#ec4899' },
+  ]
+
   return (
-    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container">
+    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 100, fontFamily: 'Outfit, sans-serif' }}>
       <style dangerouslySetInnerHTML={{__html: `
-        @media (max-width: 768px) {
-           .ad-calendar-mobile-container .page-header { align-items: center !important; text-align: center !important; }
-           .ad-calendar-filter-bar { flex-direction: column !important; align-items: stretch !important; padding: 16px !important; }
-           .ad-calendar-grid-columns { grid-template-columns: 1fr !important; }
+        @media (max-width: 992px) {
+          .ad-calendar-main-grid { grid-template-columns: 1fr !important; }
         }
       `}} />
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+
+      {/* Standard Header Admin */}
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 className="page-title">Calendário Escolar</h1>
-          <p className="page-subtitle">{eventosAgenda.length} evento(s) cadastrado(s) • {year}</p>
+          <h1 className="page-title" style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 28, color: '#1e293b', margin: 0 }}>Gestão do Calendário Escolar</h1>
+          <p className="page-subtitle" style={{ color: '#64748b', fontSize: 13, margin: '4px 0 0 0' }}>{meventosNoMes.length} evento(s) no mês • {year}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
           <button 
-            className="btn btn-outline-danger btn-sm" 
             onClick={() => { 
               if (confirm('Tem certeza que deseja EXCLUIR TODOS os eventos do calendário? Esta ação não pode ser desfeita.')) {
                 handleDeleteAll();
               }
             }}
-            style={{ background: '#fee2e2', color: '#ef4444', border: '1px solid #fca5a5' }}
+            style={{
+              padding: '10px 16px',
+              borderRadius: 14,
+              background: '#fff1f2',
+              color: '#ef4444',
+              border: '1px solid #fecdd3',
+              fontSize: 13,
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}
           >
-            <Trash2 size={13} /> Excluir Todos
+            <Trash2 size={14} /> Excluir Todos
           </button>
-          <button className="btn btn-primary btn-sm" onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' }); setEditingId(null); setShowModal(true) }}>
-            <Plus size={13} />Novo Evento
+
+          <button
+            onClick={() => { setForm(BLANK_EVENTO); setVisibilidade({ tipo: 'todos', turmasSel: [], usuario: 'Todos' }); setEditingId(null); setShowModal(true) }}
+            style={{
+              padding: '10px 20px',
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              color: '#fff',
+              border: 'none',
+              fontSize: 13,
+              fontWeight: 900,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              boxShadow: '0 8px 20px rgba(99,102,241,0.35)'
+            }}
+          >
+            <Plus size={16} /> Novo Evento
           </button>
         </div>
       </div>
 
-      <div className="ad-calendar-grid-columns" style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: 20, alignItems: 'start' }}>
-        <div className="card" style={{ padding: '16px', borderRadius: 20, boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <button className="btn btn-ghost btn-icon" onClick={() => setViewDate(new Date(year, month - 1, 1))}><ChevronLeft size={16} /></button>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{MESES[month]} {year}</div>
-            <button className="btn btn-ghost btn-icon" onClick={() => setViewDate(new Date(year, month + 1, 1))}><ChevronRight size={16} /></button>
+      {/* 📅 FILTRO DO MÊS ALINHADO À ESQUERDA */}
+      <div style={{
+        background: '#fff',
+        borderRadius: 20,
+        padding: '12px 20px',
+        marginBottom: 24,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+        border: '1px solid #f1f5f9',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-start'
+      }}>
+        {/* Month Switcher Controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', padding: '6px 10px', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+          <button
+            onClick={() => setViewDate(new Date(year, month - 1, 1))}
+            style={{ border: 'none', background: '#fff', width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', color: '#475569' }}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <div style={{ padding: '0 16px', fontSize: 15, fontWeight: 900, color: '#1e293b', minWidth: 140, textAlign: 'center' }}>
+            {MESES[month]} {year}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 10 }}>
-            {DIAS_SEMANA.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 10, fontWeight: 800, color: '#94a3b8' }}>{d}</div>)}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
-            {Array.from({ length: firstDay }).map((_, i) => <div key={`e-${i}`} />)}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const d = i + 1; const dateStr = getDateStr(d); const events = eventosPorDia(dateStr); const isToday = dateStr === today; const isSelected = dateStr === selectedDay;
-              return (
-                <button key={d} onClick={() => setSelectedDay(isSelected ? null : dateStr)} onDoubleClick={() => openNewEventoForDay(dateStr)} style={{ height: 42, borderRadius: 12, background: isSelected ? '#6366f1' : 'transparent', border: `1px solid ${isSelected ? '#6366f1' : isToday ? '#e2e8f0' : 'transparent'}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ fontSize: 13, fontWeight: isSelected || isToday ? 800 : 500, color: isSelected ? '#fff' : isToday ? '#6366f1' : '#334155' }}>{d}</div>
-                  <div style={{ display: 'flex', gap: 2 }}>{isSelected ? <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#fff' }} /> : events.slice(0, 3).map(ev => <div key={ev.id} style={{ width: 4, height: 4, borderRadius: '50%', background: ev.cor ?? TIPO_CORES[ev.tipo] }} />)}</div>
-                </button>
-              )
-            })}
-          </div>
+          <button
+            onClick={() => setViewDate(new Date(year, month + 1, 1))}
+            style={{ border: 'none', background: '#fff', width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', color: '#475569' }}
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
+      </div>
+
+      {/* 🚀 LAYOUT PRINCIPAL EM LISTA (2 COLUNAS: LISTA DE EVENTOS + CARD DE ANIVERSARIANTES) */}
+      <div className="ad-calendar-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, alignItems: 'start' }}>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: 'calc(100vh - 200px)', overflowY: 'auto', paddingRight: 4, scrollbarWidth: 'none' }}>
+        {/* 📋 COLUNA ESQUERDA: AGENDA DE EVENTOS EM LISTA TIMELINE */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           
-          {/* 📍 Eventos do Dia Selecionado - CARD PRINCIPAL */}
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            className="card" 
-            style={{ 
-              padding: '24px', borderRadius: 28, border: '1px solid rgba(255,255,255,0.8)',
-              background: 'linear-gradient(135deg, #ffffff 0%, #f8faff 100%)',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.04)',
-              position: 'relative', overflow: 'hidden'
+          {Object.keys(meventosAgrupados).length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              style={{
+                background: '#fff',
+                borderRadius: 24,
+                padding: '60px 24px',
+                textAlign: 'center',
+                border: '1px solid #f1f5f9',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.02)'
+              }}
+            >
+              <div style={{
+                width: 72, height: 72, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 16px auto', color: '#4338ca'
+              }}>
+                <CalendarIcon size={36} />
+              </div>
+              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b', margin: '0 0 6px 0' }}>
+                Nenhum evento encontrado
+              </h3>
+              <p style={{ fontSize: 13, color: '#64748b', maxWidth: 360, margin: '0 auto 20px auto' }}>
+                {selectedDay
+                  ? 'Não há compromissos agendados para a data selecionada.'
+                  : 'Nenhum evento agendado para este mês.'}
+              </p>
+              {selectedDay && (
+                <button
+                  onClick={() => setSelectedDay(null)}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: 14,
+                    background: '#6366f1',
+                    color: '#fff',
+                    border: 'none',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 16px rgba(99,102,241,0.25)'
+                  }}
+                >
+                  Ver Todos os Eventos do Mês
+                </button>
+              )}
+            </motion.div>
+          ) : (
+            /* Timeline List Groups (Matching Reference Image) */
+            Object.entries(meventosAgrupados).map(([dateStr, eventsList]) => {
+              const [y, m, d] = dateStr.split('-')
+              const isToday = dateStr === today
+              const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
+              const weekDayFull = dateObj.toLocaleDateString('pt-BR', { weekday: 'long' })
+              const monthAbbr = MESES[parseInt(m) - 1].slice(0, 3).toUpperCase()
+
+              return (
+                <motion.div
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  key={dateStr}
+                  style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}
+                >
+                  {/* 🗓️ LEFT DATE CARD */}
+                  <div style={{
+                    width: 100,
+                    minWidth: 100,
+                    background: '#fff',
+                    borderRadius: 22,
+                    padding: '18px 10px',
+                    border: isToday ? '2px solid #6366f1' : '1px solid #e2e8f0',
+                    boxShadow: isToday ? '0 8px 24px rgba(99,102,241,0.12)' : '0 4px 16px rgba(0,0,0,0.02)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    position: 'relative'
+                  }}>
+                    <span style={{ fontSize: 32, fontWeight: 900, color: isToday ? '#6366f1' : '#1e293b', lineHeight: 1 }}>
+                      {String(parseInt(d)).padStart(2, '0')}
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: isToday ? '#6366f1' : '#1e293b', marginTop: 4, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                      {monthAbbr}
+                    </span>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', marginTop: 2, textTransform: 'uppercase' }}>
+                      {weekDayFull}
+                    </span>
+                    {isToday && (
+                      <span style={{ position: 'absolute', top: -10, padding: '2px 8px', background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        HOJE
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 📋 RIGHT CONTENT CONTAINER WITH VERTICAL TIMELINE */}
+                  <div style={{
+                    flex: 1,
+                    minWidth: 0,
+                    background: '#fff',
+                    borderRadius: 22,
+                    padding: '20px 24px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.02)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    position: 'relative'
+                  }}>
+                    {/* Vertical Timeline Line for multiple events */}
+                    {eventsList.length > 1 && (
+                      <div style={{
+                        position: 'absolute',
+                        left: 28,
+                        top: 32,
+                        bottom: 32,
+                        width: 3,
+                        background: 'linear-gradient(180deg, #f97316 0%, #6366f1 100%)',
+                        borderRadius: 2,
+                        zIndex: 1
+                      }} />
+                    )}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {eventsList.map((ev, idx) => {
+                        const color = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#f97316'
+                        return (
+                          <div
+                            key={ev.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 14,
+                              paddingBottom: idx < eventsList.length - 1 ? 14 : 0,
+                              borderBottom: idx < eventsList.length - 1 ? '1px solid #f8fafc' : 'none',
+                              position: 'relative',
+                              zIndex: 2,
+                              flexWrap: 'wrap'
+                            }}
+                          >
+                            {/* Vertical Line Node Circle */}
+                            {eventsList.length > 1 && (
+                              <div style={{
+                                width: 12,
+                                height: 12,
+                                borderRadius: '50%',
+                                background: '#fff',
+                                border: `3px solid ${color}`,
+                                flexShrink: 0,
+                                margin: '0 4px 0 -2px'
+                              }} />
+                            )}
+
+                            {/* Time Pill */}
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '6px 14px',
+                              borderRadius: 14,
+                              background: color + '15',
+                              color: color,
+                              fontSize: 12,
+                              fontWeight: 900,
+                              flexShrink: 0
+                            }}>
+                              <Clock size={13} />
+                              <span>{(ev as any).diaTodo ? 'Dia Todo' : ev.horaInicio || '08:00'}</span>
+                              {!((ev as any).diaTodo) && ev.horaFim && (
+                                <span style={{ opacity: 0.8 }}> - {ev.horaFim}</span>
+                              )}
+                            </div>
+
+                            {/* Title & Description */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <h4 style={{ fontSize: 14, fontWeight: 900, color: '#1e293b', margin: 0, lineHeight: 1.3 }}>
+                                {ev.titulo}
+                              </h4>
+                              {ev.descricao && (
+                                <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0 0', lineHeight: 1.3 }}>
+                                  {ev.descricao}
+                                </p>
+                              )}
+                              {ev.local && (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 2 }}>
+                                  <MapPin size={11} color={color} />
+                                  <span>{ev.local}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Action Buttons for Admin */}
+                            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleEdit(ev as any); }}
+                                style={{ width: 32, height: 32, borderRadius: 10, background: '#f1f5f9', border: 'none', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                                title="Editar Evento"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); if (confirm('Excluir evento?')) handleDelete(ev.id); }}
+                                style={{ width: 32, height: 32, borderRadius: 10, background: '#fff1f2', border: 'none', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
+                                title="Excluir Evento"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </motion.div>
+              )
+            })
+          )}
+
+        </div>
+
+        {/* 🎈 COLUNA DIREITA: APENAS O CARD DE ANIVERSARIANTES DO MÊS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          
+          {/* 🎉 CARD DE ANIVERSARIANTES DO MÊS */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            style={{
+              background: '#fff',
+              borderRadius: 24,
+              padding: '22px',
+              boxShadow: '0 15px 35px rgba(236, 72, 153, 0.08)',
+              border: '1px solid rgba(236, 72, 153, 0.15)',
+              position: 'relative',
+              overflow: 'hidden'
             }}
           >
-            <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, background: 'rgba(99, 102, 241, 0.03)', borderRadius: '50%' }} />
-            
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            {/* Header Decorative Background */}
+            <div style={{
+              margin: '-22px -22px 18px -22px',
+              padding: '18px 22px',
+              background: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 8px 16px rgba(99, 102, 241, 0.2)' }}>
-                   <CalendarIcon size={20} />
+                <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={20} />
                 </div>
                 <div>
-                  <div style={{ fontWeight: 900, fontSize: 17, color: '#1e293b', fontFamily: 'Outfit, sans-serif' }}>
-                    {selectedDay ? `${parseInt(selectedDay.split('-')[2])} de ${MESES[parseInt(selectedDay.split('-')[1]) - 1]}` : 'Agenda do Dia'}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{selectedEvents.length} compromisso(s)</div>
+                  <h3 style={{ fontSize: 16, fontWeight: 900, margin: 0, lineHeight: 1.2 }}>Aniversários do Mês</h3>
+                  <span style={{ fontSize: 11, opacity: 0.9, fontWeight: 600 }}>{MESES[month]}</span>
                 </div>
+              </div>
+              <div style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.25)', borderRadius: 12, fontSize: 12, fontWeight: 900 }}>
+                {aniversariantes.length}
               </div>
             </div>
 
-            {selectedEvents.length === 0 ? (
-              <div style={{ padding: '40px 0', textAlign: 'center' }}>
-                <div style={{ fontSize: 40, marginBottom: 10 }}>☁️</div>
-                <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>{selectedDay ? 'Nenhum evento para este dia' : 'Selecione um dia no calendário'}</div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {selectedEvents.map((ev, idx) => (
-                  <motion.div 
-                    initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.05 }}
-                    key={ev.id} 
-                    style={{ 
+            {/* List of Birthdays */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 450, overflowY: 'auto', paddingRight: 2 }} className="ad-date-strip-scroll">
+              {loadingNivers ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 12, color: '#94a3b8' }}>Carregando aniversariantes...</div>
+              ) : aniversariantes.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px 10px' }}>
+                  <div style={{ fontSize: 32, marginBottom: 6 }}>🎈</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#64748b' }}>Nenhum aniversariante neste mês</div>
+                </div>
+              ) : (
+                aniversariantes.map((p, idx) => (
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    key={p.id || idx}
+                    style={{
                       display: 'flex',
+                      gap: 12,
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      background: (ev.cor ?? TIPO_CORES[ev.tipo]) + '08',
-                      borderRadius: 12,
-                      border: `1px solid ${(ev.cor ?? TIPO_CORES[ev.tipo]) + '15'}`,
-                      marginBottom: idx === selectedEvents.length - 1 ? 0 : 8,
-                      gap: 16
+                      padding: '10px 14px',
+                      borderRadius: 16,
+                      background: p.isProximo ? 'linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(244, 63, 94, 0.04) 100%)' : '#f8fafc',
+                      border: p.isProximo ? '1.5px solid rgba(236, 72, 153, 0.3)' : '1px solid #f1f5f9'
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0 }}>
-                      {/* Event Color Dot */}
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: ev.cor ?? TIPO_CORES[ev.tipo], flexShrink: 0 }} />
-                      
-                      {/* Time */}
-                      <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', background: '#f8fafc', padding: '4px 8px', borderRadius: 6, minWidth: 100, textAlign: 'center', flexShrink: 0 }}>
-                        {(ev as any).diaTodo ? '☀️ Dia Todo' : `${ev.horaInicio || '00:00'}${ev.horaFim ? ` - ${ev.horaFim}` : ''}`}
-                      </span>
+                    {/* Avatar */}
+                    <div style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: '50%',
+                      flexShrink: 0,
+                      background: p.foto ? `url(${p.foto}) center/cover` : 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 13,
+                      fontWeight: 900,
+                      boxShadow: '0 4px 10px rgba(236, 72, 153, 0.2)',
+                      border: p.isProximo ? '2px solid #ec4899' : '2px solid #fff'
+                    }}>
+                      {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
+                    </div>
 
-                      {/* Title & Local */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.titulo}</span>
-                          <span style={{ fontSize: 10, fontWeight: 900, color: ev.cor ?? TIPO_CORES[ev.tipo], textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0 }}>
-                            {TIPO_LABELS[ev.tipo]}
-                          </span>
-                        </div>
-                        {ev.local && (
-                          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                            <span>📍 {ev.local}</span>
-                          </div>
-                        )}
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {p.nome}
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>
+                        {p.tipo}
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleEdit(ev); }}
-                        style={{ width: 28, height: 28, borderRadius: 8, background: '#f1f5f9', border: 'none', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
-                        onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
-                      >
-                        <Edit2 size={12} />
-                      </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleDelete(ev.id); }}
-                        style={{ width: 28, height: 28, borderRadius: 8, background: '#fff1f2', border: 'none', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#ffe4e6'}
-                        onMouseLeave={e => e.currentTarget.style.background = '#fff1f2'}
-                      >
-                        <X size={12} />
-                      </button>
+                    {/* Day Badge */}
+                    <div style={{
+                      padding: '6px 10px',
+                      borderRadius: 12,
+                      background: p.isProximo ? '#ec4899' : '#fff',
+                      color: p.isProximo ? '#fff' : '#1e293b',
+                      border: p.isProximo ? 'none' : '1px solid #e2e8f0',
+                      textAlign: 'center',
+                      flexShrink: 0,
+                      boxShadow: p.isProximo ? '0 6px 12px rgba(236,72,153,0.3)' : 'none'
+                    }}>
+                      <div style={{ fontSize: 9, fontWeight: 800, opacity: 0.8, textTransform: 'uppercase' }}>
+                        {p.isProximo ? 'É HOJE' : 'DIA'}
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 900, lineHeight: 1 }}>
+                        {p.dia}
+                      </div>
                     </div>
                   </motion.div>
-                ))}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </motion.div>
 
-          {/* 🚀 Seção Lado a Lado: Aniversariantes & Próximos */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-            
-            {/* 📅 Próximos Eventos */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1 }}
-              className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                  <CalendarIcon size={16} />
-                </div>
-                <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b' }}>Próximos Compromissos</span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-                {proximosEventos.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Sem eventos futuros</div>
-                ) : (
-                  proximosEventos.map((ev, idx) => {
-                    const [y, m, d] = ev.data.split('-')
-                    return (
-                      <motion.div 
-                        whileHover={{ x: 5 }}
-                        key={ev.id} 
-                        style={{ 
-                          display: 'flex', gap: 10, alignItems: 'center', padding: '10px', 
-                          borderRadius: 16, background: '#f8fafc', border: '1px solid transparent'
-                        }}
-                      >
-                        <div style={{ 
-                          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                          background: (ev.cor ?? TIPO_CORES[ev.tipo]) + '15',
-                          color: ev.cor ?? TIPO_CORES[ev.tipo],
-                          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900
-                        }}>
-                          <span>{d}</span>
-                          <span style={{ fontSize: 8 }}>{MESES[parseInt(m)-1].slice(0,3)}</span>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 800, color: '#334155', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.titulo}</div>
-                          <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>{TIPO_LABELS[ev.tipo]}</div>
-                        </div>
-                      </motion.div>
-                    )
-                  })
-                )}
-              </div>
-            </motion.div>
-
-            {/* 🎉 Aniversariantes */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
-              className="card" style={{ padding: '20px', borderRadius: 28, background: '#fff', boxShadow: '0 15px 35px rgba(0,0,0,0.03)', border: '1px solid #f1f5f9' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                  <Sparkles size={16} />
-                </div>
-                <span style={{ fontWeight: 800, fontSize: 14, color: '#1e293b' }}>Aniversários do Mês</span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-                {loadingNivers ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
-                ) : aniversariantes.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '20px', fontSize: 11, color: '#94a3b8' }}>Ninguém este mês 🎈</div>
-                ) : (
-                  aniversariantes.map((p, idx) => (
-                    <motion.div 
-                      whileHover={{ x: 5 }}
-                      key={p.id || idx}
-                      style={{ 
-                        display: 'flex', gap: 14, alignItems: 'center', padding: '12px 16px', 
-                        borderRadius: 22, background: p.isProximo ? 'rgba(236, 72, 153, 0.04)' : '#f8fafc',
-                        border: p.isProximo ? '1.5px solid rgba(236, 72, 153, 0.15)' : '1.5px solid transparent',
-                        boxShadow: p.isProximo ? '0 8px 20px rgba(236, 72, 153, 0.05)' : 'none'
-                      }}
-                    >
-                      <div style={{ 
-                        width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
-                        background: p.foto ? `url(${p.foto}) center/cover` : '#fff',
-                        border: p.isProximo ? '2.5px solid #ec4899' : '2.5px solid #e2e8f0',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#64748b',
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
-                      }}>
-                        {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
-                      </div>
-                      
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'Outfit, sans-serif' }}>{p.nome}</div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>{p.tipo}</div>
-                      </div>
-
-                      <div style={{ 
-                        width: 54, height: 54, borderRadius: 18, flexShrink: 0,
-                        background: p.isProximo ? '#ec4899' : '#fff',
-                        border: p.isProximo ? 'none' : '1.5px solid #e2e8f0',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: p.isProximo ? '0 10px 20px rgba(236, 72, 153, 0.25)' : '0 4px 10px rgba(0,0,0,0.03)'
-                      }}>
-                        <span style={{ fontSize: 9, fontWeight: 900, color: p.isProximo ? 'rgba(255,255,255,0.8)' : '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>Dia</span>
-                        <span style={{ fontSize: 18, fontWeight: 900, color: p.isProximo ? '#fff' : '#1e293b', lineHeight: 1 }}>{p.dia}</span>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
-              </div>
-            </motion.div>
-
-          </div>
         </div>
+
       </div>
 
       {showModal && (

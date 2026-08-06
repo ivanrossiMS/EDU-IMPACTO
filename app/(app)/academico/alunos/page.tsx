@@ -2147,16 +2147,16 @@ export default function AlunosPage() {
                               {isIntegralInt && (
                                 <div>
                                   <span style={{ 
-                                    background: '#dbeafe', 
-                                    color: '#1d4ed8', 
+                                    background: '#f3e8ff', 
+                                    color: '#6b21a8', 
                                     fontSize: 10, 
                                     fontWeight: 700, 
                                     padding: '2px 8px', 
                                     borderRadius: 6, 
-                                    border: '1px solid #bfdbfe',
+                                    border: '1px solid #e9d5ff',
                                     textTransform: 'uppercase',
                                     display: 'inline-block'
-                                  }}>
+                                }}>
                                     INTEGRAL/INTERMEDIÁRIO
                                   </span>
                                 </div>

@@ -5,7 +5,7 @@ import {
   Users, Search, Plus, Filter, 
   School, Calendar, BookOpen, 
   ChevronLeft, ChevronRight, Edit, Trash2,
-  FileSpreadsheet, AlertTriangle, X, Sparkles
+  FileSpreadsheet, AlertTriangle, X, Sparkles, ArrowUpDown, Printer
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
@@ -13,6 +13,20 @@ import { UpdatingIndicator } from '@/components/skeletons/States'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import ImportarTurmasModal from '@/components/turmas/ImportarTurmasModal'
+
+const getTurnoBadgeStyle = (turno: string) => {
+  const t = (turno || '').toLowerCase()
+  if (t.includes('integral') || t.includes('intermediario') || t.includes('intermediário')) {
+    return { background: '#f3e8ff', color: '#6b21a8' }
+  }
+  if (t.includes('matutino') || t.includes('manha') || t.includes('manhã')) {
+    return { background: '#dbeafe', color: '#1e40af' }
+  }
+  if (t.includes('vespertino') || t.includes('tarde')) {
+    return { background: '#fef3c7', color: '#b45309' }
+  }
+  return { background: '#fef3c7', color: '#b45309' }
+}
 
 export default function TurmasPage() {
   const { cfgNiveisEnsino, cfgTurnos, cfgCalendarioLetivo, logSystemAction } = useData()
@@ -35,6 +49,8 @@ export default function TurmasPage() {
   const [alunosIntegralList, setAlunosIntegralList] = useState<any[]>([])
   const [loadingIntegralAlunos, setLoadingIntegralAlunos] = useState(false)
   const [searchIntegralModal, setSearchIntegralModal] = useState('')
+  const [sortIntegralField, setSortIntegralField] = useState<'nome' | 'turma'>('nome')
+  const [sortIntegralOrder, setSortIntegralOrder] = useState<'asc' | 'desc'>('asc')
   
   const [turmaToDelete, setTurmaToDelete] = useState<any>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -281,14 +297,286 @@ export default function TurmasPage() {
     }
   }
 
-  const filteredIntegralAlunos = alunosIntegralList.filter((aluno: any) => {
-    if (!searchIntegralModal.trim()) return true
-    const q = searchIntegralModal.toLowerCase()
-    const nomeMatch = (aluno.nome || '').toLowerCase().includes(q)
-    const matriculaMatch = (aluno.matricula || aluno.id || '').toString().toLowerCase().includes(q)
-    const turmaMatch = (aluno.turma_nome || aluno.turma || '').toLowerCase().includes(q)
-    return nomeMatch || matriculaMatch || turmaMatch
-  })
+  const filteredIntegralAlunos = alunosIntegralList
+    .filter((aluno: any) => {
+      if (!searchIntegralModal.trim()) return true
+      const q = searchIntegralModal.toLowerCase()
+      const nomeMatch = (aluno.nome || '').toLowerCase().includes(q)
+      const matriculaMatch = (aluno.matricula || aluno.id || '').toString().toLowerCase().includes(q)
+      const turmaDisplay = aluno.turma_nome || turmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma || ''
+      const turmaMatch = turmaDisplay.toLowerCase().includes(q)
+      return nomeMatch || matriculaMatch || turmaMatch
+    })
+    .sort((a: any, b: any) => {
+      let comparison = 0
+      const turmaA = (a.turma_nome || turmas.find((t: any) => String(t.id) === String(a.turma))?.nome || a.turma || 'Sem Turma').toString()
+      const turmaB = (b.turma_nome || turmas.find((t: any) => String(t.id) === String(b.turma))?.nome || b.turma || 'Sem Turma').toString()
+      
+      if (sortIntegralField === 'turma') {
+        comparison = turmaA.localeCompare(turmaB, 'pt-BR', { numeric: true, sensitivity: 'base' })
+        if (comparison === 0) {
+          comparison = (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' })
+        }
+      } else {
+        comparison = (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' })
+        if (comparison === 0) {
+          comparison = turmaA.localeCompare(turmaB, 'pt-BR', { numeric: true, sensitivity: 'base' })
+        }
+      }
+      return sortIntegralOrder === 'asc' ? comparison : -comparison
+    })
+
+  const handlePrintIntegralAlunos = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+
+    const dataAtual = new Date().toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+
+    const ordenacaoTexto = sortIntegralField === 'turma'
+      ? `Turma / Série (${sortIntegralOrder === 'asc' ? 'A-Z' : 'Z-A'})`
+      : `Nome do Aluno (${sortIntegralOrder === 'asc' ? 'A-Z' : 'Z-A'})`
+
+    const buscaTexto = searchIntegralModal.trim() ? `"${searchIntegralModal}"` : 'Todos os Alunos'
+
+    const rowsHtml = filteredIntegralAlunos.map((aluno: any, index: number) => {
+      const turmaDisplay = aluno.turma_nome || turmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma || 'Sem Turma'
+
+      return `
+        <tr>
+          <td style="text-align: center; font-weight: 600; color: #64748b; font-size: 9px;">${index + 1}</td>
+          <td style="font-weight: 700; color: #334155; font-size: 9.5px;">${aluno.matricula || aluno.id || 'N/A'}</td>
+          <td style="font-weight: 700; color: #0f172a; font-size: 10px;">${aluno.nome || 'Sem Nome'}</td>
+          <td>
+            <span style="background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; padding: 1px 6px; border-radius: 4px; font-weight: 700; font-size: 9px; display: inline-block;">
+              ${turmaDisplay}
+            </span>
+          </td>
+          <td>
+            <span style="background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; padding: 1px 6px; border-radius: 8px; font-weight: 700; font-size: 9px; display: inline-block;">
+              Integral / Intermediário
+            </span>
+          </td>
+        </tr>
+      `
+    }).join('')
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>Relatório de Alunos Integral / Intermediário — Impacto EDU</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
+          }
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+            background: #fff;
+            margin: 0;
+            padding: 0;
+            font-size: 10px;
+            line-height: 1.3;
+          }
+          .header-container {
+            border-bottom: 2px solid #6d28d9;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+          }
+          .header-title h1 {
+            font-size: 17px;
+            font-weight: 900;
+            color: #5b21b6;
+            margin: 0 0 1px 0;
+            letter-spacing: -0.5px;
+          }
+          .header-title h2 {
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
+            margin: 0;
+          }
+          .header-meta {
+            text-align: right;
+            font-size: 9.5px;
+            color: #64748b;
+            line-height: 1.4;
+          }
+          .header-meta strong {
+            color: #0f172a;
+          }
+          .summary-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 6px 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+          }
+          .summary-item {
+            display: flex;
+            flex-direction: column;
+          }
+          .summary-label {
+            font-size: 8.5px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: #64748b;
+            letter-spacing: 0.5px;
+          }
+          .summary-value {
+            font-size: 11px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-top: 1px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 2px;
+          }
+          th {
+            background: #6d28d9;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 9.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 5px 8px;
+            text-align: left;
+            border: 1px solid #5b21b6;
+          }
+          td {
+            padding: 3.5px 8px;
+            border: 1px solid #e2e8f0;
+            font-size: 9.5px;
+            vertical-align: middle;
+          }
+          tr:nth-child(even) td {
+            background: #f8fafc;
+          }
+          tr {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .footer-note {
+            margin-top: 12px;
+            padding-top: 6px;
+            border-top: 1px solid #cbd5e1;
+            display: flex;
+            justify-content: space-between;
+            font-size: 8.5px;
+            color: #64748b;
+          }
+          .no-print-btn {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            background: #6d28d9;
+            color: white;
+            padding: 8px 14px;
+            border-radius: 6px;
+            border: none;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(109, 40, 217, 0.3);
+            z-index: 9999;
+          }
+          .no-print-btn:hover {
+            background: #5b21b6;
+          }
+          @media print {
+            .no-print-btn {
+              display: none !important;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <button class="no-print-btn" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+
+        <div class="header-container">
+          <div class="header-title">
+            <h1>IMPACTO EDU</h1>
+            <h2>Relatório de Alunos — Integral / Intermediário</h2>
+          </div>
+          <div class="header-meta">
+            <div>Emissão: <strong>${dataAtual}</strong></div>
+            <div>Sistema de Gestão Escolar</div>
+          </div>
+        </div>
+
+        <div class="summary-box">
+          <div class="summary-item">
+            <span class="summary-label">Total de Alunos</span>
+            <span class="summary-value" style="color: #6d28d9;">${filteredIntegralAlunos.length} Alunos</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Busca Aplicada</span>
+            <span class="summary-value">${buscaTexto}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Ordenação</span>
+            <span class="summary-value">${ordenacaoTexto}</span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Modalidade</span>
+            <span class="summary-value">Integral / Intermediário</span>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 25px; text-align: center;">#</th>
+              <th style="width: 75px;">Matrícula</th>
+              <th>Nome do Aluno</th>
+              <th style="width: 170px;">Turma / Série</th>
+              <th style="width: 140px;">Modalidade</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+
+        <div class="footer-note">
+          <span>Relatório gerado automaticamente via Sistema Impacto EDU</span>
+          <span>Impresso em ${dataAtual}</span>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          };
+        </script>
+      </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
 
 
   const totalPaginas = Math.ceil(totalItens / itensPorPagina)
@@ -506,7 +794,7 @@ export default function TurmasPage() {
                     </span>
                   </td>
                   <td style={{ padding: '14px 16px', fontSize: '13px', color: '#475569' }}>
-                    <span style={{ padding: '2px 8px', background: turma.turno === 'Matutino' ? '#dbeafe' : '#fef3c7', color: turma.turno === 'Matutino' ? '#1e40af' : '#b45309', borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
+                    <span style={{ padding: '2px 8px', ...getTurnoBadgeStyle(turma.turno), borderRadius: '12px', fontSize: '11px', fontWeight: 700 }}>
                       {turma.turno}
                     </span>
                   </td>
@@ -1104,8 +1392,8 @@ export default function TurmasPage() {
             </div>
 
             {/* Barra de Busca e Filtro interno do Modal */}
-            <div style={{ padding: '16px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ flex: 1, position: 'relative' }}>
+            <div style={{ padding: '16px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '200px', position: 'relative' }}>
                 <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                 <input 
                   type="text"
@@ -1116,7 +1404,90 @@ export default function TurmasPage() {
                   onChange={e => setSearchIntegralModal(e.target.value)}
                 />
               </div>
-              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+
+              {/* Seletor de Ordenação */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Ordenar:</span>
+                <select
+                  value={sortIntegralField}
+                  onChange={e => setSortIntegralField(e.target.value as 'nome' | 'turma')}
+                  style={{ 
+                    height: '38px', 
+                    padding: '0 10px', 
+                    borderRadius: '8px', 
+                    border: '1px solid #cbd5e1', 
+                    fontSize: '13px', 
+                    background: '#fff', 
+                    color: '#0f172a',
+                    fontWeight: 600,
+                    cursor: 'pointer' 
+                  }}
+                >
+                  <option value="nome">Nome</option>
+                  <option value="turma">Turma</option>
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => setSortIntegralOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                  title={`Ordem: ${sortIntegralOrder === 'asc' ? 'Crescente' : 'Decrescente'}`}
+                  style={{
+                    height: '38px',
+                    padding: '0 10px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#fff',
+                    color: '#6d28d9',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#f3e8ff'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                >
+                  <ArrowUpDown size={14} />
+                  <span>{sortIntegralOrder === 'asc' ? 'A-Z' : 'Z-A'}</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePrintIntegralAlunos}
+                title="Imprimir ou Salvar em PDF"
+                style={{
+                  height: '38px',
+                  padding: '0 14px',
+                  borderRadius: '8px',
+                  border: '1px solid #c084fc',
+                  background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(109, 40, 217, 0.25)',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(109, 40, 217, 0.35)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(109, 40, 217, 0.25)'
+                }}
+              >
+                <Printer size={15} color="#fff" />
+                <span>Imprimir / PDF</span>
+              </button>
+
+              <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap', marginLeft: 'auto' }}>
                 {filteredIntegralAlunos.length} de {alunosIntegralList.length} alunos
               </div>
             </div>
@@ -1137,7 +1508,7 @@ export default function TurmasPage() {
                   </p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {filteredIntegralAlunos.map((aluno: any) => {
                     const turmaDisplay = aluno.turma_nome || turmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma || 'Sem Turma';
                     return (
@@ -1147,12 +1518,12 @@ export default function TurmasPage() {
                           display: 'flex', 
                           justifyContent: 'space-between', 
                           alignItems: 'center', 
-                          padding: '12px 16px', 
+                          padding: '8px 14px', 
                           border: '1px solid #e2e8f0', 
-                          borderRadius: '12px', 
+                          borderRadius: '10px', 
                           background: '#ffffff', 
                           transition: 'all 0.2s ease',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
                         }} 
                         onMouseEnter={e => {
                           e.currentTarget.style.background = '#faf5ff';
@@ -1164,10 +1535,10 @@ export default function TurmasPage() {
                         }}
                       >
                         {/* Aluno (Foto + Nome + Matrícula) */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1.5 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1.5 }}>
                           <div style={{ 
-                            width: '44px', 
-                            height: '44px', 
+                            width: '38px', 
+                            height: '38px', 
                             borderRadius: '50%', 
                             background: aluno.foto ? `url(${aluno.foto}) center/cover` : 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)', 
                             display: 'flex', 
@@ -1175,61 +1546,83 @@ export default function TurmasPage() {
                             justifyContent: 'center', 
                             color: '#fff', 
                             fontWeight: 700, 
-                            fontSize: '16px',
+                            fontSize: '14px',
                             flexShrink: 0
                           }}>
                             {!aluno.foto && (aluno.nome ? aluno.nome.charAt(0).toUpperCase() : 'A')}
                           </div>
                           <div>
-                            <p style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', margin: 0 }}>{aluno.nome}</p>
-                            <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 0 0' }}>
+                            <p 
+                              onClick={() => {
+                                if (sortIntegralField === 'nome') {
+                                  setSortIntegralOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+                                } else {
+                                  setSortIntegralField('nome')
+                                  setSortIntegralOrder('asc')
+                                }
+                              }}
+                              title="Clique para ordenar por Nome"
+                              style={{ 
+                                fontSize: '13px', 
+                                fontWeight: 700, 
+                                color: sortIntegralField === 'nome' ? '#6d28d9' : '#0f172a', 
+                                margin: 0,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {aluno.nome}
+                            </p>
+                            <p style={{ fontSize: '11px', color: '#64748b', margin: '1px 0 0 0' }}>
                               Matrícula: <span style={{ fontWeight: 600, color: '#475569' }}>{aluno.matricula || aluno.id}</span>
                             </p>
                           </div>
                         </div>
 
                         {/* Turma do Aluno */}
-                        <div style={{ flex: 1.2, padding: '0 12px' }}>
-                          <span style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '2px', fontWeight: 600 }}>Turma / Série</span>
-                          <span style={{ 
-                            fontSize: '12px', 
-                            fontWeight: 700, 
-                            color: '#1e40af', 
-                            background: '#eff6ff', 
-                            padding: '3px 10px', 
-                            borderRadius: '6px', 
-                            border: '1px solid #bfdbfe',
-                            display: 'inline-block' 
-                          }}>
+                        <div style={{ flex: 1.2, padding: '0 10px' }}>
+                          <span style={{ fontSize: '10px', color: '#64748b', display: 'block', marginBottom: '1px', fontWeight: 600 }}>Turma / Série</span>
+                          <span 
+                            onClick={() => {
+                              if (sortIntegralField === 'turma') {
+                                setSortIntegralOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+                              } else {
+                                setSortIntegralField('turma')
+                                setSortIntegralOrder('asc')
+                              }
+                            }}
+                            title="Clique para ordenar por Turma"
+                            style={{ 
+                              fontSize: '11px', 
+                              fontWeight: 700, 
+                              color: sortIntegralField === 'turma' ? '#1d4ed8' : '#1e40af', 
+                              background: sortIntegralField === 'turma' ? '#dbeafe' : '#eff6ff', 
+                              padding: '2px 8px', 
+                              borderRadius: '5px', 
+                              border: sortIntegralField === 'turma' ? '1px solid #93c5fd' : '1px solid #bfdbfe',
+                              display: 'inline-block',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease' 
+                            }}
+                          >
                             {turmaDisplay}
                           </span>
                         </div>
 
-                        {/* Badge Modalidade & Status */}
+                        {/* Badge Modalidade */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ 
-                            padding: '3px 10px', 
+                            padding: '2px 8px', 
                             background: '#f3e8ff', 
                             color: '#7e22ce', 
-                            borderRadius: '20px', 
-                            fontSize: '11px', 
+                            borderRadius: '16px', 
+                            fontSize: '10.5px', 
                             fontWeight: 700,
                             border: '1px solid #e9d5ff',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '4px'
                           }}>
-                            <Sparkles size={12} /> Integral / Intermediário
-                          </span>
-                          <span style={{ 
-                            padding: '3px 8px', 
-                            background: (aluno.status === 'inativo' || aluno.status === 'Inativo') ? '#fef2f2' : '#dcfce7', 
-                            color: (aluno.status === 'inativo' || aluno.status === 'Inativo') ? '#991b1b' : '#15803d', 
-                            borderRadius: '12px', 
-                            fontSize: '11px', 
-                            fontWeight: 700 
-                          }}>
-                            {aluno.status || 'Ativo'}
+                            <Sparkles size={11} /> Integral / Intermediário
                           </span>
                         </div>
                       </div>
@@ -1239,17 +1632,25 @@ export default function TurmasPage() {
               )}
             </div>
 
-            {/* Footer com resumo e botão Fechar */}
+            {/* Footer com resumo e botões */}
             <div style={{ padding: '16px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '13px', color: '#475569', fontWeight: 600 }}>
                 Total de alunos no Integral / Intermediário: <strong style={{ color: '#6d28d9' }}>{alunosIntegralList.length}</strong>
               </span>
-              <button 
-                onClick={() => setIsIntegralModalOpen(false)}
-                style={{ height: '38px', padding: '0 24px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: '#334155', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-              >
-                Fechar
-              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  onClick={handlePrintIntegralAlunos}
+                  style={{ height: '38px', padding: '0 18px', borderRadius: '8px', border: '1px solid #c084fc', background: '#f3e8ff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: '#6d28d9', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Printer size={15} /> Imprimir / PDF
+                </button>
+                <button 
+                  onClick={() => setIsIntegralModalOpen(false)}
+                  style={{ height: '38px', padding: '0 24px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: '#334155', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
 
           </div>
@@ -1355,8 +1756,7 @@ export default function TurmasPage() {
                 </span>
                 <span style={{
                   padding: '3px 10px',
-                  background: turmaToDelete.turno === 'Matutino' ? '#dbeafe' : '#fef3c7',
-                  color: turmaToDelete.turno === 'Matutino' ? '#1e40af' : '#b45309',
+                  ...getTurnoBadgeStyle(turmaToDelete.turno),
                   borderRadius: '20px',
                   fontSize: '11px',
                   fontWeight: 700
