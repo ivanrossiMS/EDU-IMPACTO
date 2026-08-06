@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { SyncAcessosModal } from '@/components/portaria/SyncAcessosModal'
 
 const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; border: string; glow: string }> = {
@@ -405,131 +406,58 @@ function renderRegrasModal(isOpen: boolean, onClose: () => void) {
         {/* Conteúdo do Modal */}
         <div style={{ padding: '32px', maxHeight: '70vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
-          {/* Regra Educação Infantil & Fund I */}
+          {/* Sistema Unificado de Lançamento */}
           <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '20px', borderRadius: '16px' }}>
             <h4 style={{ margin: '0 0 10px 0', color: '#16a34a', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ background: '#10b981', color: '#fff', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>EI</span>
-              Educação Infantil e Ensino Fundamental I
+              <span style={{ background: '#10b981', color: '#fff', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>1</span>
+              Lançamento Unificado de Frequência (1-Clique)
             </h4>
             <ul style={{ margin: '0 0 16px 0', paddingLeft: '20px', fontSize: '13px', color: '#14532d', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <li>
-                <strong>Métrica Diária:</strong> As faltas são calculadas por <strong>dia letivo completo</strong> (não por períodos individuais).
+                <strong>Métrica Diária Simplificada:</strong> A frequência é gerenciada por <strong>dia letivo</strong> utilizando o botão único de 1-Clique para todos os segmentos escolares.
               </li>
               <li>
-                <strong>Tolerância de Atraso:</strong> Até <strong>07:20 (Matutino)</strong> ou <strong>13:20 (Vespertino)</strong> = Presente no 1º tempo. Até <strong>07:50 / 13:50</strong> = Falta no 1º tempo, Presente no restante.
+                <strong>Estados de Frequência:</strong>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+                  <span style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>PRESENTE (P)</span>
+                  <span style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>FALTOSO (F)</span>
+                  <span style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>JUSTIFICADO (J)</span>
+                  <span style={{ background: '#f8fafc', color: '#64748b', border: '1px dashed #cbd5e1', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 800 }}>DEFINIR FREQUÊNCIA (-)</span>
+                </div>
               </li>
               <li>
-                <strong>Falta no 1º e 2º tempos:</strong> Atrasos após 07:50 ou 13:50 (ou falta consecutiva nos dois primeiros tempos) configuram <strong>Falta no dia completo</strong>.
+                <strong>Horário de Entrada:</strong> Quando marcado como <code>PRESENTE</code>, o sistema registra automaticamente o horário de entrada (suportando Biometria iDFace, Totem ou Lançamento Manual) e permite edição manual com clique simples no badge de horário.
               </li>
             </ul>
-
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: '200px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Educação Infantil</span>
-                <div style={{ marginTop: '8px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>Matutino</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#047857', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>7h - 8h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>8h - 9h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>9h - 10h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>10h - 11h</strong></div>
-                  </div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>Vespertino</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#047857' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>13h - 14h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>14h - 15h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>15h - 16h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>16h - 17h</strong></div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ flex: 1, minWidth: '200px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #d1fae5' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ensino Fundamental I</span>
-                <div style={{ marginTop: '8px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>Matutino</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#047857', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>7h - 8h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>8h - 9h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>9h20 - 10h20</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>10h20 - 11h20</strong></div>
-                  </div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#16a34a', marginBottom: '4px' }}>Vespertino</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#047857' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>13h - 14h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>14h - 15h</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>15h20 - 16h20</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>16h20 - 17h20</strong></div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Regra Fund II & Ensino Médio */}
-          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '20px', borderRadius: '16px' }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#2563eb', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ background: '#3b82f6', color: '#fff', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>EM</span>
-              Ensino Fundamental II e Ensino Médio
+          {/* Sistema de Registro de Saída */}
+          <div style={{ background: '#fdf4ff', border: '1px solid #f5d0fe', padding: '20px', borderRadius: '16px' }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#c026d3', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ background: '#c026d3', color: '#fff', width: '22px', height: '22px', borderRadius: '50%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 900 }}>2</span>
+              Registro de Saída e Retirada de Alunos
             </h4>
-            <ul style={{ margin: '0 0 16px 0', paddingLeft: '20px', fontSize: '13px', color: '#1e3a8a', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <ul style={{ margin: '0 0 0 0', paddingLeft: '20px', fontSize: '13px', color: '#701a75', lineHeight: '1.6', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <li>
-                <strong>Métrica por Período:</strong> Cada tempo de aula ausente soma exatamente <strong>uma falta individual</strong> e reduz proporcionalmente a frequência (%).
+                <strong>Botão Registrar Saída:</strong> Disponível no Diário de Frequência para todos os alunos que estiverem presentes.
               </li>
               <li>
-                <strong>Tolerância de Atraso:</strong> Mesma tolerância de 20min (Presente no 1º) e 50min (Falta no 1º, Presente nos demais).
+                <strong>Controle de Responsáveis Autorizados:</strong> Abre o modal interativo com verificação em tempo real dos responsáveis autorizados na ficha do aluno (destacando <code>🟢 PERMITIDO</code> e bloqueando restritos <code>🔴 PROIBIDO RETIRAR</code>).
               </li>
               <li>
-                <strong>Regra de Bloqueio Consecutivo:</strong> Se o aluno tiver falta tanto no <strong>1º quanto no 2º tempo</strong> (atraso &gt; 50min), todos os tempos subsequentes daquele dia são automaticamente marcados como falta.
+                <strong>Sincronização em Tempo Real:</strong> A confirmação da saída dispara eventos em tempo real para o módulo de <strong>/chamadas</strong> e para o monitor de portaria/TV da escola.
               </li>
             </ul>
-
-            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: '200px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #dbeafe' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ensino Fundamental II</span>
-                <div style={{ marginTop: '8px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', marginBottom: '4px' }}>Matutino</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#1e40af', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>7h - 7h50</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>7h50 - 8h40</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>8h40 - 9h30</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>9h50 - 10h40</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>5º tempo:</span> <strong>10h40 - 11h30</strong></div>
-                  </div>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', marginBottom: '4px' }}>Vespertino</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#1e40af' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>13h - 13h50</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>13h50 - 14h40</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>14h40 - 15h30</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>15h50 - 16h40</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>5º tempo:</span> <strong>16h40 - 17h30</strong></div>
-                  </div>
-                </div>
-              </div>
-              <div style={{ flex: 1, minWidth: '200px', background: '#fff', padding: '12px', borderRadius: '12px', border: '1px solid #dbeafe' }}>
-                <span style={{ fontSize: '11px', fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ensino Médio</span>
-                <div style={{ marginTop: '8px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', marginBottom: '4px' }}>Matutino (Integral)</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '11px', color: '#1e40af' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>1º tempo:</span> <strong>7h - 7h50</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>2º tempo:</span> <strong>7h50 - 8h40</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>3º tempo:</span> <strong>8h55 - 9h45</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>4º tempo:</span> <strong>9h45 - 10h35</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>5º tempo:</span> <strong>10h50 - 11h40</strong></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>6º tempo:</span> <strong>11h40 - 12h30</strong></div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* Regra Geral / Justificativa */}
+          {/* Ausências Justificadas */}
           <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '20px', borderRadius: '16px' }}>
             <h4 style={{ margin: '0 0 10px 0', color: '#d97706', fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Shield size={16} />
-              Ausências Justificadas (J)
+              Ausências Justificadas (J) e Frequência Total (%)
             </h4>
             <p style={{ margin: 0, fontSize: '13px', color: '#78350f', lineHeight: '1.6' }}>
-              Qualquer tempo marcado como <strong>Justificada (J)</strong> é desconsiderado na contagem de faltas daquele dia, ou seja, o aluno é dispensado do tempo e a falta <strong>não prejudica a porcentagem (%)</strong> de presença geral.
+              Qualquer ausência marcada como <strong>Justificada (J)</strong> é abonada, significando que a falta <strong>não penaliza o percentual (%) da Frequência Total</strong> do aluno. Faltas não justificadas (F) reduzem proporcionalmente a frequência global acumulada.
             </p>
           </div>
 
@@ -961,18 +889,10 @@ export default function FrequenciaPage() {
 
   const alunosDaTurma = useMemo(() => {
     if (!turmaSel) return []
-    const tId = turmaObj?.id ? String(turmaObj.id) : String(turmaSel)
-    const tCod = turmaObj?.codigo ? String(turmaObj.codigo) : ''
-    const tNome = turmaObj?.nome ? String(turmaObj.nome).toLowerCase() : ''
+    const targetTurma = turmaObj || turmas.find(t => String(t.id) === String(turmaSel) || String(t.codigo) === String(turmaSel) || String(t.nome) === String(turmaSel)) || turmaSel
 
     const lista = alunos.filter((a: any) => {
-      const aTurma = String(a.turma || a.turma_id || a.dados?.turma || '').trim()
-      const aTurmaNome = String(a.turma_nome || '').trim().toLowerCase()
-      
-      if (aTurma === tId || (tCod && aTurma === tCod)) return true
-      if (aTurma.toLowerCase() === tNome || (tNome && aTurmaNome === tNome)) return true
-      if (String(aTurma) === String(turmaSel)) return true
-      return false
+      return isAlunoCursandoTurma(a, targetTurma, undefined, turmas)
     })
     const ordenados = ordenarPorChamada(lista)
     return ordenados.map((aluno: any) => {
@@ -983,7 +903,7 @@ export default function FrequenciaPage() {
         horaRegistro: freqRecord?.dados?.horaRegistro || freqRecord?.horaRegistro || null
       }
     })
-  }, [alunos, turmaSel, turmaObj, ordenarPorChamada, freqTurma, dataSel])
+  }, [alunos, turmaSel, turmaObj, turmas, ordenarPorChamada, freqTurma, dataSel])
   
   const alunosFiltrados = useMemo(() => !buscaAluno ? alunosDaTurma : alunosDaTurma.filter((a: any) => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())), [alunosDaTurma, buscaAluno])
 
@@ -3569,34 +3489,48 @@ export default function FrequenciaPage() {
     return (
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)',
-        zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)',
+        zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+        animation: 'fadeIn 0.2s ease-out'
       }}>
         <div style={{
-          background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '900px', maxHeight: '90vh',
-          display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden'
+          background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '940px', maxHeight: '90vh',
+          display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid #e2e8f0', overflow: 'hidden'
         }}>
           {/* Header do Modal */}
-          <div style={{ padding: '24px 32px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{
+            padding: '24px 32px', borderBottom: '1px solid #f1f5f9',
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#fff',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{ background: '#fef3c7', color: '#d97706', width: '48px', height: '48px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#fff', width: '48px', height: '48px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)' }}>
                 <Users size={24} />
               </div>
               <div>
-                <h2 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: 800, color: '#0f172a' }}>Registrar Não Identificados</h2>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748b' }}>Registre faltas ou presenças manualmente para os alunos sem biometria</p>
+                <h2 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontSize: '22px', fontWeight: 900, color: '#fff', letterSpacing: '-0.5px' }}>
+                  Registrar Não Identificados
+                </h2>
+                <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#cbd5e1', fontWeight: 500 }}>
+                  Lançamento manual de frequência para alunos sem biometria
+                </p>
               </div>
             </div>
-            <button onClick={() => setShowRegistroManualModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', color: '#94a3b8' }}>
-              <X size={24} />
+            <button
+              onClick={() => setShowRegistroManualModal(false)}
+              style={{ background: 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', padding: '8px', borderRadius: '10px', color: '#fff', transition: 'all 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+            >
+              <X size={20} />
             </button>
           </div>
 
           {/* Barra de Filtros Interna */}
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', width: '100%', background: '#fafaf9' }}>
+          <div style={{ padding: '14px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', width: '100%', background: '#f8fafc' }}>
             <select
               className="form-input"
-              style={{ width: '100px', height: '34px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+              style={{ width: '110px', height: '38px', borderRadius: '10px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '13px', fontWeight: 600, padding: '0 10px', color: '#0f172a' }}
               value={registroManualAno}
               onChange={e => setRegistroManualAno(e.target.value)}
             >
@@ -3607,14 +3541,14 @@ export default function FrequenciaPage() {
             <input
               type="date"
               className="form-input"
-              style={{ width: '120px', height: '34px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+              style={{ width: '140px', height: '38px', borderRadius: '10px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '13px', fontWeight: 600, padding: '0 10px', color: '#0f172a' }}
               value={registroManualData}
               onChange={e => setRegistroManualData(e.target.value)}
             />
 
             <select
               className="form-input"
-              style={{ width: '110px', height: '34px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px', padding: '0 8px', margin: 0 }}
+              style={{ width: '130px', height: '38px', borderRadius: '10px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '13px', fontWeight: 600, padding: '0 10px', color: '#0f172a' }}
               value={registroManualTurno}
               onChange={e => setRegistroManualTurno(e.target.value)}
             >
@@ -3625,28 +3559,29 @@ export default function FrequenciaPage() {
               <option value="Integral">Integral</option>
             </select>
 
-            <div style={{ position: 'relative', flex: 1 }}>
-              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input
                 className="form-input"
-                style={{ paddingLeft: '30px', height: '34px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', fontSize: '12px', width: '100%', margin: 0 }}
+                style={{ paddingLeft: '36px', height: '38px', borderRadius: '10px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '13px', fontWeight: 600, width: '100%', color: '#0f172a' }}
                 placeholder="Buscar aluno, ID ou turma..."
                 value={buscaRegistroManual}
                 onChange={e => setBuscaRegistroManual(e.target.value)}
               />
             </div>
             
-            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, paddingLeft: '12px' }}>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700, padding: '6px 12px', background: '#e2e8f0', borderRadius: '20px' }}>
               Exibindo {filteredAbsentees.length} alunos
-            </div>
+            </span>
           </div>
 
-          {/* Lista de Alunos e Tempos */}
-          <div style={{ padding: '20px 16px', overflowY: 'auto', flex: 1 }}>
+          {/* Lista de Alunos em Cards Ultra Modernos */}
+          <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '24px', background: '#fff' }}>
             {filteredAbsentees.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748b' }}>
-                <Users size={48} style={{ color: '#cbd5e1', marginBottom: '12px' }} />
-                <p style={{ margin: 0, fontWeight: 600, fontSize: '15px' }}>Nenhum aluno faltando registro nesta data.</p>
+              <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
+                <Users size={56} style={{ color: '#cbd5e1', marginBottom: '16px' }} />
+                <h3 style={{ margin: '0 0 4px', fontWeight: 800, fontSize: '18px', color: '#334155' }}>Nenhum aluno pendente nesta data</h3>
+                <p style={{ margin: 0, fontSize: '13px', color: '#94a3b8' }}>Todos os alunos possuem registro ou a busca não retornou resultados.</p>
               </div>
             ) : (
               sortedTurmas.map(turmaNome => {
@@ -3657,114 +3592,182 @@ export default function FrequenciaPage() {
                 if (!schedule) return null
 
                 return (
-                  <div key={turmaNome} style={{ marginBottom: '24px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: '#f8fafc', borderRadius: '8px', marginBottom: '12px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 800, color: '#334155' }}>{turmaNome}</span>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', background: '#e2e8f0', color: '#475569', borderRadius: '12px' }}>
-                        {schedule.segmento}
-                      </span>
+                  <div key={turmaNome} style={{ background: '#f8fafc', borderRadius: '18px', border: '1px solid #e2e8f0', padding: '18px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                    {/* Header da Turma com Ações Rápidas */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0', flexWrap: 'wrap', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>{turmaNome}</span>
+                        <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 10px', background: '#2563eb', color: '#fff', borderRadius: '20px', textTransform: 'uppercase' }}>
+                          {schedule.segmento}
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>({turmaStudents.length} alunos)</span>
+                      </div>
+
+                      {/* Botões de Ação em Lote por Turma */}
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAbsencesManual(prev => {
+                              const copy = { ...prev }
+                              turmaStudents.forEach(aluno => {
+                                const newStudentTempos: Record<string, PresStatus> = {}
+                                schedule.tempos.forEach((t: any) => { newStudentTempos[t.id] = 'P' })
+                                copy[aluno.id] = newStudentTempos
+                                if (!horariosEntrada[aluno.id]?.[registroManualData]) {
+                                  const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                  setHorariosEntrada(p => ({
+                                    ...p,
+                                    [aluno.id]: { ...(p[aluno.id] || {}), [registroManualData]: nowT }
+                                  }))
+                                }
+                              })
+                              return copy
+                            })
+                          }}
+                          style={{ padding: '5px 12px', fontSize: '11px', fontWeight: 800, background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#bbf7d0'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#dcfce7'}
+                        >
+                          + Presença Geral (Turma)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAbsencesManual(prev => {
+                              const copy = { ...prev }
+                              turmaStudents.forEach(aluno => {
+                                const newStudentTempos: Record<string, PresStatus> = {}
+                                schedule.tempos.forEach((t: any) => { newStudentTempos[t.id] = 'F' })
+                                copy[aluno.id] = newStudentTempos
+                              })
+                              return copy
+                            })
+                          }}
+                          style={{ padding: '5px 12px', fontSize: '11px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#fecaca'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#fee2e2'}
+                        >
+                          + Falta Geral (Turma)
+                        </button>
+                      </div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* Cards de Alunos da Turma */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       {turmaStudents.map(aluno => {
                         const existingFreq = allFreqs?.find(f => String(f.aluno_id) === String(aluno.id) && String(f.data).startsWith(registroManualData))
                         const infoOrigem = getOrigemFrequenciaCompleta(aluno.id, registroManualData, existingFreq, portariaEventsList, saidaCallsList)
                         
+                        let currentStatus: PresStatus = '-'
+                        if (absencesManual[aluno.id] && absencesManual[aluno.id]['1']) {
+                          currentStatus = absencesManual[aluno.id]['1']
+                        } else if (existingFreq && existingFreq.tempos) {
+                          currentStatus = existingFreq.tempos['1'] || '-'
+                        } else if (existingFreq && !existingFreq.tempos) {
+                          currentStatus = existingFreq.justificativa === 'Justificada' ? 'J' : (existingFreq.presente ? 'P' : 'F')
+                        }
+
+                        const currentEntrada = horariosEntrada[aluno.id]?.[registroManualData] || (infoOrigem.entrada?.horario ? infoOrigem.entrada.horario : '')
+                        const isEditingThisEntrada = editingEntrada?.alunoId === aluno.id && editingEntrada?.dia === registroManualData
+                        const hSaida = horariosSaida[aluno.id]?.[registroManualData] || infoOrigem.saida?.horario
+                        const rSaida = responsaveisSaida[aluno.id]?.[registroManualData] || infoOrigem.saida?.responsavel
+
                         return (
-                          <div key={aluno.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: '12px', border: '1px solid #f1f5f9', borderRadius: '12px', gap: '12px' }}>
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a' }}>{aluno.nome}</div>
-                                <OrigemBadgePair infoCompleta={infoOrigem} compact />
+                          <div key={aluno.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', gap: '16px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                            {/* Dados do Aluno */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1', minWidth: '220px' }}>
+                              <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', color: '#0369a1', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '14px', boxShadow: '0 2px 4px rgba(3, 105, 161, 0.1)' }}>
+                                {getInitials(aluno.nome)}
                               </div>
-                              <div style={{ fontSize: '11px', color: '#64748b' }}>Matrícula: #{aluno.id}</div>
-                            </div>
-                            
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginRight: '8px', paddingRight: '12px', borderRight: '1px dashed #cbd5e1' }}>
-                                <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>TODOS</span>
-                                <div style={{ display: 'flex', background: '#f8fafc', borderRadius: '6px', padding: '2px', border: '1px solid #e2e8f0' }}>
-                                  <button
-                                    onClick={() => setAbsencesManual(prev => {
-                                      const newData = { ...(prev[aluno.id] || {}) }
-                                      schedule.tempos.forEach((t: any) => newData[t.id] = 'P')
-                                      return { ...prev, [aluno.id]: newData }
-                                    })}
-                                    style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
-                                    title="Marcar todos como Presença"
-                                  >P</button>
-                                  <button
-                                    onClick={() => setAbsencesManual(prev => {
-                                      const newData = { ...(prev[aluno.id] || {}) }
-                                      schedule.tempos.forEach((t: any) => newData[t.id] = 'F')
-                                      return { ...prev, [aluno.id]: newData }
-                                    })}
-                                    style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
-                                    title="Marcar todos como Falta"
-                                  >F</button>
-                                  <button
-                                    onClick={() => setAbsencesManual(prev => {
-                                      const newData = { ...(prev[aluno.id] || {}) }
-                                      schedule.tempos.forEach((t: any) => newData[t.id] = 'J')
-                                      return { ...prev, [aluno.id]: newData }
-                                    })}
-                                    style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
-                                    title="Marcar todos como Justificado"
-                                  >J</button>
-                                  <button
-                                    onClick={() => setAbsencesManual(prev => {
-                                      const newData = { ...(prev[aluno.id] || {}) }
-                                      schedule.tempos.forEach((t: any) => newData[t.id] = '-')
-                                      return { ...prev, [aluno.id]: newData }
-                                    })}
-                                    style={{ width: '24px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', background: 'transparent', color: '#64748b' }}
-                                    title="Limpar todos (Sem registro)"
-                                  >SR</button>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>{aluno.nome}</div>
+                                  <OrigemBadgePair infoCompleta={infoOrigem} compact />
+                                </div>
+                                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                                  Matrícula: <strong style={{ color: '#0f172a' }}>#{aluno.id}</strong>
                                 </div>
                               </div>
-                              {schedule.tempos.map((t: any) => {
-                                let defaultStatus: PresStatus = '-'
-                                if (existingFreq && existingFreq.tempos) {
-                                  defaultStatus = existingFreq.tempos[t.id] || '-'
-                                } else if (existingFreq && !existingFreq.tempos) {
-                                  defaultStatus = existingFreq.justificativa === 'Justificada' ? 'J' : (existingFreq.presente ? 'P' : 'F')
-                                }
+                            </div>
+                            
+                            {/* Controle 1-Clique de Frequência / Entrada */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextStatus: PresStatus = currentStatus === '-' ? 'P' : (currentStatus === 'P' ? 'F' : (currentStatus === 'F' ? 'J' : '-'))
+                                    
+                                    setAbsencesManual(prev => {
+                                      const newStudentTempos: Record<string, PresStatus> = {}
+                                      schedule.tempos.forEach((t: any) => { newStudentTempos[t.id] = nextStatus })
+                                      return {
+                                        ...prev,
+                                        [aluno.id]: newStudentTempos
+                                      }
+                                    })
 
-                                const currentStatus = absencesManual[aluno.id]?.[t.id] || defaultStatus
+                                    if (nextStatus === 'P' && !horariosEntrada[aluno.id]?.[registroManualData]) {
+                                      const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                      setHorariosEntrada(prev => ({
+                                        ...prev,
+                                        [aluno.id]: { ...(prev[aluno.id] || {}), [registroManualData]: infoOrigem.entrada?.horario || nowT }
+                                      }))
+                                    }
+                                  }}
+                                  style={{
+                                    padding: '8px 18px', borderRadius: '10px', fontWeight: 900, fontSize: '13px', cursor: 'pointer',
+                                    border: currentStatus === 'P' ? '1px solid #bbf7d0' : (currentStatus === 'F' ? '1px solid #fecaca' : (currentStatus === 'J' ? '1px solid #fde68a' : '1px dashed #cbd5e1')),
+                                    background: currentStatus === 'P' ? 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)' : (currentStatus === 'F' ? 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' : (currentStatus === 'J' ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : '#f8fafc')),
+                                    color: currentStatus === 'P' ? '#15803d' : (currentStatus === 'F' ? '#b91c1c' : (currentStatus === 'J' ? '#b45309' : '#64748b')),
+                                    boxShadow: currentStatus === 'P' ? '0 2px 8px rgba(34, 197, 94, 0.2)' : 'none',
+                                    transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '6px'
+                                  }}
+                                >
+                                  {currentStatus === 'P' && <CheckCircle size={16} />}
+                                  {currentStatus === 'F' && <XCircle size={16} />}
+                                  {currentStatus === 'J' && <AlertTriangle size={16} />}
+                                  <span>
+                                    {currentStatus === 'P' ? 'PRESENTE' : (currentStatus === 'F' ? 'FALTOSO' : (currentStatus === 'J' ? 'JUSTIFICADO' : 'DEFINIR FREQUÊNCIA'))}
+                                  </span>
+                                </button>
 
-                                return (
-                                  <div key={t.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8' }}>{t.id}º T</span>
-                                    <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px' }}>
-                                      <button
-                                        onClick={() => setAbsencesManual(prev => ({ ...prev, [aluno.id]: { ...(prev[aluno.id] || {}), [t.id]: 'P' } }))}
-                                        style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === 'P' ? '#22c55e' : 'transparent', color: currentStatus === 'P' ? '#fff' : '#64748b' }}
+                                {currentStatus === 'P' && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {isEditingThisEntrada ? (
+                                      <input
+                                        type="time"
+                                        autoFocus
+                                        value={currentEntrada || '07:30'}
+                                        onBlur={() => setEditingEntrada(null)}
+                                        onChange={e => {
+                                          const v = e.target.value
+                                          setHorariosEntrada(prev => ({
+                                            ...prev,
+                                            [aluno.id]: { ...(prev[aluno.id] || {}), [registroManualData]: v }
+                                          }))
+                                        }}
+                                        style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
+                                      />
+                                    ) : (
+                                      <span
+                                        onClick={() => setEditingEntrada({ alunoId: aluno.id, dia: registroManualData })}
+                                        title="Clique para editar o horário de entrada"
+                                        style={{
+                                          cursor: 'pointer', fontSize: '11px', fontWeight: 800, color: '#0369a1',
+                                          background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', border: '1px solid #7dd3fc',
+                                          display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                        }}
                                       >
-                                        P
-                                      </button>
-                                      <button
-                                        onClick={() => setAbsencesManual(prev => ({ ...prev, [aluno.id]: { ...(prev[aluno.id] || {}), [t.id]: 'F' } }))}
-                                        style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === 'F' ? '#ef4444' : 'transparent', color: currentStatus === 'F' ? '#fff' : '#64748b' }}
-                                      >
-                                        F
-                                      </button>
-                                      <button
-                                        onClick={() => setAbsencesManual(prev => ({ ...prev, [aluno.id]: { ...(prev[aluno.id] || {}), [t.id]: 'J' } }))}
-                                        style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === 'J' ? '#f59e0b' : 'transparent', color: currentStatus === 'J' ? '#fff' : '#64748b' }}
-                                      >
-                                        J
-                                      </button>
-                                      <button
-                                        onClick={() => setAbsencesManual(prev => ({ ...prev, [aluno.id]: { ...(prev[aluno.id] || {}), [t.id]: '-' } }))}
-                                        style={{ width: '28px', height: '24px', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', background: currentStatus === '-' ? '#94a3b8' : 'transparent', color: currentStatus === '-' ? '#fff' : '#64748b' }}
-                                        title="Limpar (Sem registro)"
-                                      >
-                                        SR
-                                      </button>
-                                    </div>
+                                        <Clock size={12} />
+                                        <span>Entrou: {currentEntrada || '07:30'}h</span>
+                                        <Edit3 size={10} style={{ opacity: 0.7 }} />
+                                      </span>
+                                    )}
                                   </div>
-                                )
-                              })}
+                                )}
+                              </div>
                             </div>
                           </div>
                         )
@@ -3778,21 +3781,24 @@ export default function FrequenciaPage() {
 
           {/* Footer do Modal */}
           <div style={{
-            padding: '20px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', flexWrap: 'wrap', gap: '12px'
+            padding: '20px 32px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', flexWrap: 'wrap', gap: '12px'
           }}>
             <button
               onClick={() => handlePrintRegistroManual(filteredAbsentees, registroManualData)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#fff', color: '#0f172a', border: '1px solid #e2e8f0', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#f8fafc'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#fff'; }}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '11px 22px', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '12px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#94a3b8'; e.currentTarget.style.background = '#f1f5f9'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.background = '#fff'; }}
             >
               <Printer size={16} />
               Imprimir Ficha
             </button>
+
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
               <button
                 onClick={() => setShowRegistroManualModal(false)}
-                style={{ padding: '10px 24px', background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+                style={{ padding: '11px 24px', background: '#fff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '12px', fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
               >
                 Cancelar
               </button>
@@ -3800,10 +3806,16 @@ export default function FrequenciaPage() {
                 onClick={handleSaveManualRegistro}
                 disabled={salvandoManual}
                 style={{
-                  padding: '10px 24px', background: salvandoManual ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '13px', cursor: salvandoManual ? 'not-allowed' : 'pointer', transition: 'background 0.2s'
+                  padding: '11px 28px', background: salvandoManual ? '#93c5fd' : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                  color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 800, fontSize: '13px',
+                  cursor: salvandoManual ? 'not-allowed' : 'pointer', boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+                  display: 'flex', alignItems: 'center', gap: '8px', transition: 'transform 0.2s'
                 }}
+                onMouseEnter={e => { if (!salvandoManual) e.currentTarget.style.transform = 'translateY(-1px)' }}
+                onMouseLeave={e => { if (!salvandoManual) e.currentTarget.style.transform = 'none' }}
               >
-                {salvandoManual ? 'Salvando...' : 'Salvar Registros'}
+                <Save size={16} />
+                <span>{salvandoManual ? 'Salvando Registros...' : 'Salvar Registros'}</span>
               </button>
             </div>
           </div>
@@ -4422,7 +4434,7 @@ export default function FrequenciaPage() {
               </button>
             </div>
             <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0', fontWeight: 500 }}>
-              Segmento: <strong style={{ color: '#2563eb' }}>{schedule.segmento}</strong> ({schedule.tempos.length} Tempos). Clique nas caixas para alternar (P / F / J).
+              Segmento: <strong style={{ color: '#2563eb' }}>{schedule.segmento}</strong>. Lançamento de Frequência 1-Clique com registro de Entrada & Saída do Aluno.
             </p>
           </div>
         </div>
@@ -4506,67 +4518,71 @@ export default function FrequenciaPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
             <thead>
-              {isInfantil ? (
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '120px' }}>Freq. Total</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '90px' }}>Faltas</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '220px' }}>Entrada / Presença (1-Clique)</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '260px' }}>Saída do Aluno & Retirada (/chamadas)</th>
-                </tr>
-              ) : (
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '150px' }}>Freq. Total</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltas</th>
-                  <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Justificadas</th>
-                  {diasPeriodo.map(dia => {
-                    const dateObj = new Date(dia + 'T00:00:00')
-                    const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')
-                    return (
-                      <th key={dia} style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, minWidth: '320px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ textTransform: 'uppercase', fontSize: '11px', color: '#94a3b8' }}>{diaSemana}</span>
-                            <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{dia.split('-')[2]}/{dia.split('-')[1]}</span>
-                          </div>
-                          {/* Ações em lote para a turma */}
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button
-                              onClick={() => {
-                                alunosFiltrados.forEach(a => {
-                                  schedule.tempos.forEach(t => setStatus(a.id, dia, t.id, 'P'))
-                                })
-                              }}
-                              style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#059669'}
-                              onMouseLeave={e => e.currentTarget.style.background = '#10b981'}
-                            >
-                              Presença Geral (Turma)
-                            </button>
-                            <button
-                              onClick={() => {
-                                alunosFiltrados.forEach(a => {
-                                  schedule.tempos.forEach(t => setStatus(a.id, dia, t.id, 'F'))
-                                })
-                              }}
-                              style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
-                              onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
-                            >
-                              Falta Geral (Turma)
-                            </button>
-                          </div>
-                        </div>
-                      </th>
-                    )
-                  })}
-                </tr>
-              )}
+              <tr>
+                <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '110px' }}>Freq. Total</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '80px' }}>Faltas</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '100px' }}>Justificadas</th>
+                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '240px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                    <span>Entrada / Presença (1-Clique)</span>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          alunosFiltrados.forEach(aluno => {
+                            diasPeriodo.forEach(dia => {
+                              const newDayTempos: Record<string, PresStatus> = {}
+                              schedule.tempos.forEach(t => { newDayTempos[t.id] = 'P' })
+                              let newEntrada = horariosEntrada[aluno.id]?.[dia]
+                              if (!newEntrada) {
+                                const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                newEntrada = nowT
+                                setHorariosEntrada(prev => ({
+                                  ...prev,
+                                  [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: newEntrada! }
+                                }))
+                              }
+                              schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'P'))
+                              autoSaveStudent(aluno.id, dia, newDayTempos, newEntrada)
+                            })
+                          })
+                        }}
+                        style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#059669'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#10b981'}
+                      >
+                        Presença Geral (Turma)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          alunosFiltrados.forEach(aluno => {
+                            diasPeriodo.forEach(dia => {
+                              const newDayTempos: Record<string, PresStatus> = {}
+                              schedule.tempos.forEach(t => { newDayTempos[t.id] = 'F' })
+                              schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'F'))
+                              autoSaveStudent(aluno.id, dia, newDayTempos)
+                            })
+                          })
+                        }}
+                        style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
+                        onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
+                      >
+                        Falta Geral (Turma)
+                      </button>
+                    </div>
+                  </div>
+                </th>
+                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '260px' }}>
+                  Saída do Aluno & Retirada (/chamadas)
+                </th>
+              </tr>
             </thead>
             <tbody>
               {loadingFreqTurma ? (
-                <TableSkeleton rows={5} cols={isInfantil ? 5 : 4 + diasPeriodo.length} />
+                <TableSkeleton rows={5} cols={6} />
               ) : alunosFiltrados.map((aluno: any) => {
                 const freqGeral = calcFreqGeral(aluno.id)
                 const isLow = freqGeral !== null && freqGeral < freqMinima
@@ -4643,273 +4659,181 @@ export default function FrequenciaPage() {
                       <span style={{ fontSize: '13px', color: totalFaltas > 5 ? '#ef4444' : '#0f172a', fontWeight: 600 }}>{totalFaltas}</span>
                     </td>
 
-                    {isInfantil ? (
-                      <>
-                        {/* Entrada / Frequência (Botão Único 1-Clique) */}
-                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
-                          {diasPeriodo.map(dia => {
-                            const status1 = getStatus(aluno.id, dia, '1')
-                            const currentEntrada = horariosEntrada[aluno.id]?.[dia] || (origemInfoCompleta.entrada?.horario ? origemInfoCompleta.entrada.horario : '')
-                            const isEditingThisEntrada = editingEntrada?.alunoId === aluno.id && editingEntrada?.dia === dia
+                    {/* Justificadas */}
+                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                      <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>{totalJustificadas}</span>
+                    </td>
 
-                            return (
-                              <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const nextStatus: PresStatus = status1 === '-' ? 'P' : (status1 === 'P' ? 'F' : (status1 === 'F' ? 'J' : '-'))
-                                    const newDayTempos: Record<string, PresStatus> = {}
-                                    schedule.tempos.forEach(t => { newDayTempos[t.id] = nextStatus })
+                    {/* Entrada / Frequência (Botão Único 1-Clique) */}
+                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                      {diasPeriodo.map(dia => {
+                        const status1 = getStatus(aluno.id, dia, '1')
+                        const currentEntrada = horariosEntrada[aluno.id]?.[dia] || (origemInfoCompleta.entrada?.horario ? origemInfoCompleta.entrada.horario : '')
+                        const isEditingThisEntrada = editingEntrada?.alunoId === aluno.id && editingEntrada?.dia === dia
 
-                                    let newEntrada = horariosEntrada[aluno.id]?.[dia]
-                                    if (nextStatus === 'P' && !newEntrada) {
-                                      const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                                      newEntrada = origemInfoCompleta.entrada?.horario || nowT
+                        return (
+                          <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextStatus: PresStatus = status1 === '-' ? 'P' : (status1 === 'P' ? 'F' : (status1 === 'F' ? 'J' : '-'))
+                                const newDayTempos: Record<string, PresStatus> = {}
+                                schedule.tempos.forEach(t => { newDayTempos[t.id] = nextStatus })
+
+                                let newEntrada = horariosEntrada[aluno.id]?.[dia]
+                                if (nextStatus === 'P' && !newEntrada) {
+                                  const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                  newEntrada = origemInfoCompleta.entrada?.horario || nowT
+                                  setHorariosEntrada(prev => ({
+                                    ...prev,
+                                    [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: newEntrada! }
+                                  }))
+                                }
+
+                                schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, nextStatus))
+                                autoSaveStudent(aluno.id, dia, newDayTempos, newEntrada)
+                              }}
+                              style={{
+                                padding: '8px 18px', borderRadius: '10px', fontWeight: 900, fontSize: '13px', cursor: 'pointer',
+                                border: status1 === 'P' ? '1px solid #bbf7d0' : (status1 === 'F' ? '1px solid #fecaca' : (status1 === 'J' ? '1px solid #fde68a' : '1px dashed #cbd5e1')),
+                                background: status1 === 'P' ? 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)' : (status1 === 'F' ? 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' : (status1 === 'J' ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : '#f8fafc')),
+                                color: status1 === 'P' ? '#15803d' : (status1 === 'F' ? '#b91c1c' : (status1 === 'J' ? '#b45309' : '#64748b')),
+                                boxShadow: status1 === 'P' ? '0 2px 8px rgba(34, 197, 94, 0.2)' : 'none',
+                                transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '6px'
+                              }}
+                            >
+                              {status1 === 'P' && <CheckCircle size={16} />}
+                              {status1 === 'F' && <XCircle size={16} />}
+                              {status1 === 'J' && <AlertTriangle size={16} />}
+                              <span>
+                                {status1 === 'P' ? 'PRESENTE' : (status1 === 'F' ? 'FALTOSO' : (status1 === 'J' ? 'JUSTIFICADO' : 'DEFINIR FREQUÊNCIA'))}
+                              </span>
+                            </button>
+
+                            {status1 === 'P' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {isEditingThisEntrada ? (
+                                  <input
+                                    type="time"
+                                    autoFocus
+                                    value={currentEntrada || '07:30'}
+                                    onBlur={() => setEditingEntrada(null)}
+                                    onChange={e => {
+                                      const v = e.target.value
                                       setHorariosEntrada(prev => ({
                                         ...prev,
-                                        [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: newEntrada! }
+                                        [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: v }
                                       }))
-                                    }
-
-                                    schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, nextStatus))
-                                    autoSaveStudent(aluno.id, dia, newDayTempos, newEntrada)
-                                  }}
-                                  style={{
-                                    padding: '8px 18px', borderRadius: '10px', fontWeight: 900, fontSize: '13px', cursor: 'pointer',
-                                    border: status1 === 'P' ? '1px solid #bbf7d0' : (status1 === 'F' ? '1px solid #fecaca' : (status1 === 'J' ? '1px solid #fde68a' : '1px dashed #cbd5e1')),
-                                    background: status1 === 'P' ? 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)' : (status1 === 'F' ? 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' : (status1 === 'J' ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : '#f8fafc')),
-                                    color: status1 === 'P' ? '#15803d' : (status1 === 'F' ? '#b91c1c' : (status1 === 'J' ? '#b45309' : '#64748b')),
-                                    boxShadow: status1 === 'P' ? '0 2px 8px rgba(34, 197, 94, 0.2)' : 'none',
-                                    transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '6px'
-                                  }}
-                                >
-                                  {status1 === 'P' && <CheckCircle size={16} />}
-                                  {status1 === 'F' && <XCircle size={16} />}
-                                  {status1 === 'J' && <AlertTriangle size={16} />}
-                                  <span>
-                                    {status1 === 'P' ? 'PRESENTE' : (status1 === 'F' ? 'FALTOSO' : (status1 === 'J' ? 'JUSTIFICADO' : 'DEFINIR FREQUÊNCIA'))}
+                                      autoSaveStudent(aluno.id, dia, undefined, v)
+                                    }}
+                                    style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
+                                  />
+                                ) : (
+                                  <span
+                                    onClick={() => setEditingEntrada({ alunoId: aluno.id, dia })}
+                                    title="Clique para editar o horário de entrada"
+                                    style={{
+                                      cursor: 'pointer', fontSize: '11px', fontWeight: 800, color: '#0369a1',
+                                      background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', border: '1px solid #7dd3fc',
+                                      display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                    }}
+                                  >
+                                    <Clock size={12} />
+                                    <span>Entrou: {currentEntrada || '07:30'}h</span>
+                                    <Edit3 size={10} style={{ opacity: 0.7 }} />
                                   </span>
-                                </button>
-
-                                {status1 === 'P' && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    {isEditingThisEntrada ? (
-                                      <input
-                                        type="time"
-                                        autoFocus
-                                        value={currentEntrada || '07:30'}
-                                        onBlur={() => setEditingEntrada(null)}
-                                        onChange={e => {
-                                          const v = e.target.value
-                                          setHorariosEntrada(prev => ({
-                                            ...prev,
-                                            [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: v }
-                                          }))
-                                          autoSaveStudent(aluno.id, dia, undefined, v)
-                                        }}
-                                        style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
-                                      />
-                                    ) : (
-                                      <span
-                                        onClick={() => setEditingEntrada({ alunoId: aluno.id, dia })}
-                                        title="Clique para editar o horário de entrada"
-                                        style={{
-                                          cursor: 'pointer', fontSize: '11px', fontWeight: 800, color: '#0369a1',
-                                          background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', border: '1px solid #7dd3fc',
-                                          display: 'inline-flex', alignItems: 'center', gap: '4px'
-                                        }}
-                                      >
-                                        <Clock size={12} />
-                                        <span>Entrou: {currentEntrada || '07:30'}h</span>
-                                        <Edit3 size={10} style={{ opacity: 0.7 }} />
-                                      </span>
-                                    )}
-                                  </div>
                                 )}
                               </div>
-                            )
-                          })}
-                        </td>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </td>
 
-                        {/* Saída do Aluno & Retirada (/chamadas) */}
-                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
-                          {diasPeriodo.map(dia => {
-                            const status1 = getStatus(aluno.id, dia, '1')
-                            const hSaida = horariosSaida[aluno.id]?.[dia]
-                            const rSaida = responsaveisSaida[aluno.id]?.[dia]
+                    {/* Saída do Aluno & Retirada (/chamadas) */}
+                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
+                      {diasPeriodo.map(dia => {
+                        const status1 = getStatus(aluno.id, dia, '1')
+                        const hSaida = horariosSaida[aluno.id]?.[dia]
+                        const rSaida = responsaveisSaida[aluno.id]?.[dia]
 
-                            if (status1 !== 'P') {
-                              return <span key={dia} style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>
-                            }
+                        if (status1 !== 'P') {
+                          return <span key={dia} style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>
+                        }
 
-                            if (hSaida && rSaida) {
-                              return (
-                                <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                                  <span style={{
-                                    background: 'linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%)',
-                                    color: '#c026d3', border: '1px solid #f5d0fe', borderRadius: '10px',
-                                    padding: '6px 12px', fontSize: '11px', fontWeight: 800,
-                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                    boxShadow: '0 2px 6px rgba(192, 38, 211, 0.12)'
-                                  }}>
-                                    <CheckCircle2 size={14} style={{ color: '#c026d3' }} />
-                                    <span>Saiu às {hSaida}h</span>
-                                  </span>
-                                  <span style={{ fontSize: '11px', color: '#475569', fontWeight: 700 }}>
-                                    Retirado por: <strong style={{ color: '#0f172a' }}>{rSaida}</strong>
-                                  </span>
+                        if (hSaida && rSaida) {
+                          return (
+                            <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                              <span style={{
+                                background: 'linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%)',
+                                color: '#c026d3', border: '1px solid #f5d0fe', borderRadius: '10px',
+                                padding: '6px 12px', fontSize: '11px', fontWeight: 800,
+                                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                boxShadow: '0 2px 6px rgba(192, 38, 211, 0.12)'
+                              }}>
+                                <CheckCircle2 size={14} style={{ color: '#c026d3' }} />
+                                <span>Saiu às {hSaida}h</span>
+                              </span>
+                              <span style={{ fontSize: '11px', color: '#475569', fontWeight: 700 }}>
+                                Retirado por: <strong style={{ color: '#0f172a' }}>{rSaida}</strong>
+                              </span>
 
-                                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSaidaModalHora(hSaida)
-                                        setSaidaModalResponsavel(rSaida)
-                                        setSaidaModalData({ aluno, dia })
-                                      }}
-                                      style={{ fontSize: '10px', fontWeight: 800, background: '#f1f5f9', color: '#2563eb', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 6px', cursor: 'pointer' }}
-                                    >
-                                      Editar
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (confirm(`Deseja cancelar o registro de saída de ${aluno.nome}?`)) {
-                                          handleCancelarSaidaInfantil(aluno, dia)
-                                        }
-                                      }}
-                                      style={{ fontSize: '10px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 6px', cursor: 'pointer' }}
-                                    >
-                                      Cancelar Saída
-                                    </button>
-                                  </div>
-                                </div>
-                              )
-                            }
-
-                            return (
-                              <div key={dia} style={{ display: 'flex', justifyContent: 'center' }}>
+                              <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                                    setSaidaModalHora(nowT)
-                                    const guardias = getStudentGuardians(aluno, allResponsaveisList)
-                                    setSaidaModalResponsavel(guardias.length > 0 ? `${guardias[0].name} (${guardias[0].role})` : '')
-                                    setCustomResponsavel('')
+                                    setSaidaModalHora(hSaida)
+                                    setSaidaModalResponsavel(rSaida)
                                     setSaidaModalData({ aluno, dia })
                                   }}
-                                  style={{
-                                    padding: '8px 16px', borderRadius: '10px', fontWeight: 800, fontSize: '12px',
-                                    background: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)', color: '#fff',
-                                    border: 'none', cursor: 'pointer', boxShadow: '0 3px 10px rgba(147, 51, 234, 0.25)',
-                                    display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s'
-                                  }}
-                                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                                  onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                                  style={{ fontSize: '10px', fontWeight: 800, background: '#f1f5f9', color: '#2563eb', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 6px', cursor: 'pointer' }}
                                 >
-                                  <LogOut size={14} />
-                                  <span>Registrar Saída</span>
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm(`Deseja cancelar o registro de saída de ${aluno.nome}?`)) {
+                                      handleCancelarSaidaInfantil(aluno, dia)
+                                    }
+                                  }}
+                                  style={{ fontSize: '10px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 6px', cursor: 'pointer' }}
+                                >
+                                  Cancelar Saída
                                 </button>
                               </div>
-                            )
-                          })}
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        {/* Justificadas */}
-                        <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
-                          <span style={{ fontSize: '13px', color: '#64748b' }}>{totalJustificadas}</span>
-                        </td>
-
-                        {/* Dias de Frequência (com controle de tempos) */}
-                        {diasPeriodo.map(dia => {
-                          return (
-                            <td 
-                              key={dia} 
-                              style={{ padding: '6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}
-                            >
-                              <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', alignItems: 'center' }}>
-                                {/* Tempos individuais */}
-                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', alignItems: 'center' }}>
-                                  {schedule.tempos.map(tempo => {
-                                    const status = getStatus(aluno.id, dia, tempo.id)
-                                    const cfg = S_CONFIG[status]
-                                    
-                                    return (
-                                      <div key={tempo.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
-                                        <button
-                                          onClick={() => {
-                                            const nextStatus = status === '-' ? 'P' : (status === 'P' ? 'F' : (status === 'F' ? 'J' : '-'))
-                                            setStatus(aluno.id, dia, tempo.id, nextStatus)
-                                          }}
-                                          title={`${tempo.label}: ${tempo.horario}`}
-                                          style={{
-                                            width: '32px',
-                                            height: '32px',
-                                            borderRadius: '8px',
-                                            border: `1px solid ${cfg.border}`,
-                                            background: cfg.bg,
-                                            color: cfg.color,
-                                            fontWeight: 800,
-                                            fontSize: '11px',
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-                                            boxShadow: `0 2px 4px ${cfg.glow}`,
-                                            position: 'relative'
-                                          }}
-                                          onMouseEnter={e => {
-                                            e.currentTarget.style.transform = 'scale(1.1)';
-                                            e.currentTarget.style.boxShadow = `0 4px 6px ${cfg.glow}`;
-                                          }}
-                                          onMouseLeave={e => {
-                                            e.currentTarget.style.transform = 'scale(1)';
-                                            e.currentTarget.style.boxShadow = `0 2px 4px ${cfg.glow}`;
-                                          }}
-                                        >
-                                          {cfg.label}
-                                        </button>
-                                        <span style={{ fontSize: '9px', color: '#94a3b8', fontWeight: 700 }}>{tempo.id}º</span>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-
-                                {/* Ações rápidas */}
-                                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  <button
-                                    title="Marcar presença em todos os tempos"
-                                    onClick={() => {
-                                      schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'P'))
-                                    }}
-                                    style={{ fontSize: '9px', fontWeight: 800, padding: '3px 6px', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#dcfce7'}
-                                    onMouseLeave={e => e.currentTarget.style.background = '#f0fdf4'}
-                                  >
-                                    P. Geral
-                                  </button>
-                                  <button
-                                    title="Marcar falta em todos os tempos"
-                                    onClick={() => {
-                                      schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'F'))
-                                    }}
-                                    style={{ fontSize: '9px', fontWeight: 800, padding: '3px 6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
-                                    onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-                                    onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
-                                  >
-                                    F. Geral
-                                  </button>
-                                </div>
-                              </div>
-                            </td>
+                            </div>
                           )
-                        })}
-                      </>
-                    )}
+                        }
+
+                        return (
+                          <div key={dia} style={{ display: 'flex', justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nowT = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                                setSaidaModalHora(nowT)
+                                const guardias = getStudentGuardians(aluno, allResponsaveisList)
+                                setSaidaModalResponsavel(guardias.length > 0 ? `${guardias[0].name} (${guardias[0].role})` : '')
+                                setCustomResponsavel('')
+                                setSaidaModalData({ aluno, dia })
+                              }}
+                              style={{
+                                padding: '8px 16px', borderRadius: '10px', fontWeight: 800, fontSize: '12px',
+                                background: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)', color: '#fff',
+                                border: 'none', cursor: 'pointer', boxShadow: '0 3px 10px rgba(147, 51, 234, 0.25)',
+                                display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                            >
+                              <LogOut size={14} />
+                              <span>Registrar Saída</span>
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </td>
                   </tr>
                 )
               })}

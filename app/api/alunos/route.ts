@@ -482,6 +482,11 @@ export async function GET(request: Request) {
 
         return {
           ...student,
+          isIntegralIntermediario: student.isIntegralIntermediario ?? d.isIntegralIntermediario,
+          integral_tipo: student.integral_tipo || d.integral_tipo,
+          modalidade: student.modalidade || d.modalidade,
+          turno: student.turno || d.turno,
+          historicoTurmas: Array.isArray(student.historicoTurmas) ? student.historicoTurmas : (Array.isArray(d.historicoTurmas) ? d.historicoTurmas : []),
           foto: resolvedFoto,
           responsaveis: finalUniqueResps,
           _responsaveis: student._responsaveis || d._responsaveis,
@@ -499,7 +504,7 @@ export async function GET(request: Request) {
           turma_anoLetivo: tObj?.ano !== undefined ? String(tObj.ano) : (student.anoLetivo || student.ano_letivo || d.anoLetivo || ''),
           dados: {
             ...(d || {}),
-            historicoTurmas: [],
+            historicoTurmas: Array.isArray(d.historicoTurmas) ? d.historicoTurmas : (Array.isArray(student.historicoTurmas) ? student.historicoTurmas : []),
             celular_responsavel: d.celular_responsavel,
             cpfResponsavel: d.cpfResponsavel,
             emailResponsavel: d.emailResponsavel,
@@ -519,7 +524,7 @@ export async function GET(request: Request) {
 
       if (turma) {
         finalLightweight = finalLightweight.filter((student: any) =>
-          isAlunoCursandoTurma(student, targetTurma || turma)
+          isAlunoCursandoTurma(student, targetTurma || turma, undefined, turmasData)
         );
       }
 
@@ -734,7 +739,7 @@ export async function GET(request: Request) {
 
     if (turma) {
       finalFormattedData = finalFormattedData.filter((student: any) =>
-        isAlunoCursandoTurma(student, targetTurma || turma)
+        isAlunoCursandoTurma(student, targetTurma || turma, undefined, turmasData)
       );
     }
 

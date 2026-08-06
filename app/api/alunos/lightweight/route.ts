@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { requireAuth } from '@/lib/server/authGuard'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 // Limita o tempo total da rota a 30 segundos (evita o hang de 66min)
@@ -38,6 +39,16 @@ export async function GET(req: Request) {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 25_000)
 
+    const turma = (url.searchParams.get('turma') || '').trim()
+
+    let targetTurmaObj: any = null
+    let allTurmasList: any[] = []
+    if (turma) {
+      const { data: tData } = await supabase.from('turmas').select('*')
+      allTurmasList = tData || []
+      targetTurmaObj = allTurmasList.find(t => String(t.id) === turma || String(t.nome) === turma || String(t.codigo) === turma) || turma
+    }
+
     // Seleção mínima — apenas campos usados em listas e seletores
     let query = supabase
       .from('alunos')
@@ -48,20 +59,23 @@ export async function GET(req: Request) {
         fotoAlt:dados->>foto, 
         fotoUrlAlt:dados->>avatarUrl, 
         responsaveis:dados->responsaveis,
-        historicoTurmas:dados->historicoTurmas
+        historicoTurmas:dados->historicoTurmas,
+        isIntegralIntermediario:dados->isIntegralIntermediario,
+        integral_tipo:dados->integral_tipo,
+        modalidade:dados->modalidade,
+        turno:dados->turno
       `, { count: 'exact' })
       .or('status.neq.inativo,status.is.null')
       .order('nome')
-      .range(from, to)
-      .abortSignal(controller.signal)
 
-    const turma = (url.searchParams.get('turma') || '').trim()
+    if (!turma) {
+      query = query.range(from, to)
+    } else {
+      query = query.limit(10000)
+    }
 
     if (search) {
       query = query.or(`nome.ilike.%${search}%,matricula.ilike.%${search}%`)
-    }
-    if (turma) {
-      query = query.eq('turma', turma)
     }
 
     let data: any, error: any, count: number | null
@@ -84,7 +98,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const formatted = (data as Record<string, unknown>[] || []).map((aluno: Record<string, unknown>) => ({
+    let formatted = (data as Record<string, unknown>[] || []).map((aluno: Record<string, unknown>) => ({
       id: String(aluno.id),
       nome: String(aluno.nome || ''),
       matricula: aluno.matricula || '',
@@ -93,10 +107,20 @@ export async function GET(req: Request) {
       foto: (aluno as any).foto || (aluno as any).fotoAlt || (aluno as any).fotoUrlAlt || null,
       responsaveis: (aluno as any).responsaveis || [],
       historicoTurmas: (aluno as any).historicoTurmas || [],
+      isIntegralIntermediario: (aluno as any).isIntegralIntermediario,
+      integral_tipo: (aluno as any).integral_tipo,
+      modalidade: (aluno as any).modalidade,
+      turno: (aluno as any).turno,
       status: aluno.status || 'ativo'
     }))
 
-    const responseData = { data: formatted, total: count || 0, page, limit };
+    if (turma) {
+      formatted = formatted.filter((aluno: any) =>
+        isAlunoCursandoTurma(aluno, targetTurmaObj || turma, undefined, allTurmasList)
+      )
+    }
+
+    const responseData = { data: formatted, total: turma ? formatted.length : (count || 0), page, limit };
     
     if (!search) {
       inMemoryCache.set(cacheKey, { data: responseData, ts: Date.now() });

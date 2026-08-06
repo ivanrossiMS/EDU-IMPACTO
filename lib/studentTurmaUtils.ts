@@ -56,6 +56,16 @@ export function getAlunoVinculosAtivos(aluno: any, anoLetivo?: string | number):
   }]
 }
 
+export function getSegmentoKey(str: any): string {
+  if (!str) return ''
+  const s = String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+  if (s.includes('infantil') || s.includes('bercario') || s.includes('maternal') || s === 'ei') return 'infantil'
+  if (s.includes('fundamental i') || s.includes('fundamental 1') || s.includes('fund 1') || s.includes('ef1') || s.includes('efi')) return 'fund1'
+  if (s.includes('fundamental ii') || s.includes('fundamental 2') || s.includes('fund 2') || s.includes('ef2') || s.includes('efii')) return 'fund2'
+  if (s.includes('medio') || s === 'em') return 'medio'
+  return s.replace(/[^a-z0-9]/g, '')
+}
+
 export function getSerieKey(str: any): string {
   if (!str) return ''
   const s = String(str).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
@@ -153,37 +163,55 @@ export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: stri
       aluno.isIntegralIntermediario === true ||
       aluno.dados?.isIntegralIntermediario === true ||
       aluno.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-      aluno.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO'
+      aluno.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+      aluno.integral_tipo || aluno.dados?.integral_tipo ||
+      String(aluno.turno || aluno.turno_nome || aluno.dados?.turno || '').toLowerCase().includes('integral') ||
+      String(aluno.turno || aluno.turno_nome || aluno.dados?.turno || '').toLowerCase().includes('intermediario')
     ) || vinculos.some(v => 
       v.isIntegralIntermediario === true || 
       v.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-      v.modalidade === 'Integral/Intermediário'
+      v.modalidade === 'Integral/Intermediário' ||
+      v.integral_tipo ||
+      String(v.turno || '').toLowerCase().includes('integral') ||
+      String(v.turno || '').toLowerCase().includes('intermediario')
     )
 
     if (hasExplicitIntegral) {
       const targetSerieKey = getSerieKey(tSerie) || getSerieKey(tNome)
 
       if (targetSerieKey) {
+        // Resolve student's main class from turmasList if available
+        const mainTurmaObj = Array.isArray(turmasList) && turmasList.length > 0
+          ? turmasList.find(t => 
+              String(t.id) === directTurma || 
+              String(t.codigo) === directTurma || 
+              String(t.nome) === directTurma ||
+              (aluno.turma_nome && String(t.nome).toLowerCase() === String(aluno.turma_nome).toLowerCase())
+            )
+          : null
+
+        const targetSegKey = getSegmentoKey(tSegmento)
+
         for (const v of vinculos) {
-          const isVinculoIntegral = v.isIntegralIntermediario === true ||
-                                    v.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-                                    v.modalidade === 'Integral/Intermediário' ||
-                                    hasExplicitIntegral
+          const vSegmento = v.segmento || aluno.segmento || aluno.dados?.segmento || mainTurmaObj?.dados?.segmento || mainTurmaObj?.segmento || ''
+          const vSegKey = getSegmentoKey(vSegmento)
 
-          if (isVinculoIntegral) {
-            const vSegmento = v.segmento || aluno.segmento || aluno.dados?.segmento || ''
-            if (tSegmento && vSegmento) {
-              const normVSeg = norm(vSegmento)
-              const normTSeg = norm(tSegmento)
-              if (normVSeg && normTSeg && normVSeg !== normTSeg) {
-                continue
-              }
-            }
+          if (targetSegKey && vSegKey && targetSegKey !== vSegKey) {
+            continue
+          }
 
-            const vinculoSerieKey = getSerieKey(v.serie) || getSerieKey(aluno.serie) || getSerieKey(aluno.dados?.serie)
-            if (vinculoSerieKey && vinculoSerieKey === targetSerieKey) {
-              return true
-            }
+          const vinculoSerieKey = getSerieKey(v.serie) ||
+                                  getSerieKey(v.serieTurma) ||
+                                  getSerieKey(v.turma) ||
+                                  getSerieKey(aluno.serie) ||
+                                  getSerieKey(aluno.turma_nome) ||
+                                  getSerieKey(aluno.turma) ||
+                                  getSerieKey(mainTurmaObj?.serie) ||
+                                  getSerieKey(mainTurmaObj?.nome) ||
+                                  getSerieKey(aluno.dados?.serie)
+
+          if (vinculoSerieKey && vinculoSerieKey === targetSerieKey) {
+            return true
           }
         }
       } else {

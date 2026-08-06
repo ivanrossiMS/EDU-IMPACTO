@@ -4,6 +4,8 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
 
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
@@ -21,13 +23,46 @@ export async function GET(request: Request) {
   const limit = limitParam ? parseInt(limitParam, 10) : 10000
 
   let query = supabase.from('frequencias').select('*').order('data', { ascending: false }).limit(limit)
-  if (turmaId) query = query.eq('turma_id', turmaId)
+
+  if (turmaId) {
+    const { data: allTurmas } = await supabase.from('turmas').select('*')
+    const { data: allAlunos } = await supabase.from('alunos').select('id, turma, status, dados').or('status.neq.inativo,status.is.null')
+
+    const targetTurma = (allTurmas || []).find(t => String(t.id) === String(turmaId) || String(t.codigo) === String(turmaId) || String(t.nome) === String(turmaId))
+    const studentIds = (allAlunos || [])
+      .filter(a => isAlunoCursandoTurma(a, targetTurma || turmaId, undefined, allTurmas || []))
+      .map(a => String(a.id))
+
+    if (studentIds.length > 0) {
+      query = query.or(`turma_id.eq.${turmaId},aluno_id.in.(${studentIds.join(',')})`)
+    } else {
+      query = query.eq('turma_id', turmaId)
+    }
+  }
+
   if (alunoId) query = query.eq('aluno_id', alunoId)
   if (data) query = query.eq('data', data)
 
   const { data: rows, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json((rows || []).map(row => ({ ...row, ...(row.dados || {}) })))
+
+  const map = new Map<string, any>()
+  ;(rows || []).forEach(row => {
+    const key = `${row.aluno_id}_${String(row.data).split('T')[0]}`
+    if (!map.has(key)) {
+      map.set(key, row)
+    } else {
+      const existing = map.get(key)
+      const existingDate = new Date(existing.updated_at || existing.created_at || existing.data).getTime()
+      const newDate = new Date(row.updated_at || row.created_at || row.data).getTime()
+      if (newDate > existingDate) {
+        map.set(key, row)
+      }
+    }
+  })
+
+  const finalRows = Array.from(map.values())
+  return NextResponse.json(finalRows.map(row => ({ ...row, ...(row.dados || {}) })))
 }
 
 export async function POST(request: Request) {
