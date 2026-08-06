@@ -63,12 +63,13 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files --type IOS_APP_STORE
           keychain add-certificates
-          xcode-project use-profiles --profile "Impacto Edu AppStore"
+          xcode-project use-profiles
       - name: Build iOS App (.ipa)
         script: |
           xcode-project build-ipa \
             --project "ios/App/App.xcodeproj" \
-            --scheme "App"
+            --scheme "App" \
+            --export-options-plist "ios/App/ExportOptions.plist"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
