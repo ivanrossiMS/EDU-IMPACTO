@@ -21,8 +21,8 @@ workflows:
     artifacts:
       - android/app/build/outputs/**/*.apk
 
-  ios-workflow:
-    name: iOS Build
+  ios-simulator-workflow:
+    name: iOS Build (Simulador)
     instance_type: mac_mini_m1
     max_build_duration: 120
     environment:
@@ -40,3 +40,36 @@ workflows:
           xcodebuild build -project App.xcodeproj -scheme App -destination "generic/platform=iOS Simulator" CODE_SIGNING_ALLOWED=NO
     artifacts:
       - ios/App/build/Build/Products/*-iphonesimulator/*.app
+
+  ios-release-workflow:
+    name: iOS Release Build (TestFlight / App Store)
+    instance_type: mac_mini_m1
+    max_build_duration: 120
+    integrations:
+      app_store_connect: AppStoreKey
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: br.com.impactoedu.agenda
+      node: latest
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install npm dependencies
+        script: npm install
+      - name: Sync Capacitor iOS
+        script: npx cap sync ios
+      - name: Set up Code Signing
+        script: xcode-project use-profiles
+      - name: Build iOS App (.ipa)
+        script: |
+          xcode-project build-ipa \
+            --project "ios/App/App.xcodeproj" \
+            --scheme "App"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
