@@ -48,6 +48,8 @@ workflows:
     integrations:
       app_store_connect: AppStoreAdminKey
     environment:
+      groups:
+        - supabase_credentials
       ios_signing:
         distribution_type: app_store
         bundle_identifier: br.com.impactoedu.agenda
@@ -57,6 +59,12 @@ workflows:
     scripts:
       - name: Install npm dependencies
         script: npm install
+      - name: Validate Supabase environment
+        script: |
+          : "${SUPABASE_URL:?SUPABASE_URL não configurada}"
+          : "${SUPABASE_PUBLISHABLE_KEY:?SUPABASE_PUBLISHABLE_KEY não configurada}"
+          : "${SUPABASE_SECRET_KEY:?SUPABASE_SECRET_KEY não configurada}"
+          : "${SUPABASE_JWKS_URL:?SUPABASE_JWKS_URL não configurada}"
       - name: Build web app
         script: npm run build
       - name: Sync Capacitor iOS
