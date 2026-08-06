@@ -48,41 +48,40 @@ workflows:
     integrations:
       app_store_connect: AppStoreKey
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: br.com.impactoedu.agenda
       node: latest
       xcode: latest
       cocoapods: default
     scripts:
       - name: Install npm dependencies
         script: npm install
+      - name: Build web app
+        script: npm run build
       - name: Sync Capacitor iOS
+        script: npx cap sync ios
+      - name: Diagnostic & Apply iOS signing profiles
         script: |
-          mkdir -p out
-          npx cap sync ios
-      - name: Set up keychain and fetch signing files from Apple
-        script: |
-          keychain initialize
-          app-store-connect fetch-signing-files --type IOS_APP_STORE --create
-          keychain add-certificates
+          echo "=== Certificados de assinatura no Keychain ==="
+          security find-identity -v -p codesigning || true
+          echo "=== Provisioning profiles baixados ==="
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          ls -la "$PROFILE_DIR" || true
+          for PROFILE_PATH in "$PROFILE_DIR"/*.mobileprovision; do
+            [ -e "$PROFILE_PATH" ] || continue
+            echo "Profile: $PROFILE_PATH"
+            security cms -D -i "$PROFILE_PATH" | plutil -extract Name raw -o - - || true
+            security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -o - - || true
+            security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements.application-identifier raw -o - - || true
+          done
           xcode-project use-profiles --project "ios/App/App.xcodeproj"
       - name: Build iOS App (.ipa)
         script: |
-          mkdir -p build/ios/xcarchive build/ios/ipa
-          xcodebuild \
-            -project "ios/App/App.xcodeproj" \
-            -scheme "App" \
-            -configuration "Release" \
-            -archivePath "build/ios/xcarchive/App.xcarchive" \
-            archive \
-            CODE_SIGN_STYLE="Manual" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="45SB74BPSM" \
-            PROVISIONING_PROFILE_SPECIFIER="Impacto Edu AppStore" \
-            COMPILER_INDEX_STORE_ENABLE=NO
-          xcodebuild \
-            -exportArchive \
-            -archivePath "build/ios/xcarchive/App.xcarchive" \
-            -exportPath "build/ios/ipa" \
-            -exportOptionsPlist "ios/App/ExportOptions.plist"
+          xcode-project build-ipa \
+            --project "ios/App/App.xcodeproj" \
+            --scheme "App" \
+            --config Release
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
