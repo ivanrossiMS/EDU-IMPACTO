@@ -63,7 +63,8 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files --type IOS_APP_STORE --create
           keychain add-certificates
-          xcode-project use-profiles
+          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || true
+          xcode-project use-profiles --project "ios/App/App.xcodeproj"
       - name: Build iOS App (.ipa)
         script: |
           mkdir -p build/ios/xcarchive build/ios/ipa
@@ -73,9 +74,6 @@ workflows:
             -configuration "Release" \
             -archivePath "build/ios/xcarchive/App.xcarchive" \
             archive \
-            CODE_SIGN_STYLE="Manual" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="45SB74BPSM" \
             COMPILER_INDEX_STORE_ENABLE=NO
           xcodebuild \
             -exportArchive \
