@@ -62,8 +62,7 @@ workflows:
       - name: Set up keychain and code signing
         script: |
           keychain initialize
-          app-store-connect fetch-signing-files "br.com.impactoedu.agenda" \
-            --type IOS_APP_STORE
+          app-store-connect fetch-signing-files
           keychain add-certificates
           xcode-project use-profiles
       - name: Build iOS App (.ipa)
