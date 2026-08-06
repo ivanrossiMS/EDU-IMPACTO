@@ -61,9 +61,9 @@ workflows:
       - name: Set up keychain and fetch signing files from Apple
         script: |
           keychain initialize
-          app-store-connect fetch-signing-files
+          app-store-connect fetch-signing-files --type IOS_APP_STORE
           keychain add-certificates
-          xcode-project use-profiles
+          xcode-project use-profiles --profile "Impacto Edu AppStore"
       - name: Build iOS App (.ipa)
         script: |
           xcode-project build-ipa \
