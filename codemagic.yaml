@@ -48,9 +48,6 @@ workflows:
     integrations:
       app_store_connect: AppStoreKey
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: br.com.impactoedu.agenda
       node: latest
       xcode: latest
       cocoapods: default
@@ -58,9 +55,15 @@ workflows:
       - name: Install npm dependencies
         script: npm install
       - name: Sync Capacitor iOS
-        script: npx cap sync ios
-      - name: Set up code signing
-        script: xcode-project use-profiles
+        script: |
+          mkdir -p out
+          npx cap sync ios
+      - name: Set up keychain and fetch signing files from Apple
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files
+          keychain add-certificates
+          xcode-project use-profiles
       - name: Build iOS App (.ipa)
         script: |
           xcode-project build-ipa \
