@@ -84,25 +84,31 @@ workflows:
           cd ios/App
           agvtool new-version -all $NEW_BUILD || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" App/Info.plist || true
-      - name: Diagnostic & Apply iOS signing profiles
+      - name: Check provisioning profile
         script: |
-          echo "=== Certificados de assinatura no Keychain ==="
-          security find-identity -v -p codesigning || true
-
-          echo "=== Provisioning profiles baixados ==="
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          ls -la "$PROFILE_DIR" || true
 
-          for PROFILE_PATH in "$PROFILE_DIR"/*.mobileprovision; do
-            [ -e "$PROFILE_PATH" ] || continue
-            echo "Profile: $PROFILE_PATH"
-            security cms -D -i "$PROFILE_PATH" | plutil -extract Name raw -o - - || true
-            security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -o - - || true
-            security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements.application-identifier raw -o - - || true
-            security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements.aps-environment raw -o - - || true
+          for PROFILE in "$PROFILE_DIR"/*.mobileprovision; do
+            [ -e "$PROFILE" ] || continue
+
+            echo "=============================="
+            echo "PROFILE FILE: $PROFILE"
+
+            security cms -D -i "$PROFILE" > /tmp/profile.plist
+
+            echo "NAME:"
+            /usr/libexec/PlistBuddy -c "Print :Name" /tmp/profile.plist || true
+
+            echo "APP ID:"
+            /usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" /tmp/profile.plist || true
+
+            echo "APS ENVIRONMENT:"
+            /usr/libexec/PlistBuddy -c "Print :Entitlements:aps-environment" /tmp/profile.plist || true
           done
-
-          xcode-project use-profiles --project "ios/App/App.xcodeproj"
+      - name: Apply iOS signing profile
+        script: |
+          xcode-project use-profiles \
+            --project "$CM_BUILD_DIR/ios/App/App.xcodeproj"
       - name: Build iOS App (.ipa)
         script: |
           set -x
