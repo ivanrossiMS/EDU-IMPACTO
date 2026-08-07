@@ -69,6 +69,10 @@ workflows:
         script: npm run build
       - name: Sync Capacitor iOS
         script: npx cap sync ios
+      - name: Install CocoaPods
+        script: |
+          cd ios/App
+          [ -f Podfile ] && pod install || echo "Sem Podfile, utilizando Swift Package Manager (CapApp-SPM)."
       - name: Diagnostic & Apply iOS signing profiles
         script: |
           echo "=== Certificados de assinatura no Keychain ==="
@@ -86,10 +90,17 @@ workflows:
           xcode-project use-profiles --project "ios/App/App.xcodeproj"
       - name: Build iOS App (.ipa)
         script: |
-          xcode-project build-ipa \
-            --project "ios/App/App.xcodeproj" \
-            --scheme "App" \
-            --config Release
+          if [ -d "ios/App/App.xcworkspace" ]; then
+            xcode-project build-ipa \
+              --workspace "$CM_BUILD_DIR/ios/App/App.xcworkspace" \
+              --scheme "App" \
+              --config Release
+          else
+            xcode-project build-ipa \
+              --project "ios/App/App.xcodeproj" \
+              --scheme "App" \
+              --config Release
+          fi
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
