@@ -70,10 +70,6 @@ workflows:
       - name: Sync Capacitor iOS
         script: |
           npx cap sync ios
-      - name: Install CocoaPods
-        script: |
-          cd ios/App
-          pod install
       - name: Diagnostic & Apply iOS signing profiles
         script: |
           echo "=== Certificados de assinatura no Keychain ==="
@@ -92,14 +88,17 @@ workflows:
             security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements.aps-environment raw -o - - || true
           done
 
-          xcode-project use-profiles
+          xcode-project use-profiles --project "ios/App/App.xcodeproj"
       - name: Build iOS App (.ipa)
         script: |
+          set -x
+
           xcode-project build-ipa \
-            --workspace "$CM_BUILD_DIR/ios/App/App.xcworkspace" \
+            --project "$CM_BUILD_DIR/ios/App/App.xcodeproj" \
             --scheme "App"
     artifacts:
       - build/ios/ipa/*.ipa
+      - ios/App/build/**/*.ipa
       - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
