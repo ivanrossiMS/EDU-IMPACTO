@@ -650,7 +650,27 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
   const pendingAlerts = student.pendenciasAtrasadas || 0;
   
   let rawName = student.turmaNome || student.turma || 'S/T'
-  const nomeTurma = rawName.split('-')[0].trim()
+  
+  const activeHist = Array.isArray(student.historicoTurmas || student.dados?.historicoTurmas)
+    ? (student.historicoTurmas || student.dados.historicoTurmas)[(student.historicoTurmas || student.dados.historicoTurmas).length - 1]
+    : null;
+
+  const isIntegral = Boolean(
+    student.isIntegralIntermediario ||
+    student.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+    student.dados?.isIntegralIntermediario ||
+    student.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+    activeHist?.isIntegralIntermediario ||
+    activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+    student.turno_nome === 'Integral/Intermediário' ||
+    String(student.turno || '').toLowerCase().includes('integral') ||
+    String(student.turno || '').toLowerCase().includes('intermediario') ||
+    rawName.toUpperCase().includes('INTEGRAL') ||
+    rawName.toUpperCase().includes('INTERMEDIÁRIO')
+  );
+
+  const baseTurma = rawName.split('-')[0].trim()
+  const displayTurma = isIntegral ? (baseTurma.toUpperCase().includes('INTEGRAL') ? baseTurma : `${baseTurma} - INTEGRAL/INTERMEDIÁRIO`) : baseTurma
   const anoLetivo = student.anoLetivo || new Date().getFullYear()
 
   const s = student.status?.toLowerCase();
@@ -668,12 +688,12 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
 
       <div className="card-info">
         <h3 className="card-title">{formatShortName(student.nome)}</h3>
-        <div className="card-subtitle">
+        <div className="card-subtitle" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
           {isInativo ? (
             <span style={{ color: '#ef4444', fontWeight: 800 }}>Aluno Inativo</span>
           ) : (
             <>
-              <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {nomeTurma}</span>
+              <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {displayTurma}</span>
               <span className="card-dot-separator" />
               <span>{anoLetivo}</span>
             </>

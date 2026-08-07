@@ -419,8 +419,9 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
 
   // 4. historicoTurmas & turmasAdicionais
   const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas;
-  if (Array.isArray(hist)) {
+  if (Array.isArray(hist) && hist.length > 0) {
     for (const ht of hist) {
+      if (ht.isIntegralIntermediario === true) return true;
       const st = String(ht.serieTurma || ht.turma || '').toLowerCase();
       const mod = String(ht.modalidade || ht.turno || '').toLowerCase();
       if (st.includes('integral') || st.includes('intermediario') || st.includes('intermediário') ||
@@ -429,6 +430,7 @@ export function isAlunoIntegralIntermediario(aluno: any, turmas: any[] = [], gru
       }
       if (Array.isArray(ht.turmasAdicionais)) {
         for (const sub of ht.turmasAdicionais) {
+          if (sub.isIntegralIntermediario === true) return true;
           const subSt = String(sub.serieTurma || sub.turma || '').toLowerCase();
           const subMod = String(sub.modalidade || sub.turno || '').toLowerCase();
           if (subSt.includes('integral') || subSt.includes('intermediario') || subSt.includes('intermediário') ||

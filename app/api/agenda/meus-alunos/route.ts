@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
+import { isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -171,10 +172,20 @@ export async function GET(request: Request) {
         t.alunoId === a.id || t.aluno === a.nome || (a.matricula && (t.alunoId === a.matricula || t.aluno === a.matricula))
       )
       const turmaInfo = turmasMap[a.turma] || { nome: a.turma || 'S/T', ano: new Date().getFullYear() }
+      const isIntegral = isAlunoIntegralIntermediario(a, turmasData || [])
+
+      let finalTurmaNome = turmaInfo.nome
+      if (isIntegral && finalTurmaNome && !finalTurmaNome.toUpperCase().includes('INTEGRAL') && !finalTurmaNome.toUpperCase().includes('INTERMEDIÁRIO')) {
+        finalTurmaNome = `${finalTurmaNome} - INTEGRAL/INTERMEDIÁRIO`
+      }
+
       return {
         ...a,
+        isIntegralIntermediario: isIntegral,
+        modalidade: isIntegral ? 'INTEGRAL/INTERMEDIÁRIO' : (a.modalidade || a.dados?.modalidade || ''),
+        turno_nome: isIntegral ? 'Integral/Intermediário' : (a.turno_nome || a.turno || ''),
         pendenciasAtrasadas: pendentesAluno.length,
-        turmaNome: turmaInfo.nome,
+        turmaNome: finalTurmaNome,
         anoLetivo: turmaInfo.ano
       }
     })

@@ -225,9 +225,27 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
                   <strong style={{ color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                     Estou na mesma rede local da catraca
                   </strong>
-                  Marque esta opção apenas se o sistema estiver rodando no servidor local da escola, permitindo que a sincronização acesse IPs privados.
+                  Marque esta opção para tentar conectar aos IPs locais privados das catracas (ex: 192.168.x.x).
                 </span>
               </label>
+
+              {forceLocal && (
+                <div style={{
+                  marginTop: 10,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  background: 'rgba(245, 158, 11, 0.08)',
+                  border: '1px solid rgba(245, 158, 11, 0.25)',
+                  fontSize: 11.5,
+                  color: 'hsl(var(--text-muted))',
+                  lineHeight: 1.5
+                }}>
+                  <strong style={{ color: '#f59e0b', display: 'block', marginBottom: 2 }}>
+                    💡 Dica Importante (Site Online vs Rede Local):
+                  </strong>
+                  Quando você navega no site online (<code style={{ background: 'rgba(0,0,0,0.1)', padding: '1px 4px', borderRadius: 4 }}>impacto-edu.net</code>), o servidor web roda na nuvem e não alcança IPs locais da sua rede (<code style={{ background: 'rgba(0,0,0,0.1)', padding: '1px 4px', borderRadius: 4 }}>192.168.x.x</code>). Para sincronizar a partir do site online, rode o script local <code style={{ background: 'rgba(0,0,0,0.1)', padding: '1px 4px', borderRadius: 4 }}>python3 Sincronizar_Catraca.py</code> no computador da portaria ou cadastre o IP Público / DDNS da catraca.
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>
@@ -431,15 +449,29 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
               <XCircle size={28} />
             </div>
             <h3 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 900, fontFamily: 'Outfit, sans-serif' }}>
-              Falha na Sincronização
+              Falha na Comunicação
             </h3>
-            <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.6, margin: '0 0 24px' }}>
-              Ocorreu um erro ao baixar os logs da catraca:
-              <br />
-              <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
-                {acessosSyncError || 'Desconhecido'}
+            <div style={{
+              fontSize: 12, color: 'hsl(var(--text-muted))', lineHeight: 1.6, margin: '0 0 20px',
+              textAlign: 'left', background: 'hsl(var(--bg-base))', padding: '14px', borderRadius: 12,
+              border: '1px solid hsl(var(--border-subtle))'
+            }}>
+              <span style={{ color: '#ef4444', fontWeight: 700, display: 'block', marginBottom: 8 }}>
+                {acessosSyncError || 'Não foi possível comunicar com o leitor.'}
               </span>
-            </p>
+              {(acessosSyncError?.includes('não consegue conectar') || acessosSyncError?.includes('nuvem') || forceLocal) && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed hsl(var(--border-subtle))', fontSize: 11.5 }}>
+                  <strong style={{ color: '#06b6d4', display: 'block', marginBottom: 4 }}>
+                    ⚡ Como resolver para sincronizar:
+                  </strong>
+                  1. No computador da portaria (rede local), abra o terminal e execute:<br />
+                  <code style={{ display: 'block', background: 'rgba(6,182,212,0.1)', color: '#06b6d4', padding: '6px 10px', borderRadius: 6, margin: '6px 0', fontFamily: 'monospace', fontWeight: 700 }}>
+                    python3 Sincronizar_Catraca.py
+                  </code>
+                  2. Ou adicione um IP Público / DDNS no cadastro da catraca em <strong>Portaria &gt; Configurações</strong>.
+                </div>
+              )}
+            </div>
             <button
               onClick={onClose}
               style={{
@@ -449,7 +481,7 @@ export function SyncAcessosModal({ isOpen, onClose, initialStartDate, initialEnd
                 fontSize: 13
               }}
             >
-              Fechar
+              Entendido
             </button>
           </>
         )}

@@ -91,20 +91,25 @@ export async function POST(req: NextRequest) {
         send({ status: 'fetching', message: 'Buscando registros na memória da catraca...' })
 
         let allLogs: any[] = []
+        let deviceErrors: string[] = []
         for (const device of devices) {
-          if (!device.ip) continue;
+          const targetIp = device.configuracao?.url_externa || device.configuracao?.ip_externo || device.ip
+          const targetPort = device.configuracao?.porta_externa || device.porta || 443
+          if (!targetIp) continue;
 
           const loginParams = device.configuracao as any || {};
           try {
             const client = new ControliDClient({
-              ip: device.ip,
-              port: device.porta || 443,
+              ip: targetIp,
+              port: targetPort,
               login: loginParams.login || 'admin',
               password: loginParams.password || 'admin',
             })
             await client.authenticate()
 
-            const baseUrl = device.porta === 80 ? `http://${device.ip}:80` : `https://${device.ip}:${device.porta}`
+            const protocol = targetPort === 80 ? 'http' : 'https'
+            const cleanIp = targetIp.replace(/^https?:\/\//i, '')
+            const baseUrl = `${protocol}://${cleanIp}:${targetPort}`
             
             let lastId = 0
             let keepFetching = true
@@ -152,12 +157,32 @@ export async function POST(req: NextRequest) {
             allLogs = allLogs.concat(deviceLogs.map((l: any) => ({ ...l, device_id: device.id || l.device_id })))
           } catch (err: any) {
             console.error(`Erro conectando ao dispositivo ${device.nome}:`, err.message)
+            deviceErrors.push(`Dispositivo "${device.nome}" (${targetIp}): ${err.message}`)
           }
         }
 
         const totalFromDevice = allLogs.length
 
         if (totalFromDevice === 0) {
+          if (deviceErrors.length > 0) {
+            const isCloudHost = !host.includes('localhost') && !host.includes('127.0.0.1') && !host.includes('192.168.') && !host.includes('10.')
+            const hasLocalIps = devices.some(d => d.ip && isLocalIp(d.ip))
+            
+            if (isCloudHost && hasLocalIps) {
+              send({
+                status: 'error',
+                error: `O servidor online (${host}) não consegue conectar aos IPs locais privados (${devices.map(d => `${d.nome} [${d.ip}]`).join(', ')}). A nuvem não tem acesso direto à rede local da escola. Para sincronizar estando no site online: utilize o script local 'Sincronizar_Catraca.py' no computador da escola ou configure um IP Público/DDNS.`
+              })
+            } else {
+              send({
+                status: 'error',
+                error: `Falha de comunicação com as catracas: ${deviceErrors.join('; ')}`
+              })
+            }
+            controller.close()
+            return
+          }
+
           send({ status: 'completed', total: 0, alreadyExisting: 0, newInserted: 0 })
           controller.close()
           return

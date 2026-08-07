@@ -22,7 +22,15 @@ from datetime import datetime, timezone, date
 # ══════════════════════════════════════════════════════════════
 #  CONFIGURAÇÕES
 # ══════════════════════════════════════════════════════════════
-NETLIFY_URL   = "https://impacto-edu.net"
+DEFAULT_SERVER_URL = "https://impacto-edu.net"
+
+# Permite sobrescrever o servidor via argumento --server=http://localhost:3000 ou variável SERVER_URL
+SERVER_URL = os.environ.get("SERVER_URL", DEFAULT_SERVER_URL)
+for arg in sys.argv:
+    if arg.startswith("--server="):
+        SERVER_URL = arg.split("=", 1)[1].strip()
+
+NETLIFY_URL   = SERVER_URL.rstrip('/')
 CATRACA_SENHA = "Pass1081$"
 CATRACA_LOGIN = "admin"
 
@@ -83,39 +91,50 @@ def detectar_base_url(cat):
     return None, None
 
 
-def get_access_logs_hoje(base_url, session):
+STATE_FILE = "catraca_state.json"
+
+def carregar_estado_catracas():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def salvar_estado_catracas(estado):
+    try:
+        with open(STATE_FILE, "w") as f:
+            json.dump(estado, f, indent=2)
+    except Exception:
+        pass
+
+
+def get_access_logs_hoje(base_url, session, last_log_id=0):
     """
-    Busca logs de hoje de forma eficiente: scan a partir de um offset próximo
-    ao final do buffer, aumentando gradualmente.
+    Busca logs de hoje de forma incremental:
+    Se last_log_id > 0, busca APENAS registros com id > last_log_id.
+    Isso torna a leitura instantânea (0.05s) e lê unicamente novos acessos.
     """
     hoje = date.today()
     inicio_ts = int(datetime(hoje.year, hoje.month, hoje.day, tzinfo=timezone.utc).timestamp())
     fim_ts = inicio_ts + 86400
 
-    # 1. Descobrir total aproximado de logs (verificando offsets)
-    total_estimado = 0
-    for off in [5000, 10000, 20000, 30000, 35000, 50000, 75000, 100000]:
-        try:
-            r = post_json(f"{base_url}/load_objects.fcgi",
-                          {"object": "access_logs", "limit": 1, "offset": off},
-                          cookie=session)
-            if r.get("access_logs"):
-                total_estimado = off
-            else:
-                break
-        except Exception:
-            break
+    time_filter = {">=": inicio_ts - 10800, "<=": fim_ts + 10800}
 
-    # Começa scan ~2000 entradas antes do final estimado
-    offset_inicio = max(0, total_estimado - 2000)
+    if last_log_id > 0:
+        where_cond = {"access_logs": {"time": time_filter, "id": {">": last_log_id}}}
+    else:
+        where_cond = {"access_logs": {"time": time_filter}}
+
     logs_hoje = []
     batch = 500
+    off = 0
 
-    off = offset_inicio
     while True:
         try:
             r = post_json(f"{base_url}/load_objects.fcgi",
-                          {"object": "access_logs", "limit": batch, "offset": off},
+                          {"object": "access_logs", "where": where_cond, "limit": batch, "offset": off},
                           cookie=session)
             chunk = r.get("access_logs", [])
         except Exception as e:
@@ -125,11 +144,11 @@ def get_access_logs_hoje(base_url, session):
         if not chunk:
             break
 
-        de_hoje = [l for l in chunk if inicio_ts <= l.get("time", 0) < fim_ts]
+        de_hoje = [l for l in chunk if inicio_ts <= l.get("time", 0) <= fim_ts]
         logs_hoje.extend(de_hoje)
 
         if len(chunk) < batch:
-            break  # fim do buffer
+            break  # Fim do buffer de novos registros
         off += batch
 
     return logs_hoje
@@ -327,7 +346,7 @@ def carregar_registrados_do_erp():
         return set()
 
 
-def main():
+def rodar_um_ciclo():
     hoje_str = date.today().strftime("%d/%m/%Y")
     print()
     print("  ══════════════════════════════════════════════════")
@@ -335,6 +354,7 @@ def main():
     print(f"   {hoje_str}")
     print("  ══════════════════════════════════════════════════")
 
+    estado = carregar_estado_catracas()
     cache_file = f"sincronizados_{date.today().strftime('%Y_%m_%d')}.txt"
     ja_sincronizados = set()
     if os.path.exists(cache_file):
@@ -361,7 +381,9 @@ def main():
     cats_conectadas = []
 
     for cat in CATRACAS:
-        print(f"\n  📡 {cat['nome']} ({cat['ip']}:{cat['porta']})")
+        cat_key = cat.get("id") or cat["ip"]
+        last_id = estado.get(cat_key, 0)
+        print(f"\n  📡 {cat['nome']} ({cat['ip']}:{cat['porta']}) [Último Log ID lido: {last_id}]")
 
         base_url, session = detectar_base_url(cat)
         if not base_url:
@@ -380,9 +402,17 @@ def main():
         else:
             print(f"     ⚠️  Monitor não configurado (pode não suportar)")
 
-        # Busca logs de hoje
-        print(f"     🔍 Buscando logs de hoje...")
-        logs_hoje = get_access_logs_hoje(base_url, session)
+        # Busca logs de hoje de forma incremental
+        print(f"     🔍 Buscando novos logs da catraca...")
+        logs_hoje = get_access_logs_hoje(base_url, session, last_log_id=last_id)
+        
+        # Atualizar last_id se novos logs forem lidos
+        if logs_hoje:
+            max_log_id = max([l.get("id", 0) for l in logs_hoje], default=last_id)
+            if max_log_id > last_id:
+                estado[cat_key] = max_log_id
+                salvar_estado_catracas(estado)
+
         reconhecidos = [l for l in logs_hoje if l.get("user_id", 0) > 0]
 
         # Filtra para enviar apenas 1 registro por aluno (o primeiro do dia)
@@ -400,10 +430,10 @@ def main():
                 novos_para_enviar.append(log)
         
         pulados = len(reconhecidos_unicos) - len(novos_para_enviar)
-        print(f"     📋 {len(logs_hoje)} eventos hoje / {len(reconhecidos_unicos)} alunos únicos / {len(novos_para_enviar)} novos para envio ({pulados} pulados/já registrados)")
+        print(f"     📋 {len(logs_hoje)} novos eventos lidos / {len(reconhecidos_unicos)} alunos únicos / {len(novos_para_enviar)} para enviar ({pulados} pulados por duplicidade)")
 
         if not novos_para_enviar:
-            print(f"     ℹ️  Todos os alunos de hoje já foram sincronizados anteriormente no sistema. Pulando.")
+            print(f"     ℹ️  Nenhum novo registro pendente para esta catraca.")
             continue
 
         cache_f = None
@@ -458,6 +488,35 @@ def main():
         print(f"   ⚠️  Erros de conexão:          {total_erros}")
     print("  ══════════════════════════════════════════════════")
     print()
+
+
+def main():
+    import sys
+    import time
+    
+    loop_mode = "--loop" in sys.argv or "--daemon" in sys.argv or "-d" in sys.argv
+    intervalo = 30
+    
+    for arg in sys.argv:
+        if arg.startswith("--intervalo="):
+            try:
+                intervalo = int(arg.split("=")[1])
+            except:
+                pass
+
+    if loop_mode:
+        print(f"\n  🚀 MODO AUTOMÁTICO CONTINUO ATIVO!")
+        print(f"  O script rodará continuamente em segundo plano a cada {intervalo}s.")
+        print("  Leitura incremental ativa: apenas novos registros serão lidos e gravados.")
+        print("  Pressione Ctrl+C para parar.\n")
+        while True:
+            try:
+                rodar_um_ciclo()
+            except Exception as e:
+                print(f"  ⚠️ Erro no ciclo automático: {e}")
+            time.sleep(intervalo)
+    else:
+        rodar_um_ciclo()
 
 
 if __name__ == "__main__":

@@ -48,36 +48,17 @@ cat > "$PLIST_PATH" << EOF
     <array>
         <string>/usr/bin/python3</string>
         <string>${SCRIPT_PATH}</string>
+        <string>--loop</string>
+        <string>30</string>
     </array>
 
-    <!-- Rodar às 07:00 (entrada manhã) -->
-    <!-- Rodar às 12:30 (entrada tarde) -->
-    <!-- Rodar às 18:00 (fechamento)    -->
-    <key>StartCalendarInterval</key>
-    <array>
-        <dict>
-            <key>Hour</key><integer>7</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
-        <dict>
-            <key>Hour</key><integer>12</integer>
-            <key>Minute</key><integer>30</integer>
-        </dict>
-        <dict>
-            <key>Hour</key><integer>18</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
-    </array>
+    <!-- Manter rodando continuamente em segundo plano (24/7) -->
+    <key>KeepAlive</key>
+    <true/>
 
-    <!-- Log de saída -->
-    <key>StandardOutPath</key>
-    <string>${LOG_PATH}</string>
-    <key>StandardErrorPath</key>
-    <string>${LOG_PATH}</string>
-
-    <!-- Não rodar ao fazer login, só nos horários acima -->
+    <!-- Iniciar automaticamente ao ligar o computador / fazer login -->
     <key>RunAtLoad</key>
-    <false/>
+    <true/>
 </dict>
 </plist>
 EOF
@@ -86,12 +67,10 @@ EOF
 launchctl load "$PLIST_PATH"
 
 if [ $? -eq 0 ]; then
-    echo "  ✅ Sincronização automática instalada com sucesso!"
+    echo "  ✅ Sincronização automática em segundo plano (24/7) instalada com sucesso!"
     echo ""
-    echo "  ⏰ Horários de execução automática:"
-    echo "     • 07:00 — Entrada da manhã"
-    echo "     • 12:30 — Entrada da tarde"
-    echo "     • 18:00 — Fechamento"
+    echo "  🚀 O serviço agora roda continuamente em segundo plano a cada 30 segundos."
+    echo "     Ele lê APENAS os novos acessos das catracas de forma incremental."
     echo ""
     echo "  📄 Logs em: $LOG_PATH"
     echo ""

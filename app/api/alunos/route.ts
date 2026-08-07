@@ -1730,6 +1730,11 @@ function buildRow(a: any) {
     activeTurma = mainTurma.serieTurma || activeTurma;
     activeSerie = mainTurma.serie || activeSerie;
     rest.anoLetivo = mainTurma.anoLetivo;
+
+    if (mainTurma.isIntegralIntermediario === true || mainTurma.modalidade === 'INTEGRAL/INTERMEDIÁRIO') {
+      rest.isIntegralIntermediario = true;
+      rest.modalidade = 'INTEGRAL/INTERMEDIÁRIO';
+    }
   }
 
   return {

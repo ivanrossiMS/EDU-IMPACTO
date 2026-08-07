@@ -9,7 +9,7 @@ import {
   ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
   AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info,
   Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw, User,
-  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace, LogOut, UserCheck, Plus, CheckCircle2
+  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace, LogOut, UserCheck, Plus, CheckCircle2, FileSpreadsheet
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
@@ -764,7 +764,7 @@ export default function FrequenciaPage() {
     return []
   }, [saidaCallsResponse])
 
-  // Mesclar registros do Context com os carregados via API
+  // Mesclar registros do Context com os carregados via API e Eventos de Catraca/Portaria
   const combinedFreqs = useMemo(() => {
     const map = new Map<string, any>()
     ;(contextFreqs || []).forEach(f => {
@@ -777,8 +777,36 @@ export default function FrequenciaPage() {
       const dt = String(f.data || '').slice(0, 10)
       if (aId && dt) map.set(`${aId}_${dt}`, f)
     })
+
+    // Sintetizar presença a partir de eventos da portaria/catraca caso não haja registro explícito
+    ;(portariaEventsList || []).forEach((ev: any) => {
+      if (ev.status === 'sucesso' && ev.aluno_id) {
+        const aId = String(ev.aluno_id)
+        const dt = String(ev.data_hora || ev.created_at || '').slice(0, 10)
+        const key = `${aId}_${dt}`
+        if (aId && dt && !map.has(key)) {
+          const studentObj = (alunos || []).find((a: any) => String(a.id) === aId)
+          const tId = studentObj?.turma || studentObj?.dados?.turma || ev.turma_id
+          const localTimeStr = ev.data_hora ? new Date(ev.data_hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'Catraca'
+          map.set(key, {
+            id: `CATRACA-${ev.id}`,
+            aluno_id: aId,
+            turma_id: tId,
+            data: dt,
+            presente: true,
+            justificativa: null,
+            dados: {
+              tempos: { '1': 'P', '2': 'P', '3': 'P', '4': 'P', '5': 'P' },
+              registradoPor: 'Catraca iDFace',
+              horaRegistro: localTimeStr
+            }
+          })
+        }
+      }
+    })
+
     return Array.from(map.values())
-  }, [contextFreqs, allFreqs])
+  }, [contextFreqs, allFreqs, portariaEventsList, alunos])
 
   const isSameDay = useCallback((fData: any, targetDayStr: string): boolean => {
     if (!fData || !targetDayStr) return false
@@ -805,8 +833,8 @@ export default function FrequenciaPage() {
   const [buscaRelatorio, setBuscaRelatorio] = useState('')
   const [turmasExpandidas, setTurmasExpandidas] = useState<Record<string, boolean>>({})
 
-  // Filtros avançados do modal de relatório (Modos: por_turma | aluno_individual)
-  const [relatorioModo, setRelatorioModo] = useState<'por_turma' | 'aluno_individual'>('por_turma')
+  // Filtros avançados do modal de relatório (Modos: por_turma | aluno_individual | risco_faltosos)
+  const [relatorioModo, setRelatorioModo] = useState<'por_turma' | 'aluno_individual' | 'risco_faltosos'>('por_turma')
   const [relatorioTipoData, setRelatorioTipoData] = useState<'especifica' | 'intervalo'>('intervalo')
   const [relatorioDataInicio, setRelatorioDataInicio] = useState(todayStr())
   const [relatorioDataFim, setRelatorioDataFim] = useState(todayStr())
@@ -842,10 +870,6 @@ export default function FrequenciaPage() {
   const [salvandoSaida, setSalvandoSaida] = useState<boolean>(false)
   const [editingEntrada, setEditingEntrada] = useState<{ alunoId: string; dia: string } | null>(null)
 
-  // Auto-open sync modal on page load
-  useEffect(() => {
-    setShowAcessosModal(true)
-  }, [])
   
   // Filtros home
   const [filtroAno, setFiltroAno] = useState(new Date().getFullYear().toString())
@@ -1882,36 +1906,41 @@ export default function FrequenciaPage() {
     }
   }
 
-  // Cálculo e agregação de relatórios com datas completas
+  // Cálculo e agregação de relatórios 100% focado em DIAS (Sem tempos)
   const reportDataFiltered = useMemo(() => {
     const targetDates = relatorioTipoData === 'intervalo'
       ? getDatesInRange(relatorioDataInicio, relatorioDataFim)
       : [relatorioDataInicio]
 
+    const selTurmasObjs = relatorioTurmasSel.length > 0
+      ? turmas.filter(t => relatorioTurmasSel.includes(String(t.id)))
+      : []
+
     // Alunos filtrados por segmento, ano e turno
     let candidateStudents = alunos.filter((aluno: any) => {
-      const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma)
-      if (!tObj) return false
-      
-      const matchAno = !relatorioAno || relatorioAno === 'todos' || String(tObj.ano) === relatorioAno
-      const matchSegmento = !relatorioSegmento || (tObj as any).dados?.segmento === relatorioSegmento
-      const matchTurno = !relatorioTurno || tObj.turno === relatorioTurno
+      const matchAno = !relatorioAno || relatorioAno === 'todos' || String(aluno.anoLetivo || aluno.dados?.anoLetivo || '') === relatorioAno || turmas.some(t => String(t.ano) === relatorioAno && isAlunoCursandoTurma(aluno, t, relatorioAno, turmas))
+      const matchSegmento = !relatorioSegmento || (aluno.segmento === relatorioSegmento || aluno.dados?.segmento === relatorioSegmento || turmas.some(t => (t as any).dados?.segmento === relatorioSegmento && isAlunoCursandoTurma(aluno, t, undefined, turmas)))
+      const matchTurno = !relatorioTurno || (aluno.turno === relatorioTurno || aluno.dados?.turno === relatorioTurno || turmas.some(t => t.turno === relatorioTurno && isAlunoCursandoTurma(aluno, t, undefined, turmas)))
       
       return matchAno && matchSegmento && matchTurno
     })
 
     // Filtros por Modo
     if (relatorioModo === 'por_turma' && relatorioTurmasSel.length > 0) {
-      candidateStudents = candidateStudents.filter((a: any) => 
-        relatorioTurmasSel.includes(String(a.turma)) || 
-        turmas.some(t => relatorioTurmasSel.includes(String(t.id)) && t.nome === a.turma)
-      )
+      candidateStudents = candidateStudents.filter((a: any) => {
+        return selTurmasObjs.some(t => isAlunoCursandoTurma(a, t, relatorioAno, turmas))
+      })
     } else if (relatorioModo === 'aluno_individual') {
       if (relatorioAlunoId) {
         candidateStudents = candidateStudents.filter((a: any) => String(a.id) === String(relatorioAlunoId))
       } else {
-        // Se nenhum aluno selecionado ainda no modo individual, pega os primeiros para preview
         candidateStudents = candidateStudents.slice(0, 1)
+      }
+    } else if (relatorioModo === 'risco_faltosos') {
+      if (relatorioTurmasSel.length > 0) {
+        candidateStudents = candidateStudents.filter((a: any) => {
+          return selTurmasObjs.some(t => isAlunoCursandoTurma(a, t, relatorioAno, turmas))
+        })
       }
     }
 
@@ -1921,29 +1950,24 @@ export default function FrequenciaPage() {
       candidateStudents = candidateStudents.filter((a: any) => 
         a.nome.toLowerCase().includes(term) || 
         String(a.id).toLowerCase().includes(term) ||
-        String(a.turma).toLowerCase().includes(term)
+        String(a.turma_nome || a.turma || '').toLowerCase().includes(term)
       )
     }
 
     const result: any[] = []
 
     candidateStudents.forEach((aluno: any) => {
-      const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma)
-      if (!tObj) return
+      const targetTurmaForStudent = selTurmasObjs.find(t => isAlunoCursandoTurma(aluno, t, relatorioAno, turmas)) ||
+        turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma || t.codigo === aluno.turma)
       
-      const schedule = getTurmaSchedule(tObj)
-      let totalContabilizados = 0
-      let faltasContabilizadas = 0
-      let justificadasContabilizadas = 0
-      let presencasContabilizadas = 0
-      let totalFaltasTotais = 0
-      let totalFaltasParciais = 0
-      let totalSemRegistro = 0
-
+      if (!targetTurmaForStudent) return
+      
+      const schedule = getTurmaSchedule(targetTurmaForStudent)
       let diasPresentes = 0
       let diasFaltantes = 0
       let diasJustificados = 0
       let diasComChamada = 0
+      let totalSemRegistro = 0
 
       const dailyBreakdown: any[] = []
 
@@ -1952,65 +1976,50 @@ export default function FrequenciaPage() {
           String(f.aluno_id || f.alunoId) === String(aluno.id) && isSameDay(f.data, dia)
         )
 
-        let tempos: Record<string, PresStatus> = {}
         const dayOfWeek = new Date(dia + 'T00:00:00').getDay()
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
         const isRealRecordedDay = !!freqRecord
 
+        let statusDia: 'presente' | 'falta' | 'justificada' | 'sem_registro' = 'sem_registro'
+        let statusLabel = 'Sem Registro'
+
         if (freqRecord) {
           diasComChamada++
-          if (freqRecord.tempos) {
-            tempos = { ...freqRecord.tempos }
-          } else {
-            const overallStatus: PresStatus = freqRecord.justificativa === 'Justificada' ? 'J' : (freqRecord.presente ? 'P' : 'F')
-            schedule.tempos.forEach(t => tempos[t.id] = overallStatus)
-          }
-        } else {
-          schedule.tempos.forEach(t => tempos[t.id] = '-')
-        }
-
-        const calc = calcularFrequenciaDia(tempos, schedule.segmento)
-        
-        const temposFaltosos: string[] = []
-        const temposSemReg: string[] = []
-        schedule.tempos.forEach(t => {
-          if (calc.temposEfetivos[t.id] === 'F') temposFaltosos.push(t.id)
-          if (calc.temposEfetivos[t.id] === '-') temposSemReg.push(t.id)
-        })
-
-        const isInfantilOuFundI = schedule.segmento === 'Educação Infantil' || schedule.segmento === 'Ensino Fundamental I'
-        let faltasStr = 'Presente'
-
-        if (freqRecord) {
-          if (calc.justificativa === 'Justificada') {
-            faltasStr = 'Ausência Justificada'
-            justificadasContabilizadas += calc.justificadasContabilizadas
+          if (freqRecord.justificativa === 'Justificada' || freqRecord.justificativa === 'Sim') {
+            statusDia = 'justificada'
+            statusLabel = 'Ausência Justificada'
             diasJustificados++
-          } else if (temposFaltosos.length > 0) {
-            const isFaltaTotal = isInfantilOuFundI ? !calc.presente : temposFaltosos.length === schedule.tempos.length
-            if (isFaltaTotal) {
-              faltasStr = 'Falta Total'
-              totalFaltasTotais++
-            } else {
-              faltasStr = `Falta Parcial (${temposFaltosos.map(i => `${i}ºT`).join(', ')})`
-              totalFaltasParciais++
-            }
-            faltasContabilizadas += calc.faltasContabilizadas
+          } else if (freqRecord.presente === false || freqRecord.presenca === false) {
+            statusDia = 'falta'
+            statusLabel = 'Falta no Dia'
             diasFaltantes++
           } else {
-            faltasStr = 'Presente'
-            diasPresentes++
+            if (freqRecord.tempos) {
+              const vals = Object.values(freqRecord.tempos)
+              const temFalta = vals.some(v => v === 'F')
+              const temJust = vals.some(v => v === 'J')
+              if (temJust && !vals.some(v => v === 'P')) {
+                statusDia = 'justificada'
+                statusLabel = 'Ausência Justificada'
+                diasJustificados++
+              } else if (temFalta) {
+                statusDia = 'falta'
+                statusLabel = 'Falta no Dia'
+                diasFaltantes++
+              } else {
+                statusDia = 'presente'
+                statusLabel = 'Presente'
+                diasPresentes++
+              }
+            } else {
+              statusDia = 'presente'
+              statusLabel = 'Presente'
+              diasPresentes++
+            }
           }
-
-          totalContabilizados += calc.totalTemposContabilizados
-          presencasContabilizadas += (calc.totalTemposContabilizados - calc.faltasContabilizadas)
         } else {
           totalSemRegistro++
-          if (isWeekend) {
-            faltasStr = 'Final de Semana'
-          } else {
-            faltasStr = 'Sem Registro'
-          }
+          statusLabel = isWeekend ? 'Final de Semana' : 'Sem Registro'
         }
 
         const [y, m, d] = dia.split('-')
@@ -2040,38 +2049,50 @@ export default function FrequenciaPage() {
         dailyBreakdown.push({
           data: dia,
           dataFormatada: `${dataFormatada} (${diaSemana})`,
-          presente: isRealRecordedDay ? calc.presente : false,
-          justificativa: calc.justificativa,
-          temposEfetivos: calc.temposEfetivos,
-          faltasStr,
-          temposFaltosos,
-          temposSemReg,
+          statusDia,
+          statusLabel,
           horaRegistro,
           temRegistro: isRealRecordedDay
         })
       })
 
-      const hasChamadas = diasComChamada > 0 && totalContabilizados > 0
-      const pctFrequencia = hasChamadas
-        ? Math.round((presencasContabilizadas / totalContabilizados) * 100) 
-        : null
+      const hasChamadas = diasComChamada > 0
+      const totalDiasAvaliados = diasPresentes + diasFaltantes + diasJustificados
+      const pctFrequencia = totalDiasAvaliados > 0
+        ? Math.round(((diasPresentes + diasJustificados) / totalDiasAvaliados) * 100) 
+        : (hasChamadas ? 100 : null)
 
       const isCritico = pctFrequencia !== null && pctFrequencia < freqMinima
-      const hasFaltasInPeriod = (totalFaltasTotais + totalFaltasParciais) > 0
+      const hasFaltasInPeriod = diasFaltantes > 0
+
+      const isIntegral = Boolean(
+        aluno.isIntegralIntermediario ||
+        aluno.dados?.isIntegralIntermediario ||
+        aluno.integral_tipo ||
+        aluno.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+        String(aluno.turno || '').toLowerCase().includes('integral') ||
+        String(aluno.turno || '').toLowerCase().includes('intermediario')
+      )
+
+      // Filtro de Modo Risco Faltosos
+      if (relatorioModo === 'risco_faltosos' && !isCritico && !hasFaltasInPeriod) return
 
       // Filtro de Status
       if (relatorioStatus === 'faltantes' && !hasFaltasInPeriod) return
       if (relatorioStatus === 'presentes' && hasFaltasInPeriod) return
-      if (relatorioStatus === 'justificados' && justificadasContabilizadas === 0) return
+      if (relatorioStatus === 'justificados' && diasJustificados === 0) return
+      if (relatorioStatus === 'criticos' && !isCritico) return
+      if (relatorioStatus === 'assiduos' && pctFrequencia !== 100) return
 
       result.push({
         id: aluno.id,
         nome: aluno.nome,
-        turmaId: aluno.turma,
-        turmaNome: tObj.nome,
-        anoLetivo: String(tObj.ano || ''),
-        turno: aluno.turno || tObj.turno || 'N/A',
+        turmaId: targetTurmaForStudent.id,
+        turmaNome: targetTurmaForStudent.nome,
+        anoLetivo: String(targetTurmaForStudent.ano || ''),
+        turno: aluno.turno || targetTurmaForStudent.turno || 'N/A',
         segmento: schedule.segmento,
+        isIntegral,
         responsavel_telefone: aluno.responsavel_telefone || aluno.telefone || '',
         pctFrequencia,
         hasChamadas,
@@ -2079,12 +2100,7 @@ export default function FrequenciaPage() {
         diasPresentes,
         diasFaltantes,
         diasJustificados,
-        totalContabilizados,
-        presencasContabilizadas,
-        faltasContabilizadas,
-        justificadasContabilizadas,
-        totalFaltasTotais,
-        totalFaltasParciais,
+        totalDiasAvaliados,
         totalSemRegistro,
         isCritico,
         dailyBreakdown
@@ -2101,17 +2117,15 @@ export default function FrequenciaPage() {
         return compTurma !== 0 ? compTurma : a.nome.localeCompare(b.nome, 'pt-BR')
       }
       if (relatorioOrdenacao === 'frequencia_asc') {
-        const compFreq = a.pctFrequencia - b.pctFrequencia
+        const compFreq = (a.pctFrequencia ?? 999) - (b.pctFrequencia ?? 999)
         return compFreq !== 0 ? compFreq : a.nome.localeCompare(b.nome, 'pt-BR')
       }
       if (relatorioOrdenacao === 'frequencia_desc') {
-        const compFreq = b.pctFrequencia - a.pctFrequencia
+        const compFreq = (b.pctFrequencia ?? -1) - (a.pctFrequencia ?? -1)
         return compFreq !== 0 ? compFreq : a.nome.localeCompare(b.nome, 'pt-BR')
       }
       if (relatorioOrdenacao === 'faltas_desc') {
-        const totalFaltasA = a.totalFaltasTotais + a.totalFaltasParciais
-        const totalFaltasB = b.totalFaltasTotais + b.totalFaltasParciais
-        const compFaltas = totalFaltasB - totalFaltasA
+        const compFaltas = b.diasFaltantes - a.diasFaltantes
         return compFaltas !== 0 ? compFaltas : a.nome.localeCompare(b.nome, 'pt-BR')
       }
       if (relatorioOrdenacao === 'id_asc') {
@@ -2127,22 +2141,23 @@ export default function FrequenciaPage() {
     relatorioTurmasSel, relatorioAlunoId, buscaRelatorio, relatorioOrdenacao, freqMinima, getDatesInRange, isSameDay
   ])
 
-  // Estatísticas calculadas do relatório ativo
+  // Estatísticas calculadas do relatório ativo (Focado em Dias)
   const reportStats = useMemo(() => {
     const totalAlunos = reportDataFiltered.length
-    if (totalAlunos === 0) return { totalAlunos: 0, mediaPresenca: null, totalFaltas: 0, totalJustificadas: 0, totalTemposFalta: 0 }
+    if (totalAlunos === 0) return { totalAlunos: 0, mediaPresenca: null, totalFaltas: 0, totalJustificadas: 0, totalPresencas: 0, alunosCriticos: 0 }
 
     const alunosComChamada = reportDataFiltered.filter(a => a.hasChamadas)
     const somaPct = alunosComChamada.reduce((acc, a) => acc + (a.pctFrequencia || 0), 0)
     const mediaPresenca = alunosComChamada.length > 0 ? Math.round(somaPct / alunosComChamada.length) : null
-    const totalFaltas = reportDataFiltered.reduce((acc, a) => acc + (a.totalFaltasTotais + a.totalFaltasParciais), 0)
-    const totalTemposFalta = reportDataFiltered.reduce((acc, a) => acc + a.faltasContabilizadas, 0)
-    const totalJustificadas = reportDataFiltered.reduce((acc, a) => acc + a.justificadasContabilizadas, 0)
+    const totalFaltas = reportDataFiltered.reduce((acc, a) => acc + a.diasFaltantes, 0)
+    const totalPresencas = reportDataFiltered.reduce((acc, a) => acc + a.diasPresentes, 0)
+    const totalJustificadas = reportDataFiltered.reduce((acc, a) => acc + a.diasJustificados, 0)
+    const alunosCriticos = reportDataFiltered.filter(a => a.isCritico).length
 
-    return { totalAlunos, mediaPresenca, totalFaltas, totalJustificadas, totalTemposFalta }
+    return { totalAlunos, mediaPresenca, totalFaltas, totalJustificadas, totalPresencas, alunosCriticos }
   }, [reportDataFiltered])
 
-  // Impressão Avançada (PDF) com histórico de datas completas
+  // Impressão Avançada (PDF) com histórico de datas completas (Focado em Dias)
   const handlePrintRelatorioAvancado = () => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
@@ -2152,6 +2167,8 @@ export default function FrequenciaPage() {
 
     const tituloModo = relatorioModo === 'aluno_individual'
       ? 'FICHA INDIVIDUAL DE ASSIDUIDADE E FREQUÊNCIA DO ALUNO'
+      : relatorioModo === 'risco_faltosos'
+      ? 'RELATÓRIO DE ALUNOS COM ALERTA DE RETENÇÃO / FALTAS'
       : 'RELATÓRIO DE FREQUÊNCIA POR TURMA(S)'
 
     let contentHtml = ''
@@ -2160,7 +2177,7 @@ export default function FrequenciaPage() {
       const a = reportDataFiltered[0]
       contentHtml = `
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 20px;">
-          <div style="font-size: 16px; font-weight: 900; color: #0f172a;">${a.nome}</div>
+          <div style="font-size: 16px; font-weight: 900; color: #0f172a;">${a.nome} ${a.isIntegral ? '<span style="font-size: 10px; color: #6b21a8; background: #f3e8ff; padding: 2px 6px; border-radius: 4px;">⚡ INTEGRAL</span>' : ''}</div>
           <div style="font-size: 12px; color: #475569; margin-top: 4px;">
             <strong>Matrícula:</strong> #${a.id} &nbsp;|&nbsp;
             <strong>Turma:</strong> ${a.turmaNome} &nbsp;|&nbsp;
@@ -2171,7 +2188,7 @@ export default function FrequenciaPage() {
             <strong>Frequência Acumulada:</strong> ${a.pctFrequencia !== null ? `${a.pctFrequencia}%` : 'Sem chamadas no período'} &nbsp;|&nbsp;
             <span style="color: #15803d;">✓ ${a.diasPresentes} Dias Presentes</span> &nbsp;|&nbsp;
             <span style="color: #b91c1c;">✕ ${a.diasFaltantes} Dias com Falta</span> &nbsp;|&nbsp;
-            <span style="color: #b45309;">⏱ ${a.faltasContabilizadas} Tempos de Falta</span>
+            <span style="color: #b45309;">📄 ${a.diasJustificados} Ausências Justificadas</span>
           </div>
         </div>
 
@@ -2179,10 +2196,9 @@ export default function FrequenciaPage() {
         <table>
           <thead>
             <tr>
-              <th style="width: 140px;">Data</th>
-              <th style="width: 140px;">Status no Dia</th>
-              <th>Detalhamento dos Tempos de Aula</th>
-              <th style="width: 130px; text-align: center;">Horário Entrada</th>
+              <th style="width: 180px;">Data & Dia</th>
+              <th>Status no Dia</th>
+              <th style="width: 140px; text-align: center;">Horário Registro</th>
             </tr>
           </thead>
           <tbody>
@@ -2191,24 +2207,12 @@ export default function FrequenciaPage() {
                 <td style="font-weight: 700;">${d.dataFormatada}</td>
                 <td>
                   <span style="font-weight: 800; color: ${
-                    d.faltasStr.includes('Falta Total') ? '#dc2626' :
-                    d.faltasStr.includes('Parcial') ? '#d97706' :
-                    d.faltasStr.includes('Justificada') ? '#b45309' :
-                    d.faltasStr.includes('Sem Registro') ? '#64748b' : '#16a34a'
+                    d.statusDia === 'falta' ? '#dc2626' :
+                    d.statusDia === 'justificada' ? '#b45309' :
+                    d.statusDia === 'presente' ? '#16a34a' : '#64748b'
                   };">
-                    ${d.faltasStr}
+                    ${d.statusLabel}
                   </span>
-                </td>
-                <td>
-                  ${Object.entries(d.temposEfetivos).map(([tId, status]) => `
-                    <span style="display: inline-block; padding: 2px 6px; font-size: 10px; font-weight: 800; border-radius: 4px; margin-right: 4px; background: ${
-                      status === 'P' ? '#dcfce7; color: #15803d;' :
-                      status === 'F' ? '#fee2e2; color: #b91c1c;' :
-                      status === 'J' ? '#fef3c7; color: #b45309;' : '#f1f5f9; color: #64748b;'
-                    }">
-                      ${tId}ºT: ${status}
-                    </span>
-                  `).join('')}
                 </td>
                 <td style="text-align: center; font-size: 11px; font-weight: 700; color: #475569;">
                   ${d.horaRegistro ? d.horaRegistro : '—'}
@@ -2229,7 +2233,7 @@ export default function FrequenciaPage() {
               <th>Frequência</th>
               <th>Dias Presentes</th>
               <th>Dias c/ Falta</th>
-              <th>Tempos Falta</th>
+              <th>Ausências Justificadas</th>
               <th>Telefone Responsável</th>
             </tr>
           </thead>
@@ -2237,14 +2241,14 @@ export default function FrequenciaPage() {
             ${reportDataFiltered.map((a: any) => `
               <tr>
                 <td>#${a.id}</td>
-                <td style="font-weight: 700;">${a.nome}</td>
+                <td style="font-weight: 700;">${a.nome} ${a.isIntegral ? '(Integral)' : ''}</td>
                 <td>${a.turmaNome}</td>
                 <td style="font-weight: 800; color: ${a.pctFrequencia === null ? '#64748b' : (a.pctFrequencia < 75 ? '#dc2626' : '#16a34a')};">
                   ${a.pctFrequencia !== null ? `${a.pctFrequencia}%` : 'Sem Registro'}
                 </td>
                 <td style="color: #15803d; font-weight: 700;">${a.diasPresentes}</td>
                 <td style="color: ${a.diasFaltantes > 0 ? '#dc2626' : '#64748b'}; font-weight: 700;">${a.diasFaltantes}</td>
-                <td style="color: ${a.faltasContabilizadas > 0 ? '#b45309' : '#64748b'}; font-weight: 700;">${a.faltasContabilizadas}</td>
+                <td style="color: ${a.diasJustificados > 0 ? '#b45309' : '#64748b'}; font-weight: 700;">${a.diasJustificados}</td>
                 <td>${a.responsavel_telefone || '—'}</td>
               </tr>
             `).join('')}
@@ -2309,11 +2313,11 @@ export default function FrequenciaPage() {
               <div class="stat-lbl">Presença Média</div>
             </div>
             <div class="stat-card">
-              <div class="stat-val" style="color: #dc2626;">${reportStats.totalFaltas} dias (${reportStats.totalTemposFalta} tempos)</div>
+              <div class="stat-val" style="color: #dc2626;">${reportStats.totalFaltas} dias</div>
               <div class="stat-lbl">Total Faltas</div>
             </div>
             <div class="stat-card">
-              <div class="stat-val" style="color: #d97706;">${reportStats.totalJustificadas}</div>
+              <div class="stat-val" style="color: #d97706;">${reportStats.totalJustificadas} dias</div>
               <div class="stat-lbl">Justificadas</div>
             </div>
           </div>
@@ -2342,15 +2346,14 @@ export default function FrequenciaPage() {
     printWindow.document.close()
   }
 
-  // Exportação Excel / CSV Avançada com Datas Completas
+  // Exportação Excel / CSV Avançada com Datas Completas (Sem Tempos)
   const handleExportCSVAvancado = () => {
-    const headers = ['Matrícula', 'Nome do Aluno', 'Turma', 'Segmento', 'Turno', 'Data', 'Dia da Semana', 'Status no Dia', 'Tempos de Aula', 'Horário Catraca', 'Dias Presentes', 'Dias com Falta', 'Tempos de Falta', 'Frequência Acumulada (%)', 'Telefone Responsável']
+    const headers = ['Matrícula', 'Nome do Aluno', 'Turma', 'Segmento', 'Turno', 'Data', 'Dia da Semana', 'Status no Dia', 'Horário Catraca', 'Dias Presentes', 'Dias com Falta', 'Ausências Justificadas', 'Frequência Acumulada (%)', 'Telefone Responsável']
     
     const rows: any[] = []
 
     reportDataFiltered.forEach(a => {
       a.dailyBreakdown.forEach((d: any) => {
-        const temposStr = Object.entries(d.temposEfetivos).map(([tId, st]) => `${tId}ºT:${st}`).join(' ')
         rows.push([
           a.id,
           a.nome,
@@ -2359,12 +2362,11 @@ export default function FrequenciaPage() {
           a.turno,
           d.data,
           getWeekdayName(d.data),
-          d.faltasStr,
-          temposStr,
+          d.statusLabel,
           d.horaRegistro || 'Sem Registro',
           a.diasPresentes,
           a.diasFaltantes,
-          a.faltasContabilizadas,
+          a.diasJustificados,
           a.pctFrequencia !== null ? `${a.pctFrequencia}%` : 'Sem Chamadas',
           a.responsavel_telefone || 'Não informado'
         ])
@@ -2381,14 +2383,14 @@ export default function FrequenciaPage() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.setAttribute('href', url)
-    link.setAttribute('download', `relatorio_frequencia_${relatorioModo}_${relatorioDataInicio}_completo.csv`)
+    link.setAttribute('download', `relatorio_frequencia_${relatorioModo}_${relatorioDataInicio}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
   }
 
-  // Render do Modal de Relatórios Avançados (Foco: Por Turma e Aluno Individual)
+  // Render do Modal de Relatórios Avançados (Foco 100% em Dias e Assiduidade)
   const renderRelatorioModal = () => {
     if (!showRelatorioModal) return null
 
@@ -2416,55 +2418,83 @@ export default function FrequenciaPage() {
     return (
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
+        background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(10px)',
         zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
         animation: 'fadeIn 0.2s ease-out'
       }}>
         <div style={{
-          background: '#fff', borderRadius: '20px', maxWidth: '1180px', width: '100%', maxHeight: '95vh',
-          display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.3)', overflow: 'hidden'
+          background: '#fff', borderRadius: '24px', maxWidth: '1200px', width: '100%', maxHeight: '94vh',
+          display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', overflow: 'hidden',
+          border: '1px solid rgba(255,255,255,0.2)'
         }}>
           {/* Header Superior do Modal */}
           <div style={{
-            padding: '14px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '16px 28px', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#fff'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: 'rgba(37, 99, 235, 0.2)', color: '#60a5fa', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(96, 165, 250, 0.3)' }}>
-                <FileText size={18} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ background: 'rgba(37, 99, 235, 0.25)', color: '#60a5fa', width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(96, 165, 250, 0.3)' }}>
+                <BarChart2 size={22} />
               </div>
               <div>
-                <h2 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontSize: '18px', fontWeight: 800, color: '#fff', letterSpacing: '-0.3px' }}>
+                <h2 style={{ margin: 0, fontFamily: 'Outfit, sans-serif', fontSize: '19px', fontWeight: 800, color: '#fff', letterSpacing: '-0.3px' }}>
                   Central de Relatórios de Frequência
                 </h2>
-                <p style={{ margin: '1px 0 0 0', fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
-                  Relatórios detalhados com histórico completo de datas por turma e aluno individual
+                <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                  Visão clara por dias letivos, ausências e alertas de retenção escolar
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => {
-                setShowRelatorioModal(false)
-                setBuscaRelatorio('')
-              }}
-              style={{ background: 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', padding: '6px', borderRadius: '8px', color: '#cbd5e1', transition: 'all 0.2s' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            >
-              <X size={18} />
-            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                onClick={handlePrintRelatorioAvancado}
+                style={{
+                  padding: '7px 14px', background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '8px',
+                  fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+              >
+                <Printer size={14} />
+                <span>Imprimir PDF</span>
+              </button>
+
+              <button
+                onClick={handleExportCSVAvancado}
+                style={{
+                  padding: '7px 14px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: '8px',
+                  fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s'
+                }}
+              >
+                <FileSpreadsheet size={14} />
+                <span>Exportar CSV</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowRelatorioModal(false)
+                  setBuscaRelatorio('')
+                }}
+                style={{ background: 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', padding: '7px', borderRadius: '8px', color: '#cbd5e1', transition: 'all 0.2s' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
-          {/* Abas dos 2 Modos: Por Turma(s) vs Aluno Individual */}
-          <div style={{ padding: '8px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '10px' }}>
+          {/* Abas dos 3 Modos de Visualização */}
+          <div style={{ padding: '10px 28px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
             <button
               onClick={() => setRelatorioModo('por_turma')}
               style={{
-                padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
+                padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s',
                 background: relatorioModo === 'por_turma' ? '#2563eb' : '#fff',
                 color: relatorioModo === 'por_turma' ? '#fff' : '#64748b',
-                boxShadow: relatorioModo === 'por_turma' ? '0 4px 12px rgba(37, 99, 235, 0.25)' : '0 1px 3px rgba(0,0,0,0.05)',
+                boxShadow: relatorioModo === 'por_turma' ? '0 4px 12px rgba(37, 99, 235, 0.25)' : '0 1px 2px rgba(0,0,0,0.04)',
                 border: relatorioModo === 'por_turma' ? 'none' : '1px solid #e2e8f0'
               }}
             >
@@ -2475,31 +2505,45 @@ export default function FrequenciaPage() {
             <button
               onClick={() => setRelatorioModo('aluno_individual')}
               style={{
-                padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
+                padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s',
                 background: relatorioModo === 'aluno_individual' ? '#2563eb' : '#fff',
                 color: relatorioModo === 'aluno_individual' ? '#fff' : '#64748b',
-                boxShadow: relatorioModo === 'aluno_individual' ? '0 4px 12px rgba(37, 99, 235, 0.25)' : '0 1px 3px rgba(0,0,0,0.05)',
+                boxShadow: relatorioModo === 'aluno_individual' ? '0 4px 12px rgba(37, 99, 235, 0.25)' : '0 1px 2px rgba(0,0,0,0.04)',
                 border: relatorioModo === 'aluno_individual' ? 'none' : '1px solid #e2e8f0'
               }}
             >
               <User size={15} />
-              <span>Relatório Individual do Aluno</span>
+              <span>Ficha do Aluno</span>
+            </button>
+
+            <button
+              onClick={() => setRelatorioModo('risco_faltosos')}
+              style={{
+                padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 800, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s',
+                background: relatorioModo === 'risco_faltosos' ? '#dc2626' : '#fff',
+                color: relatorioModo === 'risco_faltosos' ? '#fff' : '#dc2626',
+                boxShadow: relatorioModo === 'risco_faltosos' ? '0 4px 12px rgba(220, 38, 38, 0.25)' : '0 1px 2px rgba(0,0,0,0.04)',
+                border: relatorioModo === 'risco_faltosos' ? 'none' : '1px solid #fecdd3'
+              }}
+            >
+              <AlertTriangle size={15} />
+              <span>⚡ Alertas & Retenção ({reportStats.alunosCriticos})</span>
             </button>
           </div>
 
-          {/* Painel de Filtros e Seleção (Design Enxuto) */}
-          <div style={{ padding: '12px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '10px', background: '#fff' }}>
+          {/* Painel de Filtros Integrado */}
+          <div style={{ padding: '14px 28px', borderBottom: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '12px', background: '#fff' }}>
             
-            {/* Linha 1: Mês, Ano Letivo, Período e Intervalo de Datas */}
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Linha 1: Filtros de Data & Atalhos */}
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               
-              {/* Seleção do Mês */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Mês</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mês</span>
                 <select
                   className="form-input"
-                  style={{ width: '125px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
+                  style={{ width: '130px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
                   value={relatorioMes}
                   onChange={e => {
                     const m = e.target.value
@@ -2518,12 +2562,11 @@ export default function FrequenciaPage() {
                 </select>
               </div>
 
-              {/* Seleção do Ano Letivo */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Ano</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ano</span>
                 <select
                   className="form-input"
-                  style={{ width: '95px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
+                  style={{ width: '95px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
                   value={relatorioAno}
                   onChange={e => {
                     const a = e.target.value
@@ -2540,20 +2583,19 @@ export default function FrequenciaPage() {
                 </select>
               </div>
 
-              {/* Tipo de Período */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Modo Datas</span>
-                <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '6px', padding: '2px', border: '1px solid #e2e8f0', height: '32px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Modo Datas</span>
+                <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: '8px', padding: '2px', border: '1px solid #e2e8f0', height: '34px', alignItems: 'center' }}>
                   <button
                     onClick={() => {
                       setRelatorioTipoData('especifica')
                       setRelatorioMes('')
                     }}
                     style={{
-                      padding: '3px 8px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      padding: '4px 10px', fontSize: '11px', fontWeight: 700, borderRadius: '6px', border: 'none', cursor: 'pointer',
                       background: relatorioTipoData === 'especifica' ? '#fff' : 'transparent',
                       color: relatorioTipoData === 'especifica' ? '#0f172a' : '#64748b',
-                      boxShadow: relatorioTipoData === 'especifica' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                      boxShadow: relatorioTipoData === 'especifica' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                     }}
                   >
                     Específica
@@ -2561,10 +2603,10 @@ export default function FrequenciaPage() {
                   <button
                     onClick={() => setRelatorioTipoData('intervalo')}
                     style={{
-                      padding: '3px 8px', fontSize: '11px', fontWeight: 700, borderRadius: '4px', border: 'none', cursor: 'pointer',
+                      padding: '4px 10px', fontSize: '11px', fontWeight: 700, borderRadius: '6px', border: 'none', cursor: 'pointer',
                       background: relatorioTipoData === 'intervalo' ? '#fff' : 'transparent',
                       color: relatorioTipoData === 'intervalo' ? '#0f172a' : '#64748b',
-                      boxShadow: relatorioTipoData === 'intervalo' ? '0 1px 2px rgba(0,0,0,0.08)' : 'none'
+                      boxShadow: relatorioTipoData === 'intervalo' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
                     }}
                   >
                     Intervalo
@@ -2572,138 +2614,106 @@ export default function FrequenciaPage() {
                 </div>
               </div>
 
-              {/* Inputs de Data */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Período</span>
-                {relatorioTipoData === 'especifica' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Período</span>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   <input
                     type="date"
                     className="form-input"
-                    style={{ width: '130px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 600 }}
+                    style={{ height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, padding: '0 8px' }}
                     value={relatorioDataInicio}
                     onChange={e => {
                       setRelatorioDataInicio(e.target.value)
-                      setRelatorioDataFim(e.target.value)
+                      setRelatorioMes('')
                     }}
                   />
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>De:</span>
-                    <input
-                      type="date"
-                      className="form-input"
-                      style={{ width: '125px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
-                      value={relatorioDataInicio}
-                      onChange={e => {
-                        setRelatorioDataInicio(e.target.value)
-                        setRelatorioMes('')
-                      }}
-                    />
-                    <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Até:</span>
-                    <input
-                      type="date"
-                      className="form-input"
-                      style={{ width: '125px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
-                      value={relatorioDataFim}
-                      onChange={e => {
-                        setRelatorioDataFim(e.target.value)
-                        setRelatorioMes('')
-                      }}
-                    />
-                  </div>
-                )}
+                  {relatorioTipoData === 'intervalo' && (
+                    <>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>até</span>
+                      <input
+                        type="date"
+                        className="form-input"
+                        style={{ height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, padding: '0 8px' }}
+                        value={relatorioDataFim}
+                        onChange={e => {
+                          setRelatorioDataFim(e.target.value)
+                          setRelatorioMes('')
+                        }}
+                      />
+                    </>
+                  )}
+                </div>
               </div>
 
-              {/* Atalhos Rápidos */}
-              <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto', alignSelf: 'flex-end' }}>
+              {/* Atalhos Rápidos de Período */}
+              <div style={{ display: 'flex', gap: '6px', alignSelf: 'flex-end', height: '34px', alignItems: 'center' }}>
                 <button
                   onClick={() => {
+                    const today = todayStr()
                     setRelatorioTipoData('especifica')
+                    setRelatorioDataInicio(today)
+                    setRelatorioDataFim(today)
                     setRelatorioMes('')
-                    setRelatorioDataInicio(todayStr())
-                    setRelatorioDataFim(todayStr())
                   }}
-                  style={{ fontSize: '11px', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '5px', cursor: 'pointer', color: '#475569' }}
+                  style={{ fontSize: '11px', fontWeight: 700, padding: '6px 10px', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer' }}
                 >
                   Hoje
                 </button>
                 <button
                   onClick={() => {
-                    setRelatorioTipoData('intervalo')
                     const now = new Date()
+                    const y = now.getFullYear()
                     const m = String(now.getMonth() + 1).padStart(2, '0')
+                    const lastDay = new Date(y, now.getMonth() + 1, 0).getDate()
+                    setRelatorioTipoData('intervalo')
+                    setRelatorioDataInicio(`${y}-${m}-01`)
+                    setRelatorioDataFim(`${y}-${m}-${String(lastDay).padStart(2, '0')}`)
                     setRelatorioMes(m)
-                    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
-                    setRelatorioDataInicio(`${firstDay.getFullYear()}-${m}-01`)
-                    setRelatorioDataFim(todayStr())
                   }}
-                  style={{ fontSize: '11px', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '5px', cursor: 'pointer', color: '#475569' }}
+                  style={{ fontSize: '11px', fontWeight: 700, padding: '6px 10px', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer' }}
                 >
                   Este Mês
                 </button>
                 <button
                   onClick={() => {
+                    const end = new Date()
+                    const start = new Date()
+                    start.setDate(end.getDate() - 30)
+                    const formatD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
                     setRelatorioTipoData('intervalo')
+                    setRelatorioDataInicio(formatD(start))
+                    setRelatorioDataFim(formatD(end))
                     setRelatorioMes('')
-                    const now = new Date()
-                    const past = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-                    setRelatorioDataInicio(`${past.getFullYear()}-${String(past.getMonth()+1).padStart(2,'0')}-${String(past.getDate()).padStart(2,'0')}`)
-                    setRelatorioDataFim(todayStr())
                   }}
-                  style={{ fontSize: '11px', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '5px', cursor: 'pointer', color: '#475569' }}
+                  style={{ fontSize: '11px', fontWeight: 700, padding: '6px 10px', background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer' }}
                 >
                   Últimos 30 dias
                 </button>
               </div>
+
             </div>
 
-            {/* Controles do Modo: Relatório por Turma(s) */}
-            {relatorioModo === 'por_turma' && (
+            {/* Linha 2: Filtros por Turma, Segmento, Turno, Status, Ordenação e Busca */}
+            {relatorioModo !== 'aluno_individual' && (
               <>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  
                   <select
                     className="form-input"
-                    style={{ width: '200px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
-                    value=""
-                    onChange={e => {
-                      const val = e.target.value
-                      if (val === 'ALL') {
-                        setRelatorioTurmasSel(turmas.map(t => String(t.id)))
-                      } else if (val === 'NONE') {
-                        setRelatorioTurmasSel([])
-                      } else if (val) {
-                        setRelatorioTurmasSel(prev => prev.includes(val) ? prev.filter(id => id !== val) : [...prev, val])
-                      }
-                    }}
-                  >
-                    <option value="">-- Selecionar Turma --</option>
-                    <option value="ALL">✅ Selecionar Todas</option>
-                    <option value="NONE">❌ Desmarcar Todas</option>
-                    {turmas.filter(t => !relatorioAno || String(t.ano) === relatorioAno).map(t => {
-                      const isSel = relatorioTurmasSel.includes(String(t.id))
-                      return (
-                        <option key={t.id} value={String(t.id)}>
-                          {isSel ? '✓ ' : ''}{t.nome} ({t.turno})
-                        </option>
-                      )
-                    })}
-                  </select>
-
-                  <select
-                    className="form-input"
-                    style={{ width: '150px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '11px', fontWeight: 600 }}
+                    style={{ width: '150px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
                     value={relatorioSegmento}
                     onChange={e => setRelatorioSegmento(e.target.value)}
                   >
                     <option value="">Todos Segmentos</option>
-                    {cfgNiveisEnsino?.map((n: any) => (
-                      <option key={n.id} value={n.nome}>{n.nome}</option>
-                    ))}
+                    <option value="Educação Infantil">Educação Infantil</option>
+                    <option value="Ensino Fundamental I">Ensino Fundamental I</option>
+                    <option value="Ensino Fundamental II">Ensino Fundamental II</option>
+                    <option value="Ensino Médio">Ensino Médio</option>
                   </select>
 
                   <select
                     className="form-input"
-                    style={{ width: '120px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '11px', fontWeight: 600 }}
+                    style={{ width: '120px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
                     value={relatorioTurno}
                     onChange={e => setRelatorioTurno(e.target.value)}
                   >
@@ -2716,19 +2726,21 @@ export default function FrequenciaPage() {
 
                   <select
                     className="form-input"
-                    style={{ width: '130px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '11px', fontWeight: 600 }}
+                    style={{ width: '175px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, color: '#1e293b' }}
                     value={relatorioStatus}
                     onChange={e => setRelatorioStatus(e.target.value)}
                   >
                     <option value="">Todos os Status</option>
-                    <option value="faltantes">Apenas Faltantes</option>
-                    <option value="presentes">Apenas Presentes</option>
-                    <option value="justificados">Ausências Justificadas</option>
+                    <option value="criticos">⚠️ Risco Assiduidade (&lt;75%)</option>
+                    <option value="assiduos">🌟 Assíduos (100% Presença)</option>
+                    <option value="faltantes">❌ Alunos com Faltas</option>
+                    <option value="presentes">✅ Apenas Presentes</option>
+                    <option value="justificados">📄 Ausências Justificadas</option>
                   </select>
 
                   <select
                     className="form-input"
-                    style={{ width: '160px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, color: '#1e293b' }}
+                    style={{ width: '165px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 700, color: '#1e293b' }}
                     value={relatorioOrdenacao}
                     onChange={e => setRelatorioOrdenacao(e.target.value as any)}
                   >
@@ -2741,20 +2753,21 @@ export default function FrequenciaPage() {
                     <option value="id_asc">Ordenar: Matrícula / ID</option>
                   </select>
 
-                  <div style={{ position: 'relative', flex: 1, minWidth: '160px' }}>
-                    <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <div style={{ position: 'relative', flex: 1, minWidth: '180px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input
                       className="form-input"
-                      style={{ paddingLeft: '28px', height: '32px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '11px', width: '100%' }}
-                      placeholder="Filtrar aluno ou turma..."
+                      style={{ paddingLeft: '32px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', width: '100%' }}
+                      placeholder="Filtrar por aluno ou turma..."
                       value={buscaRelatorio}
                       onChange={e => setBuscaRelatorio(e.target.value)}
                     />
                   </div>
                 </div>
 
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>Turmas Selecionadas ({relatorioTurmasSel.length === 0 ? 'Todas' : relatorioTurmasSel.length}):</span>
+                {/* Seleção de Turmas em Pills */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155' }}>Turmas ({relatorioTurmasSel.length === 0 ? 'Todas' : relatorioTurmasSel.length}):</span>
                   <button
                     onClick={() => {
                       if (relatorioTurmasSel.length === turmas.length) {
@@ -2763,11 +2776,11 @@ export default function FrequenciaPage() {
                         setRelatorioTurmasSel(turmas.map(t => String(t.id)))
                       }
                     }}
-                    style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '4px', cursor: 'pointer' }}
+                    style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '6px', cursor: 'pointer' }}
                   >
                     {relatorioTurmasSel.length === turmas.length ? 'Desmarcar Todas' : 'Selecionar Todas'}
                   </button>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '50px', overflowY: 'auto', flex: 1 }}>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', maxHeight: '55px', overflowY: 'auto', flex: 1 }}>
                     {turmas.filter(t => !relatorioAno || String(t.ano) === relatorioAno).map(t => {
                       const isSelected = relatorioTurmasSel.includes(String(t.id))
                       return (
@@ -2782,7 +2795,7 @@ export default function FrequenciaPage() {
                             }
                           }}
                           style={{
-                            fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '4px', cursor: 'pointer',
+                            fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '6px', cursor: 'pointer',
                             background: isSelected ? '#2563eb' : '#fff',
                             color: isSelected ? '#fff' : '#475569',
                             border: isSelected ? '1px solid #1d4ed8' : '1px solid #cbd5e1'
@@ -2797,16 +2810,16 @@ export default function FrequenciaPage() {
               </>
             )}
 
-            {/* Controles do Modo: Relatório Individual do Aluno (Design 100% Focado no Aluno e Enxuto) */}
+            {/* Controles do Modo: Ficha do Aluno */}
             {relatorioModo === 'aluno_individual' && (
-              <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <div style={{ position: 'relative', width: '240px' }}>
-                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Buscar por Nome/Matrícula</span>
+              <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '12px', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', width: '260px' }}>
+                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', display: 'block', marginBottom: '3px' }}>Buscar por Nome ou Matrícula</span>
                   <div style={{ position: 'relative' }}>
-                    <Search size={13} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input
                       className="form-input"
-                      style={{ paddingLeft: '28px', height: '32px', borderRadius: '6px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '11px', width: '100%' }}
+                      style={{ paddingLeft: '32px', height: '34px', borderRadius: '8px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '11px', width: '100%' }}
                       placeholder="Nome ou matrícula..."
                       value={buscaAlunoRelatorio}
                       onChange={e => setBuscaAlunoRelatorio(e.target.value)}
@@ -2814,31 +2827,31 @@ export default function FrequenciaPage() {
                   </div>
                 </div>
 
-                <div style={{ flex: 1, minWidth: '260px' }}>
-                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>Selecionar Aluno ({alunosParaBuscaIndividual.length})</span>
+                <div style={{ flex: 1, minWidth: '280px' }}>
+                  <span style={{ fontSize: '9px', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', display: 'block', marginBottom: '3px' }}>Selecionar Aluno ({alunosParaBuscaIndividual.length})</span>
                   <select
                     className="form-input"
-                    style={{ width: '100%', height: '32px', borderRadius: '6px', background: '#fff', border: '1px solid #7dd3fc', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
+                    style={{ width: '100%', height: '34px', borderRadius: '8px', background: '#fff', border: '1px solid #7dd3fc', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}
                     value={relatorioAlunoId}
                     onChange={e => setRelatorioAlunoId(e.target.value)}
                   >
-                    <option value="">-- Selecione o Aluno para a Ficha Individual --</option>
+                    <option value="">-- Selecione o Aluno para a Ficha --</option>
                     {alunosParaBuscaIndividual.slice(0, 300).map((a: any) => (
                       <option key={a.id} value={a.id}>
-                        {a.nome} (Matrícula: #{a.id} - Turma: {a.turma})
+                        {a.nome} (Matrícula: #{a.id} - Turma: {a.turma_nome || a.turma})
                       </option>
                     ))}
                   </select>
                 </div>
 
                 {alunoSelObj && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #7dd3fc', alignSelf: 'flex-end', height: '32px' }}>
-                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fff', padding: '4px 12px', borderRadius: '8px', border: '1px solid #7dd3fc', alignSelf: 'flex-end', height: '34px' }}>
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800 }}>
                       {getInitials(alunoSelObj.nome)}
                     </div>
                     <div>
-                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#0369a1', lineHeight: '1.2' }}>{alunoSelObj.nome}</div>
-                      <div style={{ fontSize: '9px', color: '#64748b', lineHeight: '1' }}>#{alunoSelObj.id} • {alunoSelObj.turma}</div>
+                      <div style={{ fontSize: '12px', fontWeight: 800, color: '#0369a1', lineHeight: '1.2' }}>{alunoSelObj.nome}</div>
+                      <div style={{ fontSize: '10px', color: '#64748b', lineHeight: '1' }}>#{alunoSelObj.id} • {alunoSelObj.turma_nome || alunoSelObj.turma}</div>
                     </div>
                   </div>
                 )}
@@ -2847,89 +2860,110 @@ export default function FrequenciaPage() {
 
           </div>
 
-          {/* Área de Resumo & Conteúdo do Relatório */}
-          <div style={{ padding: '16px 24px', overflowY: 'auto', flex: 1 }}>
+          {/* Conteúdo Principal do Relatório */}
+          <div style={{ padding: '20px 28px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
             
-            {/* Cards de Métricas Gerais do Período */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginBottom: '14px' }}>
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ background: '#e0f2fe', color: '#0369a1', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Users size={16} />
+            {/* Cards de KPIs em Linha (Resumo do Escopo) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '18px' }}>
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                <div style={{ background: '#e0f2fe', color: '#0369a1', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Users size={18} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Alunos no Escopo</div>
-                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#0f172a' }}>{reportStats.totalAlunos}</div>
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Alunos no Escopo</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>{reportStats.totalAlunos}</div>
                 </div>
               </div>
 
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ background: '#dcfce7', color: '#15803d', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CheckCircle size={16} />
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                <div style={{ background: '#dcfce7', color: '#15803d', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CheckCircle size={18} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Frequência Média</div>
-                  <div style={{ fontSize: '15px', fontWeight: 900, color: reportStats.mediaPresenca === null ? '#64748b' : (reportStats.mediaPresenca < 75 ? '#dc2626' : '#16a34a') }}>
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Frequência Média</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: reportStats.mediaPresenca === null ? '#64748b' : (reportStats.mediaPresenca < 75 ? '#dc2626' : '#16a34a') }}>
                     {reportStats.mediaPresenca !== null ? `${reportStats.mediaPresenca}%` : 'Sem registros'}
                   </div>
                 </div>
               </div>
 
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ background: '#fee2e2', color: '#b91c1c', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <XCircle size={16} />
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                <div style={{ background: '#dcfce7', color: '#15803d', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Check size={18} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Faltas (Dias / Tempos)</div>
-                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#b91c1c' }}>
-                    {reportStats.totalFaltas} dias ({reportStats.totalTemposFalta} tempos)
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dias Presentes</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: '#15803d', fontFamily: 'Outfit, sans-serif' }}>
+                    {reportStats.totalPresencas} <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>dias</span>
                   </div>
                 </div>
               </div>
 
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ background: '#fef3c7', color: '#b45309', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <FileText size={16} />
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                <div style={{ background: '#fee2e2', color: '#b91c1c', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <XCircle size={18} />
                 </div>
                 <div>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Justificativas</div>
-                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#b45309' }}>{reportStats.totalJustificadas}</div>
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Dias de Falta</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: '#b91c1c', fontFamily: 'Outfit, sans-serif' }}>
+                    {reportStats.totalFaltas} <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>dias</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: reportStats.alunosCriticos > 0 ? '#fff1f2' : '#fff', border: reportStats.alunosCriticos > 0 ? '1px solid #fecdd3' : '1px solid #e2e8f0', borderRadius: '14px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                <div style={{ background: reportStats.alunosCriticos > 0 ? '#f43f5e' : '#f1f5f9', color: reportStats.alunosCriticos > 0 ? '#fff' : '#64748b', width: '38px', height: '38px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={18} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 800, color: reportStats.alunosCriticos > 0 ? '#e11d48' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Risco Retenção (&lt;75%)</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: reportStats.alunosCriticos > 0 ? '#e11d48' : '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+                    {reportStats.alunosCriticos} {reportStats.alunosCriticos === 1 ? 'aluno' : 'alunos'}
+                  </div>
                 </div>
               </div>
             </div>
 
             {reportDataFiltered.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748b' }}>
-                <Users size={48} style={{ color: '#cbd5e1', marginBottom: '12px' }} />
-                <p style={{ margin: 0, fontWeight: 700, fontSize: '15px', color: '#334155' }}>Nenhum registro encontrado.</p>
-                <p style={{ margin: '4px 0 0 0', fontSize: '13px' }}>Selecione um aluno ou ajuste os filtros para visualizar as datas completas.</p>
+              <div style={{ textAlign: 'center', padding: '56px 0', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                <Users size={52} style={{ color: '#cbd5e1', marginBottom: '14px' }} />
+                <h4 style={{ margin: 0, fontWeight: 800, fontSize: '16px', color: '#1e293b' }}>Nenhum registro encontrado</h4>
+                <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#64748b' }}>Selecione um aluno ou ajuste o período/turmas para visualizar o histórico de assiduidade.</p>
               </div>
             ) : relatorioModo === 'aluno_individual' ? (
-              // VISÃO INDIVIDUAL DO ALUNO COM DATAS COMPLETAS
+              // VISÃO FICHA INDIVIDUAL DO ALUNO (100% FOCADA EM DIAS)
               <div>
                 {reportDataFiltered.map((a: any) => (
-                  <div key={a.id} style={{ borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', background: '#fff' }}>
-                    {/* Header do Aluno Individual */}
-                    <div style={{ padding: '14px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: a.pctFrequencia === null ? '#f1f5f9' : (a.isCritico ? '#fee2e2' : '#dcfce7'), color: a.pctFrequencia === null ? '#64748b' : (a.isCritico ? '#dc2626' : '#15803d'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 900, border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <div key={a.id} style={{ borderRadius: '18px', border: '1px solid #e2e8f0', overflow: 'hidden', background: '#fff', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                    {/* Header com Dados do Aluno */}
+                    <div style={{ padding: '18px 24px', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                        <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: a.pctFrequencia === null ? '#f1f5f9' : (a.isCritico ? '#fee2e2' : '#dcfce7'), color: a.pctFrequencia === null ? '#64748b' : (a.isCritico ? '#dc2626' : '#15803d'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 900, border: '2px solid #fff', boxShadow: '0 2px 4px rgba(0,0,0,0.08)' }}>
                           {getInitials(a.nome)}
                         </div>
                         <div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
-                          <div style={{ fontSize: '11px', color: '#64748b' }}>
-                            Matrícula: #{a.id} • Turma: <strong>{a.turmaNome}</strong> ({a.segmento} - {a.turno})
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '17px', fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>{a.nome}</span>
+                            {a.isIntegral && (
+                              <span style={{ fontSize: '10px', fontWeight: 800, background: '#f3e8ff', color: '#6b21a8', border: '1px solid #e9d5ff', padding: '2px 8px', borderRadius: '6px' }}>
+                                ⚡ TURNO INTEGRAL
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px' }}>
+                            Matrícula: <strong>#{a.id}</strong> • Turma: <strong>{a.turmaNome}</strong> ({a.segmento} - {a.turno})
                           </div>
                           
-                          {/* Badges de Resumo do Período */}
-                          <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 800, background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #bbf7d0' }}>
-                              ✓ {a.diasPresentes} dia{a.diasPresentes !== 1 ? 's' : ''} presente{a.diasPresentes !== 1 ? 's' : ''}
+                          {/* Metricas em Badges */}
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 800, background: '#dcfce7', color: '#15803d', padding: '3px 10px', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
+                              ✓ {a.diasPresentes} dias presentes
                             </span>
-                            <span style={{ fontSize: '11px', fontWeight: 800, background: a.diasFaltantes > 0 ? '#fee2e2' : '#f1f5f9', color: a.diasFaltantes > 0 ? '#b91c1c' : '#64748b', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', border: a.diasFaltantes > 0 ? '1px solid #fecaca' : '1px solid #e2e8f0' }}>
-                              ✕ {a.diasFaltantes} dia{a.diasFaltantes !== 1 ? 's' : ''} com falta
+                            <span style={{ fontSize: '11px', fontWeight: 800, background: a.diasFaltantes > 0 ? '#fee2e2' : '#f1f5f9', color: a.diasFaltantes > 0 ? '#b91c1c' : '#64748b', padding: '3px 10px', borderRadius: '6px', border: a.diasFaltantes > 0 ? '1px solid #fecaca' : '1px solid #e2e8f0' }}>
+                              ✕ {a.diasFaltantes} dias de falta
                             </span>
-                            <span style={{ fontSize: '11px', fontWeight: 800, background: a.faltasContabilizadas > 0 ? '#fef3c7' : '#f1f5f9', color: a.faltasContabilizadas > 0 ? '#b45309' : '#64748b', padding: '2px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', border: a.faltasContabilizadas > 0 ? '1px solid #fde68a' : '1px solid #e2e8f0' }}>
-                              ⏱ {a.faltasContabilizadas} tempo{a.faltasContabilizadas !== 1 ? 's' : ''} de falta
+                            <span style={{ fontSize: '11px', fontWeight: 800, background: a.diasJustificados > 0 ? '#fef3c7' : '#f1f5f9', color: a.diasJustificados > 0 ? '#b45309' : '#64748b', padding: '3px 10px', borderRadius: '6px', border: a.diasJustificados > 0 ? '1px solid #fde68a' : '1px solid #e2e8f0' }}>
+                              📄 {a.diasJustificados} justificadas
                             </span>
                           </div>
                         </div>
@@ -2937,93 +2971,135 @@ export default function FrequenciaPage() {
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Frequência no Período</div>
+                          <div style={{ fontSize: '10px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Frequência Acumulada</div>
                           {a.pctFrequencia !== null ? (
-                            <div style={{ fontSize: '22px', fontWeight: 900, color: a.pctFrequencia < 75 ? '#dc2626' : '#16a34a' }}>
+                            <div style={{ fontSize: '24px', fontWeight: 900, color: a.pctFrequencia < 75 ? '#dc2626' : '#16a34a', fontFamily: 'Outfit, sans-serif' }}>
                               {a.pctFrequencia}%
                             </div>
                           ) : (
-                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', background: '#f1f5f9', padding: '3px 8px', borderRadius: '6px', marginTop: '2px', border: '1px solid #e2e8f0' }}>
-                              Sem chamadas no período
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px', marginTop: '2px' }}>
+                              Sem registro
                             </div>
                           )}
                         </div>
                         <button
                           onClick={() => handleSendWhatsApp(a)}
-                          style={{ padding: '8px 14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          style={{ padding: '10px 16px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 6px rgba(34, 197, 94, 0.3)' }}
                         >
                           WhatsApp
                         </button>
                       </div>
                     </div>
 
-                    {/* Tabela com as Datas Completas do Período */}
-                    <div style={{ padding: '0' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead>
-                          <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
-                            <th style={{ padding: '10px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Data & Dia da Semana</th>
-                            <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Status do Dia</th>
-                            <th style={{ padding: '10px 14px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Detalhamento por Tempo</th>
-                            <th style={{ padding: '10px 16px', fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Origem & Horário</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {a.dailyBreakdown.map((d: any) => {
-                            const dFreqRecord = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(a.id) && isSameDay(f.data, d.data))
-                            const dOrigem = getOrigemFrequenciaCompleta(a.id, d.data, dFreqRecord, portariaEventsList, saidaCallsList)
+                    {/* Timeline de Datas do Aluno */}
+                    <div style={{ padding: '16px 24px' }}>
+                      <h5 style={{ margin: '0 0 14px 0', fontSize: '12px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Histórico por Dia Letivo no Período ({a.dailyBreakdown.length} dias):
+                      </h5>
 
-                            return (
-                              <tr key={d.data} style={{ borderBottom: '1px solid #f1f5f9', background: '#fff' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
-                                <td style={{ padding: '12px 16px', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
-                                  {d.dataFormatada}
-                                </td>
-                                <td style={{ padding: '12px 14px' }}>
-                                  <span style={{
-                                    padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 800,
-                                    background: d.faltasStr.includes('Falta Total') ? '#fee2e2' :
-                                                d.faltasStr.includes('Parcial') ? '#fef3c7' :
-                                                d.faltasStr.includes('Justificada') ? '#fde68a' :
-                                                d.faltasStr.includes('Sem Registro') ? '#f1f5f9' : '#dcfce7',
-                                    color: d.faltasStr.includes('Falta Total') ? '#b91c1c' :
-                                           d.faltasStr.includes('Parcial') ? '#b45309' :
-                                           d.faltasStr.includes('Justificada') ? '#92400e' :
-                                           d.faltasStr.includes('Sem Registro') ? '#64748b' : '#15803d'
-                                  }}>
-                                    {d.faltasStr}
-                                  </span>
-                                </td>
-                                <td style={{ padding: '12px 14px' }}>
-                                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                    {Object.entries(d.temposEfetivos).map(([tId, status]) => {
-                                      const cfg = S_CONFIG[status as PresStatus] || { bg: '#f1f5f9', color: '#64748b', label: '-' }
-                                      return (
-                                        <div key={tId} style={{ padding: '2px 8px', borderRadius: '6px', background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border || 'transparent'}`, fontSize: '11px', fontWeight: 800 }}>
-                                          {tId}ºT: {cfg.label}
-                                        </div>
-                                      )
-                                    })}
-                                  </div>
-                                </td>
-                                <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#475569' }}>
-                                  <OrigemBadgePair infoCompleta={dOrigem} />
-                                  {!dOrigem.entrada && !dOrigem.saida && <span style={{ color: '#94a3b8' }}>—</span>}
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {a.dailyBreakdown.map((d: any) => {
+                          const dFreqRecord = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(a.id) && isSameDay(f.data, d.data))
+                          const dOrigem = getOrigemFrequenciaCompleta(a.id, d.data, dFreqRecord, portariaEventsList, saidaCallsList)
+
+                          return (
+                            <div key={d.data} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', flexWrap: 'wrap', gap: '10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{
+                                  width: '10px', height: '10px', borderRadius: '50%',
+                                  background: d.statusDia === 'falta' ? '#ef4444' : (d.statusDia === 'justificada' ? '#f59e0b' : (d.statusDia === 'presente' ? '#22c55e' : '#cbd5e1'))
+                                }} />
+                                <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{d.dataFormatada}</span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <span style={{
+                                  padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 800,
+                                  background: d.statusDia === 'falta' ? '#fee2e2' : (d.statusDia === 'justificada' ? '#fef3c7' : (d.statusDia === 'presente' ? '#dcfce7' : '#f1f5f9')),
+                                  color: d.statusDia === 'falta' ? '#b91c1c' : (d.statusDia === 'justificada' ? '#b45309' : (d.statusDia === 'presente' ? '#15803d' : '#64748b'))
+                                }}>
+                                  {d.statusLabel}
+                                </span>
+
+                                <OrigemBadgePair infoCompleta={dOrigem} />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : relatorioModo === 'risco_faltosos' ? (
+              // VISÃO ALERTA DE RISCO & FALTOSOS
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '12px', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <AlertTriangle size={20} style={{ color: '#e11d48' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#be123c' }}>
+                      Alunos com frequência abaixo do limite mínimo de 75% ou com faltas no período ({reportDataFiltered.length})
+                    </span>
+                  </div>
+                </div>
+
+                {reportDataFiltered.map((a: any) => (
+                  <div key={a.id} style={{ borderRadius: '14px', border: a.isCritico ? '1px solid #fecdd3' : '1px solid #e2e8f0', background: a.isCritico ? '#fff5f5' : '#fff', padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: a.isCritico ? '#fee2e2' : '#fef3c7', color: a.isCritico ? '#dc2626' : '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 900 }}>
+                        {getInitials(a.nome)}
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>{a.nome}</span>
+                          {a.isIntegral && (
+                            <span style={{ fontSize: '9px', fontWeight: 800, background: '#f3e8ff', color: '#6b21a8', border: '1px solid #e9d5ff', padding: '1px 6px', borderRadius: '4px' }}>
+                              ⚡ INTEGRAL
+                            </span>
+                          )}
+                          {a.isCritico && (
+                            <span style={{ fontSize: '10px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '1px 6px', borderRadius: '4px' }}>
+                              ⚠️ RETENÇÃO
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                          Matrícula: #{a.id} • Turma: <strong>{a.turmaNome}</strong> ({a.turno})
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Frequência</span>
+                        <div style={{ fontSize: '18px', fontWeight: 900, color: a.isCritico ? '#dc2626' : '#15803d' }}>
+                          {a.pctFrequencia !== null ? `${a.pctFrequencia}%` : '—'}
+                        </div>
+                      </div>
+
+                      <div style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 800, textTransform: 'uppercase' }}>Faltas</span>
+                        <div style={{ fontSize: '16px', fontWeight: 900, color: '#b91c1c' }}>
+                          {a.diasFaltantes}d
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleSendWhatsApp(a)}
+                        style={{ padding: '8px 14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        Notificar Pai (WhatsApp)
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              // VISÃO POR TURMA(S) COM ACCORDEÃO DE DATAS COMPLETAS
+              // VISÃO POR TURMA(S) COM ACCORDEÃO DE DATAS
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
                   <span style={{ fontSize: '12px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
-                    Alunos no Período ({reportDataFiltered.length})
+                    Alunos Encontrados ({reportDataFiltered.length})
                   </span>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -3048,25 +3124,39 @@ export default function FrequenciaPage() {
                 {reportDataFiltered.map((a: any) => {
                   const isExpanded = !!alunosExpandidosRelatorio[a.id]
                   return (
-                    <div key={a.id} style={{ borderRadius: '14px', border: '1px solid #e2e8f0', overflow: 'hidden', background: '#fff' }}>
+                    <div key={a.id} style={{ borderRadius: '14px', border: '1px solid #e2e8f0', overflow: 'hidden', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                       {/* Linha Resumo do Aluno */}
                       <div
                         onClick={() => setAlunosExpandidosRelatorio(prev => ({ ...prev, [a.id]: !prev[a.id] }))}
-                        style={{ padding: '12px 18px', background: isExpanded ? '#f8fafc' : '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', transition: 'background 0.2s' }}
+                        style={{ padding: '14px 20px', background: isExpanded ? '#f8fafc' : '#fff', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', transition: 'background 0.2s' }}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <div style={{ width: '34px', height: '34px', borderRadius: '50%', background: a.isCritico ? '#fee2e2' : '#e0f2fe', color: a.isCritico ? '#dc2626' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: '240px' }}>
+                          <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: a.isCritico ? '#fee2e2' : '#e0f2fe', color: a.isCritico ? '#dc2626' : '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800 }}>
                             {getInitials(a.nome)}
                           </div>
                           <div>
-                            <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
-                            <div style={{ fontSize: '11px', color: '#64748b' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>{a.nome}</span>
+                              {a.isIntegral && (
+                                <span style={{ fontSize: '9px', fontWeight: 800, background: '#f3e8ff', color: '#6b21a8', border: '1px solid #e9d5ff', padding: '1px 6px', borderRadius: '4px' }}>
+                                  ⚡ INTEGRAL
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
                               Matrícula: #{a.id} • Turma: <strong>{a.turmaNome}</strong> ({a.turno})
                             </div>
+
+                            {/* Barra de Progresso Visual de Presença */}
+                            {a.pctFrequencia !== null && (
+                              <div style={{ width: '160px', height: '5px', background: '#e2e8f0', borderRadius: '3px', marginTop: '6px', overflow: 'hidden' }}>
+                                <div style={{ width: `${a.pctFrequencia}%`, height: '100%', background: a.pctFrequencia < 75 ? '#ef4444' : '#22c55e', borderRadius: '3px' }} />
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                           <div style={{ textAlign: 'center' }}>
                             <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>Frequência</span>
                             {a.pctFrequencia !== null ? (
@@ -3092,16 +3182,9 @@ export default function FrequenciaPage() {
                           </div>
 
                           <div style={{ textAlign: 'center' }}>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>Dias Falta</span>
+                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>Faltas</span>
                             <span style={{ fontSize: '12px', fontWeight: 800, color: a.diasFaltantes > 0 ? '#dc2626' : '#64748b' }}>
                               {a.diasFaltantes}d
-                            </span>
-                          </div>
-
-                          <div style={{ textAlign: 'center' }}>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', display: 'block' }}>Tempos Falta</span>
-                            <span style={{ fontSize: '12px', fontWeight: 800, color: a.faltasContabilizadas > 0 ? '#b45309' : '#64748b' }}>
-                              {a.faltasContabilizadas}T
                             </span>
                           </div>
 
@@ -3118,61 +3201,42 @@ export default function FrequenciaPage() {
                         </div>
                       </div>
 
-                      {/* Conteúdo Expandido: Tabela de Datas Completas */}
+                      {/* Conteúdo Expandido: Linhas de Datas sem Tempos */}
                       {isExpanded && (
-                        <div style={{ padding: '12px 18px 16px 18px', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
+                        <div style={{ padding: '14px 20px 18px 20px', borderTop: '1px solid #f1f5f9', background: '#fafafa' }}>
                           <h5 style={{ margin: '0 0 10px 0', fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            Detalhamento Completo por Data:
+                            Histórico por Dia Letivo:
                           </h5>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', background: '#fff', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                            <thead>
-                              <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #e2e8f0' }}>
-                                <th style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Data</th>
-                                <th style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Status no Dia</th>
-                                <th style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Tempos de Aula</th>
-                                <th style={{ padding: '8px 12px', fontSize: '10px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'center' }}>Catraca</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {a.dailyBreakdown.map((d: any) => (
-                                <tr key={d.data} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                  <td style={{ padding: '8px 12px', fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
-                                    {d.dataFormatada}
-                                  </td>
-                                  <td style={{ padding: '8px 12px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {a.dailyBreakdown.map((d: any) => {
+                              const dFreqRecord = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(a.id) && isSameDay(f.data, d.data))
+                              const dOrigem = getOrigemFrequenciaCompleta(a.id, d.data, dFreqRecord, portariaEventsList, saidaCallsList)
+
+                              return (
+                                <div key={d.data} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{
+                                      width: '8px', height: '8px', borderRadius: '50%',
+                                      background: d.statusDia === 'falta' ? '#ef4444' : (d.statusDia === 'justificada' ? '#f59e0b' : (d.statusDia === 'presente' ? '#22c55e' : '#cbd5e1'))
+                                    }} />
+                                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{d.dataFormatada}</span>
+                                  </div>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                                     <span style={{
                                       padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800,
-                                      background: d.faltasStr.includes('Falta Total') ? '#fee2e2' :
-                                                  d.faltasStr.includes('Parcial') ? '#fef3c7' :
-                                                  d.faltasStr.includes('Justificada') ? '#fde68a' :
-                                                  d.faltasStr.includes('Sem Registro') ? '#f1f5f9' : '#dcfce7',
-                                      color: d.faltasStr.includes('Falta Total') ? '#b91c1c' :
-                                             d.faltasStr.includes('Parcial') ? '#b45309' :
-                                             d.faltasStr.includes('Justificada') ? '#92400e' :
-                                             d.faltasStr.includes('Sem Registro') ? '#64748b' : '#15803d'
+                                      background: d.statusDia === 'falta' ? '#fee2e2' : (d.statusDia === 'justificada' ? '#fef3c7' : (d.statusDia === 'presente' ? '#dcfce7' : '#f1f5f9')),
+                                      color: d.statusDia === 'falta' ? '#b91c1c' : (d.statusDia === 'justificada' ? '#b45309' : (d.statusDia === 'presente' ? '#15803d' : '#64748b'))
                                     }}>
-                                      {d.faltasStr}
+                                      {d.statusLabel}
                                     </span>
-                                  </td>
-                                  <td style={{ padding: '8px 12px' }}>
-                                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                      {Object.entries(d.temposEfetivos).map(([tId, status]) => {
-                                        const cfg = S_CONFIG[status as PresStatus] || { bg: '#f1f5f9', color: '#64748b', label: '-' }
-                                        return (
-                                          <div key={tId} style={{ padding: '1px 6px', borderRadius: '4px', background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border || 'transparent'}`, fontSize: '10px', fontWeight: 800 }}>
-                                            {tId}ºT: {cfg.label}
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                  </td>
-                                  <td style={{ padding: '8px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: '#475569' }}>
-                                    {d.horaRegistro || '—'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+
+                                    <OrigemBadgePair infoCompleta={dOrigem} />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3184,18 +3248,16 @@ export default function FrequenciaPage() {
 
           {/* Footer do Modal com Botões de Ação */}
           <div style={{
-            padding: '16px 28px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc'
+            padding: '16px 28px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff'
           }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 onClick={handlePrintRelatorioAvancado}
                 style={{
-                  padding: '10px 20px', background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '10px',
+                  padding: '10px 20px', background: '#f8fafc', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '10px',
                   fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
-                onMouseLeave={e => e.currentTarget.style.background = '#fff'}
               >
                 <Printer size={16} />
                 <span>Imprimir / PDF</span>
@@ -3208,11 +3270,9 @@ export default function FrequenciaPage() {
                   fontWeight: 700, fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
                   boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)', transition: 'all 0.2s'
                 }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'none'}
               >
-                <Download size={16} />
-                <span>Exportar Excel / CSV</span>
+                <FileSpreadsheet size={16} />
+                <span>Exportar CSV</span>
               </button>
             </div>
 
@@ -3223,7 +3283,7 @@ export default function FrequenciaPage() {
               }}
               style={{
                 padding: '10px 24px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '10px',
-                fontWeight: 700, fontSize: '13px', cursor: 'pointer'
+                fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s'
               }}
             >
               Fechar
@@ -3681,13 +3741,11 @@ export default function FrequenciaPage() {
                                 {getInitials(aluno.nome)}
                               </div>
                               <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                  <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>{aluno.nome}</div>
-                                  <OrigemBadgePair infoCompleta={infoOrigem} compact />
-                                </div>
-                                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                                <div style={{ fontWeight: 700, fontSize: '15px', color: '#0f172a' }}>{aluno.nome}</div>
+                                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', marginBottom: '4px' }}>
                                   Matrícula: <strong style={{ color: '#0f172a' }}>#{aluno.id}</strong>
                                 </div>
+                                <OrigemBadgePair infoCompleta={infoOrigem} compact />
                               </div>
                             </div>
                             
@@ -3829,7 +3887,21 @@ export default function FrequenciaPage() {
     const totalTurmas = turmas.length
     const freqs = allFreqs || []
     
-    const turmasComChamadaHoje = turmas.filter(t => freqs.some(f => String(f.turma_id) === String(t.id) && String(f.data).startsWith(dataSel))).length
+    const turmasComChamadaHoje = turmas.filter(t => {
+      const alunosDaEstaTurma = alunos.filter((a: any) => isAlunoCursandoTurma(a, t, undefined, turmas))
+      const alunosIdsDaTurma = new Set(alunosDaEstaTurma.map((a: any) => String(a.id)))
+
+      const temDirect = freqs.some(f => String(f.turma_id) === String(t.id) && isSameDay(f.data, dataSel))
+      const temAlunosFreq = freqs.some(f => alunosIdsDaTurma.has(String(f.aluno_id || f.alunoId)) && isSameDay(f.data, dataSel))
+      const temCatraca = (portariaEventsList || []).some((ev: any) =>
+        ev.status === 'sucesso' &&
+        alunosIdsDaTurma.has(String(ev.aluno_id || ev.user_id_equipamento)) &&
+        isSameDay(ev.data_hora || ev.created_at || ev.data, dataSel)
+      )
+      const temManual = alunosDaEstaTurma.some((a: any) => !!horariosEntrada[a.id]?.[dataSel])
+
+      return temDirect || temAlunosFreq || temCatraca || temManual
+    }).length
     
     let somaPresenca = 0
     let totalAulas = 0
@@ -3919,10 +3991,137 @@ export default function FrequenciaPage() {
     )
 
     return (
-      <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+      <div className="freq-page-wrap" style={{ padding: '20px 24px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media (max-width: 900px) {
+            .freq-page-wrap {
+              padding: 14px 12px !important;
+            }
+            .freq-header-container {
+              flex-direction: column !important;
+              align-items: stretch !important;
+              gap: 16px !important;
+              margin-bottom: 20px !important;
+            }
+            .freq-header-actions {
+              display: grid !important;
+              grid-template-columns: repeat(2, 1fr) !important;
+              gap: 8px !important;
+              width: 100% !important;
+            }
+            .freq-header-actions button {
+              width: 100% !important;
+              justify-content: center !important;
+              padding: 0 10px !important;
+              font-size: 12px !important;
+              height: 40px !important;
+              white-space: nowrap !important;
+              text-overflow: ellipsis !important;
+              overflow: hidden !important;
+            }
+            .freq-metrics-grid {
+              grid-template-columns: repeat(2, 1fr) !important;
+              gap: 10px !important;
+              margin-bottom: 20px !important;
+            }
+            .freq-metric-card {
+              padding: 12px 14px !important;
+              border-radius: 14px !important;
+            }
+            .freq-metric-card h3 {
+              font-size: 20px !important;
+            }
+            .freq-filter-bar {
+              padding: 14px !important;
+              flex-direction: column !important;
+              align-items: stretch !important;
+              gap: 12px !important;
+              margin-bottom: 16px !important;
+            }
+            .freq-filter-inputs {
+              display: grid !important;
+              grid-template-columns: repeat(2, 1fr) !important;
+              width: 100% !important;
+              gap: 8px !important;
+              flex-wrap: wrap !important;
+            }
+            .freq-search-wrapper {
+              grid-column: 1 / -1 !important;
+              max-width: 100% !important;
+              width: 100% !important;
+            }
+            .freq-filter-item {
+              width: 100% !important;
+            }
+            .freq-filter-item select, .freq-filter-item input {
+              width: 100% !important;
+              font-size: 13px !important;
+            }
+            .freq-filter-counter {
+              width: 100% !important;
+              justify-content: flex-end !important;
+            }
+            .freq-table-box {
+              padding: 14px !important;
+              border-radius: 14px !important;
+            }
+            .freq-table-scroll {
+              overflow-x: auto !important;
+              -webkit-overflow-scrolling: touch !important;
+            }
+            .freq-detail-header {
+              flex-direction: column !important;
+              align-items: stretch !important;
+              gap: 16px !important;
+              margin-bottom: 20px !important;
+            }
+            .freq-detail-actions-group {
+              flex-direction: row !important;
+              justify-content: space-between !important;
+              align-items: center !important;
+              width: 100% !important;
+              gap: 12px !important;
+            }
+            .freq-detail-save-btn {
+              flex: 1 !important;
+              justify-content: center !important;
+            }
+            .freq-detail-toolbar {
+              padding: 14px !important;
+              flex-direction: column !important;
+              align-items: stretch !important;
+              gap: 12px !important;
+            }
+            .freq-detail-inputs {
+              flex-direction: column !important;
+              width: 100% !important;
+              gap: 10px !important;
+            }
+            .freq-detail-inputs > div {
+              width: 100% !important;
+            }
+            .freq-detail-legend {
+              flex-wrap: wrap !important;
+              gap: 6px 12px !important;
+              padding: 8px 12px !important;
+            }
+          }
+          @media (max-width: 480px) {
+            .freq-header-actions {
+              grid-template-columns: repeat(2, 1fr) !important;
+            }
+            .freq-filter-inputs {
+              grid-template-columns: 1fr 1fr !important;
+            }
+            .freq-detail-actions-group {
+              flex-direction: column !important;
+              align-items: stretch !important;
+            }
+          }
+        `}} />
 
         {/* Header Ultra Moderno */}
-        <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="freq-header-container" style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <Sparkles size={20} style={{ color: '#2563eb' }} />
@@ -3937,7 +4136,7 @@ export default function FrequenciaPage() {
             <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Monitore a assiduidade e identifique riscos de evasão em tempo real.</p>
           </div>
           
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div className="freq-header-actions" style={{ display: 'flex', gap: '12px' }}>
             <button
               onClick={() => setShowRelatorioModal(true)}
               style={{
@@ -4033,9 +4232,9 @@ export default function FrequenciaPage() {
         </div>
 
         {/* Cards de Métricas Premium */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
+        <div className="freq-metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
           {/* Card 1 */}
-          <div style={{ 
+          <div className="freq-metric-card" style={{ 
             background: 'linear-gradient(135deg, #fff, rgba(37, 99, 235, 0.02))', 
             padding: '16px 20px', 
             borderRadius: '20px', 
@@ -4072,7 +4271,7 @@ export default function FrequenciaPage() {
           </div>
 
           {/* Card 2 */}
-          <div style={{ 
+          <div className="freq-metric-card" style={{ 
             background: 'linear-gradient(135deg, #fff, rgba(16, 185, 129, 0.02))', 
             padding: '16px 20px', 
             borderRadius: '20px', 
@@ -4109,7 +4308,7 @@ export default function FrequenciaPage() {
           </div>
 
           {/* Card 3 */}
-          <div style={{ 
+          <div className="freq-metric-card" style={{ 
             background: 'linear-gradient(135deg, #fff, rgba(245, 158, 11, 0.02))', 
             padding: '16px 20px', 
             borderRadius: '20px', 
@@ -4149,7 +4348,7 @@ export default function FrequenciaPage() {
           </div>
 
           {/* Card 4 */}
-          <div style={{ 
+          <div className="freq-metric-card" style={{ 
             background: 'linear-gradient(135deg, #fff, rgba(239, 68, 68, 0.02))', 
             padding: '16px 20px', 
             borderRadius: '20px', 
@@ -4187,28 +4386,28 @@ export default function FrequenciaPage() {
         </div>
 
         {/* Barra de Ações e Filtros */}
-        <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', gap: '12px', flex: 1 }}>
-            <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+        <div className="freq-filter-bar" style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <div className="freq-filter-inputs" style={{ display: 'flex', gap: '12px', flex: 1, flexWrap: 'wrap' }}>
+            <div className="freq-search-wrapper" style={{ position: 'relative', flex: 1, maxWidth: '400px', minWidth: '200px' }}>
               <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input 
                 className="form-input" 
-                style={{ paddingLeft: '42px', height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} 
+                style={{ paddingLeft: '42px', height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', width: '100%' }} 
                 placeholder="Pesquisar turma por nome..." 
                 value={filtroBusca} 
                 onChange={e => setFiltroBusca(e.target.value)} 
               />
             </div>
             
-            <div style={{ width: '160px' }}>
-              <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
+            <div className="freq-filter-item" style={{ width: '160px' }}>
+              <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', width: '100%' }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
                 <option value="todos">Anos Letivos</option>
                 {anosDisponiveis.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
 
-             <div style={{ width: '200px' }}>
-               <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} value={filtroSegmento} onChange={e => setFiltroSegmento(e.target.value)}>
+             <div className="freq-filter-item" style={{ width: '200px' }}>
+               <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', width: '100%' }} value={filtroSegmento} onChange={e => setFiltroSegmento(e.target.value)}>
                  <option value="">Todos Segmentos</option>
                  {cfgNiveisEnsino?.map((n: any) => (
                    <option key={n.id} value={n.nome}>{n.nome}</option>
@@ -4216,8 +4415,8 @@ export default function FrequenciaPage() {
                </select>
              </div>
 
-             <div style={{ width: '160px' }}>
-               <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} value={filtroTurno} onChange={e => setFiltroTurno(e.target.value)}>
+             <div className="freq-filter-item" style={{ width: '160px' }}>
+               <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', width: '100%' }} value={filtroTurno} onChange={e => setFiltroTurno(e.target.value)}>
                  <option value="">Todos os Turnos</option>
                  <option value="Matutino">Matutino</option>
                  <option value="Vespertino">Vespertino</option>
@@ -4226,26 +4425,26 @@ export default function FrequenciaPage() {
                </select>
              </div>
 
-             <div style={{ width: '160px' }}>
+             <div className="freq-filter-item" style={{ width: '160px' }}>
                <input 
                  type="date"
                  className="form-input" 
-                 style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: '13px' }} 
+                 style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', fontWeight: 600, fontSize: '13px', width: '100%' }} 
                  value={dataSel} 
                  onChange={e => setDataSel(e.target.value)} 
                />
              </div>
            </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="freq-filter-counter" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Filtrando: </span>
             <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{turmasFiltradas.length} turmas</span>
           </div>
         </div>
 
         {/* Grid de Turmas Ultra Moderno */}
-        <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 6px -2px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
+        <div className="freq-table-box" style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 6px -2px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
+          <div className="freq-table-scroll" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
               <thead>
                 <tr>
@@ -4262,9 +4461,22 @@ export default function FrequenciaPage() {
                   <TableSkeleton rows={5} cols={6} />
                 ) : (
                    turmasFiltradas.map(turma => {
+                    const alunosDaEstaTurma = alunos.filter((a: any) => isAlunoCursandoTurma(a, turma, undefined, turmas))
+                    const totalAlunosTurma = alunosDaEstaTurma.length
+                    const alunosIdsDaTurma = new Set(alunosDaEstaTurma.map((a: any) => String(a.id)))
+
                     const freqs = allFreqs || []
-                    const regs = freqs.filter(f => String(f.turma_id) === String(turma.id))
-                    const temHoje = regs.some(f => String(f.data).startsWith(dataSel))
+                    const regs = freqs.filter(f => String(f.turma_id) === String(turma.id) || alunosIdsDaTurma.has(String(f.aluno_id || f.alunoId)))
+
+                    const temHojeDirect = regs.some(f => isSameDay(f.data, dataSel))
+                    const temHojeCatraca = (portariaEventsList || []).some((ev: any) => 
+                      ev.status === 'sucesso' && 
+                      alunosIdsDaTurma.has(String(ev.aluno_id || ev.user_id_equipamento)) && 
+                      isSameDay(ev.data_hora || ev.created_at || ev.data, dataSel)
+                    )
+                    const temHojeManual = alunosDaEstaTurma.some((a: any) => !!horariosEntrada[a.id]?.[dataSel])
+
+                    const temHoje = temHojeDirect || temHojeCatraca || temHojeManual
                     
                     const schedule = getTurmaSchedule(turma)
                     let totalContabilizadoTurma = 0
@@ -4289,8 +4501,6 @@ export default function FrequenciaPage() {
                     const presencasTurma = totalContabilizadoTurma - faltasContabilizadasTurma
                     const pctPresenca = totalContabilizadoTurma > 0 ? Math.round((presencasTurma / totalContabilizadoTurma) * 100) : 100
                     const isLow = pctPresenca < freqMinima
-
-                  const totalAlunosTurma = alunos.filter((a: any) => String(a.turma) === String(turma.id)).length
 
                   return (
                     <tr key={turma.id} style={{ background: '#fff', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
@@ -4389,26 +4599,28 @@ export default function FrequenciaPage() {
   })
 
   return (
-    <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+    <div className="freq-page-wrap" style={{ padding: '20px 24px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
 
       {/* Header Ultra Moderno */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+      <div className="freq-detail-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           <button 
             onClick={() => setTurmaSel(null)} 
-            style={{ border: '1px solid #e2e8f0', background: '#fff', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s' }}
+            style={{ border: '1px solid #e2e8f0', background: '#fff', width: '44px', height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', transition: 'all 0.2s', flexShrink: 0 }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
             onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
           >
             <ArrowLeft size={20} />
           </button>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
               <span style={{ padding: '4px 8px', background: '#e0f2fe', color: '#0369a1', borderRadius: '6px', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Gestão de Classe</span>
-              <span style={{ padding: '4px 8px', background: '#2563eb', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>{turmaSel}</span>
+              <span style={{ padding: '4px 8px', background: '#2563eb', color: '#fff', borderRadius: '6px', fontSize: '11px', fontWeight: 700 }}>Diário de Frequência</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>Diário de Frequência</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 32, color: '#0f172a', margin: 0, letterSpacing: '-0.5px' }}>
+                {turmaObj?.nome || turmaSel}
+              </h1>
               <button
                 onClick={() => setShowRegrasModal(true)}
                 style={{
@@ -4433,13 +4645,13 @@ export default function FrequenciaPage() {
                 Regras de Cálculo
               </button>
             </div>
-            <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0', fontWeight: 500 }}>
-              Segmento: <strong style={{ color: '#2563eb' }}>{schedule.segmento}</strong>. Lançamento de Frequência 1-Clique com registro de Entrada & Saída do Aluno.
+            <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0', fontWeight: 500 }}>
+              Segmento: <strong style={{ color: '#2563eb' }}>{schedule.segmento}</strong>{turmaObj?.turno ? ` • Turno: ${turmaObj.turno}` : ''}. Lançamento de Frequência 1-Clique com registro de Entrada & Saída do Aluno.
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+        <div className="freq-detail-actions-group" style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
           <div style={{ textAlign: 'right' }}>
             <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Faltas no Dia</span>
             <p style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444', margin: 0, fontFamily: 'Outfit,sans-serif' }}>
@@ -4449,6 +4661,7 @@ export default function FrequenciaPage() {
           
           <div style={{ display: 'flex', gap: '12px' }}>
             <button 
+              className="freq-detail-save-btn"
               onClick={handleSave}
               style={{ height: '44px', padding: '0 24px', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'transform 0.2s' }}
               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
@@ -4462,8 +4675,8 @@ export default function FrequenciaPage() {
       </div>
 
       {/* Toolbar Premium */}
-      <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div className="freq-detail-toolbar" style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div className="freq-detail-inputs" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           {/* Calendário */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', padding: '10px 14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
             <Calendar size={18} style={{ color: '#64748b' }} />
@@ -4481,7 +4694,7 @@ export default function FrequenciaPage() {
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
             <input 
               className="form-input" 
-              style={{ paddingLeft: '40px', height: '42px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }} 
+              style={{ paddingLeft: '40px', height: '42px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', width: '100%' }} 
               placeholder="Buscar aluno..." 
               value={buscaAluno} 
               onChange={e => setBuscaAluno(e.target.value)} 
@@ -4489,10 +4702,8 @@ export default function FrequenciaPage() {
           </div>
         </div>
 
-
-
         {/* Legenda Premium */}
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: '#f8fafc', padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+        <div className="freq-detail-legend" style={{ display: 'flex', gap: '16px', alignItems: 'center', background: '#f8fafc', padding: '10px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
           <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Legenda:</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '3px' }}></span>
@@ -4514,19 +4725,19 @@ export default function FrequenciaPage() {
       </div>
 
       {/* Tabela de Grade Ultra Moderna */}
-      <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 6px -2px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+      <div className="freq-table-box" style={{ background: '#fff', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.02), 0 4px 6px -2px rgba(0,0,0,0.03)', overflow: 'hidden' }}>
+        <div className="freq-table-scroll" style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 6px', tableLayout: 'auto' }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
-                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '110px' }}>Freq. Total</th>
-                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '80px' }}>Faltas</th>
-                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '100px' }}>Justificadas</th>
-                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '240px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Aluno</th>
+                <th style={{ textAlign: 'center', padding: '10px 6px', fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '90px' }}>Freq. Total</th>
+                <th style={{ textAlign: 'center', padding: '10px 4px', fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '60px' }}>Faltas</th>
+                <th style={{ textAlign: 'center', padding: '10px 4px', fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', width: '80px' }}>Justificadas</th>
+                <th style={{ textAlign: 'center', padding: '10px 6px', fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '185px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                     <span>Entrada / Presença (1-Clique)</span>
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    <div style={{ display: 'flex', gap: '4px' }}>
                       <button
                         type="button"
                         onClick={() => {
@@ -4548,7 +4759,7 @@ export default function FrequenciaPage() {
                             })
                           })
                         }}
-                        style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#10b981', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+                        style={{ padding: '3px 6px', fontSize: '9px', fontWeight: 700, background: '#10b981', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer', transition: 'all 0.2s' }}
                         onMouseEnter={e => e.currentTarget.style.background = '#059669'}
                         onMouseLeave={e => e.currentTarget.style.background = '#10b981'}
                       >
@@ -4566,7 +4777,7 @@ export default function FrequenciaPage() {
                             })
                           })
                         }}
-                        style={{ padding: '4px 8px', fontSize: '10px', fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.2s' }}
+                        style={{ padding: '3px 6px', fontSize: '9px', fontWeight: 700, background: '#ef4444', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer', transition: 'all 0.2s' }}
                         onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
                         onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
                       >
@@ -4575,8 +4786,8 @@ export default function FrequenciaPage() {
                     </div>
                   </div>
                 </th>
-                <th style={{ textAlign: 'center', padding: '12px', fontSize: '12px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '260px' }}>
-                  Saída do Aluno & Retirada (/chamadas)
+                <th style={{ textAlign: 'center', padding: '10px 6px', fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: '165px' }}>
+                  Saída do Aluno & Retirada
                 </th>
               </tr>
             </thead>
@@ -4616,63 +4827,63 @@ export default function FrequenciaPage() {
                 return (
                   <tr key={aluno.id} style={{ background: '#fff', transition: 'all 0.2s' }}>
                     {/* Nome do Aluno */}
-                    <td style={{ padding: '16px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderLeft: '1px solid #f1f5f9', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '36px', height: '36px', background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', color: '#0369a1', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px' }}>
+                    <td style={{ padding: '10px 12px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderLeft: '1px solid #f1f5f9', borderTopLeftRadius: '10px', borderBottomLeftRadius: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '32px', height: '32px', minWidth: '32px', background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', color: '#0369a1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
                           {getInitials(aluno.nome)}
                         </div>
                         <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{aluno.nome}</p>
-                            <OrigemBadgePair infoCompleta={origemInfoCompleta} />
+                          <p style={{ fontSize: '13.5px', fontWeight: 600, color: '#0f172a', margin: 0, lineHeight: '1.2' }}>{aluno.nome}</p>
+                          <p style={{ fontSize: '11px', color: '#64748b', margin: '2px 0 2px 0' }}>ID: {aluno.id} • {turmaObj?.nome} ({turmaObj?.turno})</p>
+                          <div style={{ marginTop: '2px' }}>
+                            <OrigemBadgePair infoCompleta={origemInfoCompleta} compact />
                           </div>
-                          <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>ID: {aluno.id} • {turmaObj?.nome} ({turmaObj?.turno})</p>
                         </div>
                       </div>
                     </td>
 
                     {/* Freq. Total */}
-                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
                       {freqGeral !== null ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center' }}>
                           <span style={{ 
-                            fontSize: '13px', 
+                            fontSize: '12px', 
                             fontWeight: 700, 
                             color: isLow ? '#ef4444' : '#10b981',
                             background: isLow ? '#fee2e2' : '#dcfce7',
-                            padding: '2px 6px',
+                            padding: '2px 5px',
                             borderRadius: '4px'
                           }}>
                             {freqGeral}%
                           </span>
-                          <div style={{ width: '60px', height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ width: '40px', height: '5px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{ width: `${freqGeral}%`, height: '100%', background: isLow ? '#ef4444' : '#10b981', borderRadius: '3px' }} />
                           </div>
                         </div>
                       ) : (
-                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>--</span>
+                        <span style={{ color: '#94a3b8', fontSize: '11px' }}>--</span>
                       )}
                     </td>
 
                     {/* Faltas */}
-                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
-                      <span style={{ fontSize: '13px', color: totalFaltas > 5 ? '#ef4444' : '#0f172a', fontWeight: 600 }}>{totalFaltas}</span>
+                    <td style={{ padding: '10px 4px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                      <span style={{ fontSize: '12px', color: totalFaltas > 5 ? '#ef4444' : '#0f172a', fontWeight: 600 }}>{totalFaltas}</span>
                     </td>
 
                     {/* Justificadas */}
-                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
-                      <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>{totalJustificadas}</span>
+                    <td style={{ padding: '10px 4px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                      <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{totalJustificadas}</span>
                     </td>
 
                     {/* Entrada / Frequência (Botão Único 1-Clique) */}
-                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
                       {diasPeriodo.map(dia => {
                         const status1 = getStatus(aluno.id, dia, '1')
                         const currentEntrada = horariosEntrada[aluno.id]?.[dia] || (origemInfoCompleta.entrada?.horario ? origemInfoCompleta.entrada.horario : '')
                         const isEditingThisEntrada = editingEntrada?.alunoId === aluno.id && editingEntrada?.dia === dia
 
                         return (
-                          <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                          <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                             <button
                               type="button"
                               onClick={() => {
@@ -4694,17 +4905,17 @@ export default function FrequenciaPage() {
                                 autoSaveStudent(aluno.id, dia, newDayTempos, newEntrada)
                               }}
                               style={{
-                                padding: '8px 18px', borderRadius: '10px', fontWeight: 900, fontSize: '13px', cursor: 'pointer',
+                                padding: '6px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '12px', cursor: 'pointer',
                                 border: status1 === 'P' ? '1px solid #bbf7d0' : (status1 === 'F' ? '1px solid #fecaca' : (status1 === 'J' ? '1px solid #fde68a' : '1px dashed #cbd5e1')),
                                 background: status1 === 'P' ? 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)' : (status1 === 'F' ? 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' : (status1 === 'J' ? 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)' : '#f8fafc')),
                                 color: status1 === 'P' ? '#15803d' : (status1 === 'F' ? '#b91c1c' : (status1 === 'J' ? '#b45309' : '#64748b')),
-                                boxShadow: status1 === 'P' ? '0 2px 8px rgba(34, 197, 94, 0.2)' : 'none',
-                                transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '6px'
+                                boxShadow: status1 === 'P' ? '0 2px 6px rgba(34, 197, 94, 0.15)' : 'none',
+                                transition: 'all 0.2s', display: 'inline-flex', alignItems: 'center', gap: '5px'
                               }}
                             >
-                              {status1 === 'P' && <CheckCircle size={16} />}
-                              {status1 === 'F' && <XCircle size={16} />}
-                              {status1 === 'J' && <AlertTriangle size={16} />}
+                              {status1 === 'P' && <CheckCircle size={14} />}
+                              {status1 === 'F' && <XCircle size={14} />}
+                              {status1 === 'J' && <AlertTriangle size={14} />}
                               <span>
                                 {status1 === 'P' ? 'PRESENTE' : (status1 === 'F' ? 'FALTOSO' : (status1 === 'J' ? 'JUSTIFICADO' : 'DEFINIR FREQUÊNCIA'))}
                               </span>
@@ -4733,14 +4944,14 @@ export default function FrequenciaPage() {
                                     onClick={() => setEditingEntrada({ alunoId: aluno.id, dia })}
                                     title="Clique para editar o horário de entrada"
                                     style={{
-                                      cursor: 'pointer', fontSize: '11px', fontWeight: 800, color: '#0369a1',
-                                      background: '#e0f2fe', padding: '2px 8px', borderRadius: '6px', border: '1px solid #7dd3fc',
-                                      display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                      cursor: 'pointer', fontSize: '10px', fontWeight: 800, color: '#0369a1',
+                                      background: '#e0f2fe', padding: '2px 6px', borderRadius: '5px', border: '1px solid #7dd3fc',
+                                      display: 'inline-flex', alignItems: 'center', gap: '3px'
                                     }}
                                   >
-                                    <Clock size={12} />
+                                    <Clock size={11} />
                                     <span>Entrou: {currentEntrada || '07:30'}h</span>
-                                    <Edit3 size={10} style={{ opacity: 0.7 }} />
+                                    <Edit3 size={9} style={{ opacity: 0.7 }} />
                                   </span>
                                 )}
                               </div>
@@ -4751,34 +4962,34 @@ export default function FrequenciaPage() {
                     </td>
 
                     {/* Saída do Aluno & Retirada (/chamadas) */}
-                    <td style={{ padding: '12px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
+                    <td style={{ padding: '10px 6px', textAlign: 'center', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9', borderTopRightRadius: '10px', borderBottomRightRadius: '10px' }}>
                       {diasPeriodo.map(dia => {
                         const status1 = getStatus(aluno.id, dia, '1')
                         const hSaida = horariosSaida[aluno.id]?.[dia]
                         const rSaida = responsaveisSaida[aluno.id]?.[dia]
 
                         if (status1 !== 'P') {
-                          return <span key={dia} style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>
+                          return <span key={dia} style={{ color: '#cbd5e1', fontSize: '11px' }}>—</span>
                         }
 
                         if (hSaida && rSaida) {
                           return (
-                            <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                            <div key={dia} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px' }}>
                               <span style={{
                                 background: 'linear-gradient(135deg, #fdf4ff 0%, #fae8ff 100%)',
-                                color: '#c026d3', border: '1px solid #f5d0fe', borderRadius: '10px',
-                                padding: '6px 12px', fontSize: '11px', fontWeight: 800,
-                                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                boxShadow: '0 2px 6px rgba(192, 38, 211, 0.12)'
+                                color: '#c026d3', border: '1px solid #f5d0fe', borderRadius: '8px',
+                                padding: '4px 8px', fontSize: '10px', fontWeight: 800,
+                                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                boxShadow: '0 1px 4px rgba(192, 38, 211, 0.1)'
                               }}>
-                                <CheckCircle2 size={14} style={{ color: '#c026d3' }} />
+                                <CheckCircle2 size={12} style={{ color: '#c026d3' }} />
                                 <span>Saiu às {hSaida}h</span>
                               </span>
-                              <span style={{ fontSize: '11px', color: '#475569', fontWeight: 700 }}>
+                              <span style={{ fontSize: '10px', color: '#475569', fontWeight: 700 }}>
                                 Retirado por: <strong style={{ color: '#0f172a' }}>{rSaida}</strong>
                               </span>
 
-                              <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                              <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -4786,7 +4997,7 @@ export default function FrequenciaPage() {
                                     setSaidaModalResponsavel(rSaida)
                                     setSaidaModalData({ aluno, dia })
                                   }}
-                                  style={{ fontSize: '10px', fontWeight: 800, background: '#f1f5f9', color: '#2563eb', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '2px 6px', cursor: 'pointer' }}
+                                  style={{ fontSize: '9px', fontWeight: 800, background: '#f1f5f9', color: '#2563eb', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '2px 5px', cursor: 'pointer' }}
                                 >
                                   Editar
                                 </button>
@@ -4797,9 +5008,9 @@ export default function FrequenciaPage() {
                                       handleCancelarSaidaInfantil(aluno, dia)
                                     }
                                   }}
-                                  style={{ fontSize: '10px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '6px', padding: '2px 6px', cursor: 'pointer' }}
+                                  style={{ fontSize: '9px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '5px', padding: '2px 5px', cursor: 'pointer' }}
                                 >
-                                  Cancelar Saída
+                                  Cancelar
                                 </button>
                               </div>
                             </div>
@@ -4819,15 +5030,15 @@ export default function FrequenciaPage() {
                                 setSaidaModalData({ aluno, dia })
                               }}
                               style={{
-                                padding: '8px 16px', borderRadius: '10px', fontWeight: 800, fontSize: '12px',
+                                padding: '6px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '11px',
                                 background: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)', color: '#fff',
-                                border: 'none', cursor: 'pointer', boxShadow: '0 3px 10px rgba(147, 51, 234, 0.25)',
-                                display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.15s'
+                                border: 'none', cursor: 'pointer', boxShadow: '0 2px 8px rgba(147, 51, 234, 0.2)',
+                                display: 'inline-flex', alignItems: 'center', gap: '5px', transition: 'all 0.15s'
                               }}
                               onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
                               onMouseLeave={e => e.currentTarget.style.transform = 'none'}
                             >
-                              <LogOut size={14} />
+                              <LogOut size={13} />
                               <span>Registrar Saída</span>
                             </button>
                           </div>
@@ -4859,3 +5070,4 @@ export default function FrequenciaPage() {
     </div>
   )
 }
+

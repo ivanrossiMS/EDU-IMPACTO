@@ -152,14 +152,22 @@ export async function GET(request: Request) {
                 .in('id', turmaIds)
               
               if (turmasData) {
-                meusAlunos.forEach(a => {
-                  const tData = turmasData.find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma))
-                  if (tData && tData.nome) {
-                    a.turma_nome = tData.nome
-                  } else {
-                    a.turma_nome = a.turma
-                  }
-                })
+            meusAlunos.forEach(a => {
+              const tData = (turmasData || []).find(t => String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma))
+              let baseNome = tData?.nome || a.turma_nome || a.turma || 'S/T'
+              const isIntegral = isAlunoIntegralIntermediario(a, allTurmasDb.data || [], allGruposDb.data || [])
+              if (isIntegral) {
+                a.isIntegralIntermediario = true
+                a.modalidade = 'INTEGRAL/INTERMEDIÁRIO'
+                a.turno_nome = 'Integral/Intermediário'
+                a.turno = 'Integral/Intermediário'
+                if (baseNome && !baseNome.toUpperCase().includes('INTEGRAL') && !baseNome.toUpperCase().includes('INTERMEDIÁRIO')) {
+                  baseNome = `${baseNome} - INTEGRAL/INTERMEDIÁRIO`
+                }
+              }
+              a.turma_nome = baseNome
+              a.turmaNome = baseNome
+            })
               }
             }
           }

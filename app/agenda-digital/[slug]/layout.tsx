@@ -3,7 +3,7 @@ import { performLogout } from "@/lib/auth/logout";
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
-import { getAlunoTurnoDisplay } from '@/lib/studentTurmaUtils';
+import { getAlunoTurnoDisplay, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils';
 
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -970,9 +970,28 @@ export default function ADInnerLayout({
                     <div className="ad-switcher-item-name" style={{ fontWeight: 700, color: 'hsl(var(--text-main))' }}>{a.nome}</div>
                     {(() => {
                       const turmaObj = turmas.find(t => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
-                      const nomeTurma = turmaObj?.nome || a.turma || 'S/T'
+                      let rawTurma = a.turma_nome || a.turmaNome || turmaObj?.nome || a.turma || 'S/T'
+                      const activeHist = Array.isArray(a.historicoTurmas || a.dados?.historicoTurmas)
+                        ? (a.historicoTurmas || a.dados.historicoTurmas)[(a.historicoTurmas || a.dados.historicoTurmas).length - 1]
+                        : null;
+                      const isIntegral = Boolean(
+                        a.isIntegralIntermediario ||
+                        a.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+                        a.dados?.isIntegralIntermediario ||
+                        a.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+                        activeHist?.isIntegralIntermediario ||
+                        activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+                        a.turno_nome === 'Integral/Intermediário' ||
+                        String(a.turno || '').toLowerCase().includes('integral') ||
+                        String(a.turno || '').toLowerCase().includes('intermediario') ||
+                        rawTurma.toUpperCase().includes('INTEGRAL') ||
+                        rawTurma.toUpperCase().includes('INTERMEDIÁRIO') ||
+                        isAlunoIntegralIntermediario(a, turmas)
+                      )
+                      const baseTurma = rawTurma.split('-')[0].trim()
+                      const displayTurma = isIntegral ? (baseTurma.toUpperCase().includes('INTEGRAL') ? baseTurma : `${baseTurma} - INTEGRAL/INTERMEDIÁRIO`) : baseTurma
                       return (
-                        <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Turma {nomeTurma}</div>
+                        <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Turma {displayTurma}</div>
                       )
                     })()}
                   </div>

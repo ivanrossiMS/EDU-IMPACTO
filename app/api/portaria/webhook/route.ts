@@ -177,10 +177,36 @@ export async function POST(req: Request) {
         if (match) {
           alunoId = match.id
           alunoNome = match.nome
-          alunoTurma = match.turma || null
-          alunoTurno = match.turno || null
+          alunoTurno = match.turno || match.dados?.turno || null
           alunoResponsaveis = [{ id: `parent_of_${match.id}` }]
-          console.log(`✅ [Webhook Portaria] Aluno resolvido: ${match.nome} (user_id catraca: ${userIdNum} → matrícula: ${match.matricula || match.codigo})`)
+
+          // Resolver a Turma do Aluno com resiliência total
+          const rawTurma = match.turma || match.dados?.turma || match.dados?.turmaId || match.dados?.serieTurma || match.dados?.historicoTurmas?.[0]?.serieTurma || match.dados?.historicoTurmas?.[0]?.turma || null
+          
+          const { data: allTurmas } = await supabase.from('turmas').select('id, nome, codigo, serie, segmento, turno, dados')
+          if (allTurmas && allTurmas.length > 0) {
+            let foundT = null
+            if (rawTurma) {
+              foundT = allTurmas.find(t =>
+                String(t.id) === String(rawTurma) ||
+                String(t.nome).trim().toLowerCase() === String(rawTurma).trim().toLowerCase() ||
+                (t.codigo && String(t.codigo).trim().toLowerCase() === String(rawTurma).trim().toLowerCase())
+              )
+            }
+            if (!foundT) {
+              const { isAlunoCursandoTurma } = await import('@/lib/studentTurmaUtils')
+              foundT = allTurmas.find(t => isAlunoCursandoTurma(match, t, undefined, allTurmas))
+            }
+            if (foundT) {
+              alunoTurma = foundT.id
+            } else if (rawTurma) {
+              alunoTurma = String(rawTurma)
+            }
+          } else if (rawTurma) {
+            alunoTurma = String(rawTurma)
+          }
+
+          console.log(`✅ [Webhook Portaria] Aluno resolvido: ${match.nome} (user_id catraca: ${userIdNum} → matrícula: ${match.matricula || match.codigo}) | Turma: ${alunoTurma || 'Nenhum'})`)
         } else {
           console.warn(`⚠️ [Webhook Portaria] user_id ${userIdNum} não corresponde a nenhum aluno. Verifique se os alunos estão sincronizados nas catracas.`)
         }
@@ -317,7 +343,8 @@ export async function POST(req: Request) {
         const { data: turmaData, error: turmaErr } = await supabase
           .from('turmas')
           .select('id, nome, turno, dados')
-          .eq('id', alunoTurma)
+          .or(`id.eq.${alunoTurma},nome.eq.${alunoTurma}`)
+          .limit(1)
           .maybeSingle()
 
         if (!turmaErr && turmaData) {
