@@ -70,6 +70,20 @@ workflows:
       - name: Sync Capacitor iOS
         script: |
           npx cap sync ios
+      - name: Auto-increment iOS Build Number from TestFlight
+        script: |
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number --bundle-id "br.com.impactoedu.agenda" 2>/dev/null || echo "0")
+          if [ -z "$LATEST_BUILD" ] || [ "$LATEST_BUILD" -eq 0 ] 2>/dev/null; then
+            LATEST_BUILD=${BUILD_NUMBER:-1}
+          fi
+          NEW_BUILD=$((LATEST_BUILD + 1))
+          echo "=========================================="
+          echo "Ultimo Build Number no TestFlight: $LATEST_BUILD"
+          echo "Novo Build Number a aplicar: $NEW_BUILD"
+          echo "=========================================="
+          cd ios/App
+          agvtool new-version -all $NEW_BUILD || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" App/Info.plist || true
       - name: Diagnostic & Apply iOS signing profiles
         script: |
           echo "=== Certificados de assinatura no Keychain ==="
