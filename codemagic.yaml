@@ -68,39 +68,36 @@ workflows:
       - name: Build web app
         script: npm run build
       - name: Sync Capacitor iOS
-        script: npx cap sync ios
+        script: |
+          npx cap sync ios
       - name: Install CocoaPods
         script: |
           cd ios/App
-          [ -f Podfile ] && pod install || echo "Sem Podfile, utilizando Swift Package Manager (CapApp-SPM)."
+          pod install
       - name: Diagnostic & Apply iOS signing profiles
         script: |
           echo "=== Certificados de assinatura no Keychain ==="
           security find-identity -v -p codesigning || true
+
           echo "=== Provisioning profiles baixados ==="
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           ls -la "$PROFILE_DIR" || true
+
           for PROFILE_PATH in "$PROFILE_DIR"/*.mobileprovision; do
             [ -e "$PROFILE_PATH" ] || continue
             echo "Profile: $PROFILE_PATH"
             security cms -D -i "$PROFILE_PATH" | plutil -extract Name raw -o - - || true
             security cms -D -i "$PROFILE_PATH" | plutil -extract TeamIdentifier.0 raw -o - - || true
             security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements.application-identifier raw -o - - || true
+            security cms -D -i "$PROFILE_PATH" | plutil -extract Entitlements.aps-environment raw -o - - || true
           done
-          xcode-project use-profiles --project "ios/App/App.xcodeproj"
+
+          xcode-project use-profiles
       - name: Build iOS App (.ipa)
         script: |
-          if [ -d "ios/App/App.xcworkspace" ]; then
-            xcode-project build-ipa \
-              --workspace "$CM_BUILD_DIR/ios/App/App.xcworkspace" \
-              --scheme "App" \
-              --config Release
-          else
-            xcode-project build-ipa \
-              --project "ios/App/App.xcodeproj" \
-              --scheme "App" \
-              --config Release
-          fi
+          xcode-project build-ipa \
+            --workspace "$CM_BUILD_DIR/ios/App/App.xcworkspace" \
+            --scheme "App"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
