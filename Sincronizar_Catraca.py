@@ -19,6 +19,21 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timezone, date
 
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_sync.log")
+_raw_print = print
+
+def log_print(*args, **kwargs):
+    _raw_print(*args, **kwargs)
+    try:
+        msg = " ".join(str(a) for a in args)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {msg}\n")
+    except Exception:
+        pass
+
+print = log_print
+
 # ══════════════════════════════════════════════════════════════
 #  CONFIGURAÇÕES
 # ══════════════════════════════════════════════════════════════
@@ -51,6 +66,7 @@ WEBHOOK_URL = f"{NETLIFY_URL}/api/portaria/webhook"
 SSL_CTX = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 SSL_CTX.check_hostname = False
 SSL_CTX.verify_mode = ssl.CERT_NONE
+
 
 
 def post_json(url, body, cookie=None, timeout=8):

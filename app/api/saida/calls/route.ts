@@ -163,45 +163,59 @@ export async function POST(request: Request) {
         const wasConfirmed = existingStatusMap.get(row.id) === 'confirmed'
         const isConfirmed = row.dados?.status === 'confirmed'
 
-        if (isConfirmed && !wasConfirmed && row.dados?.studentId) {
+        if (isConfirmed && row.dados?.studentId) {
           try {
             const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
             const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
-            const { data: aluno } = await supabase.from('alunos').select('nome, turma').eq('id', row.dados.studentId).single()
-            if (aluno) {
-              const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-              const freqId = `FREQ-${row.dados.studentId}-${today}`
-              const anoLetivo = new Date().getFullYear().toString()
-              
-              const { data: existingFreq } = await supabase.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
+            
+            const rawStudentId = String(row.dados.studentId).trim()
+            const unpaddedId = rawStudentId.replace(/^0+/, '')
+            const studentTargets = Array.from(new Set([rawStudentId, unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
 
-              await supabase.from('frequencias').upsert({
-                id: freqId,
-                aluno_id: row.dados.studentId,
-                turma_id: aluno.turma || '',
-                data: today,
-                presente: existingFreq?.presente ?? true,
-                tempos: existingFreq?.tempos || null,
-                dados: {
-                  ...(existingFreq?.dados || {}),
-                  saidaHorario: row.dados.confirmedAt || new Date().toISOString(),
-                  saidaResponsavel: row.dados.guardianName || '',
-                  anoLetivo,
-                  diarioId: `DIARIO-${aluno.turma || ''}-${anoLetivo}`
-                }
-              })
-              
-              const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.dados.studentId] })
-              if (targetIds.length > 0) {
-                await sendAgendaPushNotification({
-                  type: 'frequencia',
-                  itemId: String(row.id),
-                  title: '🎓 Saída Confirmada',
-                  message: `A saída de ${aluno.nome} foi confirmada na portaria.`,
-                  targetUserIds: targetIds,
-                  targetUrl: `/agenda-digital/frequencia`
-                })
+            const { data: aluno } = await supabaseService.from('alunos').select('nome, turma').eq('id', rawStudentId).maybeSingle()
+            const nomeAluno = aluno?.nome || row.dados?.studentName || 'o aluno'
+            const turmaAluno = aluno?.turma || row.dados?.studentClass || ''
+
+            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+            const freqId = `FREQ-${rawStudentId}-${today}`
+            const anoLetivo = new Date().getFullYear().toString()
+            
+            const { data: existingFreq } = await supabaseService.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
+
+            await supabaseService.from('frequencias').upsert({
+              id: freqId,
+              aluno_id: rawStudentId,
+              turma_id: turmaAluno,
+              data: today,
+              presente: existingFreq?.presente ?? true,
+              tempos: existingFreq?.tempos || null,
+              dados: {
+                ...(existingFreq?.dados || {}),
+                saidaHorario: row.dados.confirmedAt || new Date().toISOString(),
+                saidaResponsavel: row.dados.guardianName || '',
+                saidaOrigem: 'manual',
+                anoLetivo,
+                diarioId: `DIARIO-${turmaAluno}-${anoLetivo}`
               }
+            })
+            
+            const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
+            if (targetIds.length > 0) {
+              const horaSaida = formatHoraSaida(row.dados?.confirmedAt)
+              const pushItemId = `saida_${row.id}_${Date.now()}`
+
+              sendAgendaPushNotification({
+                type: 'saida',
+                itemId: pushItemId,
+                title: '🎓 Saída Confirmada',
+                message: `A saída de ${nomeAluno} foi confirmada na portaria às ${horaSaida}.`,
+                targetUserIds: targetIds,
+                targetUrl: `/agenda-digital/frequencia`,
+                metadata: {
+                  aluno_id: rawStudentId,
+                  saida_id: String(row.id)
+                }
+              }).catch(e => console.error('Saida Push Error:', e))
             }
           } catch (e) {
             console.error('Saida Push Error:', e)
@@ -294,46 +308,59 @@ export async function POST(request: Request) {
       }
     }
 
-    if (isConfirmed && !wasConfirmed && data.dados?.studentId) {
+    if (isConfirmed && data.dados?.studentId) {
       try {
         const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
         const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
-        const { data: aluno } = await supabase.from('alunos').select('nome, turma').eq('id', data.dados.studentId).single()
-        if (aluno) {
-          // Create frequencia record
-          const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-          const freqId = `FREQ-${data.dados.studentId}-${today}`
-          const anoLetivo = new Date().getFullYear().toString()
-          
-          const { data: existingFreq } = await supabase.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
+        
+        const rawStudentId = String(data.dados.studentId).trim()
+        const unpaddedId = rawStudentId.replace(/^0+/, '')
+        const studentTargets = Array.from(new Set([rawStudentId, unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
 
-          await supabase.from('frequencias').upsert({
-            id: freqId,
-            aluno_id: data.dados.studentId,
-            turma_id: aluno.turma || '',
-            data: today,
-            presente: existingFreq?.presente ?? true,
-            tempos: existingFreq?.tempos || null,
-            dados: {
-              ...(existingFreq?.dados || {}),
-              saidaHorario: data.dados.confirmedAt || new Date().toISOString(),
-              saidaResponsavel: data.dados.guardianName || '',
-              anoLetivo,
-              diarioId: `DIARIO-${aluno.turma || ''}-${anoLetivo}`
-            }
-          })
+        const { data: aluno } = await supabaseService.from('alunos').select('nome, turma').eq('id', rawStudentId).maybeSingle()
+        const nomeAluno = aluno?.nome || data.dados?.studentName || 'o aluno'
+        const turmaAluno = aluno?.turma || data.dados?.studentClass || ''
 
-          const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.dados.studentId] })
-          if (targetIds.length > 0) {
-            sendAgendaPushNotification({
-              type: 'frequencia',
-              itemId: String(data.id),
-              title: '🎓 Saída Confirmada',
-              message: `A saída de ${aluno.nome} foi confirmada na portaria.`,
-              targetUserIds: targetIds,
-              targetUrl: `/agenda-digital/frequencia`
-            }).catch(e => console.error('Saida Push Error:', e))
+        const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+        const freqId = `FREQ-${rawStudentId}-${today}`
+        const anoLetivo = new Date().getFullYear().toString()
+        
+        const { data: existingFreq } = await supabaseService.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
+
+        await supabaseService.from('frequencias').upsert({
+          id: freqId,
+          aluno_id: rawStudentId,
+          turma_id: turmaAluno,
+          data: today,
+          presente: existingFreq?.presente ?? true,
+          tempos: existingFreq?.tempos || null,
+          dados: {
+            ...(existingFreq?.dados || {}),
+            saidaHorario: data.dados.confirmedAt || new Date().toISOString(),
+            saidaResponsavel: data.dados.guardianName || '',
+            saidaOrigem: 'manual',
+            anoLetivo,
+            diarioId: `DIARIO-${turmaAluno}-${anoLetivo}`
           }
+        })
+
+        const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
+        if (targetIds.length > 0) {
+          const horaSaida = formatHoraSaida(data.dados?.confirmedAt)
+          const pushItemId = `saida_${data.id}_${Date.now()}`
+
+          sendAgendaPushNotification({
+            type: 'saida',
+            itemId: pushItemId,
+            title: '🎓 Saída Confirmada',
+            message: `A saída de ${nomeAluno} foi confirmada na portaria às ${horaSaida}.`,
+            targetUserIds: targetIds,
+            targetUrl: `/agenda-digital/frequencia`,
+            metadata: {
+              aluno_id: rawStudentId,
+              saida_id: String(data.id)
+            }
+          }).catch(e => console.error('Saida Push Error:', e))
         }
       } catch (e) {
         console.error('Saida Push Error:', e)
@@ -390,4 +417,21 @@ function buildRow(body: any) {
     id: id || crypto.randomUUID(),
     dados: rest,
   }
+}
+
+function formatHoraSaida(rawTime?: string | null): string {
+  if (!rawTime) {
+    return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }).format(new Date())
+  }
+  if (/^\d{2}:\d{2}$/.test(rawTime)) {
+    return rawTime
+  }
+  const dateStr = rawTime.includes('T') && !rawTime.endsWith('Z') && !rawTime.includes('-') && !rawTime.includes('+')
+    ? `${rawTime}-04:00`
+    : rawTime
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) {
+    return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }).format(new Date())
+  }
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }).format(date)
 }

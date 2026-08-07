@@ -4041,8 +4041,7 @@ export default function AlunosPage() {
                     { val: 'todos', label: 'Todos os turnos' },
                     { val: 'matutino', label: 'Matutino' },
                     { val: 'vespertino', label: 'Vespertino' },
-                    { val: 'integral', label: 'Integral' },
-                    { val: 'noturno', label: 'Noturno' },
+                    { val: 'integral', label: 'Integral / Intermediário' },
                   ].map(item => {
                     const isActive = filtrosAvancados.turno === item.val;
                     return (

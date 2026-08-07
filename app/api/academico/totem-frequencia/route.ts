@@ -46,17 +46,48 @@ async function buscarPendentes(data: string) {
 
   const alunos = todosAlunos || []
 
-  // 2. IDs dos alunos que JÁ têm registro no dia (qualquer status: presente ou falta)
-  const { data: registrosExistentes, error: errFreq } = await admin
+  // 2. IDs dos alunos que JÁ têm registro em frequencias OU em portaria_eventos (iDFace) no dia
+  const { data: registrosExistentes } = await admin
     .from('frequencias')
     .select('aluno_id')
     .eq('data', data)
 
-  if (errFreq) throw new Error(`Erro ao buscar frequências: ${errFreq.message}`)
+  const startOfDayIso = `${data}T00:00:00.000Z`
+  const endOfDayIso = `${data}T23:59:59.999Z`
 
-  const idsComRegistro = new Set((registrosExistentes || []).map((r: any) => String(r.aluno_id)))
+  const { data: portariaExistentes } = await admin
+    .from('portaria_eventos')
+    .select('aluno_id, user_id_equipamento')
+    .gte('data_hora', startOfDayIso)
+    .lte('data_hora', endOfDayIso)
 
-  // 3. Alunos SEM nenhum registro no dia
+  const idsComRegistro = new Set<string>()
+
+  for (const r of registrosExistentes || []) {
+    if (r.aluno_id) idsComRegistro.add(String(r.aluno_id))
+  }
+
+  for (const p of portariaExistentes || []) {
+    if (p.aluno_id) idsComRegistro.add(String(p.aluno_id))
+  }
+
+  // Cruzar matrículas numéricas de eventos da portaria com os alunos
+  if (portariaExistentes && portariaExistentes.length > 0) {
+    const numIds = new Set(
+      portariaExistentes
+        .map(p => parseInt(String(p.user_id_equipamento || '').replace(/\D/g, ''), 10))
+        .filter(n => !isNaN(n) && n > 0)
+    )
+
+    for (const a of alunos) {
+      const numMat = parseInt(String(a.matricula || a.id || '').replace(/\D/g, ''), 10)
+      if (!isNaN(numMat) && numIds.has(numMat)) {
+        idsComRegistro.add(String(a.id))
+      }
+    }
+  }
+
+  // 3. Alunos SEM nenhum registro de entrada no dia
   const pendentes = alunos.filter((a: any) => !idsComRegistro.has(String(a.id)))
 
   return { alunos, pendentes, idsComRegistro }

@@ -437,7 +437,20 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
     if (alunosToProcess.length > 0) {
       const allAlunoIds = alunosToProcess.map(a => a.id)
-      const vinculados = await fetchInChunks<any>(supabase, 'aluno_responsavel', 'aluno_id, responsavel_id', 'aluno_id', allAlunoIds)
+      const expandedAlunoIds = new Set<string>()
+      allAlunoIds.forEach(id => {
+        expandedAlunoIds.add(id)
+        const clean = id.replace(/^(a_|_ALU)/, '')
+        if (clean) expandedAlunoIds.add(clean)
+        const num = parseInt(id.replace(/\D/g, ''), 10)
+        if (!isNaN(num)) {
+          expandedAlunoIds.add(String(num))
+          expandedAlunoIds.add(String(num).padStart(6, '0'))
+        }
+      })
+
+      const searchIdsArray = Array.from(expandedAlunoIds)
+      const vinculados = await fetchInChunks<any>(supabase, 'aluno_responsavel', 'aluno_id, responsavel_id', 'aluno_id', searchIdsArray)
 
       // Agrupar responsáveis por aluno, sempre incluindo o ID do próprio aluno (para logins virtuais)
       const mapResponsaveis = new Map<string, Set<string>>()
@@ -450,10 +463,48 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         vinculados.forEach(v => {
           if (v.aluno_id && v.responsavel_id) {
             const aid = String(v.aluno_id)
-            if (!mapResponsaveis.has(aid)) mapResponsaveis.set(aid, new Set([aid]))
-            mapResponsaveis.get(aid)!.add(String(v.responsavel_id))
+            const aidClean = aid.replace(/^0+/, '')
+            const matchedAluno = alunosToProcess.find(a => 
+              a.id === aid || 
+              a.id.replace(/^0+/, '') === aidClean
+            )
+            const targetKey = matchedAluno ? matchedAluno.id : aid
+            if (!mapResponsaveis.has(targetKey)) mapResponsaveis.set(targetKey, new Set([targetKey]))
+            mapResponsaveis.get(targetKey)!.add(String(v.responsavel_id))
           }
         })
+      }
+
+      // Mapear responsáveis e alunos para system_users (Auth UUIDs para o OneSignal)
+      const allRawIds = new Set<string>()
+      mapResponsaveis.forEach(set => set.forEach(id => allRawIds.add(id)))
+      const rawIdsArray = Array.from(allRawIds)
+
+      if (rawIdsArray.length > 0) {
+        try {
+          const { data: sysUsers } = await supabase
+            .from('system_users')
+            .select('id, dados, email')
+            .limit(5000)
+
+          if (sysUsers && sysUsers.length > 0) {
+            sysUsers.forEach((u: any) => {
+              const rId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
+              const aId = String(u.dados?.aluno_id || u.dados?.alunoId || '').trim()
+              
+              mapResponsaveis.forEach((set, alunoIdKey) => {
+                if (
+                  (rId && set.has(rId)) ||
+                  (aId && (alunoIdKey === aId || alunoIdKey.replace(/^0+/, '') === aId.replace(/^0+/, '')))
+                ) {
+                  set.add(String(u.id))
+                }
+              })
+            })
+          }
+        } catch (sysErr) {
+          console.warn('[NotifHelper] Erro ao mapear system_users para comunicados:', sysErr)
+        }
       }
 
       studentsResult = alunosToProcess.map(a => ({

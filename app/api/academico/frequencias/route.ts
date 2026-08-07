@@ -70,36 +70,80 @@ export async function POST(request: Request) {
   if (errorResponse) return errorResponse
 
   const supabase = await createProtectedClient();
+
+  let userName = user.user_metadata?.nome || user.user_metadata?.name || ''
+  if (!userName && user.email) {
+    try {
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('nome')
+        .or(`id.eq.${user.id},email.eq.${user.email}`)
+        .maybeSingle()
+      if (dbUser?.nome) {
+        userName = dbUser.nome
+      } else {
+        userName = user.email.split('@')[0]
+      }
+    } catch {}
+  }
+
   try {
     const body = await request.json()
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })
-      const rows = body.map(f => buildRow(f))
+      
+      const items = body.map(f => buildRow(f, userName, user.id))
+      const rows = items.map(i => i.row)
+
       const { error } = await supabase.from('frequencias').upsert(rows)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
       // Lote otimizado para não dar timeout no Vercel/Netlify
       const targetData = await getStudentTargetsForComunicados({ targetStudents: rows.map(r => String(r.aluno_id)) })
       
-      const pushPromises = rows.map(async (row) => {
-        const studentInfo = targetData.students.find(s => String(s.aluno_id) === String(row.aluno_id))
+      const pushPromises = items.map(async (item) => {
+        // Se notifyPush for explicitamente false (nenhuma alteração de frequência), ignora o disparo
+        if (item.notifyPush === false) return
+
+        const row = item.row
+        const rowAlunoIdClean = String(row.aluno_id || '').replace(/^0+/, '')
+        const studentInfo = targetData.students.find(s => {
+          const sIdClean = String(s.aluno_id || '').replace(/^0+/, '')
+          return String(s.aluno_id) === String(row.aluno_id) || sIdClean === rowAlunoIdClean
+        })
         if (!studentInfo || studentInfo.responsaveis_ids.length === 0) return
 
         const nomeAluno = studentInfo.aluno_nome || 'o aluno'
-        const isPresent = row.presente !== false
-        const pushTitle = isPresent ? '✅ Presença Confirmada' : '❌ Falta Registrada'
-        const pushMsg = isPresent 
-          ? `A presença de ${nomeAluno} foi confirmada na escola.` 
-          : `Foi registrada uma falta para ${nomeAluno}.`
+        const isJustified = Boolean(row.justificativa && String(row.justificativa).trim().length > 0)
+        const isPresent = row.presente !== false && !isJustified
+
+        let pushTitle = '✅ Presença Confirmada'
+        let pushMsg = `A presença de ${nomeAluno} foi confirmada na escola.`
+
+        if (isJustified) {
+          pushTitle = '📋 Falta Justificada'
+          pushMsg = `Foi registrada uma falta justificada para ${nomeAluno}.`
+        } else if (!isPresent) {
+          pushTitle = '❌ Falta Registrada'
+          pushMsg = `Foi registrada uma falta para ${nomeAluno}.`
+        }
+
+        // ItemId único por salvamento usando timestamp para evitar travamento na deduplicação de push
+        const pushItemId = `${row.id}_${Date.now()}`
 
         try {
           await sendAgendaPushNotification({
             type: 'frequencia',
-            itemId: String(row.id),
+            itemId: pushItemId,
             title: pushTitle,
             message: pushMsg,
             targetUserIds: studentInfo.responsaveis_ids,
-            targetUrl: `/agenda-digital/frequencia`
+            targetUrl: `/agenda-digital/frequencia`,
+            metadata: {
+              aluno_id: String(row.aluno_id),
+              turma_id: String(row.turma_id),
+              data: String(row.data)
+            }
           })
         } catch (err) {
           console.error('Frequencia Push Error:', err)
@@ -114,29 +158,47 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ ok: true, count: rows.length })
     }
-    const row = buildRow(body)
-    const { data, error } = await supabase.from('frequencias').upsert(row).select().single()
+
+    const item = buildRow(body, userName, user.id)
+    const { data, error } = await supabase.from('frequencias').upsert(item.row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
-    if (targetIds.length > 0) {
-      const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
-      const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
-      
-      const isPresent = data.presente !== false;
-      const pushTitle = isPresent ? '✅ Presença Confirmada' : '❌ Falta Registrada';
-      const pushMsg = isPresent 
-        ? `A presença de ${nomeAluno} foi confirmada na escola.` 
-        : `Foi registrada uma falta para ${nomeAluno}.`;
+    if (item.notifyPush !== false) {
+      const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
+      if (targetIds.length > 0) {
+        const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
+        const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+        
+        const isJustified = Boolean(data.justificativa && String(data.justificativa).trim().length > 0)
+        const isPresent = data.presente !== false && !isJustified
 
-      sendAgendaPushNotification({
-        type: 'frequencia',
-        itemId: String(data.id),
-        title: pushTitle,
-        message: pushMsg,
-        targetUserIds: targetIds,
-        targetUrl: `/agenda-digital/frequencia`
-      }).catch(err => console.error('Frequencia Push Error:', err))
+        let pushTitle = '✅ Presença Confirmada'
+        let pushMsg = `A presença de ${nomeAluno} foi confirmada na escola.`
+
+        if (isJustified) {
+          pushTitle = '📋 Falta Justificada'
+          pushMsg = `Foi registrada uma falta justificada para ${nomeAluno}.`
+        } else if (!isPresent) {
+          pushTitle = '❌ Falta Registrada'
+          pushMsg = `Foi registrada uma falta para ${nomeAluno}.`
+        }
+
+        const pushItemId = `${data.id}_${Date.now()}`
+
+        sendAgendaPushNotification({
+          type: 'frequencia',
+          itemId: pushItemId,
+          title: pushTitle,
+          message: pushMsg,
+          targetUserIds: targetIds,
+          targetUrl: `/agenda-digital/frequencia`,
+          metadata: {
+            aluno_id: String(data.aluno_id),
+            turma_id: String(data.turma_id),
+            data: String(data.data)
+          }
+        }).catch(err => console.error('Frequencia Push Error:', err))
+      }
     }
 
     return NextResponse.json({ ...data, ...(data.dados || {}) }, { status: 201 })
@@ -153,6 +215,8 @@ export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   const all = searchParams.get('all')
+  const alunoId = searchParams.get('aluno_id') || searchParams.get('alunoId')
+  const dataStr = searchParams.get('data')
   
   if (all === 'true') {
     const { error } = await supabase.from('frequencias').delete().neq('id', 'non-existent-id')
@@ -160,19 +224,53 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ ok: true, message: 'Todos os registros foram excluídos.' })
   }
   
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  const { error } = await supabase.from('frequencias').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-  return NextResponse.json({ ok: true })
+  if (id) {
+    const { error } = await supabase.from('frequencias').delete().eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ok: true })
+  }
+
+  if (alunoId && dataStr) {
+    const cleanDate = String(dataStr).split('T')[0]
+    const { error } = await supabase
+      .from('frequencias')
+      .delete()
+      .eq('aluno_id', alunoId)
+      .gte('data', `${cleanDate}T00:00:00`)
+      .lte('data', `${cleanDate}T23:59:59`)
+
+    await supabase
+      .from('frequencias')
+      .delete()
+      .eq('aluno_id', alunoId)
+      .eq('data', cleanDate)
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    return NextResponse.json({ ok: true })
+  }
+
+  return NextResponse.json({ error: 'id or (aluno_id and data) required' }, { status: 400 })
 }
 
-function buildRow(f: any) {
-  const { id, alunoId, turmaId, data, presente, justificativa, anoLetivo, registradoPor, origem, horaRegistro, ...rest } = f
+function buildRow(f: any, userName?: string, userId?: string) {
+  const { id, alunoId, turmaId, data, presente, justificativa, anoLetivo, registradoPor, origem, horaRegistro, notifyPush, ...rest } = f
   const currentYear = new Date().getFullYear().toString()
   const year = anoLetivo || currentYear
   const diarioId = `DIARIO-${turmaId}-${year}`
   
-  return {
+  let finalRegistradoPor = registradoPor || rest.registradoPor
+  const isCatraca = origem === 'catraca' || String(finalRegistradoPor || '').toLowerCase().includes('catraca') || String(finalRegistradoPor || '').toLowerCase().includes('idface')
+  const isTotem = origem === 'totem' || String(finalRegistradoPor || '').toLowerCase().includes('totem')
+
+  if (!isCatraca && !isTotem && userName) {
+    if (!finalRegistradoPor || finalRegistradoPor === 'Manual' || finalRegistradoPor === 'Manual (Auto)') {
+      finalRegistradoPor = `Manual (${userName})`
+    }
+  } else if (!finalRegistradoPor) {
+    finalRegistradoPor = 'Manual'
+  }
+
+  const row = {
     id: id || `FREQ-${alunoId}-${data}`,
     aluno_id: alunoId || '',
     turma_id: turmaId || '',
@@ -183,9 +281,17 @@ function buildRow(f: any) {
       ...rest,
       diarioId,
       anoLetivo: year,
-      registradoPor: registradoPor || rest.registradoPor || 'Manual',
+      registradoPor: finalRegistradoPor,
+      usuarioNome: userName || rest.usuarioNome || null,
+      usuarioId: userId || rest.usuarioId || null,
       origem: origem || rest.origem || 'manual',
       horaRegistro: horaRegistro || rest.horaRegistro || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     },
   }
+
+  return {
+    row,
+    notifyPush: notifyPush !== undefined ? Boolean(notifyPush) : true
+  }
 }
+

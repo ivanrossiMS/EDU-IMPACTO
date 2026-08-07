@@ -260,7 +260,7 @@ export async function POST(request: Request) {
                   type: 'momentos',
                   itemId: String(row.id),
                   title: '📸 Novo Momento Publicado!',
-                  message: `Novas fotos ou vídeos de ${student.aluno_nome} foram compartilhados com você. Venha conferir!`,
+                  message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: '/agenda-digital/momentos',
                   metadata: { aluno_id: student.aluno_id }
@@ -275,7 +275,7 @@ export async function POST(request: Request) {
                 type: 'momentos',
                 itemId: String(row.id),
                 title: '📸 Novo Momento Publicado!',
-                message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
+                message: `Um novo conteúdo foi compartilhado. Confira!`,
                 targetUserIds: directColaboradores,
                 targetUrl: '/agenda-digital/momentos'
               }).catch(err => console.error('Momento Push Error Colab:', err))
@@ -312,7 +312,7 @@ export async function POST(request: Request) {
                 type: 'momentos',
                 itemId: String(data.id),
                 title: '📸 Novo Momento Publicado!',
-                message: `Novas fotos ou vídeos de ${student.aluno_nome} foram compartilhados com você. Venha conferir!`,
+                message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
                 targetUserIds: student.responsaveis_ids,
                 targetUrl: '/agenda-digital/momentos',
                 metadata: { aluno_id: student.aluno_id }
@@ -327,7 +327,7 @@ export async function POST(request: Request) {
               type: 'momentos',
               itemId: String(data.id),
               title: '📸 Novo Momento Publicado!',
-              message: `Novas fotos ou vídeos foram compartilhados com você. Venha conferir!`,
+              message: `Um novo conteúdo foi compartilhado. Confira!`,
               targetUserIds: directColaboradores,
               targetUrl: '/agenda-digital/momentos'
             }).catch(err => console.error('Momento Push Error Colab:', err))

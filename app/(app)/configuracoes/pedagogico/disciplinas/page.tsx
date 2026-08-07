@@ -8,7 +8,7 @@ import { Plus, Edit2, Trash2, Check, BookOpen, Search, Download, Layers } from '
 
 const NIVEIS_OPTS = ['EI', 'EF1', 'EF2', 'EM', 'EJA']
 const NIVEL_COLORS: Record<string, string> = { EI: '#ec4899', EF1: '#3b82f6', EF2: '#8b5cf6', EM: '#10b981', EJA: '#f59e0b' }
-const TURNOS = ['Manhã', 'Tarde', 'Noite', 'Integral']
+const TURNOS = ['Matutino', 'Vespertino', 'Integral/Intermediário']
 
 const BLANK: Omit<ConfigDisciplina, 'id' | 'createdAt'> = {
   codigo: '', nome: '', cargaHoraria: 2, niveisEnsino: ['EF1'], obrigatoria: true, situacao: 'ativa',

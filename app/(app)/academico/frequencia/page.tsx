@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
-import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 import { SyncAcessosModal } from '@/components/portaria/SyncAcessosModal'
 
 const S_CONFIG: Record<PresStatus, { bg: string; color: string; label: string; border: string; glow: string }> = {
@@ -146,9 +146,14 @@ function getOrigemFrequenciaCompleta(
 
     const isTotem = origem === 'totem' || registradoPor.toLowerCase().includes('totem')
 
+    const temposArray = freqRecord?.tempos ? Object.values(freqRecord.tempos) : []
+    const hasActiveTempos = temposArray.length > 0
+      ? temposArray.some(v => v === 'P' || v === 'F' || v === 'J')
+      : (freqRecord?.presente !== null && freqRecord?.presente !== undefined)
+
     const hasEntradaExplicit = !!horarioEntradaState ||
-                               !!freqRecord.dados?.horaEntrada ||
-                               (freqRecord.origem === 'manual' && !isSaidaOnlyRecord && (freqRecord.horaRegistro || freqRecord.presente || (freqRecord.tempos && Object.values(freqRecord.tempos).some(v => v === 'P'))))
+                               (!!freqRecord.dados?.horaEntrada && hasActiveTempos) ||
+                               (freqRecord.origem === 'manual' && !isSaidaOnlyRecord && hasActiveTempos && (freqRecord.horaRegistro || freqRecord.presente))
 
     if (isCatraca) {
       entrada = {
@@ -166,11 +171,18 @@ function getOrigemFrequenciaCompleta(
         detalhes: 'Entrada registrada via Totem'
       }
     } else if (hasEntradaExplicit && horaEntradaExplicit) {
+      let quem = freqRecord?.dados?.usuarioNome || freqRecord?.dados?.registradoPor || registradoPor
+      if (quem && typeof quem === 'string' && quem.startsWith('Manual (') && quem.endsWith(')')) {
+        quem = quem.slice(8, -1)
+      }
+      const detalhesText = quem && quem !== 'Manual' && quem !== 'Manual (Auto)'
+        ? `Entrada lançada por ${quem}`
+        : 'Entrada lançada manualmente'
       entrada = {
         tipo: 'manual',
         label: 'Manual',
         horario: horaEntradaExplicit || undefined,
-        detalhes: 'Entrada lançada manualmente'
+        detalhes: detalhesText
       }
     }
   } else if (portariaEvEntrada) {
@@ -198,14 +210,19 @@ function getOrigemFrequenciaCompleta(
     const cStudentId = String(c.studentId || c.alunoId || c.aluno_id || '').trim()
     if (cStudentId !== targetId) return false
     const cStatus = String(c.status || '').toLowerCase()
-    if (cStatus !== 'confirmed' && cStatus !== 'confirmado' && !c.confirmedAt) return false
+    if (cStatus === 'cancelled' || cStatus === 'cancelado' || c.isRevert) return false
+    if (cStatus !== 'confirmed' && cStatus !== 'confirmado') return false
     const cDate = String(c.confirmedAt || c.calledAt || c.created_at || '').split('T')[0]
     return cDate === dataStr
   })
 
-  const freqSaidaHorario = freqRecord?.dados?.saidaHorario || freqRecord?.saidaHorario
-  const freqSaidaResp = freqRecord?.dados?.saidaResponsavel || freqRecord?.saidaResponsavel
-  const freqSaidaOrigem = freqRecord?.dados?.saidaOrigem || freqRecord?.saidaOrigem
+  const rawFreqHorario = freqRecord?.dados?.saidaHorario || freqRecord?.saidaHorario
+  const rawFreqResp = freqRecord?.dados?.saidaResponsavel || freqRecord?.saidaResponsavel
+  const rawFreqOrigem = freqRecord?.dados?.saidaOrigem || freqRecord?.saidaOrigem
+
+  const freqSaidaHorario = (rawFreqHorario && String(rawFreqHorario) !== 'null') ? rawFreqHorario : null
+  const freqSaidaResp = (rawFreqResp && String(rawFreqResp) !== 'null') ? rawFreqResp : null
+  const freqSaidaOrigem = (rawFreqOrigem && String(rawFreqOrigem) !== 'null') ? rawFreqOrigem : null
 
   const horaSaidaRaw = horarioSaidaState ||
                        (chamadaConfirmada ? (chamadaConfirmada.confirmedAt || chamadaConfirmada.calledAt) : null) ||
@@ -767,15 +784,27 @@ export default function FrequenciaPage() {
   // Mesclar registros do Context com os carregados via API e Eventos de Catraca/Portaria
   const combinedFreqs = useMemo(() => {
     const map = new Map<string, any>()
-    ;(contextFreqs || []).forEach(f => {
-      const aId = String((f as any).aluno_id || (f as any).alunoId || (f as any).aluno || '')
+    ;(contextFreqs || []).forEach((f: any) => {
+      const aId = String(f.aluno_id || f.alunoId || f.aluno || '')
       const dt = String(f.data || '').slice(0, 10)
-      if (aId && dt) map.set(`${aId}_${dt}`, f)
+      if (aId && dt) {
+        const tVals = f.tempos ? Object.values(f.tempos) : []
+        const isAllDash = tVals.length > 0 && tVals.every(v => v === '-')
+        if (!isAllDash) map.set(`${aId}_${dt}`, f)
+      }
     })
-    ;(allFreqs || []).forEach(f => {
-      const aId = String((f as any).aluno_id || (f as any).alunoId || (f as any).aluno || '')
+    ;(allFreqs || []).forEach((f: any) => {
+      const aId = String(f.aluno_id || f.alunoId || f.aluno || '')
       const dt = String(f.data || '').slice(0, 10)
-      if (aId && dt) map.set(`${aId}_${dt}`, f)
+      if (aId && dt) {
+        const tVals = f.tempos ? Object.values(f.tempos) : []
+        const isAllDash = tVals.length > 0 && tVals.every(v => v === '-')
+        if (isAllDash) {
+          map.delete(`${aId}_${dt}`)
+        } else {
+          map.set(`${aId}_${dt}`, f)
+        }
+      }
     })
 
     // Sintetizar presença a partir de eventos da portaria/catraca caso não haja registro explícito
@@ -869,6 +898,7 @@ export default function FrequenciaPage() {
   const [customResponsavel, setCustomResponsavel] = useState<string>('')
   const [salvandoSaida, setSalvandoSaida] = useState<boolean>(false)
   const [editingEntrada, setEditingEntrada] = useState<{ alunoId: string; dia: string } | null>(null)
+  const [confirmCancelSaidaModal, setConfirmCancelSaidaModal] = useState<{ aluno: any; dia: string } | null>(null)
 
   
   // Filtros home
@@ -993,106 +1023,37 @@ export default function FrequenciaPage() {
     return '-'
   }, [absences])
 
-  // Salvamento automático em tempo real para cada alteração de frequência
-  const autoSaveStudent = useCallback(async (
-    alunoId: string,
-    dia: string,
-    overrideTempos?: Record<string, PresStatus>,
-    overrideEntrada?: string,
-    overrideSaida?: string,
-    overrideRespSaida?: string
-  ) => {
-    const aId = String(alunoId)
-    const aluno = alunos.find(a => String(a.id) === aId)
-    if (!aluno) return
-
-    const schedule = getTurmaSchedule(turmaObj)
-    const studentDay = overrideTempos || absences[aId]?.[dia] || {}
-    const tempos: Record<string, PresStatus> = {}
-    schedule.tempos.forEach(t => {
-      tempos[t.id] = studentDay[t.id] || '-'
-    })
-
-    const calc = calcularFrequenciaDia(tempos, schedule.segmento)
-    const existing = freqTurma?.find(f => String(f.aluno_id) === aId && String(f.data).startsWith(dia))
-
-    const targetId = aId.trim()
-    const portariaEv = (portariaEventsList || []).find((ev: any) => {
-      const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
-      const evEquipId = String(ev.user_id_equipamento || '').trim()
-      const matchesAluno = (evAlunoId && evAlunoId === targetId) || (evEquipId && evEquipId === targetId)
-      if (!matchesAluno) return false
-      if (ev.status && ev.status !== 'sucesso') return false
-      const evDateStr = String(ev.data_hora || ev.created_at || ev.data || '').split('T')[0]
-      return evDateStr === dia
-    })
-
-    let horaCatraca: string | undefined = undefined
-    if (portariaEv) {
-      const rawTime = portariaEv.data_hora || portariaEv.created_at || portariaEv.data
-      if (rawTime) {
-        try {
-          const d = new Date(rawTime)
-          if (!isNaN(d.getTime())) {
-            const h = String(d.getUTCHours()).padStart(2, '0')
-            const m = String(d.getUTCMinutes()).padStart(2, '0')
-            horaCatraca = `${h}:${m}`
-          }
-        } catch {}
-      }
-    }
-
-    const isCatraca = !!portariaEv || existing?.origem === 'catraca' || String(existing?.registradoPor || '').toLowerCase().includes('catraca')
-    const nowTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    const customEntrada = overrideEntrada !== undefined ? overrideEntrada : (horariosEntrada[aId]?.[dia] || horaCatraca || existing?.horaRegistro || nowTime)
-    const customSaida = overrideSaida !== undefined ? overrideSaida : (horariosSaida[aId]?.[dia] || existing?.dados?.saidaHorario || null)
-    const customRespSaida = overrideRespSaida !== undefined ? overrideRespSaida : (responsaveisSaida[aId]?.[dia] || existing?.dados?.saidaResponsavel || null)
-
-    const recordToSave = {
-      id: existing?.id,
-      alunoId: aluno.id,
-      turmaId: turmaId,
-      data: dia,
-      anoLetivo: filtroAno,
-      presente: calc.presente,
-      justificativa: calc.justificativa,
-      tempos: calc.temposEfetivos,
-      registradoPor: isCatraca ? (existing?.registradoPor || 'Catraca iDFace') : 'Manual (Auto)',
-      origem: isCatraca ? 'catraca' : 'manual',
-      horaRegistro: customEntrada || nowTime,
-      dados: {
-        ...(existing?.dados || {}),
-        horaEntrada: customEntrada || nowTime,
-        saidaHorario: customSaida,
-        saidaResponsavel: customRespSaida,
-      }
-    }
-
-    try {
-      await fetch('/api/academico/frequencias', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([recordToSave])
-      })
-      if (refetchFreq) refetchFreq()
-      if (refetchAllFreqs) refetchAllFreqs()
-    } catch (err) {
-      console.error('Erro no salvamento automático de frequência:', err)
-    }
-  }, [alunos, turmaObj, absences, freqTurma, portariaEventsList, horariosEntrada, horariosSaida, responsaveisSaida, turmaId, filtroAno, refetchFreq, refetchAllFreqs])
-
   const setStatus = (alunoId: string, dia: string, tempoId: string, statusNext: PresStatus) => {
     const aId = String(alunoId)
     setAbsences(prev => {
       const studentData = prev[aId] || {}
       const dayData = studentData[dia] || {}
+      
+      if (statusNext === '-') {
+        const updatedDayData = { ...dayData }
+        delete updatedDayData[tempoId]
+        const remainingTempos = Object.keys(updatedDayData)
+        if (remainingTempos.length === 0 || Object.values(updatedDayData).every(v => v === '-')) {
+          const updatedStudentData = { ...studentData }
+          delete updatedStudentData[dia]
+          return {
+            ...prev,
+            [aId]: updatedStudentData
+          }
+        }
+        return {
+          ...prev,
+          [aId]: {
+            ...studentData,
+            [dia]: updatedDayData
+          }
+        }
+      }
+
       const updatedDayData = {
         ...dayData,
         [tempoId]: statusNext
       }
-
-      // Dispara salvamento automático instantâneo em tempo real no banco
-      autoSaveStudent(aId, dia, updatedDayData)
 
       return {
         ...prev,
@@ -1157,6 +1118,7 @@ export default function FrequenciaPage() {
         presente: existing?.presente ?? true,
         justificativa: existing?.justificativa || '',
         tempos: existing?.tempos || null,
+        notifyPush: false,
         registradoPor: existing?.registradoPor || null,
         origem: existing?.origem || null,
         horaRegistro: existing?.horaRegistro || null,
@@ -1219,6 +1181,7 @@ export default function FrequenciaPage() {
         presente: true,
         justificativa: existing?.justificativa || '',
         tempos: existing?.tempos || { '1': 'P', '2': 'P', '3': 'P', '4': 'P' },
+        notifyPush: false,
         registradoPor: existing?.registradoPor || 'Manual',
         origem: existing?.origem || 'manual',
         horaRegistro: currentEntrada,
@@ -1226,6 +1189,7 @@ export default function FrequenciaPage() {
           ...(existing?.dados || {}),
           saidaHorario: null,
           saidaResponsavel: null,
+          saidaOrigem: null,
         }
       }
 
@@ -1235,7 +1199,7 @@ export default function FrequenciaPage() {
         body: JSON.stringify([recordToSave])
       })
 
-      // 3. Atualiza / cancela o registro no painel de chamadas da portaria
+      // 3. Atualiza / cancela o registro no painel de chamadas da portaria e deleta da dita tabela
       const nowIso = new Date().toISOString()
       await fetch('/api/saida/calls', {
         method: 'POST',
@@ -1255,6 +1219,12 @@ export default function FrequenciaPage() {
         })
       })
 
+      await fetch('/api/saida/calls', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: `infantil-${aId}-${dia}` })
+      }).catch(console.error)
+
       if (refetchFreq) refetchFreq()
       if (refetchAllFreqs) refetchAllFreqs()
       if (refetchSaidaCalls) refetchSaidaCalls()
@@ -1265,6 +1235,7 @@ export default function FrequenciaPage() {
 
   const handleSave = async () => {
     const recordsToSave: any[] = []
+    const deletePromises: Promise<any>[] = []
     const schedule = getTurmaSchedule(turmaObj)
     
     alunosDaTurma.forEach(a => {
@@ -1275,11 +1246,39 @@ export default function FrequenciaPage() {
           tempos[t.id] = studentDay[t.id] || '-'
         })
         
-        // Aplicar as regras específicas do segmento
         const calc = calcularFrequenciaDia(tempos, schedule.segmento)
-        
         const existing = freqTurma?.find(f => String(f.aluno_id) === String(a.id) && String(f.data).startsWith(dia))
         
+        const isAllDash = Object.values(tempos).every(v => v === '-')
+        if (isAllDash) {
+          if (existing?.id || existing) {
+            setHorariosEntrada(prev => {
+              const copy = { ...prev }
+              if (copy[a.id]) delete copy[a.id][dia]
+              return copy
+            })
+            setHorariosSaida(prev => {
+              const copy = { ...prev }
+              if (copy[a.id]) delete copy[a.id][dia]
+              return copy
+            })
+            setResponsaveisSaida(prev => {
+              const copy = { ...prev }
+              if (copy[a.id]) delete copy[a.id][dia]
+              return copy
+            })
+            setAbsences(prev => {
+              const copy = { ...prev }
+              if (copy[a.id]) delete copy[a.id][dia]
+              return copy
+            })
+
+            const queryParam = existing?.id ? `id=${existing.id}` : `aluno_id=${a.id}&data=${dia}`
+            deletePromises.push(fetch(`/api/academico/frequencias?${queryParam}`, { method: 'DELETE' }))
+          }
+          return
+        }
+
         const targetId = String(a.id).trim()
         const portariaEv = (portariaEventsList || []).find((ev: any) => {
           const evAlunoId = String(ev.aluno_id || ev.alunoId || '').trim()
@@ -1313,6 +1312,16 @@ export default function FrequenciaPage() {
         const customSaida = horariosSaida[String(a.id)]?.[dia]
         const customRespSaida = responsaveisSaida[String(a.id)]?.[dia]
 
+        // Verificar se houve alteração real em relação ao registro existente no banco
+        const existingTempos = (existing?.tempos || existing?.dados?.tempos || {}) as Record<string, string>
+        const calcTempos = calc.temposEfetivos || {}
+        const temposKeys = Array.from(new Set([...Object.keys(existingTempos), ...Object.keys(calcTempos)]))
+        const isTemposDifferent = temposKeys.some(k => (existingTempos[k] || '-') !== (calcTempos[k] || '-'))
+        const isPresenteDifferent = existing ? Boolean(existing.presente) !== Boolean(calc.presente) : true
+        const isJustificativaDifferent = existing ? Boolean(existing.justificativa) !== Boolean(calc.justificativa) : false
+
+        const hasChanged = !existing || isPresenteDifferent || isJustificativaDifferent || isTemposDifferent
+
         recordsToSave.push({
           id: existing?.id,
           alunoId: a.id,
@@ -1321,7 +1330,8 @@ export default function FrequenciaPage() {
           anoLetivo: filtroAno,
           presente: calc.presente,
           justificativa: calc.justificativa,
-          tempos: calc.temposEfetivos, // Salvamos os tempos efetivos com as regras auto-aplicadas
+          tempos: calc.temposEfetivos,
+          notifyPush: hasChanged,
           registradoPor: isCatraca ? (existing?.registradoPor || 'Catraca iDFace') : 'Manual',
           origem: isCatraca ? 'catraca' : 'manual',
           horaRegistro: customEntrada || horaCatraca || existing?.horaRegistro || nowTime,
@@ -1336,23 +1346,30 @@ export default function FrequenciaPage() {
     })
 
     try {
-      const response = await fetch('/api/academico/frequencias', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(recordsToSave)
-      })
-
-      if (response.ok) {
-        setSalvo(true)
-        refetchFreq()
-        if (refetchAllFreqs) refetchAllFreqs()
-        setTimeout(() => {
-          setSalvo(false)
-        }, 1500)
-      } else {
-        const err = await response.json()
-        alert('Erro ao salvar: ' + (err.error || response.statusText))
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises)
       }
+
+      if (recordsToSave.length > 0) {
+        const response = await fetch('/api/academico/frequencias', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(recordsToSave)
+        })
+
+        if (!response.ok) {
+          const err = await response.json()
+          alert('Erro ao salvar: ' + (err.error || response.statusText))
+          return
+        }
+      }
+
+      setSalvo(true)
+      refetchFreq()
+      if (refetchAllFreqs) refetchAllFreqs()
+      setTimeout(() => {
+        setSalvo(false)
+      }, 1500)
     } catch (error: any) {
       alert('Erro na requisição: ' + error.message)
     }
@@ -1509,22 +1526,34 @@ export default function FrequenciaPage() {
     const turmasComChamada = new Set(freqsNoDia.map(f => String(f.turma_id)))
 
     // Filtrar alunos baseados na seleção da turma e filtros globais
-    const targetAlunos = turmaSel 
+    const targetAlunos = (turmaSel && !overrideData) 
       ? alunosDaTurma 
       : alunos.filter((aluno: any) => {
-          const tObj = turmas.find(t => String(t.id) === String(aluno.turma))
-          if (!tObj) return false
+          if (overrideData) return true
+          const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma || t.codigo === aluno.turma)
+          if (!tObj) return true
           const matchesSegmento = !filtroSegmento || (tObj as any).dados?.segmento === filtroSegmento
-          const matchesBusca = !filtroBusca || tObj.nome.toLowerCase().includes(filtroBusca.toLowerCase())
+          const term = (filtroBusca || '').trim().toLowerCase()
+          const matchesBusca = !term ||
+            tObj.nome.toLowerCase().includes(term) ||
+            aluno.nome.toLowerCase().includes(term) ||
+            String(aluno.id).toLowerCase().includes(term) ||
+            (aluno.matricula && String(aluno.matricula).toLowerCase().includes(term))
           return matchesSegmento && matchesBusca
         })
 
     targetAlunos.forEach((aluno: any) => {
-      const tObj = turmas.find(t => String(t.id) === String(aluno.turma))
-      if (!tObj) return
-      
-      const schedule = getTurmaSchedule(tObj)
+      const tObj = turmas.find(t => String(t.id) === String(aluno.turma) || t.nome === aluno.turma || t.codigo === aluno.turma)
+      const turmaNome = tObj?.nome || aluno.turma_nome || aluno.turma || 'Sem Turma'
+      const schedule = tObj ? getTurmaSchedule(tObj) : { segmento: aluno.segmento || 'Ensino Fundamental I', tempos: [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' }] }
       const freqRecord = freqMap.get(String(aluno.id))
+
+      const isIntegral = Boolean(
+        isAlunoIntegralIntermediario(aluno, turmas) ||
+        aluno.isIntegralIntermediario === true ||
+        aluno.dados?.isIntegralIntermediario === true ||
+        aluno.modalidade === 'INTEGRAL/INTERMEDIÁRIO'
+      )
       
       let tempos: Record<string, PresStatus> = {}
       
@@ -1577,14 +1606,21 @@ export default function FrequenciaPage() {
           faltasStr = isFaltaTotal ? 'Falta Total' : `Parcial (${temposFaltosos.map(i => `${i}ºT`).join(', ')})`
         }
 
+        const rawTurno = aluno.turno || tObj?.turno || ''
+        const normTurno = rawTurno.toLowerCase().includes('matutino') || rawTurno.toLowerCase().includes('manhã')
+          ? 'Matutino'
+          : (rawTurno.toLowerCase().includes('vespertino') || rawTurno.toLowerCase().includes('tarde') ? 'Vespertino' : 'Matutino')
+        const turnoDisplay = isIntegral ? 'Integral/Intermediário' : normTurno
+
         list.push({
           id: aluno.id,
           nome: aluno.nome,
           turmaId: aluno.turma,
-          turmaNome: tObj.nome,
-          anoLetivo: String(tObj.ano || ''),
-          turno: aluno.turno || tObj.turno || 'N/A',
+          turmaNome: turmaNome,
+          anoLetivo: String(tObj?.ano || aluno.anoLetivo || aluno.dados?.anoLetivo || ''),
+          turno: turnoDisplay,
           segmento: schedule.segmento,
+          isIntegral: isIntegral,
           responsavel_telefone: aluno.responsavel_telefone || aluno.telefone || '',
           faltasStr: faltasStr,
           faltasCount: temposFaltosos.length,
@@ -1920,7 +1956,7 @@ export default function FrequenciaPage() {
     let candidateStudents = alunos.filter((aluno: any) => {
       const matchAno = !relatorioAno || relatorioAno === 'todos' || String(aluno.anoLetivo || aluno.dados?.anoLetivo || '') === relatorioAno || turmas.some(t => String(t.ano) === relatorioAno && isAlunoCursandoTurma(aluno, t, relatorioAno, turmas))
       const matchSegmento = !relatorioSegmento || (aluno.segmento === relatorioSegmento || aluno.dados?.segmento === relatorioSegmento || turmas.some(t => (t as any).dados?.segmento === relatorioSegmento && isAlunoCursandoTurma(aluno, t, undefined, turmas)))
-      const matchTurno = !relatorioTurno || (aluno.turno === relatorioTurno || aluno.dados?.turno === relatorioTurno || turmas.some(t => t.turno === relatorioTurno && isAlunoCursandoTurma(aluno, t, undefined, turmas)))
+      const matchTurno = !relatorioTurno || (aluno.turno === relatorioTurno || aluno.dados?.turno === relatorioTurno || (relatorioTurno === 'Integral/Intermediário' && (isAlunoIntegralIntermediario(aluno, turmas) || String(aluno.turno || '').toLowerCase().includes('integral') || String(aluno.turno || '').toLowerCase().includes('intermediario'))) || turmas.some(t => (t.turno === relatorioTurno || (relatorioTurno === 'Integral/Intermediário' && (t.turno === 'Integral' || String(t.turno || '').toLowerCase().includes('integral')))) && isAlunoCursandoTurma(aluno, t, undefined, turmas)))
       
       return matchAno && matchSegmento && matchTurno
     })
@@ -2713,15 +2749,14 @@ export default function FrequenciaPage() {
 
                   <select
                     className="form-input"
-                    style={{ width: '120px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
+                    style={{ width: '150px', height: '34px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #cbd5e1', fontSize: '11px', fontWeight: 600 }}
                     value={relatorioTurno}
                     onChange={e => setRelatorioTurno(e.target.value)}
                   >
                     <option value="">Todos Turnos</option>
                     <option value="Matutino">Matutino</option>
                     <option value="Vespertino">Vespertino</option>
-                    <option value="Noturno">Noturno</option>
-                    <option value="Integral">Integral</option>
+                    <option value="Integral/Intermediário">Integral/Intermediário</option>
                   </select>
 
                   <select
@@ -3518,6 +3553,82 @@ export default function FrequenciaPage() {
     )
   }
 
+  // Modal Modal de Confirmação de Cancelamento de Saída
+  const renderConfirmCancelSaidaModal = () => {
+    if (!confirmCancelSaidaModal) return null
+    const { aluno, dia } = confirmCancelSaidaModal
+
+    return (
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999,
+        background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
+        animation: 'fadeIn 0.15s ease-out'
+      }}>
+        <div style={{
+          background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '440px',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden', border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ padding: '28px 28px 20px 28px', display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '14px',
+              background: '#fee2e2', color: '#dc2626',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              boxShadow: '0 4px 12px rgba(220, 38, 38, 0.15)'
+            }}>
+              <AlertTriangle size={24} />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+                Cancelar Registro de Saída
+              </h3>
+              <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+                Deseja cancelar o registro de saída de <strong style={{ color: '#0f172a' }}>{aluno?.nome}</strong>?
+                O horário e o responsável cadastrados serão removidos.
+              </p>
+            </div>
+          </div>
+
+          <div style={{
+            padding: '16px 24px 20px 24px', background: '#f8fafc',
+            borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '12px'
+          }}>
+            <button
+              type="button"
+              onClick={() => setConfirmCancelSaidaModal(null)}
+              style={{
+                padding: '10px 18px', background: '#fff', color: '#475569',
+                border: '1px solid #cbd5e1', borderRadius: '12px',
+                fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+              onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+            >
+              Manter Registro
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                handleCancelarSaidaInfantil(aluno, dia)
+                setConfirmCancelSaidaModal(null)
+              }}
+              style={{
+                padding: '10px 20px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                color: '#fff', border: 'none', borderRadius: '12px',
+                fontWeight: 800, fontSize: '13px', cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)', transition: 'all 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+            >
+              Sim, Cancelar Saída
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // Render do Modal de Registro Manual de Não Identificados
   const renderRegistroManualModal = () => {
     if (!showRegistroManualModal) return null
@@ -3531,7 +3642,8 @@ export default function FrequenciaPage() {
                          a.turmaNome.toLowerCase().includes(buscaRegistroManual.toLowerCase())
       
       const matchAno = !registroManualAno || a.anoLetivo === registroManualAno
-      const matchTurno = !registroManualTurno || a.turno === registroManualTurno
+      const matchTurno = !registroManualTurno || 
+        (registroManualTurno === 'Integral/Intermediário' ? (a.isIntegral || a.turno === 'Integral/Intermediário') : (!a.isIntegral && a.turno === registroManualTurno))
       
       return matchBusca && matchAno && matchTurno
     })
@@ -3608,15 +3720,14 @@ export default function FrequenciaPage() {
 
             <select
               className="form-input"
-              style={{ width: '130px', height: '38px', borderRadius: '10px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '13px', fontWeight: 600, padding: '0 10px', color: '#0f172a' }}
+              style={{ width: '175px', height: '38px', borderRadius: '10px', background: '#fff', border: '1px solid #cbd5e1', fontSize: '13px', fontWeight: 600, padding: '0 10px', color: '#0f172a' }}
               value={registroManualTurno}
               onChange={e => setRegistroManualTurno(e.target.value)}
             >
               <option value="">Turnos</option>
               <option value="Matutino">Matutino</option>
               <option value="Vespertino">Vespertino</option>
-              <option value="Noturno">Noturno</option>
-              <option value="Integral">Integral</option>
+              <option value="Integral/Intermediário">Integral/Intermediário</option>
             </select>
 
             <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
@@ -3724,8 +3835,10 @@ export default function FrequenciaPage() {
                           currentStatus = absencesManual[aluno.id]['1']
                         } else if (existingFreq && existingFreq.tempos) {
                           currentStatus = existingFreq.tempos['1'] || '-'
-                        } else if (existingFreq && !existingFreq.tempos) {
+                        } else if (existingFreq && existingFreq.presente !== undefined) {
                           currentStatus = existingFreq.justificativa === 'Justificada' ? 'J' : (existingFreq.presente ? 'P' : 'F')
+                        } else if (infoOrigem.entrada) {
+                          currentStatus = 'P' // Aluno com entrada iDFace/Catraca é padrão PRESENTE
                         }
 
                         const currentEntrada = horariosEntrada[aluno.id]?.[registroManualData] || (infoOrigem.entrada?.horario ? infoOrigem.entrada.horario : '')
@@ -3983,12 +4096,28 @@ export default function FrequenciaPage() {
 
   // ── HOME (VISÃO DE DIRETOR) ───────────────────────────────────────────────
   if (!turmaSel) {
-    const turmasFiltradas = turmas.filter(t =>
-      (filtroAno === 'todos' || t.ano.toString() === filtroAno) &&
-      (!filtroSegmento || (t as any).dados?.segmento === filtroSegmento) &&
-      (!filtroTurno || t.turno === filtroTurno) &&
-      (!filtroBusca || t.nome.toLowerCase().includes(filtroBusca.toLowerCase()))
-    )
+    const turmasFiltradas = turmas.filter(t => {
+      const matchesAno = filtroAno === 'todos' || t.ano.toString() === filtroAno
+      const matchesSegmento = !filtroSegmento || (t as any).dados?.segmento === filtroSegmento
+      const matchesTurno = !filtroTurno || t.turno === filtroTurno || (filtroTurno === 'Integral/Intermediário' && (t.turno === 'Integral' || String(t.turno || '').toLowerCase().includes('integral') || String(t.turno || '').toLowerCase().includes('intermediario')))
+      
+      let matchesBusca = true
+      if (filtroBusca.trim()) {
+        const term = filtroBusca.trim().toLowerCase()
+        const matchesTurmaNome = t.nome.toLowerCase().includes(term) || (t.codigo && String(t.codigo).toLowerCase().includes(term)) || (t.serie && String(t.serie).toLowerCase().includes(term))
+        const matchesAluno = (alunos || []).some((a: any) =>
+          isAlunoCursandoTurma(a, t, undefined, turmas) && (
+            a.nome?.toLowerCase().includes(term) ||
+            String(a.id || '').toLowerCase().includes(term) ||
+            (a.matricula && String(a.matricula).toLowerCase().includes(term)) ||
+            (a.codigo && String(a.codigo).toLowerCase().includes(term))
+          )
+        )
+        matchesBusca = matchesTurmaNome || matchesAluno
+      }
+
+      return matchesAno && matchesSegmento && matchesTurno && matchesBusca
+    })
 
     return (
       <div className="freq-page-wrap" style={{ padding: '20px 24px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
@@ -4393,7 +4522,7 @@ export default function FrequenciaPage() {
               <input 
                 className="form-input" 
                 style={{ paddingLeft: '42px', height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', width: '100%' }} 
-                placeholder="Pesquisar turma por nome..." 
+                placeholder="Pesquisar por turma ou aluno..." 
                 value={filtroBusca} 
                 onChange={e => setFiltroBusca(e.target.value)} 
               />
@@ -4415,13 +4544,12 @@ export default function FrequenciaPage() {
                </select>
              </div>
 
-             <div className="freq-filter-item" style={{ width: '160px' }}>
+             <div className="freq-filter-item" style={{ width: '190px' }}>
                <select className="form-input" style={{ height: '44px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', width: '100%' }} value={filtroTurno} onChange={e => setFiltroTurno(e.target.value)}>
                  <option value="">Todos os Turnos</option>
                  <option value="Matutino">Matutino</option>
                  <option value="Vespertino">Vespertino</option>
-                 <option value="Noturno">Noturno</option>
-                 <option value="Integral">Integral</option>
+                 <option value="Integral/Intermediário">Integral/Intermediário</option>
                </select>
              </div>
 
@@ -4464,6 +4592,14 @@ export default function FrequenciaPage() {
                     const alunosDaEstaTurma = alunos.filter((a: any) => isAlunoCursandoTurma(a, turma, undefined, turmas))
                     const totalAlunosTurma = alunosDaEstaTurma.length
                     const alunosIdsDaTurma = new Set(alunosDaEstaTurma.map((a: any) => String(a.id)))
+
+                    const searchTerm = (filtroBusca || '').trim().toLowerCase()
+                    const alunosMatchBusca = searchTerm ? alunosDaEstaTurma.filter((a: any) => 
+                      a.nome?.toLowerCase().includes(searchTerm) ||
+                      String(a.id || '').toLowerCase().includes(searchTerm) ||
+                      (a.matricula && String(a.matricula).toLowerCase().includes(searchTerm)) ||
+                      (a.codigo && String(a.codigo).toLowerCase().includes(searchTerm))
+                    ) : []
 
                     const freqs = allFreqs || []
                     const regs = freqs.filter(f => String(f.turma_id) === String(turma.id) || alunosIdsDaTurma.has(String(f.aluno_id || f.alunoId)))
@@ -4508,6 +4644,16 @@ export default function FrequenciaPage() {
                         <div>
                           <p style={{ fontSize: '14px', fontWeight: 600, color: '#0f172a', margin: 0 }}>{turma.nome}</p>
                           <p style={{ fontSize: '12px', color: '#64748b', margin: 0 }}>{turma.serie} • {turma.turno}</p>
+                          {alunosMatchBusca.length > 0 && (
+                            <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '11px', background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <User size={12} />
+                                {alunosMatchBusca.length === 1
+                                  ? `Aluno: ${alunosMatchBusca[0].nome}`
+                                  : `Alunos (${alunosMatchBusca.length}): ${alunosMatchBusca.map((a: any) => a.nome).slice(0, 2).join(', ')}${alunosMatchBusca.length > 2 ? '...' : ''}`}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td style={{ padding: '12px', borderTop: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9' }}>
@@ -4755,7 +4901,6 @@ export default function FrequenciaPage() {
                                 }))
                               }
                               schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'P'))
-                              autoSaveStudent(aluno.id, dia, newDayTempos, newEntrada)
                             })
                           })
                         }}
@@ -4773,7 +4918,6 @@ export default function FrequenciaPage() {
                               const newDayTempos: Record<string, PresStatus> = {}
                               schedule.tempos.forEach(t => { newDayTempos[t.id] = 'F' })
                               schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, 'F'))
-                              autoSaveStudent(aluno.id, dia, newDayTempos)
                             })
                           })
                         }}
@@ -4901,8 +5045,30 @@ export default function FrequenciaPage() {
                                   }))
                                 }
 
-                                schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, nextStatus))
-                                autoSaveStudent(aluno.id, dia, newDayTempos, newEntrada)
+                                if (nextStatus === '-') {
+                                  setHorariosEntrada(prev => {
+                                    const copy = { ...prev }
+                                    if (copy[aluno.id]) delete copy[aluno.id][dia]
+                                    return copy
+                                  })
+                                  setHorariosSaida(prev => {
+                                    const copy = { ...prev }
+                                    if (copy[aluno.id]) delete copy[aluno.id][dia]
+                                    return copy
+                                  })
+                                  setResponsaveisSaida(prev => {
+                                    const copy = { ...prev }
+                                    if (copy[aluno.id]) delete copy[aluno.id][dia]
+                                    return copy
+                                  })
+                                  setAbsences(prev => {
+                                    const copy = { ...prev }
+                                    if (copy[aluno.id]) delete copy[aluno.id][dia]
+                                    return copy
+                                  })
+                                } else {
+                                  schedule.tempos.forEach(t => setStatus(aluno.id, dia, t.id, nextStatus))
+                                }
                               }}
                               style={{
                                 padding: '6px 12px', borderRadius: '8px', fontWeight: 800, fontSize: '12px', cursor: 'pointer',
@@ -4935,7 +5101,6 @@ export default function FrequenciaPage() {
                                         ...prev,
                                         [aluno.id]: { ...(prev[aluno.id] || {}), [dia]: v }
                                       }))
-                                      autoSaveStudent(aluno.id, dia, undefined, v)
                                     }}
                                     style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #2563eb', fontSize: '11px', fontWeight: 800, width: '90px' }}
                                   />
@@ -5004,9 +5169,7 @@ export default function FrequenciaPage() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (confirm(`Deseja cancelar o registro de saída de ${aluno.nome}?`)) {
-                                      handleCancelarSaidaInfantil(aluno, dia)
-                                    }
+                                    setConfirmCancelSaidaModal({ aluno, dia })
                                   }}
                                   style={{ fontSize: '9px', fontWeight: 800, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '5px', padding: '2px 5px', cursor: 'pointer' }}
                                 >
@@ -5056,6 +5219,7 @@ export default function FrequenciaPage() {
       {renderRelatorioModal()}
       {renderRegistroManualModal()}
       {renderSaidaModal()}
+      {renderConfirmCancelSaidaModal()}
       <SyncAcessosModal 
         isOpen={showAcessosModal} 
         onClose={() => setShowAcessosModal(false)}

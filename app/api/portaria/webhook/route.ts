@@ -280,17 +280,8 @@ export async function POST(req: Request) {
       // Face presente mas não cadastrada na catraca → negado
       eventStatus = 'negado'
     } else if (alunoId) {
-      // Aluno identificado → validar janela de horário
-      const eventDate = new Date(eventTime)
-      // A catraca iDFace grava o timestamp como se o horário local fosse UTC (sem offset).
-      // Portanto usamos getUTCHours() para obter a hora local real registrada pelo equipamento.
-      const eventHourStr = String(eventDate.getUTCHours()).padStart(2, '0') + ':' + String(eventDate.getUTCMinutes()).padStart(2, '0')
-      if (eventHourStr >= startHour && eventHourStr <= endHour) {
-        eventStatus = 'sucesso'
-      } else {
-        console.warn(`⏰ [Webhook Portaria] Acesso fora da janela permitida (${eventHourStr}) — esperado entre ${startHour} e ${endHour}`)
-        eventStatus = 'inconsistencia'
-      }
+      // Aluno identificado → Presença sempre confirmada como sucesso independente do horário de entrada
+      eventStatus = 'sucesso'
     } else if (userIdNum && userIdNum > 0) {
       // user_id presente mas aluno não encontrado no ERP → inconsistencia
       eventStatus = 'inconsistencia'
@@ -336,94 +327,59 @@ export async function POST(req: Request) {
       console.error('[Supabase Portaria Insert Error]', insertErr)
     }
 
-    // Integração automática de presença em academico/frequencia
-    if (eventStatus === 'sucesso' && alunoId && alunoTurma) {
+    // Integração automática de presença em academico/frequencia (Apenas registro de horário de entrada)
+    if (eventStatus === 'sucesso' && alunoId) {
       try {
-        // 1. Obter informações da turma do aluno para saber o segmento e horários
-        const { data: turmaData, error: turmaErr } = await supabase
-          .from('turmas')
-          .select('id, nome, turno, dados')
-          .or(`id.eq.${alunoTurma},nome.eq.${alunoTurma}`)
-          .limit(1)
+        // 1. Resolver data e hora local do evento extraindo UTC (pois a catraca grava o local como UTC)
+        const eventDateObj = new Date(eventTime)
+        
+        const year = eventDateObj.getUTCFullYear()
+        const month = String(eventDateObj.getUTCMonth() + 1).padStart(2, '0')
+        const day = String(eventDateObj.getUTCDate()).padStart(2, '0')
+        const localDate = `${year}-${month}-${day}`
+        
+        const localHour = eventDateObj.getUTCHours()
+        const localMin = eventDateObj.getUTCMinutes()
+        const localTimeStr = `${String(localHour).padStart(2, '0')}:${String(localMin).padStart(2, '0')}`
+
+        // 2. Verificar se já existe lançamento de frequência para este aluno neste dia (NÃO SOBREPOR)
+        const freqId = `FREQ-${alunoId}-${localDate}`
+        const { data: existingFreq } = await supabase
+          .from('frequencias')
+          .select('*')
+          .eq('id', freqId)
           .maybeSingle()
 
-        if (!turmaErr && turmaData) {
-          const schedule = getTurmaSchedule(turmaData)
-
-          // 2. Resolver data e hora local do evento extraindo UTC (pois a catraca grava o local como UTC)
-          const eventDateObj = new Date(eventTime)
-          
-          const year = eventDateObj.getUTCFullYear()
-          const month = String(eventDateObj.getUTCMonth() + 1).padStart(2, '0')
-          const day = String(eventDateObj.getUTCDate()).padStart(2, '0')
-          const localDate = `${year}-${month}-${day}`
-          
-          const localHour = eventDateObj.getUTCHours()
-          const localMin = eventDateObj.getUTCMinutes()
-          const localTimeStr = `${String(localHour).padStart(2, '0')}:${String(localMin).padStart(2, '0')}`
-
-          // 3. Calcular minutos desde a meia-noite
-          const arrivalMinutes = localHour * 60 + localMin
-
-          // 4. Determinar primeiro tempo presente baseado na tolerância
-          const firstPresentTempoIndex = getFirstPresentTempoIndex(arrivalMinutes, schedule.segmento, schedule.turno)
-
-          // 5. Verificar se já existe lançamento de frequência para este aluno neste dia
-          const freqId = `FREQ-${alunoId}-${localDate}`
-          const { data: existingFreq } = await supabase
-            .from('frequencias')
-            .select('*')
-            .eq('id', freqId)
-            .maybeSingle()
-
-          // 6. Mesclar com as frequências existentes preservando 'J' (justificadas)
-          let tempos: Record<string, string> = {}
-          const existingTempos = existingFreq?.dados?.tempos || existingFreq?.tempos
-          if (existingTempos && typeof existingTempos === 'object') {
-            tempos = { ...existingTempos }
-          }
-
-          schedule.tempos.forEach((t, index) => {
-            if (index >= firstPresentTempoIndex) {
-              tempos[t.id] = 'P' // Presente a partir da chegada
-            } else {
-              // Só marca como Falta se não estiver pré-marcado como Justificado
-              if (tempos[t.id] !== 'J') {
-                tempos[t.id] = 'F'
-              }
-            }
-          })
-
-          // 7. Aplicar as regras específicas de segmento
-          const calc = calcularFrequenciaDia(tempos as any, schedule.segmento)
-
-          // 8. Salvar ou atualizar o registro de frequência
+        if (existingFreq) {
+          console.log(`ℹ️ [Portaria Integration] Aluno ${alunoNome} (ID: ${alunoId}) já possui registro de entrada em ${localDate}. Registro preservado sem sobreposição.`)
+        } else {
+          // 3. Salvar registro de entrada (sem tempos de aula)
           const currentYear = new Date().getFullYear().toString()
-          const diarioId = `DIARIO-${alunoTurma}-${currentYear}`
+          const diarioId = alunoTurma ? `DIARIO-${alunoTurma}-${currentYear}` : `DIARIO-PORTARIA-${currentYear}`
 
           const row = {
             id: freqId,
             aluno_id: alunoId,
-            turma_id: alunoTurma,
+            turma_id: alunoTurma || null,
             data: localDate,
-            presente: calc.presente,
-            justificativa: calc.justificativa,
+            presente: true,
+            justificativa: '',
             dados: {
-              tempos: calc.temposEfetivos,
               diarioId,
               anoLetivo: currentYear,
               registradoPor: 'Catraca iDFace',
+              horaEntrada: localTimeStr,
               horaRegistro: localTimeStr
             }
           }
 
-          const { error: upsertErr } = await supabase.from('frequencias').upsert(row)
-          if (upsertErr) {
-            console.error('[Portaria Integration Frequencia Upsert Error]', upsertErr)
+          const { error: insertErr } = await supabase.from('frequencias').insert(row)
+          if (insertErr) {
+            console.error('[Portaria Integration Frequencia Insert Error]', insertErr)
           } else {
-            console.log(`✅ [Portaria Integration] Frequência atualizada com sucesso para ${alunoNome} em ${localDate} (${localTimeStr})`)
+            console.log(`✅ [Portaria Integration] Horário de entrada (${localTimeStr}) registrado com sucesso para ${alunoNome} em ${localDate}`)
             
-            // 9. Disparo do Push Notification para a Agenda Digital
+            // 4. Disparo do Push Notification para os Pais na Agenda Digital
             if (alunoId) {
               try {
                 const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
