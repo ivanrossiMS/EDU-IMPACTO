@@ -37,14 +37,15 @@ function abbreviateName(name: string): string {
   return `${first} ${middle} ${last}`;
 }
 
-// Helper parsers for attachments formatted as "name|url|mime"
+// Helper parsers for attachments formatted as "name|url|mime|size"
 const parseAnexo = (anexoData: any) => {
   if (!anexoData) return null;
   if (typeof anexoData === 'object') {
     return {
       name: anexoData.nome || anexoData.name || '',
       url: anexoData.url || '',
-      mime: anexoData.mime || (anexoData.type === 'image' ? 'image/jpeg' : '')
+      mime: anexoData.mime || (anexoData.type === 'image' ? 'image/jpeg' : ''),
+      size: anexoData.size || anexoData.tamanho || null
     };
   }
   try {
@@ -53,7 +54,8 @@ const parseAnexo = (anexoData: any) => {
     const name = parts[0] || '';
     const url = parts[1] || '';
     const mime = parts[2] || '';
-    return { name, url, mime };
+    const size = parts[3] ? parseInt(parts[3], 10) : null;
+    return { name, url, mime, size };
   } catch (e) {
     return null;
   }

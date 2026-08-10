@@ -15,7 +15,8 @@ const parseAnexo = (anexoData: any) => {
     return {
       name: anexoData.nome || anexoData.name || '',
       url: anexoData.url || '',
-      mime: anexoData.mime || (anexoData.type === 'image' ? 'image/jpeg' : '')
+      mime: anexoData.mime || (anexoData.type === 'image' ? 'image/jpeg' : ''),
+      size: anexoData.size || anexoData.tamanho || null
     };
   }
   try {
@@ -24,10 +25,48 @@ const parseAnexo = (anexoData: any) => {
     const name = parts[0] || '';
     const url = parts[1] || '';
     const mime = parts[2] || '';
-    return { name, url, mime };
+    const size = parts[3] ? parseInt(parts[3], 10) : null;
+    return { name, url, mime, size };
   } catch (e) {
     return null;
   }
+};
+
+const AttachmentSize = ({ url, initialSize }: { url?: string; initialSize?: number | string | null }) => {
+  const [sizeStr, setSizeStr] = useState<string>('');
+
+  useEffect(() => {
+    if (initialSize) {
+      const bytes = typeof initialSize === 'number' ? initialSize : parseInt(initialSize, 10);
+      if (!isNaN(bytes)) {
+        if (bytes > 1048576) {
+          setSizeStr((bytes / 1048576).toFixed(1) + ' MB');
+        } else {
+          setSizeStr((bytes / 1024).toFixed(0) + ' KB');
+        }
+        return;
+      }
+    }
+
+    if (url && url.startsWith('http')) {
+      fetch(url, { method: 'HEAD' })
+        .then(res => {
+          const cl = res.headers.get('content-length');
+          if (cl) {
+            const bytes = parseInt(cl, 10);
+            if (bytes > 1048576) {
+              setSizeStr((bytes / 1048576).toFixed(1) + ' MB');
+            } else {
+              setSizeStr((bytes / 1024).toFixed(0) + ' KB');
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [url, initialSize]);
+
+  if (!sizeStr) return null;
+  return <span>{sizeStr}</span>;
 };
 
 function timeAgoShort(dateString: string) {
@@ -969,7 +1008,12 @@ export function ComunicadoViewModal({
                         </div>
                         <div style={{ flex: 1 }}>
                            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{parsed.name.replace(/^(Formulário:|Relatório:|Tarefa de Relatório:)\s*/, '')}</div>
-                           <div style={{ fontSize: 13, color: '#64748b' }}>{isForm ? 'Formulário' : isRel ? 'Relatório' : isReportTask ? 'Tarefa de Relatório' : 'Documento anexo'}</div>
+                           <div style={{ fontSize: 13, color: '#64748b' }}>
+                              {isForm ? 'Formulário' : isRel ? 'Relatório' : isReportTask ? 'Tarefa de Relatório' : 'Documento anexo'}
+                              {!isForm && !isRel && !isReportTask && !isReportPayload && (
+                                <> • <AttachmentSize url={parsed.url} initialSize={parsed.size} /></>
+                              )}
+                            </div>
                            {isAdminMode && cienciaString && (
                              <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                                <CheckCircle2 size={14} />

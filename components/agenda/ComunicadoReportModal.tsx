@@ -43,7 +43,8 @@ const parseAnexo = (anexoData: any) => {
     return {
       name: anexoData.nome || anexoData.name || '',
       url: anexoData.url || '',
-      mime: anexoData.mime || (anexoData.type === 'image' ? 'image/jpeg' : '')
+      mime: anexoData.mime || (anexoData.type === 'image' ? 'image/jpeg' : ''),
+      size: anexoData.size || anexoData.tamanho || null
     };
   }
   try {
@@ -52,10 +53,48 @@ const parseAnexo = (anexoData: any) => {
     const name = parts[0] || '';
     const url = parts[1] || '';
     const mime = parts[2] || '';
-    return { name, url, mime };
+    const size = parts[3] ? parseInt(parts[3], 10) : null;
+    return { name, url, mime, size };
   } catch (e) {
     return null;
   }
+};
+
+const AttachmentSize = ({ url, initialSize }: { url?: string; initialSize?: number | string | null }) => {
+  const [sizeStr, setSizeStr] = useState<string>('');
+
+  useEffect(() => {
+    if (initialSize) {
+      const bytes = typeof initialSize === 'number' ? initialSize : parseInt(initialSize, 10);
+      if (!isNaN(bytes)) {
+        if (bytes > 1048576) {
+          setSizeStr((bytes / 1048576).toFixed(1) + ' MB');
+        } else {
+          setSizeStr((bytes / 1024).toFixed(0) + ' KB');
+        }
+        return;
+      }
+    }
+
+    if (url && url.startsWith('http')) {
+      fetch(url, { method: 'HEAD' })
+        .then(res => {
+          const cl = res.headers.get('content-length');
+          if (cl) {
+            const bytes = parseInt(cl, 10);
+            if (bytes > 1048576) {
+              setSizeStr((bytes / 1048576).toFixed(1) + ' MB');
+            } else {
+              setSizeStr((bytes / 1024).toFixed(0) + ' KB');
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [url, initialSize]);
+
+  if (!sizeStr) return null;
+  return <span>{sizeStr}</span>;
 };
 
 export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatGroups, colaboradores, onClose, setViewingReportPayload, renderConteudo }: ComunicadoReportModalProps) {
@@ -315,7 +354,7 @@ export function ComunicadoReportModal({ selectedCom, alunosAtivos, turmas, chatG
                        }}
                      >
                        <Paperclip size={14} color="#64748b" />
-                       {name}
+                       {name} <span style={{ fontWeight: 400, opacity: 0.8, marginLeft: 2 }}>(<AttachmentSize url={url} initialSize={parsed.size} />)</span>
                      </a>
                    )
                 }

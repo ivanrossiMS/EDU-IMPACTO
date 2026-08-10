@@ -42,17 +42,18 @@ function abbreviateName(name: string): string {
   return `${first} ${middle} ${last}`;
 }
 
-// Helper parsers for attachments formatted as "name|url|mime"
+// Helper parsers for attachments formatted as "name|url|mime|size"
 const parseAnexo = (anexoStr: any) => {
   if (!anexoStr) return null;
   if (typeof anexoStr === 'object') {
-    return { name: anexoStr.name || '', url: anexoStr.url || '', mime: anexoStr.mime || '' };
+    return { name: anexoStr.name || '', url: anexoStr.url || '', mime: anexoStr.mime || '', size: anexoStr.size || anexoStr.tamanho || null };
   }
   try {
     const str = typeof anexoStr === 'string' ? anexoStr : String(anexoStr);
     let name = '';
     let url = '';
     let mime = '';
+    let size = null;
     if (str.endsWith('|report-payload')) {
       const firstPipe = str.indexOf('|');
       const lastPipe = str.lastIndexOf('|');
@@ -64,8 +65,9 @@ const parseAnexo = (anexoStr: any) => {
       name = parts[0] || '';
       url = parts[1] || '';
       mime = parts[2] || '';
+      size = parts[3] ? parseInt(parts[3], 10) : null;
     }
-    return { name, url, mime };
+    return { name, url, mime, size };
   } catch(e) {
     return null;
   }

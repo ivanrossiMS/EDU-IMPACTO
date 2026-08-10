@@ -6,6 +6,7 @@ import { useApp } from '@/lib/context'
 import { newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import BackupSection from '@/components/configuracoes/BackupSection'
+import MediaManagerSection from '@/components/configuracoes/MediaManagerSection'
 import { FormModal, ConfirmModal } from '@/components/ui/CrudModal'
 
 /* ─── Section definitions ─────────────────────────────────────── */
@@ -14,6 +15,7 @@ const CONFIG_SECTIONS = [
   { id: 'notificacoes',icon: '🔔', label: 'Notificações', desc: 'Email, push, SMS, WhatsApp' },
   { id: 'seguranca',   icon: '🔒', label: 'Segurança & LGPD', desc: 'Senha, 2FA, auditoria' },
   { id: 'backup',      icon: '💾', label: 'Backup & Exportação', desc: 'Exportar dados reais do sistema' },
+  { id: 'midia',       icon: '📁', label: 'Mídia & Arquivos', desc: 'Gerenciador de arquivos do banco de dados' },
 ]
 
 const MODULES_CONFIG = [
@@ -240,6 +242,9 @@ export default function ConfiguracoesPage() {
 
           {/* ── BACKUP ── */}
           {section === 'backup' && <BackupSection />}
+
+          {/* ── MÍDIA ── */}
+          {section === 'midia' && <MediaManagerSection />}
         </div>
       </div>
     </div>

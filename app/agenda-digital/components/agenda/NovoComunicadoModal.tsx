@@ -9,10 +9,47 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import { UserAvatar } from '@/components/UserAvatar'
-import { compressImage, compressVideo } from '@/lib/mediaCompressor'
+import { compressImage, compressVideo, compressPDF } from '@/lib/mediaCompressor'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { useRelatorios } from '@/lib/relatoriosContext'
 import { ReportsSelectionModal } from '@/components/agenda/ReportsSelectionModal'
+
+const AttachmentSize = ({ url, initialSize }: { url?: string; initialSize?: number | string | null }) => {
+  const [sizeStr, setSizeStr] = useState<string>('');
+
+  useEffect(() => {
+    if (initialSize) {
+      const bytes = typeof initialSize === 'number' ? initialSize : parseInt(initialSize, 10);
+      if (!isNaN(bytes)) {
+        if (bytes > 1048576) {
+          setSizeStr((bytes / 1048576).toFixed(1) + ' MB');
+        } else {
+          setSizeStr((bytes / 1024).toFixed(0) + ' KB');
+        }
+        return;
+      }
+    }
+
+    if (url && url.startsWith('http')) {
+      fetch(url, { method: 'HEAD' })
+        .then(res => {
+          const cl = res.headers.get('content-length');
+          if (cl) {
+            const bytes = parseInt(cl, 10);
+            if (bytes > 1048576) {
+              setSizeStr((bytes / 1048576).toFixed(1) + ' MB');
+            } else {
+              setSizeStr((bytes / 1024).toFixed(0) + ' KB');
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [url, initialSize]);
+
+  if (!sizeStr) return null;
+  return <span>{sizeStr}</span>;
+};
 
 export interface NovoComunicadoModalProps {
   isOpen: boolean;
@@ -46,9 +83,11 @@ export default function NovoComunicadoModal({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadingText, setUploadingText] = useState('')
   const [showScheduleModal, setShowScheduleModal] = useState(false)
   const [tempAgendamento, setTempAgendamento] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [previewAttachment, setPreviewAttachment] = useState<{ url: string; type: string; name: string } | null>(null)
 
   // ASAAS Cobranças
   const [showCobrancaModal, setShowCobrancaModal] = useState(false)
@@ -135,57 +174,87 @@ export default function NovoComunicadoModal({
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
     
-    // Atualizado para 50MB
+    // Converte para um array estático antes de limpar o valor do input (FileList é vivo e zera ao limpar o value)
+    const filesArray = Array.from(files);
+    e.target.value = '';
+    
     const MAX_SIZE = 50 * 1024 * 1024;
-    if (file.size > MAX_SIZE) {
-      alert('Arquivo muito grande. O limite é 50MB.');
-      return;
+
+    // Valida o limite de tamanho para cada arquivo
+    for (const file of filesArray) {
+      if (file.size > MAX_SIZE) {
+        alert(`O arquivo "${file.name}" excede o limite de tamanho permitido de 50MB.`);
+        return;
+      }
     }
 
     setIsUploading(true);
-    setUploadProgress(5);
+    setUploadProgress(0);
 
     try {
-      let fileToUpload: File = file;
+      for (let i = 0; i < filesArray.length; i++) {
+        const file = filesArray[i];
+        const displayIndex = i + 1;
+        const totalFiles = filesArray.length;
+        
+        setUploadingText(`Processando "${file.name}" (${displayIndex}/${totalFiles})...`);
+        setUploadProgress(Math.round((i / totalFiles) * 100));
 
-      if (file.type.startsWith('image/')) {
-        setUploadProgress(10);
-        fileToUpload = await compressImage(file, { quality: 0.65, format: 'image/webp' });
-        setUploadProgress(40);
-      } else if (file.type.startsWith('video/')) {
-        setUploadProgress(5);
-        fileToUpload = await compressVideo(file, (percent) => {
-          const scaled = Math.round(5 + (percent * 0.45));
-          setUploadProgress(scaled);
-        }) as File;
+        let fileToUpload: File = file;
+
+        // Compressão automática baseada no tipo de mídia
+        if (file.type.startsWith('image/')) {
+          setUploadProgress(Math.round(((i + 0.1) / totalFiles) * 100));
+          fileToUpload = await compressImage(file, { format: 'image/webp' });
+          setUploadProgress(Math.round(((i + 0.4) / totalFiles) * 100));
+        } else if (file.type.startsWith('video/')) {
+          setUploadProgress(Math.round(((i + 0.1) / totalFiles) * 100));
+          fileToUpload = await compressVideo(file, (percent) => {
+            const fileFraction = 0.1 + (percent * 0.4 / 100);
+            setUploadProgress(Math.round(((i + fileFraction) / totalFiles) * 100));
+          }) as File;
+        } else if (file.type === 'application/pdf') {
+          setUploadProgress(Math.round(((i + 0.1) / totalFiles) * 100));
+          fileToUpload = await compressPDF(file, (percent) => {
+            const fileFraction = 0.1 + (percent * 0.4 / 100);
+            setUploadProgress(Math.round(((i + fileFraction) / totalFiles) * 100));
+          });
+        }
+
+        setUploadingText(`Enviando "${fileToUpload.name}" (${displayIndex}/${totalFiles})...`);
+        setUploadProgress(Math.round(((i + 0.6) / totalFiles) * 100));
+
+        const uploadRes = await uploadFileToSupabase({
+          bucket: 'comunicados-midia',
+          file: fileToUpload,
+          usageType: 'common' 
+        });
+
+        if (!uploadRes.ok || !uploadRes.url) {
+          alert(uploadRes.error || `Erro no envio do arquivo: ${file.name}`);
+          continue; // Prossegue com os outros arquivos se houver falha em um
+        }
+
+        setUploadProgress(Math.round(((i + 1.0) / totalFiles) * 100));
+        // Adiciona à lista de anexos no formato: nome|url|tipo|tamanho_comprimido|tamanho_original
+        setAnexos(prev => [...prev, `${fileToUpload.name}|${uploadRes.url}|${fileToUpload.type}|${fileToUpload.size}|${file.size}`]);
       }
 
-      setUploadProgress(60);
-
-      const uploadRes = await uploadFileToSupabase({
-        bucket: 'comunicados-midia',
-        file: fileToUpload,
-        usageType: 'common' 
-      });
-
-      if (!uploadRes.ok || !uploadRes.url) {
-        alert(uploadRes.error || 'Erro no envio direto do arquivo.');
-        setIsUploading(false);
-        setUploadProgress(0);
-        return;
-      }
-
+      setUploadingText('Todos os arquivos foram enviados!');
       setUploadProgress(100);
-      setAnexos(prev => [...prev, `${fileToUpload.name}|${uploadRes.url}|${fileToUpload.type}|${fileToUpload.size}`]);
-      setTimeout(() => { setIsUploading(false); setUploadProgress(0); }, 700);
+      setTimeout(() => { 
+        setIsUploading(false); 
+        setUploadProgress(0); 
+        setUploadingText('');
+      }, 1000);
     } catch (err: any) {
-      alert('Erro inesperado: ' + (err?.message || ''));
+      alert('Erro inesperado no envio de arquivos: ' + (err?.message || ''));
       setIsUploading(false);
       setUploadProgress(0);
+      setUploadingText('');
     }
   }
 
@@ -621,7 +690,7 @@ export default function NovoComunicadoModal({
               <label style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: '10px 20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.background = '#F8FAFC'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FFF'; }}>
                 <Paperclip size={18} color="#475569" />
                 <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Anexar</span>
-                <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" hidden onChange={handleFileUpload} />
+                <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" multiple hidden onChange={handleFileUpload} />
               </label>
 
               <button onClick={(e) => { e.preventDefault(); setShowRelsModal(true); }} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: '10px 20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.background = '#F8FAFC'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FFF'; }}>
@@ -642,6 +711,8 @@ export default function NovoComunicadoModal({
                   let name = '';
                   let url = '';
                   let mimeType = '';
+                  let size: string | null = null;
+                  let originalSize: string | null = null;
                   if (typeof anexo === 'string') {
                     if (anexo.endsWith('|report-payload')) {
                       const firstPipe = anexo.indexOf('|');
@@ -654,14 +725,40 @@ export default function NovoComunicadoModal({
                       name = parts[0];
                       url = parts[1];
                       mimeType = parts[2] || '';
+                      size = parts[3] || null;
+                      originalSize = parts[4] || null;
                     }
                   } else {
                     name = String(anexo);
                   }
                   const isImg = mimeType.startsWith('image/') || (url && url.startsWith('data:image')) || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
                   
+                  // Calcular redução obtida com a compressão automática
+                  const bytes = size ? parseInt(size, 10) : 0;
+                  const origBytes = originalSize ? parseInt(originalSize, 10) : 0;
+                  const showSavings = origBytes > bytes && bytes > 0;
+                  const savingsPercent = showSavings ? Math.round(((origBytes - bytes) / origBytes) * 100) : 0;
+
                   return (
-                    <div key={i} style={{ background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: 8, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <div 
+                      key={i} 
+                      onClick={() => setPreviewAttachment({ url, type: mimeType, name })}
+                      style={{ 
+                        background: '#FFF', 
+                        border: '1px solid #E2E8F0', 
+                        borderRadius: 16, 
+                        padding: 8, 
+                        position: 'relative', 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        gap: 8,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#6D5DF6'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(109, 93, 246, 0.08)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.boxShadow = 'none'; }}
+                    >
                       <div style={{ width: '100%', aspectRatio: '1/1', borderRadius: 10, background: '#F8FAFC', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {isImg ? (
                           <Image src={url} alt="Capa" fill style={{ objectFit: 'cover' }} />
@@ -669,13 +766,25 @@ export default function NovoComunicadoModal({
                           <FileText size={32} color="#94A3B8" />
                         )}
                         <button 
-                          onClick={(e) => { e.preventDefault(); setAnexos(anexos.filter(a => a !== anexo)); }}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAnexos(anexos.filter(a => a !== anexo)); }}
                           style={{ position: 'absolute', top: -6, right: -6, width: 24, height: 24, background: '#EF4444', color: '#FFF', borderRadius: '50%', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
                         >
                           <X size={14} />
                         </button>
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#475569', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{name}</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#475569', width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }} title={name}>{name}</div>
+                      {mimeType !== 'report-payload' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, marginTop: -4 }}>
+                          <div style={{ fontSize: 10, color: '#94A3B8', fontWeight: 500 }}>
+                            <AttachmentSize url={url} initialSize={size} />
+                          </div>
+                          {showSavings && (
+                            <span style={{ fontSize: 9, color: '#10B981', fontWeight: 700, background: '#ECFDF5', padding: '1px 4px', borderRadius: 4 }}>
+                              -{savingsPercent}%
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -700,7 +809,7 @@ export default function NovoComunicadoModal({
             {isUploading && (
               <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, background: '#F5F3FF', padding: '12px 16px', borderRadius: 16 }}>
                  <div style={{ width: 20, height: 20, borderRadius: 10, border: '2px solid #C4B5FD', borderTopColor: '#6D5DF6', animation: 'spin 1s linear infinite' }} />
-                 <span style={{ fontSize: 14, fontWeight: 600, color: '#6D5DF6' }}>Enviando arquivo... {uploadProgress}%</span>
+                 <span style={{ fontSize: 14, fontWeight: 600, color: '#6D5DF6' }}>{uploadingText || 'Enviando arquivo...'} {uploadProgress}%</span>
               </div>
             )}
           </div>
@@ -874,6 +983,112 @@ export default function NovoComunicadoModal({
           </motion.div>
         </div>
       )}
+      
+      {/* MODAL DE PRÉ-VISUALIZAÇÃO DE ANEXO (LIGHTBOX) */}
+      <AnimatePresence>
+        {previewAttachment && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            onClick={() => setPreviewAttachment(null)}
+            style={{ 
+              position: 'fixed', 
+              inset: 0, 
+              background: 'rgba(15, 23, 42, 0.75)', 
+              backdropFilter: 'blur(8px)', 
+              zIndex: 99999999, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              padding: 24 
+            }}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }} 
+              animate={{ scale: 1, y: 0 }} 
+              exit={{ scale: 0.95, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ 
+                background: '#FFF', 
+                borderRadius: 24, 
+                padding: 24, 
+                width: '100%', 
+                maxWidth: '900px', 
+                maxHeight: '90vh', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                gap: 16,
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                position: 'relative'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F5F9', paddingBottom: 16 }}>
+                <div style={{ fontWeight: 800, fontSize: 16, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '80%' }}>
+                  {previewAttachment.name}
+                </div>
+                <button 
+                  onClick={() => setPreviewAttachment(null)} 
+                  style={{ 
+                    width: 32, 
+                    height: 32, 
+                    borderRadius: '50%', 
+                    background: '#F1F5F9', 
+                    border: 'none', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    cursor: 'pointer',
+                    color: '#64748B',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#E2E8F0'; e.currentTarget.style.color = '#0F172A'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.color = '#64748B'; }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '350px', maxHeight: 'calc(90vh - 120px)', background: '#F8FAFC', borderRadius: 16, padding: 8 }}>
+                {previewAttachment.type.startsWith('image/') ? (
+                  <img 
+                    src={previewAttachment.url} 
+                    alt={previewAttachment.name} 
+                    style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 140px)', objectFit: 'contain', borderRadius: 12 }} 
+                  />
+                ) : previewAttachment.type.startsWith('video/') ? (
+                  <video 
+                    src={previewAttachment.url} 
+                    controls 
+                    autoPlay
+                    style={{ maxWidth: '100%', maxHeight: 'calc(90vh - 140px)', borderRadius: 12 }} 
+                  />
+                ) : previewAttachment.type.includes('pdf') ? (
+                  <iframe 
+                    src={previewAttachment.url} 
+                    style={{ width: '100%', height: 'calc(90vh - 140px)', border: 'none', borderRadius: 12 }} 
+                    title={previewAttachment.name}
+                  />
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24 }}>
+                    <FileText size={64} color="#94A3B8" />
+                    <span style={{ fontSize: 14, color: '#64748B', fontWeight: 600 }}>Visualização não disponível para este tipo de arquivo</span>
+                    <a 
+                      href={previewAttachment.url} 
+                      download={previewAttachment.name} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      style={{ padding: '10px 20px', background: '#6D5DF6', color: '#FFF', borderRadius: 12, fontWeight: 700, textDecoration: 'none', marginTop: 8 }}
+                    >
+                      Download do Arquivo
+                    </a>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>, 
     document.body
   );
