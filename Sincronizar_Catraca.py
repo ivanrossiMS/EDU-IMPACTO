@@ -307,7 +307,7 @@ def processar_fila_pendencias_erp(cats_conectadas):
                                 import base64
                                 clean_b64 = foto.split(',')[-1] if ',' in foto else foto
                                 img_bytes = base64.b64decode(clean_b64)
-                                req = urllib.request.Request(f"{base_url}/user_set_image.fcgi?user_id={numeric_id}", data=img_bytes, method="POST")
+                                req = urllib.request.Request(f"{base_url}/user_set_image.fcgi?user_id={numeric_id}&session={session}", data=img_bytes, method="POST")
                                 req.add_header("Content-Type", "application/octet-stream")
                                 if session:
                                     req.add_header("Cookie", f"session={session}")
@@ -320,13 +320,13 @@ def processar_fila_pendencias_erp(cats_conectadas):
                                 # Tenta fallback JSON
                                 try:
                                     clean_b64 = foto.split(',')[-1] if ',' in foto else foto
-                                    post_json(f"{base_url}/set_user_image.fcgi",
+                                    post_json(f"{base_url}/set_user_image.fcgi?session={session}",
                                               {"user_id": numeric_id, "image": clean_b64},
                                               cookie=session)
                                     foto_enviada = True
                                     print(f"     📸 [Catraca {cat_nome}] Foto de '{nome}' transmitida com sucesso (JSON).")
-                                except Exception:
-                                    print(f"     ⚠️  [Catraca {cat_nome}] Foto falhou para '{nome}'")
+                                except Exception as fe2:
+                                    print(f"     ⚠️  [Catraca {cat_nome}] Foto falhou para '{nome}' (Erro Binário: {fe} | Erro JSON: {fe2})")
 
                     # Notificar o servidor online que o item foi sincronizado com sucesso nesta catraca
                     post_json(url_queue, {
