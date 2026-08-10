@@ -104,7 +104,7 @@ export async function middleware(request: NextRequest) {
   // Utilizando getUser() aqui também para evitar o aviso de segurança do Supabase
   const { data: { user }, error } = await supabase.auth.getUser()
 
-  // ── Sem sessão → redireciona para login ───────────────────────────────────
+  // ── Sem sessão → exibe página de login ──────────────────────────────────
   if (!user) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
@@ -112,8 +112,13 @@ export async function middleware(request: NextRequest) {
         { status: 401 }
       )
     }
+    // Evita HTTP 302 Redirect no arranque da rota raiz '/' para prevenir
+    // o erro NSURLErrorCancelled (-999) do iOS WKWebView quando deslogado.
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL('/login', request.url))
+    }
+
     const loginUrl = new URL('/login', request.url)
-    // Guarda a URL que o usuário tentou acessar para redirecionar após login
     loginUrl.searchParams.set('next', pathname)
     return NextResponse.redirect(loginUrl)
   }

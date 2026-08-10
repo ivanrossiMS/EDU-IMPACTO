@@ -30,9 +30,10 @@ export function CapacitorResumeGuard() {
     const logoutPending = localStorage.getItem(LOGOUT_FLAG)
     if (logoutPending) {
       localStorage.removeItem(LOGOUT_FLAG)
-      console.log('[CapacitorResumeGuard] Logout pendente detectado — redirecionando para /login')
-      // Usar replace para não criar entrada no histórico
-      window.location.replace('/login')
+      if (window.location.pathname !== '/login') {
+        console.log('[CapacitorResumeGuard] Logout pendente — redirecionando para /login')
+        window.location.replace('/login')
+      }
       return
     }
 
@@ -47,8 +48,10 @@ export function CapacitorResumeGuard() {
         const pending = localStorage.getItem(LOGOUT_FLAG)
         if (pending) {
           localStorage.removeItem(LOGOUT_FLAG)
-          console.log('[CapacitorResumeGuard] App retomado com logout pendente — reload')
-          window.location.replace('/login')
+          if (window.location.pathname !== '/login') {
+            console.log('[CapacitorResumeGuard] App retomado — reload para /login')
+            window.location.replace('/login')
+          }
         }
       }).then((handle) => {
         removeListener = () => handle.remove()

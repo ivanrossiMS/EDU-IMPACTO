@@ -3,34 +3,36 @@ import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { createClient } from '@/utils/supabase/client';
 
+const LOGOUT_FLAG = 'edu-logout-pending';
+
 /**
- * Performs a complete, nuclear logout:
- * 1. Signs out Supabase Auth Client (global scope)
+ * Performs a complete, non-blocking nuclear logout:
+ * 1. Clears window.localStorage and window.sessionStorage FIRST
  * 2. Clears iOS Keychain / Android Keystore
  * 3. Clears Capacitor Native Preferences
- * 4. Clears window.localStorage and sessionStorage
- * 5. Calls POST /api/auth/logout to expire HTTP-only sb-* cookies on the server
- * 6. Navigates directly to /login using replace() — NO 302 redirect chain
- *
- * IMPORTANT (Capacitor iOS): Never use window.location.href = '/api/auth/logout'
- * because the WKWebView follows the server 302 redirect unreliably and the app
- * ends up on a blank white screen. Always do the cookie clearing via POST fetch
- * then navigate directly to /login.
+ * 4. Calls POST /api/auth/logout to clear HTTP-only server cookies
+ * 5. Calls Supabase signOut with 1.5s race timeout (so network hangs never freeze the app)
+ * 6. Navigates cleanly to /login via replace()
  */
 export async function performLogout() {
-  console.log('[Auth Logout] Initiating full logout...');
+  console.log('[Auth Logout] Initiating full non-blocking logout...');
 
-  // 1. Sign out Supabase JS client
-  try {
-    const supabase = createClient();
-    await supabase.auth.signOut({ scope: 'global' });
-  } catch (error) {
-    console.error('[Auth Logout] Error signing out Supabase client:', error);
+  // 1. Clear window.localStorage & sessionStorage IMMEDIATELY
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+      window.localStorage.setItem(LOGOUT_FLAG, '1');
+      console.log('[Auth Logout] localStorage and sessionStorage wiped.');
+    } catch (error) {
+      console.error('[Auth Logout] Error clearing browser storage:', error);
+    }
   }
 
   // 2. Clear iOS Keychain / Android Keystore
   try {
     await clearSessionSecurely();
+    console.log('[Auth Logout] Secure session cleared.');
   } catch (error) {
     console.error('[Auth Logout] Error clearing secure session:', error);
   }
@@ -45,33 +47,7 @@ export async function performLogout() {
     }
   }
 
-  // 4. Clear window.localStorage
-  // NOTE: Set the logout-pending flag BEFORE and re-set AFTER clear(),
-  // so CapacitorResumeGuard can detect it if the app is reopened after being killed.
-  const LOGOUT_FLAG = 'edu-logout-pending'
-  if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-    try {
-      window.localStorage.clear();
-      // Re-set the flag after clear so it survives in localStorage for next app open
-      window.localStorage.setItem(LOGOUT_FLAG, '1');
-      console.log('[Auth Logout] localStorage cleared and logout flag set.');
-    } catch (error) {
-      console.error('[Auth Logout] Error clearing localStorage:', error);
-    }
-  }
-
-  // 5. Clear window.sessionStorage
-  if (typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined') {
-    try {
-      window.sessionStorage.clear();
-      console.log('[Auth Logout] sessionStorage cleared.');
-    } catch (error) {
-      console.error('[Auth Logout] Error clearing sessionStorage:', error);
-    }
-  }
-
-  // 6. Call POST /api/auth/logout to clear HTTP-Only server cookies WITHOUT following a redirect.
-  //    This avoids the Capacitor WKWebView blank-screen bug caused by following 302s.
+  // 4. Call POST /api/auth/logout to clear HTTP-Only server cookies
   try {
     await fetch('/api/auth/logout', {
       method: 'POST',
@@ -83,9 +59,22 @@ export async function performLogout() {
     console.error('[Auth Logout] Failed to clear server session cookies:', error);
   }
 
-  // 7. Navigate directly to /login — no redirect chain, guaranteed to work on Capacitor iOS
+  // 5. Sign out Supabase JS client with 1.5s safeguard timeout
+  try {
+    const supabase = createClient();
+    const signOutPromise = supabase.auth.signOut({ scope: 'global' });
+    const timeoutPromise = new Promise(resolve => setTimeout(resolve, 1500));
+    await Promise.race([signOutPromise, timeoutPromise]);
+  } catch (error) {
+    console.error('[Auth Logout] Supabase signOut error or timeout:', error);
+  }
+
+  // 6. Navigate directly to /login
   if (typeof window !== 'undefined') {
-    window.location.replace('/login');
+    if (window.location.pathname !== '/login') {
+      window.location.replace('/login');
+    } else {
+      window.location.reload();
+    }
   }
 }
-
