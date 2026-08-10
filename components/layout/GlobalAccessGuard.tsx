@@ -347,19 +347,27 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const hasSeenSplash = sessionStorage.getItem('edu_has_seen_splash')
+      // Use localStorage (not sessionStorage) so the flag survives iOS app kill/reopen
+      const hasSeenSplash = localStorage.getItem('edu_has_seen_splash')
       if (hasSeenSplash) {
         setShowSplash(false)
         return
       }
-      sessionStorage.setItem('edu_has_seen_splash', 'true')
+      localStorage.setItem('edu_has_seen_splash', 'true')
     }
 
     const timer = setTimeout(() => {
       setShowSplash(false)
-    }, 1800)
+    }, 1200)
     return () => clearTimeout(timer)
   }, [])
+
+  // Safety valve: if hydration completes before splash timer, dismiss splash immediately
+  useEffect(() => {
+    if (hydrated) {
+      setShowSplash(false)
+    }
+  }, [hydrated])
 
   useEffect(() => {
     if (hydrated && currentUser && pathname === '/') {

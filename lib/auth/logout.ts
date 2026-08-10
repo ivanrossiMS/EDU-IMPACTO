@@ -4,14 +4,18 @@ import { Preferences } from '@capacitor/preferences';
 import { createClient } from '@/utils/supabase/client';
 
 /**
- * Performs a complete, nuclear logout by:
- * 1. Signing out Supabase Auth Client
- * 2. Clearing iOS Keychain / Android Keystore (SecureStorage)
- * 3. Clearing Capacitor Native Preferences
- * 4. Clearing window.localStorage
- * 5. Clearing window.sessionStorage
- * 6. Invoking the server API endpoint /api/auth/logout to clear HTTP-only cookies
- * 7. Redirecting cleanly to /login
+ * Performs a complete, nuclear logout:
+ * 1. Signs out Supabase Auth Client (global scope)
+ * 2. Clears iOS Keychain / Android Keystore
+ * 3. Clears Capacitor Native Preferences
+ * 4. Clears window.localStorage and sessionStorage
+ * 5. Calls POST /api/auth/logout to expire HTTP-only sb-* cookies on the server
+ * 6. Navigates directly to /login using replace() — NO 302 redirect chain
+ *
+ * IMPORTANT (Capacitor iOS): Never use window.location.href = '/api/auth/logout'
+ * because the WKWebView follows the server 302 redirect unreliably and the app
+ * ends up on a blank white screen. Always do the cookie clearing via POST fetch
+ * then navigate directly to /login.
  */
 export async function performLogout() {
   console.log('[Auth Logout] Initiating full logout...');
@@ -61,9 +65,22 @@ export async function performLogout() {
     }
   }
 
-  // 6. Direct browser navigation to GET /api/auth/logout which clears HTTP-Only cookies and 302-redirects to /login
+  // 6. Call POST /api/auth/logout to clear HTTP-Only server cookies WITHOUT following a redirect.
+  //    This avoids the Capacitor WKWebView blank-screen bug caused by following 302s.
+  try {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      cache: 'no-store',
+      credentials: 'include',
+    });
+    console.log('[Auth Logout] Server session cookies cleared via POST.');
+  } catch (error) {
+    console.error('[Auth Logout] Failed to clear server session cookies:', error);
+  }
+
+  // 7. Navigate directly to /login — no redirect chain, guaranteed to work on Capacitor iOS
   if (typeof window !== 'undefined') {
-    window.location.href = '/api/auth/logout';
+    window.location.replace('/login');
   }
 }
 

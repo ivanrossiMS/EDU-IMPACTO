@@ -181,8 +181,20 @@ export default function LoginPage() {
       }
       
       const checkStoredUser = async () => {
-        const storedUser = await loadSettingAsync<any>('edu-current-user', null)
-        if (storedUser) {
+        // Hard timeout: if anything hangs (Capacitor Preferences, network), force login form after 3s
+        const timeoutId = setTimeout(() => {
+          console.warn('[Login] checkStoredUser timed out after 3s — forcing login form')
+          setStep('login')
+        }, 3000)
+
+        try {
+          const storedUser = await loadSettingAsync<any>('edu-current-user', null)
+          if (!storedUser) {
+            clearTimeout(timeoutId)
+            setStep('login')
+            return
+          }
+
           // Se fomos redirecionados para o login pelo middleware (nextParam existe)
           // ou se a sessão no servidor expirou, limpamos o estado local.
           if (nextParam) {
@@ -192,6 +204,7 @@ export default function LoginPage() {
               await Preferences.clear().catch(() => {})
             }
             setCurrentUser(null)
+            clearTimeout(timeoutId)
             setStep('login')
             return
           }
@@ -211,6 +224,7 @@ export default function LoginPage() {
                 await Preferences.clear().catch(() => {})
               }
               setCurrentUser(null)
+              clearTimeout(timeoutId)
               setStep('login')
               return
             }
@@ -222,6 +236,7 @@ export default function LoginPage() {
               await Preferences.clear().catch(() => {})
             }
             setCurrentUser(null)
+            clearTimeout(timeoutId)
             setStep('login')
             return
           }
@@ -243,7 +258,13 @@ export default function LoginPage() {
             }
           } catch (e) {
             console.error("Error restoring user for step:", e)
+            setStep('login')
           }
+        } catch (e) {
+          console.error('[Login] checkStoredUser fatal error:', e)
+          setStep('login')
+        } finally {
+          clearTimeout(timeoutId)
         }
       }
       checkStoredUser()

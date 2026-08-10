@@ -240,6 +240,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         'edu-current-user',
         'edu-current-perfil',
         'edu-user-passwords',  // legacy local passwords — nuke on every logout
+        'edu_has_seen_splash',  // reset splash flag so next open shows it correctly
       ]
       USER_KEYS.forEach(k => removeSettingAsync(k))
       if (Capacitor.isNativePlatform()) {
