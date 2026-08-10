@@ -129,9 +129,10 @@ def salvar_estado_catracas(estado):
 
 def get_access_logs_hoje(base_url, session, last_log_id=0):
     """
-    Busca logs de hoje de forma incremental:
-    Se last_log_id > 0, busca APENAS registros com id > last_log_id.
-    Isso torna a leitura instantânea (0.05s) e lê unicamente novos acessos.
+    Busca os logs de hoje da catraca:
+    Mede a faixa do dia de hoje e resgata os logs.
+    Se last_log_id for maior do que o maior ID existente hoje no equipamento
+    (por exemplo, se foi salvo antes da correção do mapa de IPs), auto-corrige e resetá-lo.
     """
     hoje = date.today()
     inicio_ts = int(datetime(hoje.year, hoje.month, hoje.day, tzinfo=timezone.utc).timestamp())
@@ -139,10 +140,8 @@ def get_access_logs_hoje(base_url, session, last_log_id=0):
 
     time_filter = {">=": inicio_ts - 10800, "<=": fim_ts + 10800}
 
-    if last_log_id > 0:
-        where_cond = {"access_logs": {"time": time_filter, "id": {">": last_log_id}}}
-    else:
-        where_cond = {"access_logs": {"time": time_filter}}
+    # Busca os logs do dia pela faixa temporal (para resiliência total)
+    where_cond = {"access_logs": {"time": time_filter}}
 
     logs_hoje = []
     batch = 500
@@ -167,6 +166,17 @@ def get_access_logs_hoje(base_url, session, last_log_id=0):
         if len(chunk) < batch:
             break  # Fim do buffer de novos registros
         off += batch
+
+    if logs_hoje:
+        max_id_equipamento = max(l.get("id", 0) for l in logs_hoje)
+        # Se o last_log_id salvo no arquivo de estado for maior do que qualquer log hoje na catraca,
+        # significa que veio do descompasso antigo de IPs! Reseta automaticamente.
+        if last_log_id > max_id_equipamento:
+            print(f"     🔄 [Auto-Fix] Último Log ID salvo ({last_log_id}) era maior que o máximo da catraca ({max_id_equipamento}). Reseta para 0.")
+            last_log_id = 0
+
+        if last_log_id > 0:
+            return [l for l in logs_hoje if l.get("id", 0) > last_log_id]
 
     return logs_hoje
 
