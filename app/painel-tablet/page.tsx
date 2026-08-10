@@ -1406,11 +1406,20 @@ function PainelTabletContent() {
                           <span style={{ fontSize: 10, fontWeight: 700, color: '#334155', marginRight: 4 }}>CHAMAR VIA:</span>
                           {respList.map((g, i) => {
                             const diaOk = isDiaPermitido(g.diasSemana)
-                            const disabled = alreadyCalled || alreadyConfirmed || g.proibido || !diaOk
+                            const isProibidoHoje = g.proibido || !diaOk
+                            const blocked = alreadyCalled || alreadyConfirmed
                             return (
                               <button key={i}
                                 onClick={() => {
-                                  if (disabled) return
+                                  if (blocked) return
+                                  if (g.proibido) {
+                                    showToast(`❌ ${g.name} está PROIBIDO(A) de retirar o aluno!`, false)
+                                    return
+                                  }
+                                  if (!diaOk) {
+                                    showToast(`⚠️ ${g.name} não tem autorização para retirar hoje!`, false)
+                                    return
+                                  }
                                   const gId = `manual-${a.id}-${i}`
                                   const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
                                   const turmaNome = tObj?.nome || a.turma
@@ -1418,21 +1427,44 @@ function PainelTabletContent() {
                                   if (!call) showToast(`${a.nome} já em chamada!`, false)
                                   else showToast(`📣 ${a.nome} chamado via ${g.name}!`)
                                 }}
-                                disabled={disabled}
+                                disabled={blocked}
                                 style={{
                                   padding: '7px 16px', borderRadius: 100, fontSize: 12, fontWeight: 700,
-                                  background: g.proibido
-                                    ? 'rgba(239,68,68,0.08)'
-                                    : disabled ? 'rgba(255,255,255,0.03)' : 'rgba(6,182,212,0.1)',
-                                  border: g.proibido
-                                    ? '1px solid rgba(239,68,68,0.3)'
-                                    : disabled ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(6,182,212,0.3)',
-                                  color: g.proibido ? '#ef4444' : disabled ? '#334155' : '#06b6d4',
-                                  cursor: disabled ? 'not-allowed' : 'pointer',
+                                  background: blocked
+                                    ? 'rgba(255,255,255,0.03)'
+                                    : isProibidoHoje
+                                      ? 'rgba(239, 68, 68, 0.15)'
+                                      : 'rgba(59, 130, 246, 0.15)',
+                                  border: blocked
+                                    ? '1px solid rgba(255,255,255,0.06)'
+                                    : isProibidoHoje
+                                      ? '1px solid rgba(239, 68, 68, 0.45)'
+                                      : '1px solid rgba(59, 130, 246, 0.45)',
+                                  color: blocked
+                                    ? '#334155'
+                                    : isProibidoHoje
+                                      ? '#ef4444'
+                                      : '#60a5fa',
+                                  cursor: blocked ? 'not-allowed' : 'pointer',
                                   display: 'inline-flex', alignItems: 'center', gap: 6,
                                   transition: 'all 0.15s',
-                                }}>
-                                {g.proibido ? <ShieldOff size={11}/> : <Phone size={10}/>}
+                                }}
+                                onMouseEnter={e => {
+                                  if (blocked || isProibidoHoje) return
+                                  const el = e.currentTarget as HTMLButtonElement
+                                  el.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)'
+                                  el.style.color = '#fff'
+                                  el.style.borderColor = 'transparent'
+                                }}
+                                onMouseLeave={e => {
+                                  if (blocked || isProibidoHoje) return
+                                  const el = e.currentTarget as HTMLButtonElement
+                                  el.style.background = 'rgba(59, 130, 246, 0.15)'
+                                  el.style.color = '#60a5fa'
+                                  el.style.borderColor = 'rgba(59, 130, 246, 0.45)'
+                                }}
+                              >
+                                {isProibidoHoje ? <ShieldOff size={11}/> : <Phone size={10}/>}
                                 {g.name}
                                 <span style={{ opacity: 0.5, fontSize: 10 }}>{g.role}</span>
                                 {g.rfid && <span style={{ fontSize: 9, color: '#06b6d4', fontFamily: 'monospace' }}>📡</span>}

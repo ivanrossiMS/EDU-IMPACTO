@@ -169,10 +169,10 @@ function TabConfiguracoes() {
           <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4, color: '#06b6d4' }}>
             Responsáveis, RFID e vínculos gerenciados na Ficha do Aluno
           </div>
-          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', lineHeight: 1.6 }}>
             As pessoas autorizadas a retirar o aluno, os cartões RFID, os dias da semana e os
             bloqueios são configurados diretamente em{' '}
-            <strong style={{ color: 'hsl(var(--text-base))' }}>
+            <strong style={{ color: 'hsl(var(--text-primary))' }}>
               Acadêmico → Alunos → Nova Código → Saúde → Autorizados a Retirar
             </strong>.
           </div>
@@ -181,13 +181,13 @@ function TabConfiguracoes() {
 
       {/* ── VOZ ── */}
       <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', padding: '20px 24px' }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8, color: 'hsl(var(--text-primary))' }}>
           🔊 Chamada por Voz
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Anúncio por auto-falante</div>
-            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Falar o nome do aluno ao ser chamado</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Anúncio por auto-falante</div>
+            <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>Falar o nome do aluno ao ser chamado</div>
           </div>
           <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
             <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: localConfig.voiceEnabled ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
@@ -198,8 +198,8 @@ function TabConfiguracoes() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Ocultar sufixo da turma</div>
-            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Anuncia o nome da turma apenas até o caractere ao lado</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Ocultar sufixo da turma</div>
+            <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>Anuncia o nome da turma apenas até o caractere ao lado</div>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             {localConfig.voiceTruncateTurma && (
@@ -211,7 +211,7 @@ function TabConfiguracoes() {
                 style={{
                   width: 36, padding: '4px', textAlign: 'center', borderRadius: 8,
                   border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))',
-                  color: 'hsl(var(--text-base))', fontSize: 12, outline: 'none'
+                  color: 'hsl(var(--text-primary))', fontSize: 12, outline: 'none'
                 }}
                 title="Caractere de corte (ex: -)"
               />
@@ -225,7 +225,7 @@ function TabConfiguracoes() {
           </div>
         </div>
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span>VOLUME</span><span style={{ color: '#06b6d4' }}>{Math.round((localConfig.voiceVolume ?? 1) * 100)}%</span>
           </label>
           <input type="range" min={0} max={1} step={0.05} value={localConfig.voiceVolume ?? 1}
@@ -233,7 +233,7 @@ function TabConfiguracoes() {
             style={{ width: '100%', accentColor: '#06b6d4' }}/>
         </div>
         <div style={{ marginBottom: 18 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span>VELOCIDADE</span><span style={{ color: '#06b6d4' }}>{localConfig.voiceRate ?? 1}×</span>
           </label>
           <input type="range" min={0.5} max={2} step={0.1} value={localConfig.voiceRate ?? 1}
@@ -241,7 +241,7 @@ function TabConfiguracoes() {
             style={{ width: '100%', accentColor: '#06b6d4' }}/>
         </div>
         <div style={{ marginBottom: 18 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span>TOM DE VOZ (PITCH)</span><span style={{ color: '#06b6d4' }}>{localConfig.voicePitch ?? 1}×</span>
           </label>
           <input type="range" min={0.5} max={2} step={0.1} value={localConfig.voicePitch ?? 1}
@@ -249,7 +249,7 @@ function TabConfiguracoes() {
             style={{ width: '100%', accentColor: '#06b6d4' }}/>
         </div>
         <div style={{ marginBottom: 18 }}>
-          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span>VOZ / LOCUTOR</span>
           </label>
           <select
@@ -258,7 +258,7 @@ function TabConfiguracoes() {
             style={{
               width: '100%', padding: '10px 14px', borderRadius: 10,
               border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))',
-              color: 'hsl(var(--text-base))', fontSize: 13, outline: 'none', cursor: 'pointer'
+              color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none', cursor: 'pointer'
             }}
           >
             <option value="">Automático pelo Navegador (Recomendado)</option>
@@ -289,11 +289,11 @@ function TabConfiguracoes() {
 
       {/* ── RFID ── */}
       <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', padding: '20px 24px' }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 16 }}>📡 Leitura RFID</div>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 16, color: 'hsl(var(--text-primary))' }}>📡 Leitura RFID</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Ativar leitor RFID no Painel Tablet</div>
-            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Captura automática de cartões</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Ativar leitor RFID no Painel Tablet</div>
+            <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>Captura automática de cartões</div>
           </div>
           <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
             <div style={{ width: 44, height: 24, borderRadius: 12, position: 'relative', background: localConfig.rfidEnabled ? '#06b6d4' : 'hsl(var(--bg-overlay))', transition: 'background 0.2s' }}>
@@ -306,12 +306,12 @@ function TabConfiguracoes() {
 
       {/* ── MONITOR TV ── */}
       <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', padding: '20px 24px' }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 16 }}>📺 Monitor TV</div>
+        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 16, color: 'hsl(var(--text-primary))' }}>📺 Monitor TV</div>
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>Quantidade de Repetições Seguidas</div>
-              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Ao chamar, o auto-falante vai repetir após a primeira chamada</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>Quantidade de Repetições Seguidas</div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>Ao chamar, o auto-falante vai repetir após a primeira chamada</div>
             </div>
             <select
               value={localConfig.voiceRepeatCount ?? 0}
@@ -319,7 +319,7 @@ function TabConfiguracoes() {
               style={{
                 padding: '8px 12px', borderRadius: 8,
                 border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))',
-                color: 'hsl(var(--text-base))', fontSize: 12, outline: 'none', fontWeight: 600, cursor: 'pointer'
+                color: 'hsl(var(--text-primary))', fontSize: 12, outline: 'none', fontWeight: 600, cursor: 'pointer'
               }}
             >
               <option value={0}>Não repetir</option>
@@ -328,7 +328,7 @@ function TabConfiguracoes() {
               <option value={3}>Repetir 3 vezes seguidamente</option>
             </select>
           </div>
-          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span>TEMPO NO MONITOR TV APÓS CONFIRMAR</span>
             <span style={{ color: '#06b6d4' }}>{localConfig.tvDisplayTime ?? 30}s</span>
           </label>
@@ -336,7 +336,7 @@ function TabConfiguracoes() {
             onChange={e => updateLocalField('tvDisplayTime', +e.target.value)}
             style={{ width: '100%', accentColor: '#06b6d4', marginBottom: 16 }}/>
 
-          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span>TEMPO PARA STATUS ATRASADO (MINUTOS)</span>
             <span style={{ color: '#06b6d4' }}>{localConfig.tvUrgentTime ?? 5} min</span>
           </label>
@@ -490,7 +490,7 @@ function TabConfiguracoes() {
               fontFamily: 'Outfit, sans-serif',
               fontSize: 20,
               fontWeight: 900,
-              color: 'hsl(var(--text-base))',
+              color: 'hsl(var(--text-primary))',
               margin: '0 0 8px 0',
               letterSpacing: '-0.02em'
             }}>
@@ -766,7 +766,7 @@ function TabRelatorios() {
             style={{
               width: '100%', padding: '9px 12px 9px 34px',
               borderRadius: 10, border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-elevated))', color: 'hsl(var(--text-base))',
+              background: 'hsl(var(--bg-elevated))', color: 'hsl(var(--text-primary))',
               fontSize: 13, outline: 'none', boxSizing: 'border-box',
             }}
           />
@@ -781,7 +781,7 @@ function TabRelatorios() {
             style={{
               padding: '9px 32px 9px 30px', borderRadius: 10,
               border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-elevated))', color: 'hsl(var(--text-base))',
+              background: 'hsl(var(--bg-elevated))', color: 'hsl(var(--text-primary))',
               fontSize: 13, cursor: 'pointer', appearance: 'none', outline: 'none',
             }}
           >
@@ -891,7 +891,7 @@ function TabRelatorios() {
 
                   {/* Name + turma */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-base))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {row.nome}
                     </div>
                     <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
@@ -972,7 +972,7 @@ function TabRelatorios() {
                                   borderTop: '1px solid hsl(var(--border-subtle))',
                                   background: proibido ? 'rgba(239,68,68,0.03)' : 'transparent',
                                 }}>
-                                  <td style={{ padding: '8px 10px', fontWeight: 700, color: 'hsl(var(--text-base))' }}>{resp.nome || '—'}</td>
+                                  <td style={{ padding: '8px 10px', fontWeight: 700, color: 'hsl(var(--text-primary))' }}>{resp.nome || '—'}</td>
                                   <td style={{ padding: '8px 10px', color: 'hsl(var(--text-muted))' }}>{resp.parentesco || '—'}</td>
                                   <td style={{ padding: '8px 10px', color: 'hsl(var(--text-muted))', fontFamily: 'monospace' }}>{resp.telefone || '—'}</td>
                                   <td style={{ padding: '8px 10px' }}>
@@ -1046,11 +1046,11 @@ function ConfigContent() {
     <div>
       {/* Page title */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 26, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 26, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10, color: 'hsl(var(--text-primary))' }}>
           <Settings size={isMobile ? 20 : 26}/> Portaria · Controle de Saída
         </h1>
-        <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: 0 }}>
-          Configurações do sistema e relatórios de autorização
+        <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: 0 }}>
+          Responsáveis, cartões RFID, voz e vínculos aluno-responsável
         </p>
       </div>
 

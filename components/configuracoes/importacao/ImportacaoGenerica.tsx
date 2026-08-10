@@ -292,7 +292,7 @@ export function ImportacaoGenerica({ modulo, onLog }: Props) {
       </div>
 
       {/* Dica de ordem */}
-      <div style={{ background: `${color}0d`, border: `1px solid ${color}25`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'hsl(var(--text-base))' }}>
+      <div style={{ background: `${color}0d`, border: `1px solid ${color}25`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'hsl(var(--text-primary))' }}>
         <strong>{cfg.icon} {cfg.label}:</strong> {cfg.desc}
       </div>
 

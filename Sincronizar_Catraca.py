@@ -17,6 +17,7 @@ import os
 import ssl
 import urllib.request
 import urllib.error
+import subprocess
 from datetime import datetime, timezone, date
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_sync.log")
@@ -54,9 +55,9 @@ CATRACA_LOGIN = "admin"
 # Porta 443 → HTTPS
 # Porta 88  → tenta HTTP primeiro, depois HTTPS
 CATRACAS = [
-    {"nome": "Portaria Média",  "ip": "192.168.1.150", "id": "0M0200/0262CE", "porta": 80},
-    {"nome": "Portaria Fund1",  "ip": "192.168.1.155", "id": "0M0200/02638E", "porta": 80},
-    {"nome": "Portaria INF",    "ip": "192.168.1.105", "id": "0M0200/02639C", "porta": 80},
+    {"nome": "Portaria Médio - PRINCIPAL", "ip": "192.168.1.150", "id": "0M0200/02638E", "porta": 80},
+    {"nome": "Portaria FUND1- PRINCIPAL",  "ip": "192.168.1.155", "id": "0M0200/02639C", "porta": 80},
+    {"nome": "Portaria PRINCIPAL -INF",   "ip": "192.168.1.105", "id": "0M0200/0262CE", "porta": 80},
 ]
 # ══════════════════════════════════════════════════════════════
 
@@ -107,7 +108,7 @@ def detectar_base_url(cat):
     return None, None
 
 
-STATE_FILE = "catraca_state.json"
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catraca_state.json")
 
 def carregar_estado_catracas():
     if os.path.exists(STATE_FILE):
@@ -371,7 +372,7 @@ def rodar_um_ciclo():
     print("  ══════════════════════════════════════════════════")
 
     estado = carregar_estado_catracas()
-    cache_file = f"sincronizados_{date.today().strftime('%Y_%m_%d')}.txt"
+    cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"sincronizados_{date.today().strftime('%Y_%m_%d')}.txt")
     ja_sincronizados = set()
     if os.path.exists(cache_file):
         with open(cache_file, "r") as f:
@@ -506,10 +507,104 @@ def rodar_um_ciclo():
     print()
 
 
+def instalar_no_windows():
+    """Cria um atalho (.lnk) na pasta Inicializar do Windows para rodar em segundo plano."""
+    if sys.platform != "win32":
+        print("❌ Esta instalação automática em segundo plano é exclusiva para sistemas Windows.")
+        sys.exit(1)
+        
+    try:
+        startup_folder = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+        shortcut_path = os.path.join(startup_folder, "Sincronizacao_Catraca.lnk")
+        script_path = os.path.abspath(__file__)
+        script_dir = os.path.dirname(script_path)
+        
+        # Encontra o pythonw.exe
+        python_exe = sys.executable
+        pythonw_exe = python_exe.replace("python.exe", "pythonw.exe")
+        if not os.path.exists(pythonw_exe):
+            pythonw_exe = python_exe
+            
+        print(f"🔧 Configurando inicialização automática no Windows...")
+        print(f"   • Pasta do projeto: {script_dir}")
+        print(f"   • Script: {script_path}")
+        print(f"   • Executável Python: {pythonw_exe}")
+        print(f"   • Atalho de inicialização: {shortcut_path}")
+        
+        # Comando PowerShell para criar o atalho .lnk de forma robusta
+        ps_cmd = (
+            f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut('{shortcut_path}'); "
+            f"$s.TargetPath = '{pythonw_exe}'; "
+            f"$s.Arguments = '\"{script_path}\" --loop 30'; "
+            f"$s.WorkingDirectory = '{script_dir}'; "
+            f"$s.WindowStyle = 7; "
+            f"$s.Save()"
+        )
+        
+        # Executa o PowerShell usando a API Unicode
+        subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        print("✅ [SUCESSO] Inicialização automática configurada com sucesso!")
+        print("   O script rodará AUTOMATICAMENTE toda vez que o Windows for iniciado.")
+        print("\n🚀 Iniciando a sincronização em segundo plano agora...")
+        
+        # Inicia o processo em segundo plano agora mesmo usando pythonw
+        subprocess.Popen([pythonw_exe, script_path, "--loop", "30"], cwd=script_dir)
+        print("✅ Sincronização em segundo plano iniciada com sucesso!")
+        print(f"   Você pode conferir os logs em: {os.path.join(script_dir, 'catraca_sync.log')}")
+        
+    except Exception as e:
+        print(f"❌ Erro ao configurar a sincronização automática: {e}")
+        sys.exit(1)
+
+
+def desinstalar_no_windows():
+    """Remove o atalho da pasta Inicializar do Windows."""
+    if sys.platform != "win32":
+        print("❌ Esta desinstalação é exclusiva para sistemas Windows.")
+        sys.exit(1)
+        
+    try:
+        startup_folder = os.path.join(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+        shortcut_path = os.path.join(startup_folder, "Sincronizacao_Catraca.lnk")
+        vbs_shortcut_path = os.path.join(startup_folder, "Sincronizacao_Catraca.vbs") # Caso exista o antigo
+        
+        removed = False
+        if os.path.exists(shortcut_path):
+            os.remove(shortcut_path)
+            print(f"🗑️ Atalho '{shortcut_path}' removido.")
+            removed = True
+        if os.path.exists(vbs_shortcut_path):
+            os.remove(vbs_shortcut_path)
+            print(f"🗑️ Script antigo '{vbs_shortcut_path}' removido.")
+            removed = True
+            
+        if removed:
+            print("✅ Desinstalação concluída com sucesso! A sincronização não iniciará mais com o Windows.")
+        else:
+            print("ℹ️ Nenhuma configuração de sincronização automática encontrada para remover.")
+            
+    except Exception as e:
+        print(f"❌ Erro ao desinstalar: {e}")
+        sys.exit(1)
+
+
 def main():
     import sys
     import time
     
+    if "--install" in sys.argv:
+        instalar_no_windows()
+        sys.exit(0)
+    elif "--uninstall" in sys.argv:
+        desinstalar_no_windows()
+        sys.exit(0)
+        
     loop_mode = "--loop" in sys.argv or "--daemon" in sys.argv or "-d" in sys.argv
     intervalo = 30
     

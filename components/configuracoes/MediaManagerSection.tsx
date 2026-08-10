@@ -5,7 +5,7 @@ import {
   Folder, File, Image, FileText, Video, Trash2, Plus, Search, 
   RefreshCw, AlertTriangle, Download, ExternalLink, HardDrive, 
   Sparkles, FileCode, CheckCircle, Info, ChevronRight, HelpCircle, X,
-  Filter, Eye, Trash, Check, Loader2, Music
+  Filter, Eye, Trash, Check, Loader2, Music, Copy
 } from 'lucide-react'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 
@@ -65,6 +65,19 @@ export default function MediaManagerSection() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+
+  // Estado para link copiado
+  const [copiedFileUrl, setCopiedFileUrl] = useState<string | null>(null)
+
+  const handleCopyLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedFileUrl(url)
+      setTimeout(() => setCopiedFileUrl(null), 2000)
+    } catch (err) {
+      console.error('Falha ao copiar link:', err)
+    }
+  }
 
   // Carregar dados
   const loadMediaData = async () => {
@@ -519,6 +532,14 @@ export default function MediaManagerSection() {
                           <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setPreviewFile(file)} title="Visualizar">
                             <Eye size={14} />
                           </button>
+                          <button 
+                            className="btn btn-ghost btn-icon btn-sm" 
+                            onClick={() => handleCopyLink(file.url)} 
+                            title="Copiar Link"
+                            style={{ color: copiedFileUrl === file.url ? '#34d399' : 'inherit' }}
+                          >
+                            {copiedFileUrl === file.url ? <Check size={14} /> : <Copy size={14} />}
+                          </button>
                           <a href={file.url} target="_blank" rel="noreferrer" className="btn btn-ghost btn-icon btn-sm" title="Abrir URL pública">
                             <ExternalLink size={14} />
                           </a>
@@ -714,6 +735,21 @@ export default function MediaManagerSection() {
             {/* Ações inferiores */}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
               <button className="btn btn-secondary btn-sm" onClick={() => setPreviewFile(null)}>Fechar</button>
+              <button 
+                className="btn btn-secondary btn-sm" 
+                onClick={() => handleCopyLink(previewFile.url)} 
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: copiedFileUrl === previewFile.url ? '#34d399' : 'inherit' }}
+              >
+                {copiedFileUrl === previewFile.url ? (
+                  <>
+                    <Check size={13} /> Copiado!
+                  </>
+                ) : (
+                  <>
+                    <Copy size={13} /> Copiar Link
+                  </>
+                )}
+              </button>
               <a href={previewFile.url} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <ExternalLink size={13} /> Abrir em Nova Aba
               </a>

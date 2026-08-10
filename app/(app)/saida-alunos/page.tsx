@@ -33,7 +33,7 @@ export default function SaidaAlunosPage() {
   return (
     <div>
       <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, margin: '0 0 6px', letterSpacing: '-0.03em' }}>
+        <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, margin: '0 0 6px', letterSpacing: '-0.03em', color: 'hsl(var(--text-primary))' }}>
           🚌 Controle de Saída de Alunos
         </h1>
         <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: 0 }}>
@@ -91,7 +91,7 @@ export default function SaidaAlunosPage() {
                 )}
               </div>
               <div>
-                <div style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 800, fontSize: 17, color: 'hsl(var(--text-base))', marginBottom: 6 }}>
+                <div style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 800, fontSize: 17, color: 'hsl(var(--text-primary))', marginBottom: 6 }}>
                   {item.title}
                 </div>
                 <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>

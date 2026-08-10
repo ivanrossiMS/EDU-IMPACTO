@@ -156,7 +156,7 @@ export default function SituacaoAlunoPage() {
       <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:14, padding:'10px 14px', background:'rgba(245,158,11,0.06)', border:'1px solid rgba(245,158,11,0.2)', borderRadius:10 }}>
         <span style={{ fontSize:13 }}>ℹ️</span>
         <span style={{ fontSize:12, color:'hsl(var(--text-muted))' }}>
-          <strong style={{color:'hsl(var(--text-base))'}}>Matrícula Ativa</strong> = aluno ainda está vinculado à turma.
+          <strong style={{color:'hsl(var(--text-primary))'}}>Matrícula Ativa</strong> = aluno ainda está vinculado à turma.
           Situações <strong style={{color:'#f59e0b'}}>Desativadas</strong> geram <span style={{background:'rgba(245,158,11,0.15)',color:'#d97706',padding:'1px 6px',borderRadius:4,fontWeight:700}}>linha amarela</span> no histórico de matrículas do Step 4.
         </span>
       </div>

@@ -106,7 +106,7 @@ function SmartDropdown({ label, icon, valueText, isOpen, onToggle, onClose, chil
           <span style={{ color: '#818cf8' }}>{icon}</span> {label}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginTop: 2 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-base))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 160 }}>
             {valueText}
           </span>
           <ChevronDown size={14} color="hsl(var(--text-muted))" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
@@ -137,7 +137,7 @@ function CheckItem({ label, checked, onClick }: any) {
       <div style={{ width: 16, height: 16, borderRadius: 4, border: '1.5px solid', borderColor: checked ? '#6366f1' : 'hsl(var(--border-strong))', background: checked ? '#6366f1' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {checked && <Check size={12} color="#fff" strokeWidth={3} />}
       </div>
-      <span style={{ fontSize: 12, fontWeight: checked ? 600 : 500, color: checked ? '#6366f1' : 'hsl(var(--text-base))' }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: checked ? 600 : 500, color: checked ? '#6366f1' : 'hsl(var(--text-primary))' }}>{label}</span>
     </div>
   )
 }
@@ -365,7 +365,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas: legacy
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}><Receipt size={22} strokeWidth={1.5} /></div>
               <div>
-                <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: 'hsl(var(--text-base))', margin: 0 }}>Extrato e Relatórios Financeiros</h2>
+                <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: 'hsl(var(--text-primary))', margin: 0 }}>Extrato e Relatórios Financeiros</h2>
                 <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontWeight: 600 }}>{aluno.nome}</span> • {turmaAtual?.nome || 'Sem turma'}
                 </div>
@@ -384,7 +384,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas: legacy
               <div style={{ marginBottom: 40 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-base))' }}>1. O que você deseja gerar?</h3>
+                    <h3 style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>1. O que você deseja gerar?</h3>
                     <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 2 }}>Selecione o tipo principal de relatório para o aluno.</p>
                   </div>
                   <button onClick={handleBotaoInteligente} title="Sugerir melhor filtro com base no saldo devedor" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 100, background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, boxShadow: '0 4px 12px rgba(99,102,241,0.2)' }}>
@@ -402,7 +402,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas: legacy
                       }}
                       style={{ position: 'relative', cursor: 'pointer', padding: '24px', borderRadius: 20, background: '#fff', border: '2px solid', borderColor: tipoDoc === opt.key ? opt.color : 'transparent', boxShadow: '0 4px 15px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)', transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)', transform: tipoDoc === opt.key ? 'translateY(-2px)' : 'none' }}>
                       <div style={{ color: opt.color, marginBottom: 12 }}>{opt.icon}</div>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: 'hsl(var(--text-base))' }}>{opt.label}</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>{opt.label}</div>
                       <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 4, lineHeight: 1.4 }}>{opt.desc}</div>
                       {tipoDoc === opt.key && <div style={{ position: 'absolute', top: 16, right: 16, width: 22, height: 22, borderRadius: '50%', background: opt.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={14} strokeWidth={3} /></div>}
                     </div>
@@ -412,7 +412,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas: legacy
 
               {/* Passo 2 - Filtros Inline */}
               <div style={{ marginBottom: 40 }}>
-                <h3 style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-base))', marginBottom: 16 }}>2. Refinar a busca</h3>
+                <h3 style={{ fontSize: 15, fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 16 }}>2. Refinar a busca</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', padding: 12, borderRadius: 16, boxShadow: '0 4px 15px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)' }}>
                   
                   <SmartDropdown label="Período" icon={<Calendar size={13}/>} valueText={periodoPreset === 'ano' ? 'Ano Atual' : periodoPreset === 'custom' ? 'Personalizado' : periodoPreset === 'ano_anterior' ? 'Ano Anterior' : 'Mês Atual'} isOpen={openDropdown === 'periodo'} onToggle={() => setOpenDropdown(p => p==='periodo'?null:'periodo')} onClose={() => setOpenDropdown(null)}>
@@ -465,7 +465,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas: legacy
               {/* Filtros Avançados Opcionais */}
               {(tipoDoc === 'ir' || showAvancados) && (
                 <div style={{ padding: 20, background: '#fff', borderRadius: 16, border: '1px dashed hsl(var(--border-subtle))', animation: 'fadeIn 0.2s', marginBottom: 40 }}>
-                  <h4 style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-base))', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Shield size={14} color="#818cf8"/> Configurações Fiscais</h4>
+                  <h4 style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Shield size={14} color="#818cf8"/> Configurações Fiscais</h4>
                   {tipoDoc === 'ir' ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <div style={{ width: 120 }}><label style={{ fontSize: 10, fontWeight: 700, color: 'hsl(var(--text-muted))', display: 'block', marginBottom: 4 }}>EXERCÍCIO (ANO)</label><input type="number" value={anoExercicio} onChange={e => setAnoExercicio(e.target.value)} style={{ width: '100%', padding: '8px 12px', fontSize: 14, fontWeight: 700 }} /></div>
@@ -486,7 +486,7 @@ export default function ExtratoModal({ aberto, onFechar, aluno, parcelas: legacy
                   <Zap size={10} style={{ display: 'inline', marginRight: 4, top:-1, position:'relative' }} fill="currentColor" /> Preview em tempo real
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 16 }}>
-                  <div style={{ fontSize: 24, fontWeight: 900, color: 'hsl(var(--text-base))', letterSpacing: '-0.03em' }}>{parcelasFiltradas.length} <span style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>lançamentos</span></div>
+                  <div style={{ fontSize: 24, fontWeight: 900, color: 'hsl(var(--text-primary))', letterSpacing: '-0.03em' }}>{parcelasFiltradas.length} <span style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>lançamentos</span></div>
                   <div style={{ width: 1, height: 20, background: 'hsl(var(--border-subtle))' }} />
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>
                     Total {tipoDoc === 'debitos' ? 'Aberto' : 'Pago'}: <strong style={{color: tipoDoc === 'debitos' ? '#dc2626' : '#059669', fontSize: 20, marginLeft: 6}}>R$ {fmtMoeda(tipoDoc === 'debitos' ? totalAbertosCalc : totalPagosCalc)}</strong>

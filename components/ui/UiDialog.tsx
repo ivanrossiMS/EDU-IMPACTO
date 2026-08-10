@@ -145,7 +145,7 @@ export function UiDialog({ type, title, message, isConfirm, confirmLabel, cancel
           <div style={{ flex: 1, paddingTop: 4 }}>
             <div style={{
               fontSize: 16, fontWeight: 800,
-              color: 'hsl(var(--text-base))',
+              color: 'hsl(var(--text-primary))',
               letterSpacing: -0.3, lineHeight: 1.2,
               marginBottom: 8,
             }}>

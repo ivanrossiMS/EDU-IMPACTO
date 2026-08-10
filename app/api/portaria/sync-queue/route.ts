@@ -43,12 +43,12 @@ async function getRegistradosHoje() {
     if (alunoUuids.size > 0) {
       const { data: alunosMatch } = await supabase
         .from('alunos')
-        .select('id, matricula, codigo')
+        .select('id, matricula, dados')
         .in('id', Array.from(alunoUuids))
 
       for (const a of alunosMatch || []) {
         if (a.id) registeredSet.add(String(a.id))
-        const numMat = parseInt(String(a.matricula || a.codigo || '').replace(/\D/g, ''), 10)
+        const numMat = parseInt(String(a.matricula || a.dados?.codigo || '').replace(/\D/g, ''), 10)
         if (!isNaN(numMat) && numMat > 0) {
           registeredSet.add(String(numMat))
         }
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
     const filterParts = alunoIds.map(id => `id.eq.${id},matricula.eq.${id}`).join(',')
     const { data: alunos, error: alunosErr } = await supabase
       .from('alunos')
-      .select('id, nome, matricula, foto, status, codigo')
+      .select('id, nome, matricula, foto, status, dados')
       .or(filterParts)
 
     if (alunosErr) throw alunosErr

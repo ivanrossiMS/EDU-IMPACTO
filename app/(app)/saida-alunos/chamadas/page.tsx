@@ -424,7 +424,6 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
     )
     showToast(`Saída de ${student.nome} confirmada (Saiu Sozinho)!`, true)
   }, [confirmSoloExit, student.id, student.nome, student.turmaNome, student.turma, student.foto, student.imagem1, showToast])
-
   const handleSoloExitClick = useCallback(() => {
     if (alreadyConfirmed) {
       showToast(`Saída de ${student.nome} já foi confirmada hoje.`, false)
@@ -437,20 +436,54 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
     executeSoloExit()
   }, [alreadyConfirmed, autorizaSaida, executeSoloExit, showToast, student.nome])
 
+  const isMobile = useIsMobile()
+  const blocked = alreadyCalled || alreadyConfirmed || isCalling
+
+  const handleCallRespClick = useCallback(() => {
+    if (blocked) return
+    
+    // Find first permitted guardian
+    const firstPermitted = respList.find((g: any) => {
+      const isProibido = g.proibido === true
+      const dias: string[] = g.diasSemana || []
+      const remap2 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab']
+      const todayK = remap2[new Date().getDay()]
+      const diaRestrito = dias.length > 0 && !dias.includes(todayK)
+      return !isProibido && !diaRestrito
+    })
+
+    if (firstPermitted) {
+      setIsCalling(true)
+      onCall(student.id, student.nome, student.turmaNome || student.turma, firstPermitted.id, firstPermitted.name, student.foto || student.imagem1)
+      setTimeout(() => setIsCalling(false), 2000)
+      showToast(`Chamando via ${firstPermitted.name}...`)
+    } else {
+      showToast('Nenhum responsável autorizado para hoje!', false)
+    }
+  }, [blocked, respList, student, onCall, showToast])
+
   return (
     <div style={{
-      background: 'hsl(var(--bg-elevated))',
-      border: alreadyCalled ? '1px solid rgba(245,158,11,0.35)' : '1px solid hsl(var(--border-subtle))',
-      borderRadius: 16, overflow: 'hidden',
+      background: '#ffffff',
+      border: alreadyCalled ? '1px solid rgba(245,158,11,0.45)' : '1px solid #e2e8f0',
+      borderRadius: 16,
+      padding: '16px 20px',
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : '1.3fr 1.5fr 1fr',
+      gap: 20,
+      alignItems: 'center',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+      position: 'relative',
     }}>
-      <div style={{ padding: '14px 18px 12px', display: 'flex', alignItems: 'center', gap: 14 }}>
+      {/* 1. LEFT COLUMN: Student Profile */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{
-          width: 52, height: 52, borderRadius: 13, flexShrink: 0,
+          width: 68, height: 68, borderRadius: 16, flexShrink: 0,
           background: (student.foto || student.imagem1) ? 'none' : 'linear-gradient(135deg, #06b6d450, #6366f130)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: 900, fontSize: 20, color: '#fff', fontFamily: 'Outfit, sans-serif',
+          fontWeight: 900, fontSize: 24, color: '#fff', fontFamily: 'Outfit, sans-serif',
           position: 'relative', overflow: 'hidden',
-          border: (student.foto || student.imagem1) ? '1px solid hsl(var(--border-subtle))' : 'none',
+          border: (student.foto || student.imagem1) ? '1px solid #e2e8f0' : 'none',
         }}>
           {(student.foto || student.imagem1) ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -459,109 +492,48 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
             initials
           )}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 3 }}>{student.nome}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-            <GraduationCap size={11} color="#06b6d4"/>
-            <span style={{ color: '#06b6d4', fontWeight: 700 }}>{student.turmaNome || student.turma}</span>
-            {student.turno && <span style={{ color: 'hsl(var(--text-muted))' }}>· {student.turno}</span>}
-            {alreadyCalled && !alreadyConfirmed && (
-              <span style={{
-                marginLeft: 4, padding: '1px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800,
-                background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)',
-              }}>⚠ Já em chamada</span>
-            )}
-            {confirmedCall && (
-              <span style={{
-                marginLeft: 4, padding: '1px 8px', borderRadius: 100, fontSize: 10, fontWeight: 800,
-                background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)',
-              }}>✅ Saída Confirmada às {confirmedCall.confirmedAt ? fmtTime(confirmedCall.confirmedAt) : fmtTime(confirmedCall.calledAt)} ({confirmedCall.guardianName || 'Autorizado'})</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {student.nome}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
+            <span style={{ color: '#06b6d4', fontWeight: 800 }}>
+              {student.turmaNome || student.turma} {student.turno ? `· ${student.turno.toUpperCase()}` : ''}
+            </span>
+          </div>
+          <div style={{ marginTop: 2 }}>
+            {autorizaSaida ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '3px 10px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 800, border: '1px solid rgba(16,185,129,0.25)' }}>
+                Pode sair sozinho
+              </span>
+            ) : (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '3px 10px', borderRadius: 100, background: 'rgba(239,68,68,0.06)', color: '#ef4444', fontWeight: 800, border: '1px solid rgba(239,68,68,0.2)' }}>
+                Não pode sair sozinho
+              </span>
             )}
           </div>
         </div>
       </div>
-      <div style={{
-        padding: '8px 18px 14px',
-        borderTop: '1px solid hsl(var(--border-subtle))',
-        background: 'hsl(var(--bg-base))',
-      }}>
-        {/* autorizaSaida badge & Solo Exit Button */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {autorizaSaida ? (
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: 800, border: '1px solid rgba(16,185,129,0.25)' }}>
-                ✅ Pode sair sozinho
-              </span>
-            ) : (
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: 'rgba(239,68,68,0.06)', color: '#ef4444', fontWeight: 800, border: '1px solid rgba(239,68,68,0.2)' }}>
-                🚫 Não pode sair sozinho
-              </span>
-            )}
-          </div>
 
-          {/* 🚶‍♂️ BUTTON: SAIU SOZINHO */}
-          <button
-            type="button"
-            onClick={handleSoloExitClick}
-            disabled={alreadyConfirmed}
-            title={alreadyConfirmed ? 'Saída já confirmada hoje' : autorizaSaida ? 'Confirmar saída do aluno sozinho' : '⚠️ Aluno não possui autorização cadastrada (exige confirmação)'}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 12px', borderRadius: 100,
-              background: alreadyConfirmed
-                ? 'hsl(var(--bg-overlay))'
-                : autorizaSaida
-                  ? 'linear-gradient(135deg, #10b981, #059669)'
-                  : 'linear-gradient(135deg, #f59e0b, #d97706)',
-              border: alreadyConfirmed
-                ? '1px solid hsl(var(--border-subtle))'
-                : 'none',
-              color: alreadyConfirmed ? 'hsl(var(--text-muted))' : '#fff',
-              fontWeight: 800, fontSize: 11,
-              cursor: alreadyConfirmed ? 'not-allowed' : 'pointer',
-              boxShadow: alreadyConfirmed
-                ? 'none'
-                : autorizaSaida
-                  ? '0 3px 12px rgba(16,185,129,0.3)'
-                  : '0 3px 12px rgba(245,158,11,0.25)',
-              transition: 'all 0.2s cubic-bezier(0.2, 1, 0.2, 1)',
-              opacity: alreadyConfirmed ? 0.6 : 1,
-            }}
-            onMouseEnter={e => {
-              if (alreadyConfirmed) return
-              const el = e.currentTarget
-              el.style.transform = 'translateY(-1px)'
-              el.style.filter = 'brightness(1.1)'
-            }}
-            onMouseLeave={e => {
-              if (alreadyConfirmed) return
-              const el = e.currentTarget
-              el.style.transform = 'none'
-              el.style.filter = 'none'
-            }}
-          >
-            <UserCheck size={12} />
-            <span>{alreadyConfirmed ? '✅ Saiu Sozinho' : '🚶‍♂️ Saiu Sozinho'}</span>
-          </button>
-        </div>
-
-        {!autorizaSaida && respList.length === 0 && (
-          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>
-            Nenhum responsável configurado. Cadastre em Saúde &amp; Obs do aluno.
+      {/* 2. MIDDLE COLUMN: Authorized Guardians */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: '0.05em' }}>
+          RESPONSÁVEIS AUTORIZADOS
+        </span>
+        {respList.length === 0 ? (
+          <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+            Nenhum responsável configurado.
           </div>
-        )}
-        {respList.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'hsl(var(--text-muted))', marginRight: 2 }}>
-              Chamar via:
-            </span>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {respList.map((g: any) => {
               const isProibido = g.proibido === true
               const dias: string[] = g.diasSemana || []
               const remap2 = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab']
               const todayK = remap2[new Date().getDay()]
               const diaRestrito = dias.length > 0 && !dias.includes(todayK)
-              const blocked = alreadyCalled || alreadyConfirmed || isCalling
+              const isProibidoHoje = isProibido || diaRestrito
+
               return (
                 <button
                   key={g.id}
@@ -582,162 +554,265 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                       setTimeout(() => setIsCalling(false), 2000)
                     }
                   }}
-                  disabled={blocked || diaRestrito}
+                  disabled={blocked}
                   title={isProibido ? '🚫 Proibido de retirar este aluno' : diaRestrito ? `⚠ Dias permitidos: ${dias.join(', ')}` : alreadyConfirmed ? '✅ Aluno já retirado' : undefined}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '6px 12px', borderRadius: 100,
-                    background: isProibido
-                      ? 'rgba(239,68,68,0.15)'
-                      : blocked || diaRestrito
-                        ? 'hsl(var(--bg-overlay))'
-                        : 'linear-gradient(135deg, #06b6d415, #6366f112)',
-                    border: isProibido
-                      ? '1px solid rgba(239,68,68,0.5)'
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 14px', borderRadius: 10, width: '100%',
+                    background: alreadyConfirmed
+                      ? 'rgba(253, 224, 71, 0.12)'
                       : blocked
-                        ? '1px solid hsl(var(--border-subtle))'
-                        : '1px solid rgba(6,182,212,0.35)',
-                    color: isProibido ? '#ef4444' : blocked || diaRestrito ? 'hsl(var(--text-muted))' : 'hsl(var(--text-base))',
-                    fontWeight: 700, fontSize: 12,
-                    cursor: blocked || diaRestrito ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s',
-                    opacity: isProibido ? 1 : blocked ? 0.5 : 1,
+                        ? '#f8fafc'
+                        : isProibidoHoje
+                          ? 'rgba(239, 68, 68, 0.08)'
+                          : 'rgba(59, 130, 246, 0.08)',
+                    border: alreadyConfirmed
+                      ? '1px solid rgba(253, 224, 71, 0.35)'
+                      : blocked
+                        ? '1px solid #e2e8f0'
+                        : isProibidoHoje
+                          ? '1px solid rgba(239, 68, 68, 0.25)'
+                          : '1px solid rgba(59, 130, 246, 0.25)',
+                    color: alreadyConfirmed
+                      ? '#a16207'
+                      : blocked
+                        ? '#94a3b8'
+                        : isProibidoHoje
+                          ? '#dc2626'
+                          : '#1d4ed8',
+                    fontWeight: 700, fontSize: 12.5,
+                    cursor: blocked ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                    outline: 'none',
                   }}
                   onMouseEnter={e => {
-                    if (blocked || diaRestrito || isProibido) return
+                    if (blocked || isProibidoHoje) return
                     const el = e.currentTarget as HTMLButtonElement
-                    el.style.background = 'linear-gradient(135deg, #06b6d4, #6366f1)'
-                    el.style.color = '#fff'
-                    el.style.borderColor = 'transparent'
+                    el.style.background = 'rgba(59, 130, 246, 0.15)'
+                    el.style.borderColor = 'rgba(59, 130, 246, 0.4)'
                   }}
                   onMouseLeave={e => {
-                    if (blocked || diaRestrito || isProibido) return
+                    if (blocked || isProibidoHoje) return
                     const el = e.currentTarget as HTMLButtonElement
-                    el.style.background = 'linear-gradient(135deg, #06b6d415, #6366f112)'
-                    el.style.color = 'hsl(var(--text-base))'
-                    el.style.borderColor = 'rgba(6,182,212,0.35)'
+                    el.style.background = 'rgba(59, 130, 246, 0.08)'
+                    el.style.borderColor = 'rgba(59, 130, 246, 0.25)'
                   }}
                 >
-                  {isProibido ? <span style={{ fontSize: 11 }}>🚫</span> : <UserCheck size={11}/>}
-                  <span>{g.name}</span>
-                  {isProibido && <span style={{ fontSize: 10, fontWeight: 700, color: '#ef4444' }}>(proibido retirar)</span>}
-                  <span style={{ fontSize: 9, fontWeight: 600, opacity: 0.6, padding: '1px 5px', borderRadius: 4, background: 'rgba(0,0,0,0.08)' }}>
-                    {g.role}
-                  </span>
-                  {g.rfid && <span style={{ fontSize: 9, color: '#06b6d4', fontFamily: 'monospace' }}>📡</span>}
-                  {diaRestrito && !isProibido && <span style={{ fontSize: 9 }}>⚠</span>}
-                  {!blocked && !diaRestrito && !isProibido && <ChevronRight size={10} style={{ opacity: 0.4 }}/>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, flexShrink: 0, opacity: 0.8 }}>👤</span>
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: alreadyConfirmed ? '#a16207' : '#1e293b', fontWeight: 700 }}>
+                      {g.name}
+                    </span>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'rgba(0,0,0,0.05)', color: alreadyConfirmed ? '#a16207' : '#64748b', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {g.role}
+                    </span>
+                  </div>
+                  
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    {g.rfid && <span style={{ fontSize: 9, color: '#3b82f6' }}>📡</span>}
+                    {alreadyConfirmed ? (
+                      <span style={{ fontSize: 12, display: 'flex', alignItems: 'center' }}>✅</span>
+                    ) : isProibidoHoje ? (
+                      <span style={{ fontSize: 12, display: 'flex', alignItems: 'center' }}>⚠️</span>
+                    ) : (
+                      <ChevronRight size={13} style={{ opacity: 0.5 }} />
+                    )}
+                  </div>
                 </button>
               )
             })}
           </div>
         )}
-        <AnimatePresence>
-          {showProibidoAlert && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{
-                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-                background: 'rgba(220, 38, 38, 0.95)',
-                zIndex: 9999, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                color: '#fff',
-              }}
-            >
-              <motion.div
-                animate={{ scale: [1, 1.1, 1], opacity: [1, 0.7, 1] }}
-                transition={{ repeat: Infinity, duration: 0.5 }}
-                style={{ textAlign: 'center' }}
-              >
-                <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ACESSO NEGADO</h1>
-                <p style={{ fontSize: 32, fontWeight: 700 }}>{showProibidoAlert.name} {showProibidoAlert.message}</p>
-              </motion.div>
-            </motion.div>
-          )}
-
-          {showConfirmModal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{
-                position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-                background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(8px)',
-                zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                padding: 16,
-              }}
-            >
-              <motion.div
-                initial={{ scale: 0.92, opacity: 0, y: 15 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.92, opacity: 0, y: 15 }}
-                style={{
-                  background: 'hsl(var(--bg-elevated))',
-                  border: '1.5px solid rgba(245, 158, 11, 0.4)',
-                  borderRadius: 24, padding: 24, width: '90%', maxWidth: 420,
-                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 25px rgba(245, 158, 11, 0.15)',
-                  display: 'flex', flexDirection: 'column', gap: 18,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                  <div style={{
-                    width: 48, height: 48, borderRadius: 16,
-                    background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                    fontSize: 24,
-                  }}>
-                    ⚠️
-                  </div>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: 'hsl(var(--text-base))', fontFamily: 'Outfit, sans-serif' }}>
-                      Confirmar Saída Sozinho?
-                    </h3>
-                    <p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>
-                      O(a) aluno(a) <strong style={{ color: 'hsl(var(--text-base))' }}>{student.nome}</strong> <span style={{ color: '#ef4444', fontWeight: 800 }}>NÃO tem autorização cadastrada</span> para sair sozinho(a).
-                      <br/><br/>
-                      Deseja confirmar a saída sozinho(a) mesmo assim?
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmModal(false)}
-                    style={{
-                      flex: 1, height: 42, borderRadius: 12,
-                      background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
-                      color: 'hsl(var(--text-base))', fontWeight: 700, fontSize: 12,
-                      cursor: 'pointer', transition: 'all 0.2s',
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowConfirmModal(false)
-                      executeSoloExit()
-                    }}
-                    style={{
-                      flex: 1.4, height: 42, borderRadius: 12,
-                      background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none',
-                      color: '#fff', fontWeight: 800, fontSize: 12,
-                      cursor: 'pointer', transition: 'all 0.2s',
-                      boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    }}
-                  >
-                    <CheckCircle2 size={14} /> Confirmar Saída
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
+
+      {/* 3. RIGHT COLUMN: Confirmed Checkout Badge or Solo Exit Button */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch' }}>
+        {alreadyConfirmed ? (
+          <div style={{
+            background: 'rgba(16, 185, 129, 0.1)',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            borderRadius: 12,
+            padding: '12px 16px',
+            color: '#10b981',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+          }}>
+            {confirmedCall?.guardianName?.toLowerCase() === 'saiu sozinho' || confirmedCall?.guardianId === 'solo' ? (
+              <>
+                <span style={{ fontWeight: 900, fontSize: 13 }}>🚶‍♂️ SAIU SOZINHO</span>
+                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>
+                  Saída confirmada às {confirmedCall?.confirmedAt ? fmtTime(confirmedCall.confirmedAt) : fmtTime(confirmedCall?.calledAt)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontWeight: 900, fontSize: 12, opacity: 0.8 }}>👨‍👦 RETIRADO POR:</span>
+                <span style={{ fontWeight: 800, fontSize: 13, color: '#059669', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {confirmedCall?.guardianName || 'Autorizado'}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>
+                  às {confirmedCall?.confirmedAt ? fmtTime(confirmedCall.confirmedAt) : fmtTime(confirmedCall?.calledAt)}
+                </span>
+              </>
+            )}
+          </div>
+        ) : autorizaSaida ? (
+          <button
+            type="button"
+            onClick={handleSoloExitClick}
+            disabled={blocked}
+            style={{
+              width: '100%',
+              height: 48,
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              border: 'none',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: 13,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0 18px',
+              cursor: blocked ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.25)',
+              transition: 'all 0.2s',
+              opacity: blocked ? 0.6 : 1,
+            }}
+            onMouseEnter={e => {
+              if (blocked) return
+              const el = e.currentTarget
+              el.style.transform = 'translateY(-1px)'
+              el.style.filter = 'brightness(1.05)'
+            }}
+            onMouseLeave={e => {
+              if (blocked) return
+              const el = e.currentTarget
+              el.style.transform = 'none'
+              el.style.filter = 'none'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <UserCheck size={16} />
+              <span>Registrar saiu sozinho</span>
+            </div>
+            <ChevronRight size={16} />
+          </button>
+        ) : (
+          <div />
+        )}
+      </div>
+
+      {/* Warning Alert Screens & Modals */}
+      <AnimatePresence>
+        {showProibidoAlert && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+              background: 'rgba(220, 38, 38, 0.95)',
+              zIndex: 9999, display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              color: '#fff',
+            }}
+          >
+            <motion.div
+              animate={{ scale: [1, 1.1, 1], opacity: [1, 0.7, 1] }}
+              transition={{ repeat: Infinity, duration: 0.5 }}
+              style={{ textAlign: 'center' }}
+            >
+              <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 20 }}>🚫 ACESSO NEGADO</h1>
+              <p style={{ fontSize: 32, fontWeight: 700 }}>{showProibidoAlert.name} {showProibidoAlert.message}</p>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showConfirmModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+              background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(8px)',
+              zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 16,
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 15 }}
+              style={{
+                background: 'hsl(var(--bg-elevated))',
+                border: '1.5px solid rgba(245, 158, 11, 0.4)',
+                borderRadius: 24, padding: 24, width: '90%', maxWidth: 420,
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 25px rgba(245, 158, 11, 0.15)',
+                display: 'flex', flexDirection: 'column', gap: 18,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 16,
+                  background: 'rgba(245, 158, 11, 0.12)', color: '#f59e0b',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  fontSize: 24,
+                }}>
+                  ⚠️
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 900, color: '#000000', fontFamily: 'Outfit, sans-serif' }}>
+                    Confirmar Saída Sozinho?
+                  </h3>
+                  <p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'hsl(var(--text-muted))', lineHeight: 1.5 }}>
+                    O(a) aluno(a) <strong style={{ color: '#000000' }}>{student.nome}</strong> <span style={{ color: '#ef4444', fontWeight: 800 }}>NÃO tem autorização cadastrada</span> para sair sozinho(a).
+                    <br/><br/>
+                    Deseja confirmar a saída sozinho(a) mesmo assim?
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmModal(false)}
+                  style={{
+                    flex: 1, height: 42, borderRadius: 12,
+                    background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                    color: '#000000', fontWeight: 700, fontSize: 12,
+                    cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowConfirmModal(false)
+                    executeSoloExit()
+                  }}
+                  style={{
+                    flex: 1.4, height: 42, borderRadius: 12,
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)', border: 'none',
+                    color: '#fff', fontWeight: 800, fontSize: 12,
+                    cursor: 'pointer', transition: 'all 0.2s',
+                    boxShadow: '0 4px 14px rgba(245, 158, 11, 0.35)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  }}
+                >
+                  <CheckCircle2 size={14} /> Confirmar Saída
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }, (prev, next) => {
@@ -1412,7 +1487,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   <Trash2 size={24} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-base))' }}>Remover autorização?</h3>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#000000' }}>Remover autorização?</h3>
                   <p style={{ margin: '4px 0 0', fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.4 }}>
                     Tem certeza que deseja remover esta autorização especial? Esta ação não pode ser desfeita.
                   </p>
@@ -1425,7 +1500,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                   style={{
                     flex: 1, height: 44, borderRadius: 12,
                     background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
-                    color: 'hsl(var(--text-base))', fontWeight: 700, fontSize: 13,
+                    color: '#000000', fontWeight: 700, fontSize: 13,
                     cursor: 'pointer', transition: 'all 0.2s',
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = 'hsl(var(--bg-overlay))'}
@@ -1851,10 +1926,10 @@ function ChamadasContent() {
       {/* Header */}
       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 26, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 26, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10, color: '#000000' }}>
             📢 Gestão de Chamadas
           </h1>
-          <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: 0 }}>
+          <p style={{ fontSize: 13, color: '#334155', margin: 0 }}>
             Histórico e controle em tempo real
           </p>
         </div>
@@ -2065,7 +2140,7 @@ function ChamadasContent() {
           style={{
             marginLeft: 'auto', padding: '8px 16px', borderRadius: 10, fontSize: 12,
             border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))',
-            color: 'hsl(var(--text-base))', outline: 'none', minWidth: 180,
+            color: '#000000', outline: 'none', minWidth: 180,
           }}
         />
 
@@ -2170,7 +2245,7 @@ function ChamadasContent() {
                   <Trash2 size={24} />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-base))' }}>Zerar chamadas?</h3>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#000000' }}>Zerar chamadas?</h3>
                   <p style={{ margin: '4px 0 0', fontSize: 13, color: 'hsl(var(--text-muted))', lineHeight: 1.4 }}>
                     Tem certeza que deseja zerar e excluir todas as chamadas do dia? Esta ação não pode ser desfeita.
                   </p>
@@ -2183,7 +2258,7 @@ function ChamadasContent() {
                   style={{
                     flex: 1, height: 44, borderRadius: 12,
                     background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
-                    color: 'hsl(var(--text-base))', fontWeight: 700, fontSize: 13,
+                    color: '#000000', fontWeight: 700, fontSize: 13,
                     cursor: 'pointer', transition: 'all 0.2s',
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = 'hsl(var(--bg-overlay))'}

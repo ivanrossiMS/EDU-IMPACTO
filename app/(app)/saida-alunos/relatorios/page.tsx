@@ -189,38 +189,33 @@ function TabHistoricoChamadas() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Filter size={15} color="#818cf8"/>
-          <span style={{ fontWeight: 800, fontSize: 13 }}>Filtros</span>
+          <span className="text-primary" style={{ fontWeight: 800, fontSize: 13 }}>Filtros</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill,minmax(180px,1fr))', gap: 12 }}>
           {/* Date from */}
           <div>
-            <label style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'block', marginBottom: 4 }}>DE</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-base))', fontSize: 12, boxSizing: 'border-box' }}/>
+            <label className="form-label">DE</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="form-input" />
           </div>
           {/* Date to */}
           <div>
-            <label style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'block', marginBottom: 4 }}>ATÉ</label>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-base))', fontSize: 12, boxSizing: 'border-box' }}/>
+            <label className="form-label">ATÉ</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="form-input" />
           </div>
           {/* Student */}
           <div>
-            <label style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'block', marginBottom: 4 }}>ALUNO</label>
-            <input value={searchStudent} onChange={e => setSearchStudent(e.target.value)} placeholder="Nome..."
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-base))', fontSize: 12, boxSizing: 'border-box' }}/>
+            <label className="form-label">ALUNO</label>
+            <input value={searchStudent} onChange={e => setSearchStudent(e.target.value)} placeholder="Nome..." className="form-input" />
           </div>
           {/* Guardian */}
           <div>
-            <label style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'block', marginBottom: 4 }}>RESPONSÁVEL</label>
-            <input value={searchGuardian} onChange={e => setSearchGuardian(e.target.value)} placeholder="Nome..."
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-base))', fontSize: 12, boxSizing: 'border-box' }}/>
+            <label className="form-label">RESPONSÁVEL</label>
+            <input value={searchGuardian} onChange={e => setSearchGuardian(e.target.value)} placeholder="Nome..." className="form-input" />
           </div>
           {/* Status */}
           <div>
-            <label style={{ fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', display: 'block', marginBottom: 4 }}>STATUS</label>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-base))', fontSize: 12, boxSizing: 'border-box' }}>
+            <label className="form-label">STATUS</label>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="form-input">
               <option value="">Todos</option>
               <option value="waiting">Aguardando</option>
               <option value="confirmed">Confirmado</option>
@@ -347,7 +342,7 @@ function TabHistoricoChamadas() {
 
       {/* System Logs */}
       <div style={{ marginTop: 36 }}>
-        <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 14 }}>🗒️ Log do Sistema (últimos 20)</div>
+        <div className="text-primary" style={{ fontWeight: 800, fontSize: 14, marginBottom: 14 }}>🗒️ Log do Sistema (últimos 20)</div>
         <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {(logs || []).slice(0, 20).map(l => (
             <div key={l.id} style={{ display: 'flex', gap: 14, fontSize: 11, alignItems: 'flex-start' }}>
@@ -508,37 +503,37 @@ function TabAutorizacoesAlunos() {
       }}>
         {/* Search */}
         <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 160 }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }}/>
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', zIndex: 10 }}/>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar aluno ou turma..."
+            className="form-input"
             style={{
-              width: '100%', padding: '9px 12px 9px 34px',
-              borderRadius: 10, border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-elevated))', color: 'hsl(var(--text-base))',
-              fontSize: 13, outline: 'none', boxSizing: 'border-box',
+              paddingLeft: 34,
             }}
           />
         </div>
 
         {/* Turma select */}
         <div style={{ position: 'relative' }}>
-          <GraduationCap size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }}/>
+          <GraduationCap size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', zIndex: 10 }}/>
           <select
             value={turmaFilter}
             onChange={e => setTurmaFilter(e.target.value)}
+            className="form-input"
             style={{
-              padding: '9px 32px 9px 30px', borderRadius: 10,
-              border: '1px solid hsl(var(--border-subtle))',
-              background: 'hsl(var(--bg-elevated))', color: 'hsl(var(--text-base))',
-              fontSize: 13, cursor: 'pointer', appearance: 'none', outline: 'none',
+              width: 'auto',
+              paddingLeft: 30,
+              paddingRight: 32,
+              cursor: 'pointer',
+              appearance: 'none',
             }}
           >
             <option value="todas">Todas as turmas</option>
             {turmas.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <ChevronDown size={12} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none' }}/>
+          <ChevronDown size={12} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))', pointerEvents: 'none', zIndex: 10 }}/>
         </div>
 
         {/* Export */}
@@ -641,7 +636,7 @@ function TabAutorizacoesAlunos() {
 
                   {/* Name + turma */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-base))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div className="text-primary" style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {row.nome}
                     </div>
                     <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
@@ -722,7 +717,7 @@ function TabAutorizacoesAlunos() {
                                   borderTop: '1px solid hsl(var(--border-subtle))',
                                   background: proibido ? 'rgba(239,68,68,0.03)' : 'transparent',
                                 }}>
-                                  <td style={{ padding: '8px 10px', fontWeight: 700, color: 'hsl(var(--text-base))' }}>{resp.nome || '—'}</td>
+                                  <td className="text-primary" style={{ padding: '8px 10px', fontWeight: 700 }}>{resp.nome || '—'}</td>
                                   <td style={{ padding: '8px 10px', color: 'hsl(var(--text-muted))' }}>{resp.parentesco || '—'}</td>
                                   <td style={{ padding: '8px 10px', color: 'hsl(var(--text-muted))', fontFamily: 'monospace' }}>{resp.telefone || '—'}</td>
                                   <td style={{ padding: '8px 10px' }}>
@@ -796,7 +791,7 @@ function RelatoriosDashboard() {
     <div>
       {/* Page title */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 26, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 className="text-primary" style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: isMobile ? 20 : 26, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 10 }}>
           📊 Painel de Relatórios
         </h1>
         <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: 0 }}>
