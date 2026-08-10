@@ -9,9 +9,7 @@ export function LoadingGlass() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'rgba(255, 255, 255, 0.1)',
-      backdropFilter: 'blur(16px)',
-      WebkitBackdropFilter: 'blur(16px)',
+      background: '#0A0F24',
     }}>
       <div style={{
         display: 'flex',
