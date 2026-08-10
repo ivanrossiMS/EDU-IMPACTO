@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useApp, loadSettingAsync, saveSetting, removeSettingAsync } from '@/lib/context'
 import { DEFAULT_PERFIS } from '@/lib/dataContext'
+import { performLogout } from '@/lib/auth/logout'
+import { Capacitor } from '@capacitor/core'
+import { Preferences } from '@capacitor/preferences'
 type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
@@ -178,14 +181,39 @@ export default function LoginPage() {
       const checkStoredUser = async () => {
         const storedUser = await loadSettingAsync<any>('edu-current-user', null)
         if (storedUser) {
-          // Se fomos redirecionados para o login pelo middleware (nextParam existe),
-          // significa que os cookies do Supabase expiraram ou são inválidos.
-          // Devemos ignorar o localStorage, limpá-lo, e forçar um novo login.
+          // Se fomos redirecionados para o login pelo middleware (nextParam existe)
+          // ou se a sessão no servidor expirou, limpamos o estado local.
           if (nextParam) {
             await removeSettingAsync('edu-current-user')
             await removeSettingAsync('edu-current-perfil')
+            if (Capacitor.isNativePlatform()) {
+              await Preferences.clear().catch(() => {})
+            }
+            setCurrentUser(null)
             setStep('login')
             return
+          }
+
+          // Verificação ativa de sessão no servidor Supabase
+          try {
+            const meRes = await fetch('/api/auth/me', {
+              cache: 'no-store',
+              credentials: 'include',
+              headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+            })
+            if (!meRes.ok) {
+              // Sessão expirada ou revogada — limpa resíduos locais e força formulário de login
+              await removeSettingAsync('edu-current-user')
+              await removeSettingAsync('edu-current-perfil')
+              if (Capacitor.isNativePlatform()) {
+                await Preferences.clear().catch(() => {})
+              }
+              setCurrentUser(null)
+              setStep('login')
+              return
+            }
+          } catch (err) {
+            console.warn('[Login] Erro ao validar sessão no servidor:', err)
           }
 
           try {
@@ -201,7 +229,6 @@ export default function LoginPage() {
             if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
               setStep(stepParam)
             } else {
-              // Default to choose_system if logged in but no step in URL
               setStep('choose_system')
             }
           } catch (e) {
@@ -914,6 +941,31 @@ export default function LoginPage() {
             )}
           </>
         )}
+      </div>
+      <div style={{ marginTop: 28, textAlign: 'center' }}>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await performLogout()
+            } catch (e) {}
+            setCurrentUser(null)
+            setStep('login')
+          }}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'rgba(255,255,255,0.4)',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            textDecoration: 'underline'
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+          onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+        >
+          Sair ou Entrar com outra conta
+        </button>
       </div>
     </div>
   )
