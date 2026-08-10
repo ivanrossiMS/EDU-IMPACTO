@@ -46,10 +46,15 @@ export async function performLogout() {
   }
 
   // 4. Clear window.localStorage
+  // NOTE: Set the logout-pending flag BEFORE and re-set AFTER clear(),
+  // so CapacitorResumeGuard can detect it if the app is reopened after being killed.
+  const LOGOUT_FLAG = 'edu-logout-pending'
   if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
     try {
       window.localStorage.clear();
-      console.log('[Auth Logout] localStorage cleared.');
+      // Re-set the flag after clear so it survives in localStorage for next app open
+      window.localStorage.setItem(LOGOUT_FLAG, '1');
+      console.log('[Auth Logout] localStorage cleared and logout flag set.');
     } catch (error) {
       console.error('[Auth Logout] Error clearing localStorage:', error);
     }

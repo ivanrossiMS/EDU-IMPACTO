@@ -25,6 +25,7 @@ export const viewport = {
 import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoader'
 
 import { KeyboardProvider } from '@/components/providers/KeyboardProvider'
+import { CapacitorResumeGuard } from '@/components/providers/CapacitorResumeGuard'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Suspense fallback={null}>
           <GlobalNavigationLoader />
         </Suspense>
+        <CapacitorResumeGuard />
         <ReactQueryProvider>
           <AppProvider>
             <KeyboardProvider>
