@@ -1,8 +1,8 @@
 import type { NextConfig } from 'next'; 
 
 const securityHeaders = [
-  // Prevent clickjacking — DENY consistente com frame-ancestors 'none' no CSP abaixo
-  { key: 'X-Frame-Options', value: 'DENY' },
+  // Allow framing for same-origin and Capacitor Native WebViews
+  { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
   // Prevent MIME-type sniffing
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   // Force HTTPS for 1 year (production only)
@@ -11,27 +11,22 @@ const securityHeaders = [
   { key: 'X-DNS-Prefetch-Control', value: 'on' },
   // Referrer policy
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  // Permissions policy — restrict dangerous APIs + desabilita FLoC (interest-cohort)
+  // Permissions policy — restrict dangerous APIs
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
-  // Content-Security-Policy — restrict to known sources
+  // Content-Security-Policy — allow Capacitor native schemes and inline scripts
   {
     key: 'Content-Security-Policy',
     value: [
-      "default-src 'self'",
-      // Em prod não precisamos de unsafe-eval (apenas Next.js dev mode)
-      process.env.NODE_ENV === 'development'
-        ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.onesignal.com https://api.onesignal.com https://onesignal.com"
-        : "script-src 'self' 'unsafe-inline' https://cdn.onesignal.com https://api.onesignal.com https://onesignal.com",
+      "default-src 'self' capacitor: http://localhost:* https://localhost:*",
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline' capacitor: http://localhost:* https://localhost:* https://cdn.onesignal.com https://api.onesignal.com https://onesignal.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://onesignal.com https://cdn.onesignal.com",
-      "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data: blob: https:",
-      "media-src 'self' blob: https://*.supabase.co https://*.supabase.in",
-      process.env.NODE_ENV === 'development'
-        ? "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br ws://localhost:* ws://127.0.0.1:* https://*.onesignal.com https://script.google.com https://*.googleusercontent.com https://www.googleapis.com https://*.google.com"
-        : "connect-src 'self' https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br https://*.onesignal.com https://script.google.com https://*.googleusercontent.com https://www.googleapis.com https://*.google.com",
-      "worker-src 'self' blob: https://cdn.onesignal.com https://onesignal.com",
-      "frame-src 'self' https://onesignal.com",
-      "frame-ancestors 'none'",
+      "font-src 'self' data: https://fonts.gstatic.com",
+      "img-src 'self' data: blob: https: capacitor:",
+      "media-src 'self' blob: https://*.supabase.co https://*.supabase.in capacitor:",
+      "connect-src 'self' capacitor: http://localhost:* https://localhost:* https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br https://*.onesignal.com https://script.google.com https://*.googleusercontent.com https://www.googleapis.com https://*.google.com",
+      "worker-src 'self' blob: capacitor: https://cdn.onesignal.com https://onesignal.com",
+      "frame-src 'self' capacitor: https://onesignal.com",
+      "frame-ancestors 'self' capacitor: http://localhost:* https://localhost:*",
     ].join('; '),
   },
 ];

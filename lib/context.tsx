@@ -20,12 +20,14 @@ export const DEFAULT_MODULES: Record<string, boolean> = {
   almoxarifado: true,
 }
 
-// Async setting loader to support Capacitor Preferences
+// Async setting loader to support Capacitor Preferences with 300ms timeout protection
 export async function loadSettingAsync<T>(key: string, fallback: T): Promise<T> {
   if (typeof window === 'undefined') return fallback
   try {
     if (Capacitor.isNativePlatform()) {
-      const { value } = await Preferences.get({ key })
+      const getPromise = Preferences.get({ key })
+      const timeoutPromise = new Promise<{ value: string | null }>(res => setTimeout(() => res({ value: null }), 300))
+      const { value } = await Promise.race([getPromise, timeoutPromise])
       if (value !== null) return JSON.parse(value) as T
     }
     const v = window.localStorage.getItem(key)
@@ -130,47 +132,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false)
   const [loadingPath, setLoadingPathState] = useState<string | null>(null)
 
-  // Hydrate from localStorage after mount
+  // Hydrate from localStorage after mount with guaranteed timeout safety
   useEffect(() => {
+    let isMounted = true
+    const fallbackTimer = setTimeout(() => {
+      if (isMounted) setHydrated(true)
+    }, 800)
+
     async function hydrate() {
-      const savedTheme = await loadSettingAsync<Theme>('edu-theme', 'light')
-      const savedSidebarTheme = await loadSettingAsync<Theme>('edu-sidebar-theme', 'dark')
-      const savedModules = await loadSettingAsync<Record<string, boolean>>('edu-active-modules', DEFAULT_MODULES)
-      const savedUnit = await loadSettingAsync<string>('edu-active-unit', 'Unidade Centro')
-      const savedPerfil = await loadSettingAsync<string>('edu-current-perfil', 'Diretor Geral')
-      const savedUser = await loadSettingAsync<CurrentUser | null>('edu-current-user', null)
+      try {
+        const savedTheme = await loadSettingAsync<Theme>('edu-theme', 'light')
+        const savedSidebarTheme = await loadSettingAsync<Theme>('edu-sidebar-theme', 'dark')
+        const savedModules = await loadSettingAsync<Record<string, boolean>>('edu-active-modules', DEFAULT_MODULES)
+        const savedUnit = await loadSettingAsync<string>('edu-active-unit', 'Unidade Centro')
+        const savedPerfil = await loadSettingAsync<string>('edu-current-perfil', 'Diretor Geral')
+        const savedUser = await loadSettingAsync<CurrentUser | null>('edu-current-user', null)
 
-      setThemeState(savedTheme)
-      setSidebarThemeState(savedSidebarTheme)
-      setActiveModulesState({ ...DEFAULT_MODULES, ...savedModules })
-      setActiveUnitState(savedUnit)
-      // Only hydrate user if explicitly saved — never default to a perfil
-      if (savedUser) {
-        setCurrentUserPerfilState(savedPerfil || savedUser.perfil || '')
-        
-        // Tentar carregar a foto de chaves isoladas (mais persistente)
-        try {
-          const isolatedPhoto = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.id}`, null)
-          const extraData = await loadSettingAsync<any>(`edu-profile-extra-${savedUser.id}`, null)
-          
-          if (isolatedPhoto) {
-            savedUser.foto = isolatedPhoto
-          } else if (extraData && extraData.foto) {
-            savedUser.foto = extraData.foto
-          }
-        } catch (e) {}
+        if (!isMounted) return
 
-        setCurrentUserState(savedUser)
-      } else {
-        // No saved user = logged out — clear any stale perfil
-        setCurrentUserPerfilState('')
-        removeSettingAsync('edu-current-perfil')
+        setThemeState(savedTheme)
+        setSidebarThemeState(savedSidebarTheme)
+        setActiveModulesState({ ...DEFAULT_MODULES, ...savedModules })
+        setActiveUnitState(savedUnit)
+
+        if (savedUser) {
+          setCurrentUserPerfilState(savedPerfil || savedUser.perfil || '')
+          try {
+            const isolatedPhoto = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.id}`, null)
+            const extraData = await loadSettingAsync<any>(`edu-profile-extra-${savedUser.id}`, null)
+            if (isolatedPhoto) savedUser.foto = isolatedPhoto
+            else if (extraData && extraData.foto) savedUser.foto = extraData.foto
+          } catch (e) {}
+          setCurrentUserState(savedUser)
+        } else {
+          setCurrentUserPerfilState('')
+          removeSettingAsync('edu-current-perfil')
+        }
+        document.documentElement.setAttribute('data-theme', savedTheme)
+      } catch (err) {
+        console.error('[Context Hydration Error]', err)
+      } finally {
+        if (isMounted) {
+          clearTimeout(fallbackTimer)
+          setHydrated(true)
+        }
       }
-      document.documentElement.setAttribute('data-theme', savedTheme)
-      setHydrated(true)
     }
 
     hydrate()
+    return () => {
+      isMounted = false
+      clearTimeout(fallbackTimer)
+    }
   }, [])
 
   const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), [])
