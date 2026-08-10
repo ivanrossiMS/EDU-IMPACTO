@@ -304,10 +304,12 @@ def processar_fila_pendencias_erp(cats_conectadas):
                         foto_enviada = False
                         if foto and isinstance(foto, str) and len(foto) > 50:
                             try:
-                                import base64
+                                import base64, time
                                 clean_b64 = foto.split(',')[-1] if ',' in foto else foto
                                 img_bytes = base64.b64decode(clean_b64)
-                                req = urllib.request.Request(f"{base_url}/user_set_image.fcgi?user_id={numeric_id}&session={session}", data=img_bytes, method="POST")
+                                now_ts = int(time.time())
+                                req_url = f"{base_url}/user_set_image.fcgi?user_id={numeric_id}&session={session}&timestamp={now_ts}"
+                                req = urllib.request.Request(req_url, data=img_bytes, method="POST")
                                 req.add_header("Content-Type", "application/octet-stream")
                                 if session:
                                     req.add_header("Cookie", f"session={session}")
@@ -319,8 +321,10 @@ def processar_fila_pendencias_erp(cats_conectadas):
                             except Exception as fe:
                                 # Tenta fallback JSON
                                 try:
+                                    import time
+                                    now_ts = int(time.time())
                                     clean_b64 = foto.split(',')[-1] if ',' in foto else foto
-                                    post_json(f"{base_url}/set_user_image.fcgi?session={session}",
+                                    post_json(f"{base_url}/set_user_image.fcgi?session={session}&timestamp={now_ts}",
                                               {"user_id": numeric_id, "image": clean_b64},
                                               cookie=session)
                                     foto_enviada = True
