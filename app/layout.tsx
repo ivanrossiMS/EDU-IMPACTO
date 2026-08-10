@@ -27,9 +27,8 @@ import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoad
 import { KeyboardProvider } from '@/components/providers/KeyboardProvider'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  
   return (
-    <html lang="pt-BR" suppressHydrationWarning data-scroll-behavior="smooth">
+    <html lang="pt-BR" suppressHydrationWarning data-scroll-behavior="smooth" style={{ backgroundColor: '#0A0F24', color: '#ffffff' }}>
       <head>
         {/* Preconnect para carregamento não-bloqueante das fontes */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -39,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body style={{ backgroundColor: '#0A0F24', color: '#ffffff', minHeight: '100vh', margin: 0 }}>
         <Suspense fallback={null}>
           <GlobalNavigationLoader />
         </Suspense>

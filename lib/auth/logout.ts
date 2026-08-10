@@ -61,24 +61,9 @@ export async function performLogout() {
     }
   }
 
-  // 6. Call server API to expire HTTP-only cookies
-  try {
-    await fetch('/api/auth/logout', { 
-      method: 'POST', 
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
-      }
-    });
-    console.log('[Auth Logout] Server logout endpoint called.');
-  } catch (error) {
-    console.error('[Auth Logout] Failed to call logout endpoint:', error);
-  }
-
-  // 7. Atomic redirect to /login
+  // 6. Direct browser navigation to GET /api/auth/logout which clears HTTP-Only cookies and 302-redirects to /login
   if (typeof window !== 'undefined') {
-    window.location.href = '/login';
+    window.location.href = '/api/auth/logout';
   }
 }
 
