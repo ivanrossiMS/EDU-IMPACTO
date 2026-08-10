@@ -50,6 +50,7 @@ const PUBLIC_PATHS = [
 ]
 
 function isPublicPath(pathname: string): boolean {
+  if (pathname === '/') return true
   return PUBLIC_PATHS.some(p => pathname.startsWith(p))
 }
 
@@ -104,7 +105,7 @@ export async function middleware(request: NextRequest) {
   // Utilizando getUser() aqui também para evitar o aviso de segurança do Supabase
   const { data: { user }, error } = await supabase.auth.getUser()
 
-  // ── Sem sessão → exibe página de login ──────────────────────────────────
+  // ── Sem sessão → redireciona para login ──────────────────────────────────
   if (!user) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json(
@@ -112,12 +113,6 @@ export async function middleware(request: NextRequest) {
         { status: 401 }
       )
     }
-    // Evita HTTP 302 Redirect no arranque da rota raiz '/' para prevenir
-    // o erro NSURLErrorCancelled (-999) do iOS WKWebView quando deslogado.
-    if (pathname === '/') {
-      return NextResponse.rewrite(new URL('/login', request.url))
-    }
-
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', pathname)
     return NextResponse.redirect(loginUrl)
