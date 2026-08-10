@@ -222,13 +222,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveSetting('edu-current-perfil', user.perfil)
     } else {
       setCurrentUserState(null)
-      // Logout: wipe ALL user-related keys from localStorage
+      // Logout: wipe ALL user-related keys from localStorage & Capacitor Preferences
       const USER_KEYS = [
         'edu-current-user',
         'edu-current-perfil',
         'edu-user-passwords',  // legacy local passwords — nuke on every logout
       ]
       USER_KEYS.forEach(k => removeSettingAsync(k))
+      if (Capacitor.isNativePlatform()) {
+        Preferences.clear().catch(() => {})
+      }
       setCurrentUserPerfilState('')
     }
   }, [])

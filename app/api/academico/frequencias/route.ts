@@ -224,41 +224,53 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ ok: true, message: 'Todos os registros foram excluídos.' })
   }
   
-  if (id) {
-    const { error } = await supabase.from('frequencias').delete().eq('id', id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ ok: true })
-  }
+  let deleteError: any = null
 
   if (alunoId && dataStr) {
     const cleanDate = String(dataStr).split('T')[0]
-    const { error } = await supabase
+    const { error: err1 } = await supabase
       .from('frequencias')
       .delete()
       .eq('aluno_id', alunoId)
       .gte('data', `${cleanDate}T00:00:00`)
       .lte('data', `${cleanDate}T23:59:59`)
 
-    await supabase
+    const { error: err2 } = await supabase
       .from('frequencias')
       .delete()
       .eq('aluno_id', alunoId)
       .eq('data', cleanDate)
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    return NextResponse.json({ ok: true })
+    const { error: err3 } = await supabase
+      .from('frequencias')
+      .delete()
+      .eq('aluno_id', alunoId)
+      .like('data', `${cleanDate}%`)
+
+    if (err1 || err2 || err3) deleteError = err1 || err2 || err3
   }
 
-  return NextResponse.json({ error: 'id or (aluno_id and data) required' }, { status: 400 })
+  if (id) {
+    const { error: errId } = await supabase.from('frequencias').delete().eq('id', id)
+    if (errId) deleteError = errId
+  }
+
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 400 })
+  }
+
+  return NextResponse.json({ ok: true })
 }
 
 function buildRow(f: any, userName?: string, userId?: string) {
-  const { id, alunoId, turmaId, data, presente, justificativa, anoLetivo, registradoPor, origem, horaRegistro, notifyPush, ...rest } = f
+  const { id, alunoId, turmaId, data, presente, justificativa, anoLetivo, registradoPor, origem, horaRegistro, notifyPush, dados, ...rest } = f
   const currentYear = new Date().getFullYear().toString()
   const year = anoLetivo || currentYear
   const diarioId = `DIARIO-${turmaId}-${year}`
   
-  let finalRegistradoPor = registradoPor || rest.registradoPor
+  const mergedExtra = { ...(dados || {}), ...rest }
+
+  let finalRegistradoPor = registradoPor || mergedExtra.registradoPor
   const isCatraca = origem === 'catraca' || String(finalRegistradoPor || '').toLowerCase().includes('catraca') || String(finalRegistradoPor || '').toLowerCase().includes('idface')
   const isTotem = origem === 'totem' || String(finalRegistradoPor || '').toLowerCase().includes('totem')
 
@@ -271,21 +283,21 @@ function buildRow(f: any, userName?: string, userId?: string) {
   }
 
   const row = {
-    id: id || `FREQ-${alunoId}-${data}`,
-    aluno_id: alunoId || '',
-    turma_id: turmaId || '',
+    id: id || `FREQ-${alunoId || f.aluno_id}-${data}`,
+    aluno_id: alunoId || f.aluno_id || '',
+    turma_id: turmaId || f.turma_id || '',
     data: data || new Date().toISOString().split('T')[0],
     presente: presente !== undefined ? Boolean(presente) : true,
     justificativa: justificativa || '',
     dados: {
-      ...rest,
+      ...mergedExtra,
       diarioId,
       anoLetivo: year,
       registradoPor: finalRegistradoPor,
-      usuarioNome: userName || rest.usuarioNome || null,
-      usuarioId: userId || rest.usuarioId || null,
-      origem: origem || rest.origem || 'manual',
-      horaRegistro: horaRegistro || rest.horaRegistro || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      usuarioNome: userName || mergedExtra.usuarioNome || null,
+      usuarioId: userId || mergedExtra.usuarioId || null,
+      origem: origem || mergedExtra.origem || 'manual',
+      horaRegistro: horaRegistro || mergedExtra.horaRegistro || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     },
   }
 

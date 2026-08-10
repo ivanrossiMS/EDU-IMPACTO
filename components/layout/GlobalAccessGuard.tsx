@@ -404,6 +404,7 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
           <AnimatePresence>
             {showSplash && <ImpactoLoader key="global-loader" />}
           </AnimatePresence>
+          {children}
         </>
       )
     }
@@ -415,6 +416,7 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
         <AnimatePresence>
           {showSplash && <ImpactoLoader key="global-loader" />}
         </AnimatePresence>
+        {children}
       </>
     )
   }

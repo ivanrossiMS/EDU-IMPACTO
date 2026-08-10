@@ -47,6 +47,7 @@ export async function restoreSessionSecurely(supabase: SupabaseClient): Promise<
           return true; // Restauração iniciada com sucesso
         } else {
           console.error('[Auth] Error setting session from secure storage:', error);
+          await clearSessionSecurely();
         }
       }
     }

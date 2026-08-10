@@ -9,7 +9,7 @@ import {
   ArrowLeft, Save, Download, CheckCircle, BookOpen, ChevronRight, ChevronDown,
   AlertTriangle, Search, Calendar, BarChart2, Users, Printer, FileText, Check, X, Info,
   Filter, School, TrendingUp, AlertCircle, Shield, Tag, XCircle, MoreHorizontal, Sparkles, RefreshCw, User,
-  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace, LogOut, UserCheck, Plus, CheckCircle2, FileSpreadsheet
+  QrCode, Edit3, Clock, ShieldCheck, Cpu, ScanFace, LogOut, UserCheck, Plus, CheckCircle2, FileSpreadsheet, Loader2
 } from 'lucide-react'
 import { TableSkeleton } from '@/components/skeletons/TableSkeleton'
 import { PresStatus, getTurmaSchedule, calcularFrequenciaDia, getFirstPresentTempoIndex } from '@/lib/frequenciaEngine'
@@ -84,8 +84,13 @@ function getOrigemFrequenciaCompleta(
   saidaCalls?: any[],
   horarioEntradaState?: string,
   horarioSaidaState?: string,
-  responsavelSaidaState?: string
+  responsavelSaidaState?: string,
+  isStatusDash?: boolean,
+  isSaidaCleared?: boolean
 ): OrigemFrequenciaCompleta {
+  if (isStatusDash) {
+    return { entrada: null, saida: null }
+  }
   const targetId = String(alunoId).trim()
 
   // Evento de portaria (Catraca iDFace) para o aluno nesta data
@@ -232,7 +237,9 @@ function getOrigemFrequenciaCompleta(
   const horaSaidaFormatted = formatTimeFromIso(horaSaidaRaw) || (horaSaidaRaw ? String(horaSaidaRaw).slice(11, 16) : undefined)
   const respSaida = responsavelSaidaState || chamadaConfirmada?.guardianName || chamadaConfirmada?.responsavel || freqSaidaResp
 
-  if (horaSaidaFormatted || chamadaConfirmada || portariaEvSaida || (freqRecord && (freqSaidaHorario || freqSaidaResp))) {
+  if (isSaidaCleared) {
+    saida = null
+  } else if (horaSaidaFormatted || chamadaConfirmada || portariaEvSaida || (freqRecord && (freqSaidaHorario || freqSaidaResp))) {
     const isCatracaSaida = !!portariaEvSaida ||
                            freqSaidaOrigem === 'catraca' ||
                            freqSaidaOrigem === 'idface' ||
@@ -923,6 +930,7 @@ export default function FrequenciaPage() {
   const [dataSel, setDataSel] = useState(todayStr())
   const [buscaAluno, setBuscaAluno] = useState('')
   const [salvo, setSalvo] = useState(false)
+  const [salvando, setSalvando] = useState(false)
   const diasPeriodo = useMemo(() => [dataSel], [dataSel])
 
   const today = todayStr()
@@ -1234,6 +1242,8 @@ export default function FrequenciaPage() {
   }
 
   const handleSave = async () => {
+    if (salvando) return
+    setSalvando(true)
     const recordsToSave: any[] = []
     const deletePromises: Promise<any>[] = []
     const schedule = getTurmaSchedule(turmaObj)
@@ -1273,7 +1283,7 @@ export default function FrequenciaPage() {
               return copy
             })
 
-            const queryParam = existing?.id ? `id=${existing.id}` : `aluno_id=${a.id}&data=${dia}`
+            const queryParam = `id=${existing?.id || ''}&aluno_id=${a.id}&data=${dia}`
             deletePromises.push(fetch(`/api/academico/frequencias?${queryParam}`, { method: 'DELETE' }))
           }
           return
@@ -1365,13 +1375,15 @@ export default function FrequenciaPage() {
       }
 
       setSalvo(true)
-      refetchFreq()
+      if (refetchFreq) refetchFreq()
       if (refetchAllFreqs) refetchAllFreqs()
       setTimeout(() => {
         setSalvo(false)
       }, 1500)
     } catch (error: any) {
       alert('Erro na requisição: ' + error.message)
+    } finally {
+      setSalvando(false)
     }
   }
 
@@ -3985,7 +3997,7 @@ export default function FrequenciaPage() {
                 onMouseEnter={e => { if (!salvandoManual) e.currentTarget.style.transform = 'translateY(-1px)' }}
                 onMouseLeave={e => { if (!salvandoManual) e.currentTarget.style.transform = 'none' }}
               >
-                <Save size={16} />
+                {salvandoManual ? <Loader2 size={16} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={16} />}
                 <span>{salvandoManual ? 'Salvando Registros...' : 'Salvar Registros'}</span>
               </button>
             </div>
@@ -4809,12 +4821,39 @@ export default function FrequenciaPage() {
             <button 
               className="freq-detail-save-btn"
               onClick={handleSave}
-              style={{ height: '44px', padding: '0 24px', background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 700, fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)', transition: 'transform 0.2s' }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+              disabled={salvando}
+              style={{
+                height: '44px',
+                padding: '0 24px',
+                background: salvo 
+                  ? '#16a34a' 
+                  : salvando 
+                    ? '#93c5fd' 
+                    : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '10px',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: salvando ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: salvo ? '0 4px 6px -1px rgba(22, 163, 74, 0.2)' : '0 4px 6px -1px rgba(37, 99, 235, 0.2)',
+                transition: 'all 0.2s ease',
+                opacity: salvando ? 0.85 : 1
+              }}
+              onMouseEnter={e => { if (!salvando) e.currentTarget.style.transform = 'translateY(-2px)' }}
+              onMouseLeave={e => { if (!salvando) e.currentTarget.style.transform = 'none' }}
             >
-              {salvo ? <CheckCircle size={18} /> : <Save size={18} />}
-              {salvo ? 'Salvo com Sucesso!' : 'Salvar Registros'}
+              {salvando ? (
+                <Loader2 size={18} className="animate-spin" style={{ animation: 'spin 1s linear infinite' }} />
+              ) : salvo ? (
+                <CheckCircle size={18} />
+              ) : (
+                <Save size={18} />
+              )}
+              {salvando ? 'Salvando Registros...' : salvo ? 'Salvo com Sucesso!' : 'Salvar Registros'}
             </button>
           </div>
         </div>
@@ -4957,6 +4996,10 @@ export default function FrequenciaPage() {
                 })
 
                 const freqRecordDia = combinedFreqs?.find(f => String(f.aluno_id || f.alunoId) === String(aluno.id) && isSameDay(f.data, dataSel))
+                const status1 = getStatus(aluno.id, dataSel, '1')
+                const isStatusDash = status1 === '-'
+                const isSaidaCleared = horariosSaida[aluno.id] !== undefined && !horariosSaida[aluno.id]?.[dataSel]
+
                 const origemInfoCompleta = getOrigemFrequenciaCompleta(
                   aluno.id,
                   dataSel,
@@ -4965,7 +5008,9 @@ export default function FrequenciaPage() {
                   saidaCallsList,
                   horariosEntrada[aluno.id]?.[dataSel],
                   horariosSaida[aluno.id]?.[dataSel],
-                  responsaveisSaida[aluno.id]?.[dataSel]
+                  responsaveisSaida[aluno.id]?.[dataSel],
+                  isStatusDash,
+                  isSaidaCleared
                 )
 
                 return (
