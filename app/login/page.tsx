@@ -29,9 +29,11 @@ type FoundUser  = { id: string; nome: string; email: string; cargo: string; perf
 // ── Senha storage ─────────────────────────────────────────────────────────────
 const PASS_KEY = 'edu-user-passwords'
 function getSenhas(): Record<string, string> {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return {}
   try { return JSON.parse(localStorage.getItem(PASS_KEY) ?? '{}') } catch { return {} }
 }
 function setSenha(uid: string, senha: string) {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return
   const all = getSenhas(); all[uid] = senha; localStorage.setItem(PASS_KEY, JSON.stringify(all))
 }
 function verificarSenha(uid: string, senha: string): boolean { return getSenhas()[uid] === senha }
@@ -213,7 +215,15 @@ export default function LoginPage() {
               return
             }
           } catch (err) {
-            console.warn('[Login] Erro ao validar sessão no servidor:', err)
+            console.warn('[Login] Erro ao validar sessão no servidor, forçando formulário de login:', err)
+            await removeSettingAsync('edu-current-user')
+            await removeSettingAsync('edu-current-perfil')
+            if (Capacitor.isNativePlatform()) {
+              await Preferences.clear().catch(() => {})
+            }
+            setCurrentUser(null)
+            setStep('login')
+            return
           }
 
           try {
@@ -857,7 +867,7 @@ export default function LoginPage() {
           </div>
         ) : (
           <>
-            {profileData && !profileData.bloqueadoGestaoEscolar && (
+            {(!profileData || !profileData.bloqueadoGestaoEscolar) && (
               <button type="button" 
                 onClick={() => {
                   setLoadingSystem('gestao-escolar');
@@ -878,7 +888,7 @@ export default function LoginPage() {
               </button>
             )}
 
-            {profileData && !profileData.bloqueadoAgendaDigital && (
+            {(!profileData || !profileData.bloqueadoAgendaDigital) && (
               <button type="button" 
                 onClick={() => {
                   setLoadingSystem('agenda-digital');
@@ -902,7 +912,7 @@ export default function LoginPage() {
               </button>
             )}
 
-            {profileData && !profileData.bloqueadoGestaoPessoas && (
+            {(!profileData || !profileData.bloqueadoGestaoPessoas) && (
               <button type="button" 
                 onClick={() => {
                   setLoadingSystem('gestao-pessoas');
@@ -921,7 +931,7 @@ export default function LoginPage() {
               </button>
             )}
 
-            {profileData && !profileData.bloqueadoSimulados && (
+            {(!profileData || !profileData.bloqueadoSimulados) && (
               <button type="button" 
                 onClick={() => {
                   setLoadingSystem('simulados');
