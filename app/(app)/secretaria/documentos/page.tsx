@@ -17,7 +17,7 @@ const quillModules = {
     ['bold', 'italic', 'underline', 'strike'],
     [{ 'align': [] }],
     [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-    [{ 'lineheight': [false, '1.0', '1.2', '1.5', '2.0', '2.5', '3.0'] }],
+    [{ 'lineheight': ['1.0', '1.2', false, '2.0', '2.5', '3.0'] }],
     ['clean']
   ],
   clipboard: {
@@ -445,21 +445,65 @@ export default function SecretariaDocumentosPage() {
           font-size: 14px;
           word-break: break-word;
           overflow-wrap: anywhere;
+          color: #000000 !important;
+          background: #ffffff !important;
         }
         
+        .ql-editor p,
+        .ql-editor span,
+        .ql-editor div,
+        .ql-editor h1,
+        .ql-editor h2,
+        .ql-editor h3,
+        .ql-editor h4,
+        .ql-editor h5,
+        .ql-editor h6,
+        .ql-editor li,
+        .ql-editor strong,
+        .ql-editor em,
+        .ql-editor u,
+        .ql-editor s {
+          color: #000000 !important;
+        }
+
         .ql-editor p {
           margin-bottom: 0.5em;
-          line-height: 1.0;
+          line-height: 1.5;
+        }
+
+        .ql-editor.ql-blank::before {
+          color: #94a3b8 !important;
+          font-style: italic;
         }
         
         .ql-toolbar.ql-snow {
           border: none !important;
           border-bottom: 1px solid #e2e8f0 !important;
           background: #f8fafc;
+          color: #0f172a !important;
+        }
+
+        .ql-snow .ql-stroke {
+          stroke: #475569 !important;
+        }
+
+        .ql-snow .ql-fill {
+          fill: #475569 !important;
+        }
+
+        .ql-snow .ql-picker {
+          color: #334155 !important;
+        }
+
+        .ql-snow .ql-picker-options {
+          background-color: #ffffff !important;
+          color: #0f172a !important;
         }
         
         .ql-container.ql-snow {
           border: none !important;
+          background: #ffffff !important;
+          color: #000000 !important;
         }
 
         /* Quill Custom Sizes Labels */
@@ -504,7 +548,7 @@ export default function SecretariaDocumentosPage() {
         /* Quill Custom Line Heights Picker */
         .ql-snow .ql-picker.ql-lineheight { width: 125px; }
         .ql-snow .ql-picker.ql-lineheight .ql-picker-label::before,
-        .ql-snow .ql-picker.ql-lineheight .ql-picker-item::before { content: 'Espaço 1.0'; }
+        .ql-snow .ql-picker.ql-lineheight .ql-picker-item::before { content: 'Espaço 1.5'; }
         
         .ql-snow .ql-picker.ql-lineheight .ql-picker-label[data-value="1.0"]::before,
         .ql-snow .ql-picker.ql-lineheight .ql-picker-item[data-value="1.0"]::before { content: 'Espaço 1.0'; }
