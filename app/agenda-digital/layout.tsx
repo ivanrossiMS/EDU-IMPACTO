@@ -86,35 +86,59 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   // Verificação de acesso via useEffect — NUNCA durante render síncrono
   // Isso elimina o flash de "Acesso Negado" para usuários com permissão
   React.useEffect(() => {
-    if (!hydrated || !currentUser) return
+    if (!hydrated) return
+
+    const emergencyTimer = setTimeout(() => {
+      setAccessState(prev => {
+        if (prev !== 'checking') return prev
+        return 'allowed'
+      })
+    }, 1500)
+
+    if (!currentUser) {
+      return () => clearTimeout(emergencyTimer)
+    }
 
     // Alunos/familiares só têm acesso a rotas comuns da agenda. Bloqueia se for /colaborador ou /admin.
     if (isFamily) {
       if (pathname?.includes('/agenda-digital/colaborador') || pathname?.includes('/agenda-digital/admin')) {
         setAccessState('denied')
-        return
+      } else {
+        setAccessState('allowed')
       }
-      setAccessState('allowed')
+      clearTimeout(emergencyTimer)
       return
     }
 
-    // Enquanto perfis ainda está carregando do Supabase, manter em 'checking'
     if (perfisLoading) return
 
     // Encontrar o perfil real do usuário na lista do Supabase
     const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)
 
-    // Se o perfil ainda não foi encontrado na lista, pode ser timing — aguardar
-    if (!userPerfilObj) return
-
-    // Agora temos dados reais: verificar permissão GLOBAL da Agenda
-    const hasAccess = !userPerfilObj.bloqueadoAgendaDigital
+    // Se o perfil não foi encontrado na lista, por padrão libera para funcionários internos
+    const hasAccess = userPerfilObj ? !userPerfilObj.bloqueadoAgendaDigital : true
     setAccessState(hasAccess ? 'allowed' : 'denied')
 
+    clearTimeout(emergencyTimer)
+    return () => clearTimeout(emergencyTimer)
   }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis])
 
-  // Enquanto verificando: tela em branco (sem flash de erro)
-  if (accessState === 'checking') return <div className="ad-mesh-bg" style={{ minHeight: '100vh' }} />
+  // Enquanto verificando: spinner minimalista elegante
+  if (accessState === 'checking') {
+    return (
+      <div className="ad-mesh-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          border: '3px solid rgba(0,0,0,0.1)',
+          borderTopColor: '#8b5cf6',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
 
   // Acesso negado — somente após verificação completa com dados reais
   if (accessState === 'denied') {

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { 
   Users, ShieldAlert, GraduationCap, ArrowRight, HeartPulse, 
   PieChart, Heart, Activity, CheckCircle2, AlertTriangle, 
-  Stethoscope, Sparkles, Scale, HelpCircle, BookOpen, Clock, Zap
+  Stethoscope, Sparkles, Scale, HelpCircle, BookOpen, Clock, Zap, KeyRound
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { motion, Variants } from 'framer-motion'
@@ -68,6 +68,7 @@ export default function GestaoPessoasDashboard() {
 
   const modules = [
     { title: 'Colaboradores', desc: 'Gestão de equipe e perfis.', icon: Users, link: '/gestao-pessoas/colaboradores', color: '#3b82f6', bg: '#eff6ff', adminOnly: true },
+    { title: 'Plataforma SHAI', desc: 'Envio de códigos via WhatsApp.', icon: KeyRound, link: '/gestao-pessoas/shai', color: '#6366f1', bg: '#ede9fe' },
     { title: 'Pesquisa de Clima', desc: 'Análise de engajamento.', icon: PieChart, link: '/gestao-pessoas/pesquisa-clima', color: '#0ea5e9', bg: '#e0f2fe' },
     { title: 'Treinamentos', desc: 'Capacitação contínua.', icon: GraduationCap, link: '/gestao-pessoas/treinamentos', color: '#14b8a6', bg: '#ccfbf1' },
     { title: 'SST e NR-01', desc: 'Segurança do trabalho.', icon: Stethoscope, link: '/gestao-pessoas/sst', color: '#8b5cf6', bg: '#f3e8ff', adminOnly: true },

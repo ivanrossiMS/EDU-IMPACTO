@@ -118,6 +118,16 @@ export function useSupabaseCollection<T>(
     return () => { isMounted.current = false }
   }, [])
 
+  // Safety timeout: garante que o flag loading nunca fique preso como true por mais de 3 segundos
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        if (isMounted.current) setLoading(false)
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [loading])
+
   // ── Fetch with SWR ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (options?.enabled === false) {

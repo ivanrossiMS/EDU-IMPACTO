@@ -47,33 +47,60 @@ function SimuladosLayoutInner({ children }: { children: React.ReactNode }) {
   }, [pathname, setLoadingPath])
 
   React.useEffect(() => {
-    if (!hydrated || !currentUser) return
+    if (!hydrated) return
+
+    // Timeout de emergência: se após 1.5s o acesso não foi resolvido, libera para funcionários internos
+    const emergencyTimer = setTimeout(() => {
+      setAccessState(prev => {
+        if (prev !== 'checking') return prev
+        const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
+        return isFamily ? 'denied' : 'allowed'
+      })
+    }, 1500)
+
+    if (!currentUser) {
+      return () => clearTimeout(emergencyTimer)
+    }
 
     // Alunos e Familiares não têm acesso ao painel admin de simulados
     const isFamily = currentUser.perfil === 'Família' || currentUser.cargo === 'Aluno' || currentUser.cargo === 'Responsável'
     if (isFamily) {
       setAccessState('denied')
+      clearTimeout(emergencyTimer)
       return
     }
 
     if (perfisLoading) return
 
     const userPerfilObj = (perfis || []).find(p => p.nome === currentUser.perfil)
-    if (!userPerfilObj) {
-      // Falha silenciosa ou admin mestre
-      if (currentUser.cargo === 'Administrador Master') {
-        setAccessState('allowed')
-        return
-      }
-      return
-    }
-
-    const hasAccess = !userPerfilObj.bloqueadoSimulados
+    const hasAccess = userPerfilObj ? !userPerfilObj.bloqueadoSimulados : true
     setAccessState(hasAccess ? 'allowed' : 'denied')
 
+    clearTimeout(emergencyTimer)
+    return () => clearTimeout(emergencyTimer)
   }, [hydrated, currentUser, pathname, perfisLoading, perfis])
 
-  if (accessState === 'checking') return <div style={{ minHeight: '100vh', background: 'hsl(var(--bg-app))' }} />
+  if (accessState === 'checking') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#0A0F24',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        <div style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          border: '3px solid rgba(255,255,255,0.1)',
+          borderTopColor: '#f43f5e',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
 
   if (accessState === 'denied') {
     return (

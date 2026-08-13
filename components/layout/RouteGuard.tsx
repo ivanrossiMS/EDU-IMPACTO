@@ -290,6 +290,7 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const { perfis, perfisLoading } = useData()
   const { currentUserPerfil, hydrated } = useApp()
   const [showDenied, setShowDenied] = useState(false)
+  const [isPerfisLoadingTimeout, setIsPerfisLoadingTimeout] = useState(false)
 
   useEffect(() => {
     setShowDenied(false)
@@ -299,11 +300,22 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer)
   }, [currentUserPerfil, pathname])
 
+  // Safety timeout: force continuation after 1.5s even if perfis is taking long
+  useEffect(() => {
+    if (perfisLoading) {
+      const timer = setTimeout(() => {
+        setIsPerfisLoadingTimeout(true)
+      }, 1500)
+      return () => clearTimeout(timer)
+    } else {
+      setIsPerfisLoadingTimeout(false)
+    }
+  }, [perfisLoading])
+
   // ── Wait for localStorage hydration ───────────────────────────────────────
   // Before hydration, currentUserPerfil = 'Diretor Geral' (false default).
   // We MUST wait to avoid incorrectly granting/denying access.
-  // Wait for perfisLoading to ensure custom role definitions are loaded before evaluating access.
-  if (!hydrated || perfisLoading) {
+  if (!hydrated || (perfisLoading && !isPerfisLoadingTimeout)) {
     return (
       <div style={{
         position: 'fixed', inset: 0, zIndex: 9998,
