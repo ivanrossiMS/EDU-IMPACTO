@@ -862,8 +862,8 @@ export default function PedidosLivrosPage() {
                       {agrupamento === 'turma' ? '🏫' : agrupamento === 'evento' ? '📖' : '🏛️'}
                     </span>
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: 14 }}>{chave}</div>
-                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))' }}>{chave}</div>
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
                         {uniqueAlunosCount} aluno(s) · {gsChave.length} materia{gsChave.length === 1 ? 'l' : 'is'} · {feitosChave}/{gsChave.length} feitos
                       </div>
                     </div>
@@ -971,9 +971,9 @@ export default function PedidosLivrosPage() {
                                             {g.alunoNome.charAt(0)}
                                           </div>
                                           <div>
-                                            <div style={{ fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-foreground))' }}>{g.alunoNome}</div>
-                                            <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', gap: 4, alignItems: 'center' }}>
-                                              <Layers size={10} /> {g.turma} • {g.segmento}
+                                            <div style={{ fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-primary))' }}>{g.alunoNome}</div>
+                                            <div style={{ fontSize: 11, color: '#334155', fontWeight: 600, display: 'flex', gap: 4, alignItems: 'center' }}>
+                                              <Layers size={11} style={{ color: '#475569' }} /> {g.turma} • {g.segmento}
                                             </div>
                                           </div>
                                         </div>

@@ -25,6 +25,7 @@
 
   /* Text */
   --text-primary: 220 15% 95%;
+  --text-main: 220 15% 95%;
   --text-secondary: 220 12% 70%;
   --text-muted: 220 10% 50%;
   --text-disabled: 220 8% 35%;
@@ -78,6 +79,7 @@
 
   /* Text */
   --text-primary: 220 25% 10%;
+  --text-main: 220 25% 10%;
   --text-secondary: 220 15% 30%;
   --text-muted: 220 10% 50%;
   --text-disabled: 220 8% 70%;
@@ -454,6 +456,11 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
 
 .form-input::placeholder { color: hsl(var(--text-muted)); }
 .form-input:focus { border-color: hsl(var(--brand-primary)); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); outline: none; }
+
+select option {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
 
 .form-label {
   display: block;
