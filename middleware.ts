@@ -155,6 +155,7 @@ export async function middleware(request: NextRequest) {
       '/api/responsaveis',
       '/api/user-photo',
       '/api/user-photo/extra',
+      '/api/isaac',        // ← Isaac Escola: financeiro da Agenda Digital
       '/favicon.ico'
     ]
 

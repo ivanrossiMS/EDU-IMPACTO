@@ -130,6 +130,7 @@ function StudentCard({
   const btnRef = useRef<HTMLDivElement>(null)
 
   const isProibido  = aut?.proibido === true
+  const isInativo   = aluno?.inativo === true || aut?.inativo === true || String(aluno?.status || aluno?.dados?.status || '').trim().toLowerCase() === 'inativo'
   const diaOk       = isDiaPermitido(aut?.diasSemana || [])
   const alreadyCalled = activeCalls.some(c =>
     c.studentId === aluno.id && (c.status === 'waiting' || c.status === 'called')
@@ -138,15 +139,15 @@ function StudentCard({
     c.studentId === aluno.id && c.status === 'confirmed'
   )
   const [recalling, setRecalling] = useState(false)
-  // Card is blocked only for real restrictions, or if already withdrawn
-  const blocked = isProibido || !diaOk || alreadyConfirmed
+  // Card is blocked if prohibited, inactive, day restricted, or already withdrawn
+  const blocked = isProibido || isInativo || !diaOk || alreadyConfirmed
 
   const initials = (aluno.nome || '?').split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
   const foto     = aluno.foto
 
-  // Color palette by state
-  const accent = isProibido ? '#ef4444' : alreadyConfirmed ? '#10b981' : alreadyCalled ? '#f59e0b' : '#06b6d4'
-  const accentDim = isProibido ? 'rgba(239,68,68,0.15)' : alreadyConfirmed ? 'rgba(16,185,129,0.12)' : alreadyCalled ? 'rgba(245,158,11,0.12)' : 'rgba(6,182,212,0.12)'
+  // Color palette by state (red for prohibited OR inactive)
+  const accent = (isProibido || isInativo) ? '#ef4444' : alreadyConfirmed ? '#10b981' : alreadyCalled ? '#f59e0b' : '#06b6d4'
+  const accentDim = (isProibido || isInativo) ? 'rgba(239,68,68,0.15)' : alreadyConfirmed ? 'rgba(16,185,129,0.12)' : alreadyCalled ? 'rgba(245,158,11,0.12)' : 'rgba(6,182,212,0.12)'
 
   const handleRecall = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -180,8 +181,8 @@ function StudentCard({
         animationDelay: `${index * 90}ms`,
         borderRadius: 24,
         overflow: 'hidden',
-        border: `2px solid ${isProibido ? 'rgba(239,68,68,0.5)' : alreadyConfirmed ? 'rgba(16,185,129,0.5)' : alreadyCalled ? 'rgba(245,158,11,0.5)' : 'rgba(6,182,212,0.35)'}`,
-        background: isProibido ? 'rgba(239,68,68,0.04)' : '#0f1c2e',
+        border: `2px solid ${(isProibido || isInativo) ? 'rgba(239,68,68,0.7)' : alreadyConfirmed ? 'rgba(16,185,129,0.5)' : alreadyCalled ? 'rgba(245,158,11,0.5)' : 'rgba(6,182,212,0.35)'}`,
+        background: (isProibido || isInativo) ? 'rgba(239,68,68,0.06)' : '#0f1c2e',
         boxShadow: blocked ? 'none' : `0 8px 48px ${accent}20, 0 2px 12px rgba(0,0,0,0.4)`,
         cursor: blocked ? 'not-allowed' : 'pointer',
         display: 'flex', flexDirection: 'column',
@@ -234,7 +235,7 @@ function StudentCard({
           padding: '5px 12px', borderRadius: 100,
           fontSize: 10, fontWeight: 900, letterSpacing: '0.06em',
           backdropFilter: 'blur(8px)',
-          background: isProibido
+          background: (isProibido || isInativo)
             ? 'rgba(239,68,68,0.9)'
             : alreadyConfirmed
               ? 'rgba(16,185,129,0.9)'
@@ -245,13 +246,15 @@ function StudentCard({
           display: 'flex', alignItems: 'center', gap: 5,
           boxShadow: `0 2px 12px ${accent}50`,
         }}>
-          {isProibido
-            ? <><ShieldOff size={10}/> BLOQUEADO</>
-            : alreadyConfirmed
-              ? <><CheckCircle2 size={10}/> JÁ RETIRADO</>
-              : alreadyCalled
-                ? <><Clock size={10}/> EM CHAMADA</>
-                : <><CheckCircle2 size={10}/> AUTORIZADO</>}
+          {isInativo
+            ? <><ShieldOff size={10}/> ALUNO INATIVO</>
+            : isProibido
+              ? <><ShieldOff size={10}/> BLOQUEADO</>
+              : alreadyConfirmed
+                ? <><CheckCircle2 size={10}/> JÁ RETIRADO</>
+                : alreadyCalled
+                  ? <><Clock size={10}/> EM CHAMADA</>
+                  : <><CheckCircle2 size={10}/> AUTORIZADO</>}
         </div>
 
         {/* Turma chip top-left */}
@@ -294,17 +297,22 @@ function StudentCard({
       }}>
         {/* Left info */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 }}>
-          {isProibido && (
+          {isInativo && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#f87171', fontSize: 12, fontWeight: 800 }}>
+              <ShieldOff size={12}/> Aluno inativo no sistema
+            </div>
+          )}
+          {!isInativo && isProibido && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#f87171', fontSize: 12, fontWeight: 800 }}>
               <ShieldOff size={12}/> Proibido de retirar este aluno
             </div>
           )}
-          {!isProibido && !diaOk && (
+          {!isInativo && !isProibido && !diaOk && (
             <div style={{ fontSize: 12, color: '#f59e0b', fontWeight: 700 }}>
               ⚠ Permitido apenas: {(aut?.diasSemana||[]).join(', ')}
             </div>
           )}
-          {alreadyCalled && !isProibido && diaOk && (
+          {alreadyCalled && !isInativo && !isProibido && diaOk && (
             <div style={{ fontSize: 12, color: '#f59e0b', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
               <Clock size={12}/> {recalling ? 'Chamando novamente...' : 'Aguardando na portaria'}
             </div>
@@ -316,8 +324,8 @@ function StudentCard({
           )}
         </div>
 
-        {/* CTA button — Chamar / Chamar Novamente / Bloqueado */}
-        {alreadyCalled && !isProibido && diaOk ? (
+        {/* CTA button — Chamar / Chamar Novamente / Bloqueado / Inativo */}
+        {alreadyCalled && !isInativo && !isProibido && diaOk ? (
           <button
             onClick={handleRecall}
             disabled={recalling}
@@ -338,23 +346,30 @@ function StudentCard({
         <div style={{
           height: 54, padding: '0 18px', borderRadius: 16, flexShrink: 0,
           background: blocked
-            ? 'rgba(255,255,255,0.04)'
+            ? 'rgba(239,68,68,0.12)'
             : `linear-gradient(135deg, #06b6d4, #6366f1)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           boxShadow: blocked ? 'none' : `0 6px 20px ${accent}45`,
-          border: blocked ? '1px solid rgba(255,255,255,0.06)' : 'none',
+          border: blocked ? '1px solid rgba(239,68,68,0.3)' : 'none',
           transition: 'all 0.2s',
         }}>
-          {isProibido
-            ? <ShieldOff size={22} color="#ef444480"/>
-            : alreadyConfirmed
-              ? <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: 800 }}>JÁ RETIRADO</span>
-              : (
+          {isInativo
+            ? (
                 <>
-                  <Megaphone size={20} color={blocked ? "rgba(255,255,255,0.4)" : "#fff"}/>
-                  <span style={{ color: blocked ? 'rgba(255,255,255,0.4)' : '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>CHAMAR ALUNO</span>
+                  <ShieldOff size={20} color="#f87171"/>
+                  <span style={{ color: '#f87171', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>INATIVO</span>
                 </>
               )
+            : isProibido
+              ? <ShieldOff size={22} color="#ef444480"/>
+              : alreadyConfirmed
+                ? <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13, fontWeight: 800 }}>JÁ RETIRADO</span>
+                : (
+                  <>
+                    <Megaphone size={20} color={blocked ? "rgba(255,255,255,0.4)" : "#fff"}/>
+                    <span style={{ color: blocked ? 'rgba(255,255,255,0.4)' : '#fff', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>CHAMAR ALUNO</span>
+                  </>
+                )
           }
         </div>
         )}
@@ -820,14 +835,7 @@ function PainelTabletContent() {
 
     for (const alunoCompleto of matchedStudents) {
       const st = String(alunoCompleto.status || alunoCompleto.dados?.status || 'ativo').trim().toLowerCase();
-      const isAtivo = st !== 'inativo';
-      if (!isAtivo) {
-        setShowInactiveAlert({ name: alunoCompleto.nome })
-        setTimeout(() => setShowInactiveAlert(null), 3000)
-        showToast('Aluno inativo.', false)
-        doBlockReset()
-        return
-      }
+      const isInativo = st === 'inativo';
 
       // Verificar se no JSON do aluno este responsável está marcado como proibido
       const autorizados: any[] = alunoCompleto.saude?.autorizados || []
@@ -845,6 +853,7 @@ function PainelTabletContent() {
         rfid: code,
         diasSemana: diasAcesso,
         proibido: resp.proibido || autInfo?.proibido || false,
+        inativo: isInativo,
         parentesco: gRole
       }
 
@@ -855,7 +864,7 @@ function PainelTabletContent() {
         blockAttempt(alunoCompleto.id, alunoCompleto.nome, alunoCompleto.turma, `rfid-${code}`, gName, code, 'proibido', prohibitionReason, foto)
       }
 
-      students.push({ ...alunoCompleto, _aut: autObj })
+      students.push({ ...alunoCompleto, inativo: isInativo, _aut: autObj })
     }
 
     // Se estiver proibido, bloqueia tudo imediatamente (prioridade máxima)
@@ -896,6 +905,10 @@ function PainelTabletContent() {
     setRfidStudents(students)
     setRfidCode(code)
     setMode('rfid')
+
+    if (students.some(s => s.inativo || s._aut?.inativo)) {
+      showToast('Atenção: Há aluno(s) inativo(s) vinculado(s).', false)
+    }
   }, [showToast, blockAttempt, doBlockReset])
 
   const handleRFID = useCallback(async (code: string) => {
@@ -918,6 +931,12 @@ function PainelTabletContent() {
 
   // ── Call student ───────────────────────────────────────────────────────────
   const handleCall = useCallback((a: any) => {
+    const isInativo = a.inativo === true || a._aut?.inativo === true || String(a.status || a.dados?.status || '').trim().toLowerCase() === 'inativo'
+    if (isInativo) {
+      showToast(`Aluno ${a.nome} está inativo no sistema e não pode ser chamado.`, false)
+      return
+    }
+
     const gId  = `rfid-${rfidCode}`
     const foto = a.foto && typeof a.foto === 'string' && a.foto.length > 10 ? a.foto : null
     const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
@@ -927,13 +946,14 @@ function PainelTabletContent() {
     showToast(`📣 ${a.nome} foi chamado(a)!`)
     rfidRef.current?.clear()
 
-    // Verificar se existem outros alunos vinculados a esta leitura de RFID que ainda não foram chamados
+    // Verificar se existem outros alunos vinculados a esta leitura de RFID que ainda não foram chamados (apenas ativos)
     const remaining = rfidStudents.filter(s => {
       if (s.id === a.id) return false
       const alreadyActive = activeCalls.some(c => c.studentId === s.id && (c.status === 'waiting' || c.status === 'called'))
       const isProibido = s._aut?.proibido === true
+      const sInativo = s.inativo === true || s._aut?.inativo === true || String(s.status || s.dados?.status || '').trim().toLowerCase() === 'inativo'
       const diaOk = isDiaPermitido(s._aut?.diasSemana || [])
-      return !alreadyActive && !isProibido && diaOk
+      return !alreadyActive && !isProibido && !sInativo && diaOk
     })
 
     if (remaining.length > 0) {
