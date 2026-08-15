@@ -14,57 +14,8 @@ import {
   Award
 } from 'lucide-react'
 
-export interface DeclaracaoIrpfData {
-  escola: {
-    razaoSocial: string
-    nomeFantasia: string
-    cnpj: string
-    endereco: string
-    cidadeUf: string
-    cep: string
-    telefone: string
-    email: string
-    site: string
-    segmento: string
-  }
-  responsavel: {
-    nome: string
-    cpf: string
-    email: string
-    telefone: string
-  }
-  aluno: {
-    id: string
-    nome: string
-    cpf: string
-    matricula: string
-    turma: string
-    segmento: string
-  }
-  anoCalendario: string
-  exercicio: string
-  mensalidades: Array<{
-    index: number
-    id: string
-    descricao: string
-    competencia: string
-    vencimento: string
-    dataPagamento: string
-    valorBase: string
-    valorPago: string
-    valorNumerico: number
-    tipo: string
-    alunoNome: string
-  }>
-  quantidadeMensalidades: number
-  totalPago: number
-  totalPagoFormatado: string
-  totalPagoPorExtenso: string
-  codigoAutenticidade: string
-  dataEmissao: string
-  dataEmissaoExtenso: string
-  cidadeDataEmissao: string
-}
+import { DeclaracaoIrpfData } from './declaracaoPdfGenerator'
+export type { DeclaracaoIrpfData }
 
 interface DeclaracaoIrpfDocumentProps {
   data: DeclaracaoIrpfData

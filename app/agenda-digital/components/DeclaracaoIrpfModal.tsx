@@ -23,6 +23,8 @@ import {
 } from 'lucide-react'
 import { DeclaracaoIrpfDocument, DeclaracaoIrpfData } from './DeclaracaoIrpfDocument'
 import { generateDeclaracaoHtml } from './declaracaoHtmlGenerator'
+import { generateDeclaracaoPdf } from './declaracaoPdfGenerator'
+import { toast } from 'sonner'
 
 interface StudentOption {
   id?: string
@@ -54,6 +56,7 @@ export function DeclaracaoIrpfModal({
   const [error, setError] = useState<string | null>(null)
   const [docData, setDocData] = useState<DeclaracaoIrpfData | null>(null)
   const [viewMode, setViewMode] = useState<'config' | 'preview'>('config')
+  const [savingPdf, setSavingPdf] = useState(false)
 
   const printAreaRef = useRef<HTMLDivElement>(null)
 
@@ -126,37 +129,94 @@ export function DeclaracaoIrpfModal({
     }
   }, [isOpen])
 
-  // Imprimir / Salvar em PDF via iframe isolado
-  const handlePrint = () => {
+  // Gerar e Salvar o arquivo PDF oficial (Mobile e Desktop)
+  const handleSavePdf = async () => {
     if (!docData) return
-    const htmlContent = generateDeclaracaoHtml(docData)
+    setSavingPdf(true)
 
-    // Remove iframe anterior se houver
-    const existingIframe = document.getElementById('irpf-print-iframe')
-    if (existingIframe) {
-      existingIframe.remove()
+    try {
+      const pdfBytes = await generateDeclaracaoPdf(docData)
+      const blob = new Blob([pdfBytes as any], { type: 'application/pdf' })
+      const safeName = (docData.aluno.nome || 'Aluno').replace(/\s+/g, '_')
+      const fileName = `Declaracao_IRPF_${docData.anoCalendario}_${safeName}.pdf`
+
+      const isMobile =
+        typeof navigator !== 'undefined' &&
+        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '')
+
+      let shared = false
+      // 1. Mobile Web Share API nativa (iOS / Android)
+      if (isMobile && typeof navigator.share === 'function' && typeof navigator.canShare === 'function') {
+        try {
+          const file = new File([blob], fileName, { type: 'application/pdf' })
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: `Declaração IRPF ${docData.anoCalendario} - ${docData.aluno.nome}`,
+              text: `Comprovante de Quitação Anual de Mensalidades - ${docData.aluno.nome}`,
+            })
+            shared = true
+            toast.success('Declaração salva com sucesso!')
+          }
+        } catch (shareErr: any) {
+          if (shareErr?.name === 'AbortError') {
+            setSavingPdf(false)
+            return
+          }
+        }
+      }
+
+      // 2. Download direto via elemento <a> se não foi compartilhado via Web Share
+      if (!shared) {
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = fileName
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(() => {
+          if (document.body.contains(a)) {
+            document.body.removeChild(a)
+          }
+          URL.revokeObjectURL(url)
+        }, 1500)
+
+        // 3. Fallback em WebViews restritas
+        if (isMobile) {
+          setTimeout(() => {
+            const previewUrl = URL.createObjectURL(blob)
+            window.open(previewUrl, '_blank')
+            setTimeout(() => URL.revokeObjectURL(previewUrl), 60000)
+          }, 400)
+        }
+
+        toast.success('Declaração em PDF salva com sucesso!')
+      }
+    } catch (err: any) {
+      console.error('Erro ao gerar/salvar PDF:', err)
+      toast.error('Erro ao gerar PDF: ' + (err.message || 'Falha desconhecida'))
+      handlePrintWindow()
+    } finally {
+      setSavingPdf(false)
     }
+  }
 
-    const iframe = document.createElement('iframe')
-    iframe.id = 'irpf-print-iframe'
-    iframe.style.position = 'fixed'
-    iframe.style.right = '0'
-    iframe.style.bottom = '0'
-    iframe.style.width = '0'
-    iframe.style.height = '0'
-    iframe.style.border = '0'
-    document.body.appendChild(iframe)
+  // Abertura em janela de impressão dedicada com UTF-8
+  const handlePrintWindow = () => {
+    if (!docData) return
+    try {
+      const htmlContent = generateDeclaracaoHtml(docData)
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const win = window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
 
-    const doc = iframe.contentWindow?.document
-    if (doc) {
-      doc.open()
-      doc.write(htmlContent)
-      doc.close()
-
-      setTimeout(() => {
-        iframe.contentWindow?.focus()
-        iframe.contentWindow?.print()
-      }, 300)
+      if (!win) {
+        // Popup bloqueado -> aciona download direto do PDF
+        handleSavePdf()
+      }
+    } catch (e) {
+      handleSavePdf()
     }
   }
 
@@ -269,26 +329,60 @@ export function DeclaracaoIrpfModal({
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {docData && viewMode === 'preview' && (
-                <button
-                  onClick={handlePrint}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 14px',
-                    borderRadius: 12,
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
-                    color: '#ffffff',
-                    fontSize: 12.5,
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    boxShadow: '0 3px 10px rgba(79, 70, 229, 0.3)',
-                  }}
-                >
-                  <Printer size={15} />
-                  <span>Imprimir / Salvar PDF</span>
-                </button>
+                <>
+                  <button
+                    disabled={savingPdf}
+                    onClick={handleSavePdf}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 14px',
+                      borderRadius: 12,
+                      border: 'none',
+                      background: savingPdf
+                        ? '#cbd5e1'
+                        : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                      color: '#ffffff',
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      cursor: savingPdf ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 3px 10px rgba(79, 70, 229, 0.3)',
+                    }}
+                  >
+                    {savingPdf ? (
+                      <>
+                        <RefreshCw size={14} style={{ animation: 'spin 0.8s linear infinite' }} />
+                        <span>Gerando PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={14} />
+                        <span>Baixar PDF</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={handlePrintWindow}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '8px 14px',
+                      borderRadius: 12,
+                      border: '1.5px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#334155',
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Printer size={15} />
+                    <span>Imprimir</span>
+                  </button>
+                </>
               )}
 
               <button
@@ -522,10 +616,33 @@ export function DeclaracaoIrpfModal({
                       </div>
                     </div>
 
-                    <div style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.4 }}>
+                    <div style={{ fontSize: 11.5, color: '#475569', lineHeight: 1.4, marginBottom: 12 }}>
                       • <strong>Instrução Normativa:</strong> Apenas os valores de mensalidades escolares são dedutíveis.
                       Materiais e taxas não constam na somatória.
                     </div>
+
+                    <button
+                      onClick={() => setViewMode('preview')}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        padding: '10px 14px',
+                        borderRadius: 12,
+                        border: '1.5px solid #c7d2fe',
+                        background: '#ffffff',
+                        color: '#4338ca',
+                        fontSize: 12.5,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <Eye size={16} />
+                      <span>Visualizar Documento Timbrado Completo</span>
+                    </button>
                   </motion.div>
                 )}
               </div>
@@ -570,29 +687,68 @@ export function DeclaracaoIrpfModal({
                   ← Voltar às Opções
                 </button>
 
-                <button
-                  onClick={handlePrint}
-                  style={{
-                    flex: 1,
-                    maxWidth: '280px',
-                    padding: '12px 20px',
-                    borderRadius: 14,
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
-                    color: '#ffffff',
-                    fontSize: 14,
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 8,
-                    boxShadow: '0 4px 14px rgba(79, 70, 229, 0.3)',
-                  }}
-                >
-                  <Printer size={16} />
-                  <span>Imprimir / Salvar PDF</span>
-                </button>
+                <div style={{ display: 'flex', gap: 10, flex: 1, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={handlePrintWindow}
+                    style={{
+                      padding: '12px 18px',
+                      borderRadius: 14,
+                      border: '1.5px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#334155',
+                      fontSize: 13.5,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Printer size={16} />
+                    <span>Imprimir</span>
+                  </button>
+
+                  <button
+                    disabled={savingPdf || !docData}
+                    onClick={handleSavePdf}
+                    style={{
+                      flex: 1,
+                      maxWidth: '280px',
+                      padding: '12px 20px',
+                      borderRadius: 14,
+                      border: 'none',
+                      background:
+                        savingPdf || !docData
+                          ? '#cbd5e1'
+                          : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                      color: '#ffffff',
+                      fontSize: 14,
+                      fontWeight: 800,
+                      cursor: savingPdf || !docData ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      boxShadow:
+                        savingPdf || !docData
+                          ? 'none'
+                          : '0 4px 16px rgba(79, 70, 229, 0.35)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {savingPdf ? (
+                      <>
+                        <RefreshCw size={17} style={{ animation: 'spin 0.8s linear infinite' }} />
+                        <span>Gerando PDF...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Download size={17} />
+                        <span>Salvar Declaração em PDF</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </>
             ) : (
               <>
@@ -613,32 +769,41 @@ export function DeclaracaoIrpfModal({
                 </button>
 
                 <button
-                  disabled={loading || !docData}
-                  onClick={handlePrint}
+                  disabled={loading || !docData || savingPdf}
+                  onClick={handleSavePdf}
                   style={{
                     flex: 1,
                     padding: '12px 20px',
                     borderRadius: 14,
                     border: 'none',
                     background:
-                      loading || !docData
+                      loading || !docData || savingPdf
                         ? '#cbd5e1'
                         : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
                     color: '#ffffff',
                     fontSize: 14,
                     fontWeight: 800,
-                    cursor: loading || !docData ? 'not-allowed' : 'pointer',
+                    cursor: loading || !docData || savingPdf ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: 8,
                     boxShadow:
-                      loading || !docData ? 'none' : '0 4px 16px rgba(79, 70, 229, 0.35)',
+                      loading || !docData || savingPdf ? 'none' : '0 4px 16px rgba(79, 70, 229, 0.35)',
                     transition: 'all 0.2s',
                   }}
                 >
-                  <Download size={17} />
-                  <span>Salvar Declaração em PDF</span>
+                  {savingPdf ? (
+                    <>
+                      <RefreshCw size={17} style={{ animation: 'spin 0.8s linear infinite' }} />
+                      <span>Gerando PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={17} />
+                      <span>Salvar Declaração em PDF</span>
+                    </>
+                  )}
                 </button>
               </>
             )}

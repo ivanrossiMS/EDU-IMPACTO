@@ -56,23 +56,75 @@ export function generateDeclaracaoHtml(data: DeclaracaoIrpfData): string {
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
+    @media print {
+      .no-print-bar {
+        display: none !important;
+      }
+      body {
+        padding: 0 !important;
+        background: #ffffff !important;
+      }
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: #0f172a;
-      background: #ffffff;
-      padding: 0;
+      background: #f1f5f9;
+      padding: 20px 0;
       margin: 0;
       font-size: 11px;
       line-height: 1.4;
     }
+    .print-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: #0f172a;
+      padding: 12px 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      margin-bottom: 20px;
+    }
+    .print-toolbar button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s ease;
+    }
+    .btn-print-action {
+      background: #4f46e5;
+      color: #ffffff;
+    }
+    .btn-print-action:hover {
+      background: #4338ca;
+    }
+    .btn-close-action {
+      background: #334155;
+      color: #f8fafc;
+    }
+    .btn-close-action:hover {
+      background: #475569;
+    }
     .page-container {
       width: 100%;
-      max-width: 100%;
+      max-width: 210mm;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       min-height: 270mm;
+      background: #ffffff;
+      padding: 12mm 15mm;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      border-radius: 8px;
     }
     .header-row {
       display: flex;
@@ -322,9 +374,18 @@ export function generateDeclaracaoHtml(data: DeclaracaoIrpfData): string {
       color: #64748b;
       line-height: 1.35;
     }
-  </style>
 </head>
 <body>
+  <div class="print-toolbar no-print-bar">
+    <button class="btn-print-action" onclick="window.print()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+      <span>Imprimir / Salvar PDF</span>
+    </button>
+    <button class="btn-close-action" onclick="window.close()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      <span>Fechar</span>
+    </button>
+  </div>
   <div class="page-container">
     <div>
       <!-- 1. CABEÇALHO -->
@@ -474,6 +535,18 @@ export function generateDeclaracaoHtml(data: DeclaracaoIrpfData): string {
       <div>Rua Alagoas, 1081 - Jardim dos Estados, Campo Grande/MS • Tel: (67) 3025-5585 • impacto@colegioimpacto.net • www.colegioimpacto.net</div>
     </div>
   </div>
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        try {
+          window.focus();
+          window.print();
+        } catch (e) {
+          console.error(e);
+        }
+      }, 350);
+    };
+  </script>
 </body>
 </html>`
 }
