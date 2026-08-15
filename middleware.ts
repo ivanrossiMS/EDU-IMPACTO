@@ -46,6 +46,8 @@ const PUBLIC_PATHS = [
   '/guia-seguranca',    // Alias do guia público
   '/regimento-interno', // Regimento Interno do Colégio Impacto (Público/Orfão)
   '/regulamento-interno', // Regulamento Interno de Trabalho para Funcionários (Público/Orfão)
+  '/politica-de-privacidade', // Política de Privacidade oficial (App Store / Google Play / LGPD)
+  '/privacidade',             // Alias público de privacidade
   '/api/gestao-pessoas/materiais-divulgacao', // Central de materiais de divulgação (acesso público para incremento de visitas)
 ]
 
