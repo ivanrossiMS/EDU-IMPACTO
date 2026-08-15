@@ -33,9 +33,9 @@ async function fetchAllPagesForGuardian(
   guardianExternalId: string,
   ano: string
 ): Promise<IsaacInstallment[]> {
-  // Página 0 → descobre o total de registros
+  // Página 1 → descobre o total de registros
   const firstPage = await isaacRequest<any>(
-    `/consolidated-installments?page=0&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
+    `/consolidated-installments?page=1&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
   )
   const totalItems: number = firstPage?.pagination?.total ?? 0
   const firstItems: IsaacInstallment[] = firstPage?.data?.items ?? []
@@ -43,37 +43,47 @@ async function fetchAllPagesForGuardian(
 
   console.log(`[Isaac] Ano ${ano}: ${totalItems} faturas totais | ${totalPages} páginas`)
 
-  // Filtra resultados da primeira página
-  const allItems: IsaacInstallment[] = firstItems.filter(
+  const rawItems: IsaacInstallment[] = firstItems.filter(
     (i) => i.guardian?.external_id === guardianExternalId
   )
 
-  // Busca páginas restantes em batches paralelos
-  const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 1)
+  // Busca páginas restantes (de 2 até totalPages) em batches paralelos
+  if (totalPages > 1) {
+    const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2)
 
-  for (let i = 0; i < remainingPages.length; i += MAX_PARALLEL) {
-    const batch = remainingPages.slice(i, i + MAX_PARALLEL)
+    for (let i = 0; i < remainingPages.length; i += MAX_PARALLEL) {
+      const batch = remainingPages.slice(i, i + MAX_PARALLEL)
 
-    const results = await Promise.allSettled(
-      batch.map((page) =>
-        isaacRequest<any>(
-          `/consolidated-installments?page=${page}&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
+      const results = await Promise.allSettled(
+        batch.map((page) =>
+          isaacRequest<any>(
+            `/consolidated-installments?page=${page}&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
+          )
         )
       )
-    )
 
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        const items: IsaacInstallment[] = result.value?.data?.items ?? []
-        const filtered = items.filter(
-          (i) => i.guardian?.external_id === guardianExternalId
-        )
-        allItems.push(...filtered)
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const items: IsaacInstallment[] = result.value?.data?.items ?? []
+          const filtered = items.filter(
+            (i) => i.guardian?.external_id === guardianExternalId
+          )
+          rawItems.push(...filtered)
+        }
       }
     }
   }
 
-  console.log(`[Isaac] Parcelas do guardian ${guardianExternalId}: ${allItems.length}`)
+  // Deduplicação estrita por ID único da parcela
+  const uniqueMap = new Map<string, IsaacInstallment>()
+  for (const item of rawItems) {
+    if (item.id && !uniqueMap.has(item.id)) {
+      uniqueMap.set(item.id, item)
+    }
+  }
+
+  const allItems = Array.from(uniqueMap.values())
+  console.log(`[Isaac] Parcelas únicas do guardian ${guardianExternalId}: ${allItems.length}`)
   return allItems
 }
 

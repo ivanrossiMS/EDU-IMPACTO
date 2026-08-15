@@ -28,12 +28,14 @@ import {
   GraduationCap,
   AlertCircle,
   User,
-  Users
+  Users,
+  FileText
 } from 'lucide-react'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { PixBottomSheet } from '../../components/PixBottomSheet'
+import { DeclaracaoIrpfModal } from '../../components/DeclaracaoIrpfModal'
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -538,6 +540,7 @@ export default function ADFinanceiroPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('emAberto')
   const [selectedAno, setSelectedAno] = useState<AnoFilter>('2026')
   const [selectedStudentFilter, setSelectedStudentFilter] = useState<string>('todos')
+  const [irpfModalOpen, setIrpfModalOpen] = useState(false)
 
   const [pixModal, setPixModal] = useState<{
     isOpen: boolean
@@ -596,6 +599,23 @@ export default function ADFinanceiroPage() {
     return names
   }, [data])
 
+  // Lista estruturada de alunos para a Declaração de IRPF
+  const alunosOptions = useMemo(() => {
+    if (!data?.parcelas) return []
+    const map = new Map<string, { id?: string; nome: string; turma?: string }>()
+    for (const p of data.parcelas) {
+      if (!p.aluno) continue
+      if (!map.has(p.aluno)) {
+        map.set(p.aluno, {
+          id: p.alunoId,
+          nome: p.aluno,
+          turma: p.descricao?.split('-')?.[1]?.trim() || '',
+        })
+      }
+    }
+    return Array.from(map.values())
+  }, [data])
+
   // ── Filtro de Faturas ──────────────────────────────────────────────────────
   const filteredList = useMemo(() => {
     if (!data?.parcelas) return []
@@ -616,7 +636,13 @@ export default function ADFinanceiroPage() {
       items = items.filter((p) => p.aluno === selectedStudentFilter)
     }
 
-    return items
+    // Deduplicação defensiva por ID
+    const seen = new Set<string>()
+    return items.filter((p) => {
+      if (!p.id || seen.has(p.id)) return false
+      seen.add(p.id)
+      return true
+    })
   }, [data, activeTab, selectedStudentFilter])
 
   // ── Abertura do Modal Pix ──────────────────────────────────────────────────
@@ -756,8 +782,46 @@ export default function ADFinanceiroPage() {
             </div>
           </div>
 
-          {/* Lado Direito: Seletor de Ano + Botão Atualizar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Lado Direito: Declaração IRPF + Seletor de Ano + Botão Atualizar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {/* Botão Declaração IRPF */}
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={() => setIrpfModalOpen(true)}
+              title="Gerar Declaração Anual de IRPF / Quitação de Débitos"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderRadius: 11,
+                border: '1.5px solid #c7d2fe',
+                background: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+                color: '#4338ca',
+                fontWeight: 800,
+                fontSize: 12,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(79, 70, 229, 0.12)',
+                transition: 'all 0.2s',
+              }}
+            >
+              <FileText size={14} color="#4f46e5" />
+              <span>Declaração IRPF</span>
+              <span
+                style={{
+                  fontSize: 9,
+                  fontWeight: 900,
+                  background: '#4f46e5',
+                  color: '#ffffff',
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  letterSpacing: 0.3,
+                }}
+              >
+                PDF
+              </span>
+            </motion.button>
+
             <div
               style={{
                 display: 'flex',
@@ -1011,25 +1075,19 @@ export default function ADFinanceiroPage() {
                 Existem parcelas com vencimento expirado. Regularize suas pendências para evitar encargos adicionais.
               </div>
 
-              {/* Botão de Ação Rápida */}
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  const primeiraVencida = data.parcelas.find((p) => p.status === 'OVERDUE' || checkIsOverdue(p))
-                  if (primeiraVencida) {
-                    handleTriggerPix(primeiraVencida)
-                  } else {
-                    setActiveTab('emAberto')
-                  }
-                }}
+              {/* Botão de Ação Rápida -> Redireciona diretamente para o Portal Isaac */}
+              <a
+                href="https://meu.olaisaac.io/auth"
+                target="_blank"
+                rel="noopener noreferrer"
                 style={{
                   width: '100%',
-                  padding: '12px 16px',
+                  padding: '13px 16px',
                   borderRadius: 14,
                   border: 'none',
                   background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                   color: '#ffffff',
-                  fontSize: 13.5,
+                  fontSize: 14,
                   fontWeight: 800,
                   cursor: 'pointer',
                   display: 'flex',
@@ -1037,11 +1095,12 @@ export default function ADFinanceiroPage() {
                   justifyContent: 'center',
                   gap: 8,
                   boxShadow: '0 4px 14px rgba(220, 38, 38, 0.4)',
+                  textDecoration: 'none',
                 }}
               >
-                <Smartphone size={16} />
-                Regularizar Débito / Pagar Fatura Vencida
-              </motion.button>
+                <ExternalLink size={16} />
+                Regularizar Débito
+              </a>
             </motion.div>
           )}
 
@@ -1210,14 +1269,16 @@ export default function ADFinanceiroPage() {
                       borderRadius: 100,
                     }}
                   >
-                    {data.parcelas.length}
+                    {data.parcelas.filter((p) => p.status !== 'CANCELED' || p.valorPago > 0).length}
                   </span>
                 </motion.button>
 
                 {/* Botões Individuais de cada Aluno */}
                 {uniqueStudents.map((stName) => {
                   const isSelected = selectedStudentFilter === stName
-                  const studentInvoiceCount = data.parcelas.filter((p) => p.aluno === stName).length
+                  const studentInvoiceCount = data.parcelas.filter(
+                    (p) => p.aluno === stName && (p.status !== 'CANCELED' || p.valorPago > 0)
+                  ).length
                   const initials = stName
                     .split(' ')
                     .filter(Boolean)
@@ -1367,6 +1428,15 @@ export default function ADFinanceiroPage() {
           error={pixModal.error}
         />
       )}
+
+      {/* ── Modal de Declaração de IRPF ─────────────────────────────────────── */}
+      <DeclaracaoIrpfModal
+        isOpen={irpfModalOpen}
+        onClose={() => setIrpfModalOpen(false)}
+        alunos={alunosOptions}
+        currentAno={selectedAno}
+        responsavelId={data?.guardianId}
+      />
     </div>
   )
 }
