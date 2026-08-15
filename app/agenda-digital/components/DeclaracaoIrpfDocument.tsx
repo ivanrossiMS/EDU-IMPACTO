@@ -289,28 +289,17 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
             <div style={{ textAlign: 'center', marginBottom: 6 }}>
               <h1
                 style={{
-                  fontSize: 11.5,
+                  fontSize: 12,
                   fontWeight: 900,
                   color: '#0f172a',
                   textTransform: 'uppercase',
-                  letterSpacing: 0.4,
-                  margin: '0 0 2px 0',
+                  letterSpacing: 0.3,
+                  margin: '0 0 4px 0',
                   lineHeight: 1.2,
                 }}
               >
-                DECLARAÇÃO DE QUITAÇÃO ANUAL DE DÉBITOS
+                Declaração de Pagamentos Efetuados para IRPF
               </h1>
-              <h2
-                style={{
-                  fontSize: 10,
-                  fontWeight: 800,
-                  color: '#4f46e5',
-                  margin: '0 0 2px 0',
-                  letterSpacing: 0.2,
-                }}
-              >
-                COMPROVANTE PARA FINS DE IMPOSTO DE RENDA (IRPF)
-              </h2>
 
               <div
                 style={{
@@ -455,8 +444,8 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
             {/* ── 4. TEXTO DECLARATÓRIO FORMAL ───────────────────────────────── */}
             <p
               style={{
-                fontSize: 8.5,
-                lineHeight: 1.3,
+                fontSize: 10,
+                lineHeight: 1.45,
                 color: '#1e293b',
                 textAlign: 'justify',
                 margin: '0 0 4px 0',
@@ -465,8 +454,8 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
               Declaramos, para os devidos fins de comprovação de despesas com instrução junto à{' '}
               <strong>Secretaria Especial da Receita Federal do Brasil (Declaração de Ajuste Anual de IRPF)</strong> e
               em cumprimento aos termos da <strong>Lei Federal nº 12.007, de 29 de julho de 2009</strong>, que o(a)
-              responsável financeiro acima qualificado(a) efetuou a quitação integral das mensalidades escolares
-              relativas aos serviços educacionais prestados ao(à) aluno(a) durante o ano-calendário de{' '}
+              responsável financeiro acima qualificado(a) efetuou a quitação das mensalidades escolares
+              relacionadas abaixo dos serviços educacionais prestados ao(à) aluno(a) durante o ano-calendário de{' '}
               <strong>{anoCalendario}</strong>, conforme discriminado a seguir:
             </p>
 
@@ -512,7 +501,7 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
                         borderTop: '2px solid #0f172a',
                       }}
                     >
-                      TOTAL GERAL DE MENSALIDADES QUITADAS ({anoCalendario}):
+                      Total de mensalidades pagas em {anoCalendario}:
                     </td>
                     <td
                       style={{
@@ -543,11 +532,11 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
                   background: '#f8fafc',
                 }}
               >
-                Não constam registros de mensalidades escolares quitadas para este aluno no ano-calendário de {anoCalendario}.
+                Não constam registros de mensalidades escolares pagas para este aluno no ano-calendário de {anoCalendario}.
               </div>
             )}
 
-            {/* ── 6. VALOR POR EXTENSO ───────────────────────────────────────── */}
+            {/* ── 6. VALOR POR EXTENSO & INDICAÇÃO LEGAL ─────────────────────── */}
             {quantidadeMensalidades > 0 && (
               <div
                 style={{
@@ -556,7 +545,7 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
                   borderRadius: 4,
                   padding: '3px 6px',
                   fontSize: 8.5,
-                  marginBottom: 5,
+                  marginBottom: 4,
                   color: '#334155',
                   boxSizing: 'border-box',
                 }}
@@ -564,6 +553,20 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
                 <strong>Valor Total por Extenso:</strong> {totalPagoPorExtenso}.
               </div>
             )}
+
+            {/* Indicação obrigatória */}
+            <div
+              style={{
+                fontSize: 8,
+                fontWeight: 700,
+                color: '#64748b',
+                fontStyle: 'italic',
+                marginBottom: 5,
+                textAlign: 'left',
+              }}
+            >
+              * Este documento não representa quitação integral do contrato.
+            </div>
 
             {/* ── 7. FECHAMENTO E DATA ───────────────────────────────────────── */}
             <p
@@ -575,8 +578,7 @@ export function DeclaracaoIrpfDocument({ data }: DeclaracaoIrpfDocumentProps) {
                 textAlign: 'justify',
               }}
             >
-              Por ser a expressão da verdade e para que produza seus regulares efeitos legais e fiscais, firmamos a presente
-              declaração anual de quitação de débitos.
+              Por ser a expressão da verdade e para que produza seus regulares efeitos legais e fiscais, firmamos a presente declaração.
             </p>
 
             <div style={{ textAlign: 'right', fontSize: 9, color: '#334155', marginBottom: 6, fontWeight: 700 }}>

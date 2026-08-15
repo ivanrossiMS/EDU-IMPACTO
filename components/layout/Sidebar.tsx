@@ -15,7 +15,7 @@ import {
   Home, LineChart, BookMarked, Database, Globe, Webhook, FolderOpen,
   BookOpenCheck, CalendarDays, FlaskConical, HardHat, ClipboardPenLine, Clock3, Banknote, Wallet, AlertTriangle, DoorOpen, Scan, Monitor, ListChecks, BookHeart, ShieldCheck, LogOut, Handshake,
   UserCircle, Laptop, ShieldAlert, History, Landmark, Coins, CreditCard as CardIcon, FileSpreadsheet, Building, Tablet, FileStack,
-  Sun, Moon
+  Sun, Moon, FileCheck2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -121,6 +121,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     title: 'ADMINISTRATIVO',
     collapsible: true,
     items: [
+      { label: 'DECLARAÇÃO IRPF', href: '/administrativo/declaracao-irpf', icon: <FileCheck2 size={16} /> },
       { label: 'DOCS ESCOLARES', href: '/secretaria/documentos', icon: <FileStack size={16} /> },
       { label: 'PEDIDO LIVROS/APOST', href: '/administrativo/pedidos-livros', icon: <Library size={16} /> },
       { label: 'MANUTENÇÃO PREDIAL', href: '/administrativo/manutencao', icon: <Wrench size={16} /> },

@@ -353,7 +353,7 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
   y -= 14
 
   // ── 2. TÍTULO DO DOCUMENTO E EXERCÍCIO FISCAL ─────────────────────────────
-  const title1 = 'DECLARACAO DE QUITACAO ANUAL DE DEBITOS'
+  const title1 = 'DECLARACAO DE PAGAMENTOS EFETUADOS PARA IRPF'
   const title1Width = fontBold.widthOfTextAtSize(title1, 11)
   page.drawText(title1, {
     x: marginLeft + (contentWidth - title1Width) / 2,
@@ -361,17 +361,6 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
     size: 11,
     font: fontBold,
     color: colorDark,
-  })
-
-  y -= 11
-  const title2 = 'COMPROVANTE PARA FINS DE IMPOSTO DE RENDA (IRPF)'
-  const title2Width = fontBold.widthOfTextAtSize(title2, 9)
-  page.drawText(title2, {
-    x: marginLeft + (contentWidth - title2Width) / 2,
-    y,
-    size: 9,
-    font: fontBold,
-    color: colorPrimary,
   })
 
   y -= 14
@@ -527,7 +516,7 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
   y = y - studentBarHeight - 10
 
   // ── 4. TEXTO DECLARATÓRIO FORMAL ──────────────────────────────────────────
-  const declaracaoTexto = `Declaramos, para os devidos fins de comprovacao de despesas com instrucao junto a Secretaria Especial da Receita Federal do Brasil (Declaracao de Ajuste Anual de IRPF) e em cumprimento aos termos da Lei Federal no 12.007, de 29 de julho de 2009, que o(a) responsavel financeiro acima qualificado(a) efetuou a quitacao integral das mensalidades escolares relativas aos servicos educacionais prestados ao(a) aluno(a) durante o ano-calendario de ${data.anoCalendario}, conforme discriminado a seguir:`
+  const declaracaoTexto = `Declaramos, para os devidos fins de comprovacao de despesas com instrucao junto a Secretaria Especial da Receita Federal do Brasil (Declaracao de Ajuste Anual de IRPF) e em cumprimento aos termos da Lei Federal no 12.007, de 29 de julho de 2009, que o(a) responsavel financeiro acima qualificado(a) efetuou a quitacao das mensalidades escolares relacionadas abaixo dos servicos educacionais prestados ao(a) aluno(a) durante o ano-calendario de ${data.anoCalendario}, conforme discriminado a seguir:`
 
   const textoLines = wrapText(declaracaoTexto, contentWidth - 4, fontRegular, 7.8)
   for (const line of textoLines) {
@@ -685,7 +674,7 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
       borderWidth: 1,
     })
 
-    const totalLabel = `TOTAL GERAL DE MENSALIDADES QUITADAS (${data.anoCalendario}):`
+    const totalLabel = `Total de mensalidades pagas em ${data.anoCalendario}:`
     const totalLabelW = fontBold.widthOfTextAtSize(totalLabel, 7.5)
     page.drawText(totalLabel, {
       x: colDef[5].x - totalLabelW - 8,
@@ -718,7 +707,7 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
       borderColor: colorBorder,
       borderWidth: 1,
     })
-    const noRecords = `Nao constam registros de mensalidades escolares quitadas para este aluno no ano-calendario de ${data.anoCalendario}.`
+    const noRecords = `Nao constam registros de mensalidades escolares pagas para este aluno no ano-calendario de ${data.anoCalendario}.`
     const noRecW = fontRegular.widthOfTextAtSize(noRecords, 7.5)
     page.drawText(noRecords, {
       x: marginLeft + (contentWidth - noRecW) / 2,
@@ -732,7 +721,7 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
 
   y -= 6
 
-  // ── 6. VALOR POR EXTENSO ──────────────────────────────────────────────────
+  // ── 6. VALOR POR EXTENSO & INDICAÇÃO LEGAL ────────────────────────────────
   if (data.quantidadeMensalidades > 0) {
     const extensoBoxHeight = 14
     page.drawRectangle({
@@ -762,11 +751,23 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
       color: colorSlate,
     })
 
-    y -= extensoBoxHeight + 6
+    y -= extensoBoxHeight + 4
   }
 
+  // Indicação de não quitação integral
+  const disclaimerText = '* Este documento nao representa quitacao integral do contrato.'
+  page.drawText(disclaimerText, {
+    x: marginLeft + 2,
+    y: y - 2,
+    size: 7.0,
+    font: fontBold,
+    color: colorMuted,
+  })
+
+  y -= 10
+
   // ── 7. FECHAMENTO & DATA ──────────────────────────────────────────────────
-  const closingText = 'Por ser a expressao da verdade e para que produza seus regulares efeitos legais e fiscais, firmamos a presente declaracao anual de quitacao de debitos.'
+  const closingText = 'Por ser a expressao da verdade e para que produza seus regulares efeitos legais e fiscais, firmamos a presente declaracao.'
   page.drawText(closingText, {
     x: marginLeft + 2,
     y,
@@ -828,7 +829,7 @@ export async function generateDeclaracaoPdf(data: DeclaracaoIrpfData): Promise<U
   const sigCenterX = pageWidth - marginRight - 100
 
   // Desenha a assinatura vetorizada manual de Ivan Rossi
-  drawIvanRossiSignature(page, sigCenterX - 65, y - 10, 0.55)
+  drawIvanRossiSignature(page, sigCenterX - 65, y + 15, 0.55)
 
   // Linha de assinatura
   const sigLineWidth = 180

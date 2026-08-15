@@ -5,9 +5,12 @@
  *
  * Regras de Negócio:
  *  - Considera estritamente parcelas pagas (PAID) do tipo TUITION ou descrição de Mensalidade.
+ *  - Considera ESTRITAMENTE as mensalidades do aluno selecionado (NUNCA soma dependentes/irmãos juntos).
  *  - CNPJ e Razão Social definidos por segmento:
  *      * Nível 1 ao 9º Ano: 04.395.789/0001-88 - Colégio Impacto Centro de Ensino
  *      * Ensino Médio: 04.397.021/0001-43 - Centro de Ensino Impacto
+ *  - Resolução completa de nomes legíveis de turmas e séries (sem exibir códigos numéricos).
+ *  - Suporte à busca e seleção tanto por Aluno quanto por Responsável Financeiro.
  */
 
 import { NextResponse } from 'next/server'
@@ -26,6 +29,20 @@ function formatCPF(cpf?: string | null): string {
   const digits = String(cpf).replace(/\D/g, '')
   if (digits.length !== 11) return String(cpf)
   return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+}
+
+function cleanDigits(val?: string | null): string {
+  if (!val) return ''
+  return String(val).replace(/\D/g, '')
+}
+
+function normalizeString(str?: string | null): string {
+  if (!str) return ''
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
 }
 
 function getDataExtenso(date: Date = new Date()): string {
@@ -90,6 +107,60 @@ function formatDateBr(dateStr?: string | null): string {
   return dateStr
 }
 
+/**
+ * Verifica com precisão cirúrgica se uma parcela do Isaac pertence ao aluno alvo
+ */
+function isInstallmentForStudent(
+  item: IsaacInstallment,
+  target: {
+    id?: string | null
+    matricula?: string | null
+    nome?: string | null
+    allRefs?: string[]
+  }
+): boolean {
+  if (!item.student) return false
+
+  const itemExtId = String(item.student.external_id || '').trim()
+  const itemName = normalizeString(item.student.name)
+
+  // 1. Match por external_id / matricula / id
+  if (itemExtId) {
+    if (target.id && itemExtId === String(target.id).trim()) return true
+    if (target.matricula && itemExtId === String(target.matricula).trim()) return true
+    if (target.allRefs && target.allRefs.includes(itemExtId)) return true
+  }
+
+  // 2. Match por Nome do Aluno
+  if (itemName && target.nome) {
+    const targetNorm = normalizeString(target.nome)
+
+    // Nomes idênticos
+    if (itemName === targetNorm) return true
+
+    // Um contém o outro exatamente
+    if (itemName.includes(targetNorm) || targetNorm.includes(itemName)) return true
+
+    // Comparação por partes significativas do nome
+    const itemWords = itemName.split(/\s+/).filter((w) => w.length > 2)
+    const targetWords = targetNorm.split(/\s+/).filter((w) => w.length > 2)
+
+    // Se o primeiro nome for diferente, NÃO é o mesmo aluno (ex: "Alana" vs "Enzo")
+    if (itemWords[0] && targetWords[0] && itemWords[0] !== targetWords[0]) {
+      return false
+    }
+
+    // Se compartilham primeiro nome + pelo menos outro sobrenome
+    if (itemWords[0] === targetWords[0]) {
+      const commonWords = itemWords.filter((w) => targetWords.includes(w))
+      if (commonWords.length >= 2) return true
+      if (itemWords.length === 1 || targetWords.length === 1) return true
+    }
+  }
+
+  return false
+}
+
 export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
@@ -101,48 +172,15 @@ export async function GET(request: Request) {
   const alunoNome = searchParams.get('alunoNome')
   const ano = searchParams.get('ano') || new Date().getFullYear().toString()
   const responsavelIdParam = searchParams.get('responsavelId')
+  const responsavelCpfParam = searchParams.get('responsavelCpf')
 
-  // ── 1. Descobrir o ID do Responsável ───────────────────────────────────────
-  let guardianExternalId = responsavelIdParam
-  if (!guardianExternalId) {
-    const metaRespId = user?.user_metadata?.responsavel_id
-    if (metaRespId) guardianExternalId = String(metaRespId)
-  }
-
-  let dbResponsavel: any = null
-
-  if (!guardianExternalId) {
-    if (!user?.email) {
-      return NextResponse.json({ error: 'Email do usuário não encontrado.' }, { status: 400 })
-    }
-
-    const { data: resp } = await supabase
-      .from('responsaveis')
-      .select('*')
-      .eq('email', user.email)
-      .maybeSingle()
-
-    if (!resp) {
-      return NextResponse.json({ error: 'Responsável não encontrado.', notFound: true }, { status: 404 })
-    }
-    dbResponsavel = resp
-    guardianExternalId = String(resp.id)
-  } else {
-    const { data: resp } = await supabase
-      .from('responsaveis')
-      .select('*')
-      .eq('id', guardianExternalId)
-      .maybeSingle()
-    dbResponsavel = resp
-  }
-
-  // ── 2. Buscar Dados do Aluno no Supabase ────────────────────────────────────
+  // ── 1. Buscar Dados do Aluno no Supabase ────────────────────────────────────
   let dbAluno: any = null
   if (alunoId) {
     const { data: al } = await supabase
       .from('alunos')
       .select('*')
-      .eq('id', alunoId)
+      .or(`id.eq.${alunoId},matricula.eq.${alunoId}`)
       .maybeSingle()
     dbAluno = al
   }
@@ -156,50 +194,241 @@ export async function GET(request: Request) {
     dbAluno = al
   }
 
-  // ── 3. Buscar todas as parcelas do responsável no Isaac para o ano ─────────
-  const firstPage = await isaacRequest<any>(
-    `/consolidated-installments?page=1&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
-  )
-  const totalItems: number = firstPage?.pagination?.total ?? 0
-  const firstItems: IsaacInstallment[] = firstPage?.data?.items ?? []
-  const totalPages = Math.ceil(totalItems / PER_PAGE)
+  // ── 2. Localizar Responsáveis Disponíveis e Titular ────────────────────────
+  let dbResponsavel: any = null
+  let responsaveisDisponiveis: any[] = []
+  let alunosDisponiveis: any[] = []
 
-  const rawItems: IsaacInstallment[] = firstItems.filter(
-    (i) => i.guardian?.external_id === guardianExternalId
-  )
+  // Se o responsavelId ou CPF foi explicitamente passado
+  if (responsavelIdParam) {
+    const { data: resp } = await supabase
+      .from('responsaveis')
+      .select('*')
+      .eq('id', responsavelIdParam)
+      .maybeSingle()
+    if (resp) dbResponsavel = resp
+  } else if (responsavelCpfParam) {
+    const cleanCpf = cleanDigits(responsavelCpfParam)
+    const { data: resp } = await supabase
+      .from('responsaveis')
+      .select('*')
+      .or(`cpf.eq.${cleanCpf},cpf.eq.${responsavelCpfParam}`)
+      .maybeSingle()
+    if (resp) dbResponsavel = resp
+  }
 
-  if (totalPages > 1) {
-    const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2)
-    for (let i = 0; i < remainingPages.length; i += MAX_PARALLEL) {
-      const batch = remainingPages.slice(i, i + MAX_PARALLEL)
-      const results = await Promise.allSettled(
-        batch.map((page) =>
-          isaacRequest<any>(
-            `/consolidated-installments?page=${page}&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
+  // Se temos um Aluno identificado, buscar todos os seus responsáveis vinculados
+  if (dbAluno) {
+    const studentRefs = [
+      dbAluno.id,
+      dbAluno.matricula,
+      dbAluno.dados?.codigo,
+      dbAluno.dados?.id,
+    ]
+      .filter(Boolean)
+      .map((r: any) => String(r).trim())
+
+    const { data: links } = await supabase
+      .from('aluno_responsavel')
+      .select('*')
+      .in('aluno_id', studentRefs)
+
+    if (links && links.length > 0) {
+      const respIds = Array.from(
+        new Set(links.map((l: any) => String(l.responsavel_id).trim()).filter(Boolean))
+      )
+      if (respIds.length > 0) {
+        const { data: respList } = await supabase
+          .from('responsaveis')
+          .select('*')
+          .in('id', respIds)
+
+        responsaveisDisponiveis = (respList || []).map((r: any) => {
+          const l = links.find((link: any) => String(link.responsavel_id).trim() === String(r.id).trim()) || {}
+          return {
+            id: String(r.id),
+            nome: r.nome || 'Responsável',
+            cpf: formatCPF(r.cpf || r.dados?.cpf),
+            email: r.email || '',
+            telefone: r.telefone || '',
+            parentesco: l.parentesco || r.parentesco || 'Responsável',
+            isFinanceiro: Boolean(l.resp_financeiro || l.is_financeiro || r.isFinanceiro),
+          }
+        })
+      }
+    }
+
+    // Fallback: verificar responsáveis armazenados no JSON de dados do aluno
+    if (responsaveisDisponiveis.length === 0 && dbAluno.dados?.responsaveis && Array.isArray(dbAluno.dados.responsaveis)) {
+      responsaveisDisponiveis = dbAluno.dados.responsaveis.map((r: any, idx: number) => ({
+        id: String(r.id || `json-${idx}`),
+        nome: r.nome || 'Responsável',
+        cpf: formatCPF(r.cpf),
+        email: r.email || '',
+        telefone: r.telefone || '',
+        parentesco: r.parentesco || 'Responsável',
+        isFinanceiro: Boolean(r.isFinanceiro || r.resp_financeiro || idx === 0),
+      }))
+    }
+
+    // Se nenhum responsável selecionado ainda, pegar o financeiro ou o primeiro disponível
+    if (!dbResponsavel) {
+      const fin = responsaveisDisponiveis.find((r) => r.isFinanceiro) || responsaveisDisponiveis[0]
+      if (fin) {
+        const { data: resp } = await supabase
+          .from('responsaveis')
+          .select('*')
+          .eq('id', fin.id)
+          .maybeSingle()
+        dbResponsavel = resp || fin
+      }
+    }
+  }
+
+  // Se buscamos por Responsável, descobrir os alunos vinculados a ele em aluno_responsavel
+  if (dbResponsavel) {
+    const { data: links } = await supabase
+      .from('aluno_responsavel')
+      .select('aluno_id, parentesco, resp_financeiro')
+      .eq('responsavel_id', dbResponsavel.id)
+
+    if (links && links.length > 0) {
+      const studentRefs = links.map((l: any) => String(l.aluno_id).trim()).filter(Boolean)
+      const { data: studentList } = await supabase
+        .from('alunos')
+        .select('id, nome, matricula, turma, status, foto, dados')
+        .or(`id.in.(${studentRefs.join(',')}),matricula.in.(${studentRefs.join(',')})`)
+
+      alunosDisponiveis = (studentList || []).map((s: any) => ({
+        id: String(s.id),
+        nome: s.nome,
+        matricula: s.matricula || s.id,
+        turma: s.turma,
+        status: s.status,
+        foto: s.foto || s.dados?.foto || s.dados?.avatarUrl || null,
+      }))
+
+      if (alunosDisponiveis.length > 0 && !dbAluno) {
+        dbAluno = studentList?.[0]
+      }
+    }
+  }
+
+  // Se for usuário responsável logado pelo portal da família (fallback para user.email)
+  if (!dbResponsavel && !dbAluno) {
+    if (user?.email) {
+      const { data: resp } = await supabase
+        .from('responsaveis')
+        .select('*')
+        .eq('email', user.email)
+        .maybeSingle()
+      if (resp) {
+        dbResponsavel = resp
+      }
+    }
+  }
+
+  const guardianExternalId = dbResponsavel ? String(dbResponsavel.id) : responsavelIdParam || null
+  const guardianCpfClean = dbResponsavel?.cpf ? cleanDigits(dbResponsavel.cpf) : cleanDigits(responsavelCpfParam)
+
+  // ── 3. Buscar todas as parcelas no Isaac para o ano ────────────────────────
+  let rawItems: IsaacInstallment[] = []
+
+  try {
+    const firstPage = await isaacRequest<any>(
+      `/consolidated-installments?page=1&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
+    )
+    const totalItems: number = firstPage?.pagination?.total ?? 0
+    const firstItems: IsaacInstallment[] = firstPage?.data?.items ?? []
+    const totalPages = Math.ceil(totalItems / PER_PAGE)
+
+    rawItems = [...firstItems]
+
+    if (totalPages > 1) {
+      const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2)
+      for (let i = 0; i < remainingPages.length; i += MAX_PARALLEL) {
+        const batch = remainingPages.slice(i, i + MAX_PARALLEL)
+        const results = await Promise.allSettled(
+          batch.map((page) =>
+            isaacRequest<any>(
+              `/consolidated-installments?page=${page}&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
+            )
           )
         )
-      )
 
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          const items: IsaacInstallment[] = result.value?.data?.items ?? []
-          const filtered = items.filter((i) => i.guardian?.external_id === guardianExternalId)
-          rawItems.push(...filtered)
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            const items: IsaacInstallment[] = result.value?.data?.items ?? []
+            rawItems.push(...items)
+          }
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error('[Isaac API Error]:', err)
+  }
+
+  // Deduplicação estrita por ID único da parcela
+  const uniqueMap = new Map<string, IsaacInstallment>()
+  for (const it of rawItems) {
+    if (it.id && !uniqueMap.has(it.id)) uniqueMap.set(it.id, it)
+  }
+  const allInstallments = Array.from(uniqueMap.values())
+
+  // Filtrar parcelas que pertencem a este responsável (se conhecido)
+  const guardianInstallments = allInstallments.filter((item) => {
+    if (guardianExternalId && item.guardian?.external_id) {
+      if (String(item.guardian.external_id).trim() === guardianExternalId) return true
+    }
+    if (guardianCpfClean && item.guardian?.tax_id) {
+      if (cleanDigits(item.guardian.tax_id) === guardianCpfClean) return true
+    }
+    return false
+  })
+
+  // Enriquecer alunosDisponiveis com quaisquer outros alunos encontrados nas parcelas do Isaac para este responsável
+  if (guardianInstallments.length > 0) {
+    const mapStudents = new Map<string, any>()
+    for (const a of alunosDisponiveis) {
+      mapStudents.set(normalizeString(a.nome), a)
+    }
+
+    for (const it of guardianInstallments) {
+      if (it.student?.name) {
+        const key = normalizeString(it.student.name)
+        if (!mapStudents.has(key)) {
+          const newStudent = {
+            id: String(it.student.external_id || it.student.id || `isaac-${key}`),
+            nome: it.student.name,
+            matricula: it.student.external_id || '—',
+            turma: '',
+            status: 'ativo',
+            foto: null,
+          }
+          mapStudents.set(key, newStudent)
+          alunosDisponiveis.push(newStudent)
         }
       }
     }
   }
 
-  // Deduplicação estrita por ID
-  const map = new Map<string, IsaacInstallment>()
-  for (const it of rawItems) {
-    if (it.id && !map.has(it.id)) map.set(it.id, it)
+  // Se ainda não temos um aluno selecionado, pega o primeiro disponível
+  if (!dbAluno && alunosDisponiveis.length > 0) {
+    dbAluno = alunosDisponiveis[0]
   }
-  const allInstallments = Array.from(map.values())
 
-  // ── 4. Filtrar EXCLUSIVAMENTE Mensalidades Escolares Pagas do Aluno ──────────
-  const targetStudentId = alunoId ? String(alunoId).trim() : null
-  const targetStudentName = (alunoNome || dbAluno?.nome || '').trim().toLowerCase()
+  // ── 4. Filtrar EXCLUSIVAMENTE Mensalidades Escolares Pagas do Aluno Selecionado ──
+  const targetStudentRefs: string[] = [
+    dbAluno?.id,
+    dbAluno?.matricula,
+    dbAluno?.dados?.codigo,
+    dbAluno?.dados?.id,
+    alunoId,
+  ]
+    .filter(Boolean)
+    .map((r: any) => String(r).trim())
+
+  const targetStudentName = dbAluno?.nome || alunoNome || null
 
   const isExcludedItem = (description?: string | null) => {
     const d = (description || '').toLowerCase()
@@ -217,6 +446,13 @@ export async function GET(request: Request) {
     )
   }
 
+  const targetMatcher = {
+    id: dbAluno?.id ? String(dbAluno.id).trim() : alunoId ? String(alunoId).trim() : null,
+    matricula: dbAluno?.matricula ? String(dbAluno.matricula).trim() : null,
+    nome: targetStudentName,
+    allRefs: targetStudentRefs,
+  }
+
   const mensalidadesPagas = allInstallments.filter((item) => {
     // 1. Status deve ser estritamente PAID (pago)
     if (item.status !== 'PAID') return false
@@ -229,18 +465,27 @@ export async function GET(request: Request) {
     const isTuition = desc.includes('mensalidade') || item.type === 'TUITION'
     if (!isTuition) return false
 
-    // 4. Deve pertencer ao aluno selecionado
-    if (targetStudentId && String(item.student?.external_id).trim() === targetStudentId) {
-      return true
-    }
-    if (targetStudentName && (item.student?.name || '').toLowerCase().includes(targetStudentName)) {
-      return true
-    }
-    if (!targetStudentId && !targetStudentName) {
-      return true
+    // 4. Se tivermos filtro de responsável, deve bater com o responsável
+    if (guardianExternalId || guardianCpfClean) {
+      let matchGuardian = false
+      if (guardianExternalId && item.guardian?.external_id) {
+        if (String(item.guardian.external_id).trim() === guardianExternalId) matchGuardian = true
+      }
+      if (guardianCpfClean && item.guardian?.tax_id) {
+        if (cleanDigits(item.guardian.tax_id) === guardianCpfClean) matchGuardian = true
+      }
+      // Se não bateu o responsável, só aceita se bater estritamente o aluno
+      if (!matchGuardian && !isInstallmentForStudent(item, targetMatcher)) {
+        return false
+      }
     }
 
-    return false
+    // 5. REGRA DE OURO: DEVE PERTENCER ESTRITAMENTE AO ALUNO SELECIONADO!
+    // NUNCA incluir parcelas de irmãos/outros dependentes.
+    const isForStudent = isInstallmentForStudent(item, targetMatcher)
+    if (!isForStudent) return false
+
+    return true
   })
 
   // Ordenar por data de vencimento / competência cronológica
@@ -276,22 +521,30 @@ export async function GET(request: Request) {
   })}`
   const totalPagoPorExtenso = valorPorExtenso(totalPagoReais)
 
-  // ── 6. Determinar Série / Turma Legível do Aluno ───────────────────────────
+  // ── 6. Determinar Série / Turma Legível do Aluno (Resolução sem Códigos) ────
   let nomeTurma = ''
   let nomeSerie = ''
   let segmentoTurma = ''
 
-  if (dbAluno?.turma) {
-    const { data: tData } = await supabase
-      .from('turmas')
-      .select('nome, serie, dados')
-      .or(`id.eq.${dbAluno.turma},codigo.eq.${dbAluno.turma}`)
-      .maybeSingle()
+  // Buscar todas as turmas para mapeamento infalível
+  const { data: allTurmas } = await supabase
+    .from('turmas')
+    .select('id, codigo, nome, serie, turno, ano, dados')
 
-    if (tData) {
-      nomeTurma = tData.nome || ''
-      nomeSerie = tData.serie || ''
-      segmentoTurma = tData.dados?.segmento || ''
+  const studentTurmaRaw = String(dbAluno?.turma || '').trim()
+
+  if (studentTurmaRaw && allTurmas && allTurmas.length > 0) {
+    const matchedTurma = allTurmas.find(
+      (t: any) =>
+        String(t.id).trim() === studentTurmaRaw ||
+        String(t.codigo).trim() === studentTurmaRaw ||
+        String(t.nome).trim().toLowerCase() === studentTurmaRaw.toLowerCase()
+    )
+
+    if (matchedTurma) {
+      nomeTurma = matchedTurma.nome || ''
+      nomeSerie = matchedTurma.serie || ''
+      segmentoTurma = matchedTurma.dados?.segmento || ''
     }
   }
 
@@ -301,6 +554,7 @@ export async function GET(request: Request) {
     const matchAno = hist.find((h: any) => String(h.anoLetivo) === String(ano)) || hist[hist.length - 1]
     if (matchAno) {
       nomeSerie = matchAno.serie || ''
+      if (matchAno.turma) nomeTurma = matchAno.turma
       segmentoTurma = segmentoTurma || matchAno.segmento || ''
     }
   }
@@ -322,17 +576,23 @@ export async function GET(request: Request) {
     }
   }
 
-  // Formatação final da Série / Turma
-  let serieFormatada = nomeSerie || nomeTurma || 'Ensino Regular'
-  if (nomeSerie && nomeTurma && !nomeTurma.toLowerCase().includes(nomeSerie.toLowerCase())) {
-    serieFormatada = `${nomeSerie} - ${nomeTurma}`
+  // Se a turma ainda for puramente numérica (código), substituir por nome formatado
+  let serieFormatada = ''
+  if (nomeTurma) {
+    serieFormatada = nomeTurma
+  } else if (nomeSerie) {
+    serieFormatada = nomeSerie
+  } else if (studentTurmaRaw && !/^\d+$/.test(studentTurmaRaw)) {
+    serieFormatada = studentTurmaRaw
+  } else {
+    serieFormatada = 'Ensino Regular'
   }
 
   // ── 7. Determinar CNPJ e Razão Social da Escola por Segmento ───────────────
   // Regra:
   // - Nível 1 ao 9º Ano (Educação Infantil e Fundamental): 04.395.789/0001-88 - Colégio Impacto Centro de Ensino
   // - Ensino Médio: 04.397.021/0001-43 - Centro de Ensino Impacto
-  const turmaText = `${serieFormatada} ${nomeTurma} ${segmentoTurma}`.toUpperCase()
+  const turmaText = `${serieFormatada} ${nomeTurma} ${nomeSerie} ${segmentoTurma}`.toUpperCase()
   const descSample = (mensalidadesPagas[0]?.description || '').toUpperCase()
   const combinedText = `${turmaText} ${descSample}`
 
@@ -341,6 +601,7 @@ export async function GET(request: Request) {
     combinedText.includes('MEDIO') ||
     combinedText.includes('EM') ||
     combinedText.includes('TERCEIRÃO') ||
+    combinedText.includes('TERCEIRAO') ||
     combinedText.includes('1ª SÉRIE') ||
     combinedText.includes('2ª SÉRIE') ||
     combinedText.includes('3ª SÉRIE') ||
@@ -375,13 +636,13 @@ export async function GET(request: Request) {
       }
 
   // ── 8. Informações do Responsável e Aluno ──────────────────────────────────
-  const guardianSample = mensalidadesPagas[0]?.guardian || allInstallments[0]?.guardian
-  const studentSample = mensalidadesPagas[0]?.student || allInstallments[0]?.student
+  const guardianSample = mensalidadesPagas[0]?.guardian || guardianInstallments[0]?.guardian || allInstallments[0]?.guardian
+  const studentSample = mensalidadesPagas[0]?.student
 
   const responsavelInfo = {
     nome: dbResponsavel?.nome || guardianSample?.name || 'Responsável Financeiro',
-    cpf: formatCPF(dbResponsavel?.cpf || guardianSample?.tax_id),
-    email: dbResponsavel?.email || user?.email || '',
+    cpf: formatCPF(dbResponsavel?.cpf || dbResponsavel?.dados?.cpf || guardianSample?.tax_id),
+    email: dbResponsavel?.email || '',
     telefone: dbResponsavel?.telefone || '',
   }
 
@@ -394,8 +655,8 @@ export async function GET(request: Request) {
     segmento: escolaInfo.segmento,
   }
 
-  // ── 8. Metadados e Código de Autenticidade ─────────────────────────────────
-  const hashSeed = `${guardianExternalId}-${alunoInfo.id}-${ano}-${totalPagoCentavos}`
+  // ── 9. Metadados e Código de Autenticidade ─────────────────────────────────
+  const hashSeed = `${guardianExternalId || dbResponsavel?.id || 'RESP'}-${alunoInfo.id}-${ano}-${totalPagoCentavos}`
   const authCode = `IMP-IRPF-${ano}-${Buffer.from(hashSeed).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase()}`
 
   const now = new Date()
@@ -417,5 +678,7 @@ export async function GET(request: Request) {
     dataEmissao: now.toISOString(),
     dataEmissaoExtenso,
     cidadeDataEmissao,
+    responsaveisDisponiveis,
+    alunosDisponiveis,
   })
 }
