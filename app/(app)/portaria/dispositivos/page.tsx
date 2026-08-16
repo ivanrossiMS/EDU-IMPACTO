@@ -182,10 +182,10 @@ export default function DispositivosPage() {
               <Monitor size={20} color="#fff" />
             </div>
             <div>
-              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.02em' }}>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.02em', color: '#0f172a' }}>
                 Dispositivos iDFace
               </h1>
-              <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', margin: 0 }}>
+              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
                 Cadastro, status e controle remoto de catracas e leitores faciais ControliD
               </p>
             </div>

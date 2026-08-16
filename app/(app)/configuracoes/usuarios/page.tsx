@@ -408,27 +408,27 @@ export default function UsuariosPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ position: 'relative' }}>
-                  <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+                  <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                   <input
                     type="text"
                     placeholder="Buscar colaborador..."
                     value={colabSearch}
                     onChange={(e) => { setColabSearch(e.target.value); setColabPage(1); }}
-                    style={{ padding: '8px 12px 8px 32px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', fontSize: 13, width: 250 }}
+                    style={{ padding: '8px 12px 8px 32px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, width: 250, fontWeight: 500 }}
                   />
                 </div>
                 <select 
                   value={colabLimit} 
                   onChange={(e) => { setColabLimit(Number(e.target.value)); setColabPage(1); }}
-                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', fontSize: 13 }}
+                  style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, fontWeight: 500 }}
                 >
-                  <option value={20}>20 por pág.</option>
-                  <option value={50}>50 por pág.</option>
-                  <option value={100}>100 por pág.</option>
+                  <option value={20} style={{ color: '#0f172a', background: '#ffffff' }}>20 por pág.</option>
+                  <option value={50} style={{ color: '#0f172a', background: '#ffffff' }}>50 por pág.</option>
+                  <option value={100} style={{ color: '#0f172a', background: '#ffffff' }}>100 por pág.</option>
                 </select>
               </div>
-              <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
-                Total: <strong>{colabTotal}</strong>
+              <div style={{ fontSize: 13, color: '#64748b' }}>
+                Total: <strong style={{ color: '#0f172a' }}>{colabTotal}</strong>
               </div>
             </div>
             <div className="table-container">
@@ -469,24 +469,44 @@ export default function UsuariosPage() {
                         </table>
             
             {colabTotal > colabLimit && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid hsl(var(--border-subtle))' }}>
-                <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
                   Mostrando {(colabPage - 1) * colabLimit + 1} a {Math.min(colabPage * colabLimit, colabTotal)} de {colabTotal}
                 </span>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button 
-                    className="btn btn-outline btn-sm" 
                     onClick={() => setColabPage(p => Math.max(1, p - 1))}
                     disabled={colabPage === 1}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      background: colabPage === 1 ? '#f8fafc' : '#ffffff',
+                      color: colabPage === 1 ? '#94a3b8' : '#0f172a',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: colabPage === 1 ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s'
+                    }}
                   >
                     Anterior
                   </button>
                   <button 
-                    className="btn btn-outline btn-sm" 
                     onClick={() => setColabPage(p => p + 1)}
                     disabled={colabPage * colabLimit >= colabTotal}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 8,
+                      border: '1px solid #cbd5e1',
+                      background: colabPage * colabLimit >= colabTotal ? '#f8fafc' : '#ffffff',
+                      color: colabPage * colabLimit >= colabTotal ? '#94a3b8' : '#0f172a',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: colabPage * colabLimit >= colabTotal ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s'
+                    }}
                   >
-                    Próxima
+                    Próximo
                   </button>
                 </div>
               </div>

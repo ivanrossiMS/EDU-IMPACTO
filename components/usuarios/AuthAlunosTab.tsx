@@ -311,21 +311,21 @@ export function AuthAlunosTab() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ position: 'relative', width: 320 }}>
-            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-            <input className="form-input" placeholder="Buscar por aluno, turma ou login..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ paddingLeft: 40 }} />
+            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+            <input className="form-input" placeholder="Buscar por aluno, turma ou login..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} style={{ paddingLeft: 40, background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', fontWeight: 500 }} />
           </div>
           <select 
             value={limit} 
             onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', fontSize: 13 }}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, fontWeight: 500 }}
           >
-            <option value={20}>20 por pág.</option>
-            <option value={50}>50 por pág.</option>
-            <option value={100}>100 por pág.</option>
+            <option value={20} style={{ color: '#0f172a', background: '#ffffff' }}>20 por pág.</option>
+            <option value={50} style={{ color: '#0f172a', background: '#ffffff' }}>50 por pág.</option>
+            <option value={100} style={{ color: '#0f172a', background: '#ffffff' }}>100 por pág.</option>
           </select>
         </div>
-        <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
-          Total: <strong>{totalItems}</strong>
+        <div style={{ fontSize: 13, color: '#64748b' }}>
+          Total: <strong style={{ color: '#0f172a' }}>{totalItems}</strong>
         </div>
       </div>
 
@@ -391,24 +391,44 @@ export function AuthAlunosTab() {
             </tbody>
           </table>
           {totalItems > limit && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid hsl(var(--border-subtle))' }}>
-              <span style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderTop: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
                 Mostrando {(page - 1) * limit + 1} a {Math.min(page * limit, totalItems)} de {totalItems}
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button 
-                  className="btn btn-outline btn-sm" 
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page === 1}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    background: page === 1 ? '#f8fafc' : '#ffffff',
+                    color: page === 1 ? '#94a3b8' : '#0f172a',
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: page === 1 ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s'
+                  }}
                 >
                   Anterior
                 </button>
                 <button 
-                  className="btn btn-outline btn-sm" 
                   onClick={() => setPage(p => p + 1)}
                   disabled={page * limit >= totalItems}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    background: page * limit >= totalItems ? '#f8fafc' : '#ffffff',
+                    color: page * limit >= totalItems ? '#94a3b8' : '#0f172a',
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    cursor: page * limit >= totalItems ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s'
+                  }}
                 >
-                  Próxima
+                  Próximo
                 </button>
               </div>
             </div>

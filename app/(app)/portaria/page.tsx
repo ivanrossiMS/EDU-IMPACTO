@@ -121,10 +121,10 @@ export default function PortariaDashboardPage() {
               <Scan size={22} color="#fff" />
             </div>
             <div>
-              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 26, margin: 0, letterSpacing: '-0.03em' }}>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 26, margin: 0, letterSpacing: '-0.03em', color: '#0f172a' }}>
                 Centro de Operações - Portaria iDFace
               </h1>
-              <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', margin: 0 }}>
+              <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
                 Monitoramento facial em tempo real · Controle de acesso de alunos
               </p>
             </div>

@@ -22,13 +22,39 @@ export async function POST(req: NextRequest) {
       if (error) throw error
       
       const list = []
+      let margins: Record<string, { top: number, bottom: number, left: number, right: number }> = {}
+
       for (const file of data || []) {
-        if (file.name !== '.emptyFolderPlaceholder') {
+        if (file.name === 'margins_config.json') {
+          try {
+            const { data: fileBlob } = await supabase.storage.from('documentos').download('timbrados/margins_config.json')
+            if (fileBlob) {
+              const text = await fileBlob.text()
+              margins = JSON.parse(text)
+            }
+          } catch (e) {
+            console.error('Erro ao ler margins_config.json:', e)
+          }
+        } else if (file.name !== '.emptyFolderPlaceholder') {
           const { data: pubUrl } = supabase.storage.from('documentos').getPublicUrl(`timbrados/${file.name}`)
           list.push({ name: file.name, url: pubUrl.publicUrl })
         }
       }
-      return NextResponse.json({ success: true, list })
+      return NextResponse.json({ success: true, list, margins })
+    }
+
+    if (action === 'save_margins') {
+      const marginsJson = formData.get('margins') as string
+      if (!marginsJson) throw new Error('Margens não fornecidas')
+      
+      const buffer = Buffer.from(marginsJson, 'utf-8')
+      const { error } = await supabase.storage.from('documentos').upload('timbrados/margins_config.json', buffer, {
+        contentType: 'application/json',
+        cacheControl: '0',
+        upsert: true
+      })
+      if (error) throw error
+      return NextResponse.json({ success: true })
     }
 
     if (action === 'delete') {

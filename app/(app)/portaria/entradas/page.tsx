@@ -69,11 +69,11 @@ export default function PortariaEntradasPage() {
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <Clock size={22} color={ACCENT} />
-          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.03em' }}>
+          <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.03em', color: '#0f172a' }}>
             Entradas em Tempo Real
           </h1>
         </div>
-        <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', margin: 0 }}>
+        <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
           Atualização automática a cada 5 segundos · {filtered.length} eventos
         </p>
       </div>

@@ -8,6 +8,7 @@ import { DEFAULT_PERFIS } from '@/lib/dataContext'
 import { performLogout } from '@/lib/auth/logout'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
+import { LogOut } from 'lucide-react'
 type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
@@ -973,7 +974,7 @@ export default function LoginPage() {
           </>
         )}
       </div>
-      <div style={{ marginTop: 28, textAlign: 'center' }}>
+      <div style={{ marginTop: 32, display: 'flex', justifyContent: 'center' }}>
         <button
           type="button"
           onClick={async () => {
@@ -984,18 +985,57 @@ export default function LoginPage() {
             setStep('login')
           }}
           style={{
-            background: 'none',
-            border: 'none',
-            color: 'rgba(255,255,255,0.4)',
+            position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '10px 20px',
+            borderRadius: 9999,
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+            color: 'rgba(255, 255, 255, 0.75)',
             fontSize: 13,
             fontWeight: 600,
             cursor: 'pointer',
-            textDecoration: 'underline'
+            transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+            outline: 'none',
+            letterSpacing: '-0.01em',
           }}
-          onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
-          onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'
+            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)'
+            e.currentTarget.style.color = '#fff'
+            e.currentTarget.style.transform = 'translateY(-2px)'
+            e.currentTarget.style.boxShadow = '0 10px 25px -4px rgba(239, 68, 68, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
+            e.currentTarget.style.color = 'rgba(255, 255, 255, 0.75)'
+            e.currentTarget.style.transform = 'translateY(0)'
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06)'
+          }}
         >
-          Sair ou Entrar com outra conta
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.25)',
+              color: '#f87171',
+              flexShrink: 0,
+            }}
+          >
+            <LogOut size={12} strokeWidth={2.5} />
+          </span>
+          <span>Sair ou entrar com outra conta</span>
         </button>
       </div>
     </div>

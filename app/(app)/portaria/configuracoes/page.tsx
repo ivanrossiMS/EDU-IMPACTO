@@ -342,8 +342,8 @@ export default function PortariaConfigPage() {
               <Settings size={20} color="#fff" />
             </div>
             <div>
-              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.02em' }}>Configurações da Portaria</h1>
-              <p style={{ fontSize: 12.5, color: 'hsl(var(--text-muted))', margin: 0 }}>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.02em', color: '#0f172a' }}>Configurações da Portaria</h1>
+              <p style={{ fontSize: 12.5, color: '#64748b', margin: 0 }}>
                 Ajuste os parâmetros de sincronização, regras de horários e chaves de segurança da portaria inteligente
               </p>
             </div>

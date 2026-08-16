@@ -279,11 +279,11 @@ function PortariaRelatoriosPageContent() {
             }}>
               <FileSpreadsheet size={18} color={ACCENT} />
             </div>
-            <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 900, color: 'hsl(var(--text-primary))', letterSpacing: '-0.03em' }}>
+            <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.03em' }}>
               Relatórios de Acesso Facial
             </h1>
           </div>
-          <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>
+          <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
             Filtre, analise e audite o tráfego de alunos nas catracas inteligentes iDFace.
           </p>
         </div>

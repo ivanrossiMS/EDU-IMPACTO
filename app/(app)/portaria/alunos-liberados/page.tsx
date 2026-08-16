@@ -201,8 +201,8 @@ export default function AlunosLiberadosPage() {
               <UserCheck size={20} color="#fff" />
             </div>
             <div>
-              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.02em' }}>Alunos Liberados</h1>
-              <p style={{ fontSize: 12.5, color: 'hsl(var(--text-muted))', margin: 0 }}>
+              <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 24, margin: 0, letterSpacing: '-0.02em', color: '#0f172a' }}>Alunos Liberados</h1>
+              <p style={{ fontSize: 12.5, color: '#64748b', margin: 0 }}>
                 {alunos.length} alunos ativos · {alunosComFoto} com foto · {alunosSincronizados} sincronizados no iDFace
               </p>
             </div>
