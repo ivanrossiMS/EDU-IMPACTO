@@ -928,7 +928,6 @@ export default function UploadSimuladosGerenciamentoPage() {
 
                                           return (
                                             <tr key={`${simulado.id}_${req.id || rIdx}`} className="table-row-hover" style={{ background: 'hsl(var(--bg-surface))' }}>
-                                              
                                               {/* SIMULADO Title (spans all reqs of this simulado) */}
                                               {isFirstRow && (
                                                 <td rowSpan={rowSpanCount} style={{ background: 'hsl(var(--bg-surface))', padding: '8px 12px 8px 16px', borderRadius: '12px 0 0 12px', borderLeft: '1px solid hsl(var(--border-subtle))', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', verticalAlign: 'middle' }}>
@@ -949,11 +948,59 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                       </div>
                                                       <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 500, color: 'hsl(var(--text-secondary))', marginTop: 2, whiteSpace: 'nowrap' }}>
                                                         {formatCreatedInfo(simulado.created_at, simulado.criado_por_nome)}
-                                                       </span>
-                                                     </div>
-                                                   </div>
-                                                 </td>
-                                               )}
+                                                      </span>
+                                                      {/* Botões de ação do simulado: Config, Imprimir, Editar */}
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
+                                                        {/* Config: editar configurações do simulado */}
+                                                        <Link href={editConfigUrl} style={{ textDecoration: 'none' }}>
+                                                          <button
+                                                            style={{
+                                                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                                                              padding: '3px 7px', borderRadius: 5,
+                                                              border: '1px solid rgba(139,92,246,0.35)', color: '#8b5cf6',
+                                                              background: 'rgba(139,92,246,0.06)', fontWeight: 700, fontSize: 10,
+                                                              cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
+                                                            }}
+                                                            title="Editar configurações do simulado"
+                                                          >
+                                                            <Edit size={10} /> Config
+                                                          </button>
+                                                        </Link>
+                                                        {/* Imprimir: abre todas as questões em modo impressão */}
+                                                        <Link href={`/simulados/simulados-upload/${simulado.id}/upload?all=true&print=true`} style={{ textDecoration: 'none' }}>
+                                                          <button
+                                                            style={{
+                                                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                                                              padding: '3px 7px', borderRadius: 5,
+                                                              border: '1px solid rgba(245,158,11,0.35)', color: '#d97706',
+                                                              background: 'rgba(245,158,11,0.06)', fontWeight: 700, fontSize: 10,
+                                                              cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
+                                                            }}
+                                                            title="Imprimir simulado completo (todas as matérias)"
+                                                          >
+                                                            <Printer size={10} /> Imprimir
+                                                          </button>
+                                                        </Link>
+                                                        {/* Editar: abre todas as questões de todas as matérias em modo edição */}
+                                                        <Link href={`/simulados/simulados-upload/${simulado.id}/upload?all=true`} style={{ textDecoration: 'none' }}>
+                                                          <button
+                                                            style={{
+                                                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                                                              padding: '3px 7px', borderRadius: 5,
+                                                              border: '1px solid rgba(16,185,129,0.35)', color: '#059669',
+                                                              background: 'rgba(16,185,129,0.06)', fontWeight: 700, fontSize: 10,
+                                                              cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
+                                                            }}
+                                                            title="Editar todas as questões de todas as matérias"
+                                                          >
+                                                            <Edit size={10} /> Editar
+                                                          </button>
+                                                        </Link>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </td>
+                                              )}
 
                                                {/* DISCIPLINA (Individual per req) */}
                                                <td style={{ padding: '8px 6px', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', verticalAlign: 'middle' }}>
@@ -1029,23 +1076,6 @@ export default function UploadSimuladosGerenciamentoPage() {
                                               {/* AÇÕES (Individual per req) */}
                                               <td style={{ padding: '8px 4px', borderRadius: rIdx === rowSpanCount - 1 ? '0 12px 12px 0' : '0', borderRight: '1px solid hsl(var(--border-subtle))', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', textAlign: 'right', position: 'relative', overflow: 'visible', verticalAlign: 'middle' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }} className="action-menu-container">
-                                                  
-                                                  {/* Botão Editar para este simulado -> edita configurações */}
-                                                  <Link href={editConfigUrl} style={{ textDecoration: 'none' }}>
-                                                    <button 
-                                                      style={{ 
-                                                        display: 'inline-flex', alignItems: 'center', gap: 4, 
-                                                        padding: '4px 8px', borderRadius: 6, 
-                                                        border: '1px solid rgba(59,130,246,0.4)', color: '#3b82f6', 
-                                                        background: 'rgba(59,130,246,0.05)', fontWeight: 700, fontSize: 12, 
-                                                        cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap'
-                                                      }}
-                                                      title="Editar configurações do simulado"
-                                                    >
-                                                      <Edit size={12} /> Editar
-                                                    </button>
-                                                  </Link>
-
                                                   {/* Radix DropdownMenu de 3 pontinhos para esta disciplina/professor */}
                                                   <DropdownMenu.Root>
                                                     <DropdownMenu.Trigger asChild>
@@ -1094,13 +1124,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                           </Link>
                                                         </DropdownMenu.Item>
 
-                                                        <DropdownMenu.Item asChild>
-                                                          <Link href={editConfigUrl} style={{ textDecoration: 'none', outline: 'none' }}>
-                                                            <div style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none' }} className="menu-item-hover">
-                                                              <Edit size={15} color="#ec4899" /> Editar Configurações
-                                                            </div>
-                                                          </Link>
-                                                        </DropdownMenu.Item>
+
 
                                                         <DropdownMenu.Item asChild>
                                                           <div onClick={() => setGabaritoModalId(simulado.id)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
