@@ -3058,9 +3058,7 @@ export default function AlunosPage() {
                               if (!hist.segmento) return '';
                               const match = cfgNiveisEnsino?.find((n: any) => 
                                 n.nome === hist.segmento || 
-                                cleanName(n.nome) === cleanName(hist.segmento) ||
-                                cleanName(n.nome).includes(cleanName(hist.segmento)) ||
-                                cleanName(hist.segmento).includes(cleanName(n.nome))
+                                cleanName(n.nome) === cleanName(hist.segmento)
                               );
                               return match ? match.nome : hist.segmento;
                             })()} 
@@ -3078,9 +3076,7 @@ export default function AlunosPage() {
                             {(() => {
                               const hasExact = cfgNiveisEnsino?.some((n: any) => 
                                 n.nome === hist.segmento || 
-                                cleanName(n.nome) === cleanName(hist.segmento) ||
-                                cleanName(n.nome).includes(cleanName(hist.segmento)) ||
-                                cleanName(hist.segmento).includes(cleanName(n.nome))
+                                cleanName(n.nome) === cleanName(hist.segmento)
                               );
                               return (
                                 <>
@@ -3109,7 +3105,7 @@ export default function AlunosPage() {
                             disabled={!hist.anoLetivo || !hist.segmento}
                             value={(() => {
                               if (!hist.serie) return '';
-                              const selectedNivel = cfgNiveisEnsino?.find((n: any) => n.nome === hist.segmento || cleanName(n.nome) === cleanName(hist.segmento || '') || cleanName(n.nome).includes(cleanName(hist.segmento || '')) || cleanName(hist.segmento || '').includes(cleanName(n.nome)));
+                              const selectedNivel = cfgNiveisEnsino?.find((n: any) => n.nome === hist.segmento || cleanName(n.nome) === cleanName(hist.segmento || ''));
                               const seriesDisponiveis = selectedNivel?.series || [];
                               const match = seriesDisponiveis.find((s: any) => 
                                 s.nome === hist.serie || 
@@ -3128,7 +3124,7 @@ export default function AlunosPage() {
                           >
                             <option value="">Selecione a série...</option>
                             {(() => {
-                              const selectedNivel = cfgNiveisEnsino?.find((n: any) => n.nome === hist.segmento || cleanName(n.nome) === cleanName(hist.segmento || '') || cleanName(n.nome).includes(cleanName(hist.segmento || '')) || cleanName(hist.segmento || '').includes(cleanName(n.nome)));
+                              const selectedNivel = cfgNiveisEnsino?.find((n: any) => n.nome === hist.segmento || cleanName(n.nome) === cleanName(hist.segmento || ''));
                               const seriesDisponiveis = selectedNivel?.series || [];
                               const hasExact = seriesDisponiveis.some((s: any) => s.nome === hist.serie || cleanName(s.nome) === cleanName(hist.serie));
                               return (
@@ -3187,15 +3183,15 @@ export default function AlunosPage() {
                                 const tAno = String(t.dados?.anoLetivo || t.anoLetivo || t.ano || '');
 
                                 const anoMatch = !hist.anoLetivo || !tAno || tAno === String(hist.anoLetivo);
-                                const segMatch = !hist.segmento || tSeg === cleanHistSeg || tSeg.includes(cleanHistSeg) || cleanHistSeg.includes(tSeg);
-                                const serieMatch = !hist.serie || tSerie === cleanHistSerie || tSerie.includes(cleanHistSerie) || cleanHistSerie.includes(tSerie);
+                                const segMatch = !hist.segmento || tSeg === cleanHistSeg;
+                                const serieMatch = !hist.serie || tSerie === cleanHistSerie;
                                 return anoMatch && segMatch && serieMatch;
                               });
 
                               if (filtered.length === 0 && hist.serie) {
                                 filtered = todasTurmas.filter((t: any) => {
                                   const tSerie = cleanName(t.dados?.serie || t.serie || '');
-                                  return tSerie === cleanHistSerie || tSerie.includes(cleanHistSerie) || cleanHistSerie.includes(tSerie);
+                                  return tSerie === cleanHistSerie;
                                 });
                               }
 
