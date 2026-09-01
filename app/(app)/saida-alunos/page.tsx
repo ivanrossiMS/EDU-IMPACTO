@@ -1,8 +1,20 @@
 'use client'
 import { useEffect } from 'react'
-import { Tablet, Monitor, History, Settings, ExternalLink } from 'lucide-react'
+import { Tablet, Monitor, History, Settings, ExternalLink, Megaphone } from 'lucide-react'
 
 const ITEMS = [
+  {
+    icon: Megaphone, color: '#ec4899', bg: 'rgba(236,72,153,0.08)', bd: 'rgba(236,72,153,0.25)',
+    title: 'Anúncios no Som',
+    desc: 'Locução e anúncios por voz no som da escola com biblioteca de frases',
+    href: '/saida-alunos/anunciar', newTab: false,
+  },
+  {
+    icon: History,  color: '#10b981', bg: 'rgba(16,185,129,0.08)', bd: 'rgba(16,185,129,0.25)',
+    title: 'Gestão de Chamadas',
+    desc: 'Histórico, confirmações e controle de todas as chamadas',
+    href: '/saida-alunos/chamadas', newTab: false,
+  },
   {
     icon: Tablet,   color: '#06b6d4', bg: 'rgba(6,182,212,0.08)', bd: 'rgba(6,182,212,0.25)',
     title: 'Painel Tablet',
@@ -14,12 +26,6 @@ const ITEMS = [
     title: 'Monitor TV',
     desc: 'Painel para TV da portaria com chamadas em tempo real',
     href: '/monitor-tv', newTab: true,
-  },
-  {
-    icon: History,  color: '#10b981', bg: 'rgba(16,185,129,0.08)', bd: 'rgba(16,185,129,0.25)',
-    title: 'Gestão de Chamadas',
-    desc: 'Histórico, confirmações e controle de todas as chamadas',
-    href: '/saida-alunos/chamadas', newTab: false,
   },
   {
     icon: Settings, color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', bd: 'rgba(245,158,11,0.2)',

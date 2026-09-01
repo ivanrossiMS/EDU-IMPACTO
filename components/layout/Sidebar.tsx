@@ -97,7 +97,6 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
         label: 'ENTRADA IDFACE', icon: <Scan size={16} />,
         children: [
           { label: 'DASHBOARD', href: '/portaria', icon: <LayoutDashboard size={11} /> },
-          { label: 'MONITOR ENTRADAS', href: '/portaria/entradas', icon: <Monitor size={11} /> },
           { label: 'ALUNOS LIBERADOS', href: '/portaria/alunos-liberados', icon: <UserCheck size={11} /> },
           { label: 'LOGS DE ACESSO', href: '/portaria/logs', icon: <ListChecks size={11} /> },
           { label: 'RELATÓRIOS', href: '/portaria/relatorios', icon: <FileSpreadsheet size={11} /> },
@@ -109,6 +108,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
         label: 'SAÍDA DE ALUNOS', icon: <DoorOpen size={16} />,
         children: [
           { label: 'CHAMADAS', href: '/saida-alunos/chamadas', icon: <LogOut size={11} /> },
+          { label: 'ANUNCIAR', href: '/saida-alunos/anunciar', icon: <Megaphone size={11} /> },
           { label: 'PAINEL-TABLET', href: '/painel-tablet', icon: <Tablet size={11} /> },
           { label: 'MONITOR TV (VERTICAL)', href: '/monitor-tv', icon: <Monitor size={11} />, target: '_blank' },
           { label: 'RELATÓRIOS', href: '/saida-alunos/relatorios', icon: <FileText size={11} /> },

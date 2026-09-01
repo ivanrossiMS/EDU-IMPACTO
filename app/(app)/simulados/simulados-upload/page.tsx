@@ -949,7 +949,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                       <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 500, color: 'hsl(var(--text-secondary))', marginTop: 2, whiteSpace: 'nowrap' }}>
                                                         {formatCreatedInfo(simulado.created_at, simulado.criado_por_nome)}
                                                       </span>
-                                                      {/* Botões de ação do simulado: Config, Imprimir, Editar, Gabarito, Adaptar */}
+                                                      {/* Botões de ação do simulado: Config, Imprimir, Editar */}
                                                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
                                                         {/* Config: editar configurações do simulado */}
                                                         <Link href={editConfigUrl} style={{ textDecoration: 'none' }}>
@@ -996,34 +996,6 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                             <Edit size={10} /> Editar
                                                           </button>
                                                         </Link>
-                                                        {/* Gabarito */}
-                                                        <button
-                                                          onClick={() => setGabaritoModalId(simulado.id)}
-                                                          style={{
-                                                            display: 'inline-flex', alignItems: 'center', gap: 3,
-                                                            padding: '3px 7px', borderRadius: 5,
-                                                            border: '1px solid rgba(16,185,129,0.35)', color: '#059669',
-                                                            background: 'rgba(16,185,129,0.06)', fontWeight: 700, fontSize: 10,
-                                                            cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
-                                                          }}
-                                                          title="Ver gabarito do simulado"
-                                                        >
-                                                          <CheckSquare size={10} /> Gabarito
-                                                        </button>
-                                                        {/* Adaptar */}
-                                                        <button
-                                                          onClick={() => handleAdaptar(simulado)}
-                                                          style={{
-                                                            display: 'inline-flex', alignItems: 'center', gap: 3,
-                                                            padding: '3px 7px', borderRadius: 5,
-                                                            border: '1px solid rgba(59,130,246,0.35)', color: '#2563eb',
-                                                            background: 'rgba(59,130,246,0.06)', fontWeight: 700, fontSize: 10,
-                                                            cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
-                                                          }}
-                                                          title="Adaptar simulado"
-                                                        >
-                                                          <BookOpen size={10} /> Adaptar
-                                                        </button>
                                                       </div>
                                                     </div>
                                                   </div>
@@ -1153,6 +1125,18 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                         </DropdownMenu.Item>
 
 
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <div onClick={() => setGabaritoModalId(simulado.id)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
+                                                            <CheckSquare size={15} color="#10b981" /> Gabarito
+                                                          </div>
+                                                        </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Item asChild>
+                                                          <div onClick={() => handleAdaptar(simulado)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
+                                                            <BookOpen size={15} color="#3b82f6" /> Adaptar simulado
+                                                          </div>
+                                                        </DropdownMenu.Item>
 
                                                         <DropdownMenu.Item asChild>
                                                           <Link href={`/simulados/simulados-upload/${simulado.id}/upload?print=true&req=${req.id}`} style={{ textDecoration: 'none', outline: 'none' }}>

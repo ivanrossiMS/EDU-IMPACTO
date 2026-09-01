@@ -61,6 +61,30 @@ export interface SaidaLog {
   createdAt: string
 }
 
+export interface SchoolAnnouncement {
+  id: string
+  title: string
+  phrase: string
+  category: 'portaria' | 'intervalo' | 'comunicado' | 'veiculos' | 'emergencia' | 'geral'
+  isFavorite?: boolean
+  playChime?: boolean
+  repeatCount?: number
+  createdAt: string
+  lastUsedAt?: string
+  tags?: string[]
+}
+
+export interface AnnouncementHistoryItem {
+  id: string
+  phrase: string
+  title?: string
+  category?: string
+  playedAt: string
+  operatorName?: string
+  repeatCount?: number
+  withChime?: boolean
+}
+
 export interface SaidaConfig {
   rfidEnabled: boolean
   voiceEnabled: boolean
@@ -136,6 +160,8 @@ interface SaidaCtx {
   addSpecialAuth: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, operatorName: string, studentPhoto?: string | null) => PickupCall
   confirmSpecialExit: (studentId: string, studentName: string, studentClass: string, authorizedPerson: string, studentPhoto?: string | null) => PickupCall
   confirmSoloExit: (studentId: string, studentName: string, studentClass: string, studentPhoto?: string | null) => PickupCall | null
+  broadcastAnnouncement: (phrase: string, options?: { repeat?: number, chime?: boolean, title?: string, operatorName?: string, rate?: number, pitch?: number }) => void
+  cancelAnnouncement: () => void
   updateConfig: (patch: Partial<SaidaConfig>) => Promise<void>
   clearLog: () => void
   clearCalls: () => void
@@ -348,6 +374,10 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
               })
             } else if (event === 'CLEAR_ALL_CALLS') {
               setActiveCallsLocal?.([])
+            } else if (event === 'ANNOUNCEMENT_VOICE') {
+              emit('ANNOUNCEMENT_VOICE', data || {})
+            } else if (event === 'CANCEL_ANNOUNCEMENT') {
+              emit('CANCEL_ANNOUNCEMENT', data || {})
             }
           }
         )
@@ -918,6 +948,29 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     }
   }, [setActiveCalls, setActiveCallsLocal])
 
+  const broadcastAnnouncement = useCallback((phrase: string, options?: { repeat?: number, chime?: boolean, title?: string, operatorName?: string, rate?: number, pitch?: number }) => {
+    if (!phrase || !phrase.trim()) return
+    const payloadData = {
+      phrase: phrase.trim(),
+      repeatCount: options?.repeat ?? 0,
+      chime: options?.chime ?? true,
+      title: options?.title || '',
+      operatorName: options?.operatorName || 'Portaria',
+      rate: options?.rate ?? config?.voiceRate ?? 0.9,
+      pitch: options?.pitch ?? config?.voicePitch ?? 1.0,
+      sentAt: new Date().toISOString(),
+    }
+    // 1. Send to Supabase network shared room
+    sendBroadcast('ANNOUNCEMENT_VOICE', payloadData)
+    // 2. Send to local broadcast channel
+    emit('ANNOUNCEMENT_VOICE', payloadData)
+  }, [sendBroadcast, emit, config])
+
+  const cancelAnnouncement = useCallback(() => {
+    sendBroadcast('CANCEL_ANNOUNCEMENT', {})
+    emit('CANCEL_ANNOUNCEMENT', {})
+  }, [sendBroadcast, emit])
+
   const filteredActiveCalls = useMemo(() => {
     return (activeCalls || []).filter(c => isFromToday(c.calledAt))
   }, [activeCalls, isFromToday])
@@ -929,6 +982,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
       isConfigLoading,
       realtimeStatus, isLoadingCalls,
       callStudent, blockAttempt, confirmPickup, cancelCall, recallStudent, revertCall, deleteCall, addSpecialAuth, confirmSpecialExit, confirmSoloExit,
+      broadcastAnnouncement, cancelAnnouncement,
       updateConfig, clearLog, clearCalls, refreshCalls,
     }}>
       {children}

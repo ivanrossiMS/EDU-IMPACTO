@@ -421,6 +421,38 @@ function MonitorContent() {
     displayCallsRef.current = displayCalls
   }, [turmas, config, audioUnlocked, displayCalls])
 
+// ── School Chime Synthesizer (High Fidelity Web Audio API) ────────────────────
+function playSchoolChime() {
+  try {
+    if (typeof window === 'undefined') return Promise.resolve()
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextClass) return Promise.resolve()
+    const ctx = new AudioContextClass()
+    if (ctx.state === 'suspended') ctx.resume()
+
+    const now = ctx.currentTime
+    const notes = [523.25, 659.25, 783.99] // C5 - E5 - G5 harmonic announcement chord
+
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, now + i * 0.15)
+      gain.gain.setValueAtTime(0.001, now + i * 0.15)
+      gain.gain.exponentialRampToValueAtTime(0.22, now + i * 0.15 + 0.04)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.15 + 0.5)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + i * 0.15)
+      osc.stop(now + i * 0.15 + 0.55)
+    })
+
+    return new Promise(resolve => setTimeout(resolve, 600))
+  } catch (e) {
+    return Promise.resolve()
+  }
+}
+
   // Realtime events listener
   useEffect(() => {
     const unsub = on('*', payload => {
@@ -441,9 +473,29 @@ function MonitorContent() {
         setDisplayCalls([])
         spokenRef.current.clear()
       }
+      if (payload.event === 'ANNOUNCEMENT_VOICE' && d.phrase) {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis.paused) {
+          window.speechSynthesis.resume()
+        }
+        const runAnnouncement = async () => {
+          if (d.chime !== false) {
+            await playSchoolChime()
+          }
+          voice.speak(d.phrase, {
+            repeatCount: d.repeatCount || 0,
+            rate: d.rate || config?.voiceRate || 0.9,
+            pitch: d.pitch || config?.voicePitch || 1.0,
+            volume: config?.voiceVolume ?? 1.0,
+          })
+        }
+        runAnnouncement()
+      }
+      if (payload.event === 'CANCEL_ANNOUNCEMENT') {
+        voice.cancel()
+      }
     })
     return () => { unsub() }
-  }, [on])
+  }, [on, voice, config])
 
   const isScreenLoading = !mounted || isLoadingCalls
   const hasCards = displayCalls.length > 0
