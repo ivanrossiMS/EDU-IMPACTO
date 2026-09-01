@@ -53,5 +53,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>O Impacto Edu precisa acessar sua câmera para tirar fotos de provas e documentos do aluno.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O Impacto Edu precisa acessar sua galeria para selecionar fotos de provas e documentos do aluno.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O Impacto Edu precisa salvar imagens na sua galeria.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>O Impacto Edu pode precisar acessar o microfone para gravar vídeos junto com a câmera.</string>
 </dict>
 </plist>
