@@ -1,6 +1,8 @@
 import mammoth from 'mammoth'
 import JSZip from 'jszip'
 import { DOMParser } from '@xmldom/xmldom'
+import { convertMetafileToSvg, isWmfOrEmf } from './wmfToSvg'
+import { parseMtefToLatex } from './mtefParser'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // OMML (Office Math Markup Language) to LaTeX Converter
@@ -581,14 +583,16 @@ export function parseBlock(block: string): ParsedBlock {
       .replace(/\[\[GABARITO\]\]/g, '')
       .trim()
 
-    // If this is the last alternative and no explicit gabarito was found yet, check inside the text
-    if (i === bestSeq.length - 1 && !explicitGabaritoLetter) {
-      const altGabMatch = text.match(/(?:[\n\r\s,;.\-\–\—]|^)(?:\(?\s*(?:gabarito|resposta(?:\s+correta)?|resp|chave)[\s\:\-\–\—\=]+(?:\(?\s*)?([a-eA-E])(?:\s*\)?)?[\s\.\,\;]*\s*)$/i)
-      if (altGabMatch) {
+    // Check if this alternative contains an explicit gabarito marker at the end
+    const altGabMatch = text.match(/(?:[\n\r\s,;.\-\–\—]|^)(?:\(?\s*(?:gabarito|resposta(?:\s+correta)?|resp|chave)[\s\:\-\–\—\=]+(?:\(?\s*)?([a-eA-E])(?:\s*\)?)?[\s\.\,\;]*\s*)$/i)
+    if (altGabMatch) {
+      if (!explicitGabaritoLetter) {
         explicitGabaritoLetter = altGabMatch[1].toUpperCase()
-        text = text.slice(0, altGabMatch.index).trim()
       }
+      text = text.slice(0, altGabMatch.index).trim()
     }
+    // Also clean any trailing standalone "Gabarito X"
+    text = text.replace(/(?:[\n\r\s,;.\-\–\—]|^)(?:gabarito|resposta|resp|chave)\s*[:=\-]?\s*[a-eA-E]\s*$/i, '').trim()
 
     alternatives.push({ letter: bestSeq[i].letter, text, correct: isCorrect })
   }
@@ -646,7 +650,7 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
   if (unique.length === 0 && normalized.trim().length > 0) {
     const { statement, alternatives, detectedGabarito } = parseBlock(normalized.trim())
     const imgIds: string[] = []
-    const cleanStmt = statement.replace(/\[\[IMAGE:(img_\d+)\]\]/g, (_match, id) => {
+    const cleanStmt = statement.replace(/\[\[IMAGE:([^\]]+)\]\]/g, (_match, id) => {
       imgIds.push(id)
       return `[IMAGEM ${imgIds.length}]`
     }).trim()
@@ -674,7 +678,7 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
 
     // Extract [[IMAGE:id]] markers from this block
     const imgIds: string[] = []
-    block = block.replace(/\[\[IMAGE:(img_\d+)\]\]/g, (_match, id) => {
+    block = block.replace(/\[\[IMAGE:([^\]]+)\]\]/g, (_match, id) => {
       imgIds.push(id)
       return `[IMAGEM ${imgIds.length}]`
     }).trim()
@@ -683,8 +687,24 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
     const { statement, alternatives, detectedGabarito } = parseBlock(block)
 
     // Resolve images
+    const allImages = Array.from(imageMap.values())
+    let unmappedIdx = 0
     const imagens = imgIds
-      .map((id) => imageMap.get(id))
+      .map((id) => {
+        let found = imageMap.get(id)
+        if (!found) {
+          for (const [k, v] of imageMap.entries()) {
+            if (k.includes(id) || id.includes(k)) {
+              found = v
+              break
+            }
+          }
+        }
+        if (!found && unmappedIdx < allImages.length) {
+          found = allImages[unmappedIdx++]
+        }
+        return found
+      })
       .filter(Boolean)
       .map((img: any) => ({ src: img.src, contentType: img.contentType }))
 
@@ -823,6 +843,41 @@ export async function parseDocx(originalBuffer: Buffer): Promise<{ text: string;
         return run
       })
 
+      // 5. Extract all media relationships from word/_rels/document.xml.rels
+      const relsMap = new Map<string, string>()
+      try {
+        const relsXml = await zip.file('word/_rels/document.xml.rels')?.async('string')
+        if (relsXml) {
+          const relRe = /<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/gi
+          let rm
+          while ((rm = relRe.exec(relsXml)) !== null) {
+            relsMap.set(rm[1], rm[2])
+          }
+        }
+      } catch (e) {
+        console.warn('[docxMathParser] Error reading relationships:', e)
+      }
+
+      // 6. Pre-extract all drawings, pictures, and OLE objects (<w:drawing>, <w:pict>, <w:object>, <v:shape>, <v:imagedata>, <a:blip>)
+      let vmlImgCounter = 0
+      docXml = docXml.replace(/<(?:w:drawing|w:pict|w:object|v:shape)\b[\s\S]*?<\/(?:w:drawing|w:pict|w:object|v:shape)>/gi, (shapeBlock) => {
+        const allRIds = Array.from(shapeBlock.matchAll(/(?:r:id|r:embed)="([^"]+)"/g)).map((m) => m[1])
+        for (const rId of allRIds) {
+          let target = relsMap.get(rId)
+          if (target) {
+            if (target.startsWith('../')) target = target.replace(/^\.\.\//, '')
+            if (!target.startsWith('word/')) target = `word/${target}`
+            if (zip.file(target)) {
+              modified = true
+              return `<w:r><w:t>[[IMAGE:rel_${rId}]]</w:t></w:r>`
+            }
+          }
+        }
+        const fid = `obj_img_${++vmlImgCounter}`
+        modified = true
+        return `<w:r><w:t>[[IMAGE:${fid}]]</w:t></w:r>`
+      })
+
       if (modified) {
         zip.file('word/document.xml', docXml)
         const newBuf = await zip.generateAsync({ type: 'nodebuffer' })
@@ -834,7 +889,90 @@ export async function parseDocx(originalBuffer: Buffer): Promise<{ text: string;
   }
 
   const imageMap = new Map<string, any>()
+  const mediaOrderedList: { id: string; src: string; contentType: string }[] = []
   let imgIndex = 0
+
+  // Helper to convert any image buffer to browser-compatible format
+  const processImageBuffer = (imgBuffer: Buffer, rawContentType?: string) => {
+    let contentType = rawContentType || 'image/png'
+    let src = ''
+
+    if (
+      contentType.includes('wmf') ||
+      contentType.includes('emf') ||
+      contentType.includes('x-wmf') ||
+      contentType.includes('x-emf') ||
+      isWmfOrEmf(imgBuffer)
+    ) {
+      const svg = convertMetafileToSvg(imgBuffer)
+      if (svg) {
+        contentType = 'image/svg+xml'
+        const base64Svg = Buffer.from(svg).toString('base64')
+        src = `data:image/svg+xml;base64,${base64Svg}`
+      } else {
+        const base64 = imgBuffer.toString('base64')
+        src = `data:${contentType};base64,${base64}`
+      }
+    } else {
+      if (imgBuffer[0] === 0xff && imgBuffer[1] === 0xd8) contentType = 'image/jpeg'
+      else if (imgBuffer[0] === 0x89 && imgBuffer[1] === 0x50 && imgBuffer[2] === 0x4e && imgBuffer[3] === 0x47) contentType = 'image/png'
+      else if (imgBuffer[0] === 0x47 && imgBuffer[1] === 0x49 && imgBuffer[2] === 0x46) contentType = 'image/gif'
+
+      const base64 = imgBuffer.toString('base64')
+      src = `data:${contentType};base64,${base64}`
+    }
+
+    return { src, contentType }
+  }
+
+  // Pre-load all media files from zip
+  try {
+    const zip = await JSZip.loadAsync(buffer)
+    const relsXml = await zip.file('word/_rels/document.xml.rels')?.async('string')
+    const relsMap = new Map<string, string>()
+    if (relsXml) {
+      const relRe = /<Relationship\s+[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/gi
+      let rm
+      while ((rm = relRe.exec(relsXml)) !== null) {
+        relsMap.set(rm[1], rm[2])
+      }
+    }
+
+    // Process all files in word/media/
+    const mediaFiles = Object.keys(zip.files).filter((k) => k.startsWith('word/media/'))
+    for (const mf of mediaFiles) {
+      const f = zip.file(mf)
+      if (f) {
+        const imgBuf = await f.async('nodebuffer')
+        const { src, contentType } = processImageBuffer(imgBuf)
+        const filename = mf.replace('word/media/', '')
+        const item = { id: `media_${filename}`, src, contentType }
+        imageMap.set(`media_${filename}`, item)
+        mediaOrderedList.push(item)
+      }
+    }
+
+    for (const [rId, targetRel] of relsMap.entries()) {
+      let target = targetRel
+      if (target.startsWith('../')) target = target.replace(/^\.\.\//, '')
+      if (!target.startsWith('word/')) target = `word/${target}`
+
+      if (target.includes('/media/') || target.includes('/embeddings/')) {
+        const fileInZip = zip.file(target)
+        if (fileInZip) {
+          const imgBuf = await fileInZip.async('nodebuffer')
+          const { src, contentType } = processImageBuffer(imgBuf)
+          const item = { id: `rel_${rId}`, src, contentType }
+          imageMap.set(`rel_${rId}`, item)
+          if (!mediaOrderedList.some((m) => m.src === src)) {
+            mediaOrderedList.push(item)
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[docxMathParser] Error pre-loading media files:', e)
+  }
 
   const result = await mammoth.convertToHtml(
     { buffer },
@@ -842,10 +980,13 @@ export async function parseDocx(originalBuffer: Buffer): Promise<{ text: string;
       convertImage: mammoth.images.imgElement(async (img: any) => {
         try {
           const imgBuffer = await img.read()
-          const base64 = imgBuffer.toString('base64')
-          const src = `data:${img.contentType};base64,${base64}`
+          const { src, contentType } = processImageBuffer(imgBuffer, img.contentType)
           const id = `img_${++imgIndex}`
-          imageMap.set(id, { id, src, contentType: img.contentType })
+          const item = { id, src, contentType }
+          imageMap.set(id, item)
+          if (!mediaOrderedList.some((m) => m.src === src)) {
+            mediaOrderedList.push(item)
+          }
           return { src: `[[IMAGE:${id}]]` }
         } catch {
           return { src: '' }
@@ -855,6 +996,21 @@ export async function parseDocx(originalBuffer: Buffer): Promise<{ text: string;
   )
 
   let html = result.value
+
+  // Replace [[VML_IMG:fid:rId]] with [[IMAGE:rel_rId]]
+  html = html.replace(/\[\[VML_IMG:([^:]+):([^\]]+)\]\]/g, (_m, _fid, rId) => {
+    return `[[IMAGE:rel_${rId}]]`
+  })
+
+  // Replace any rogue control/replacement characters (the black diamond with question mark) with actual images
+  let unmappedMediaIndex = 0
+  html = html.replace(/[\u0001\uFFFD\u0008\u0014\u0015\uFFFE]/g, () => {
+    if (unmappedMediaIndex < mediaOrderedList.length) {
+      const item = mediaOrderedList[unmappedMediaIndex++]
+      return `\n[[IMAGE:${item.id}]]\n`
+    }
+    return ''
+  })
 
   // Preserve image markers
   html = html.replace(/<img\b[^>]*?src="(\[\[IMAGE:[^\]]*\]\])"[^>]*\/?>/gi, '\n$1\n')
@@ -915,4 +1071,87 @@ export async function parsePdf(buffer: Buffer): Promise<{ text: string; imageMap
   const pdfParse = pdfParseModule.default || pdfParseModule
   const data = await pdfParse(buffer)
   return { text: data.text || '', imageMap: new Map() }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AI ENHANCEMENT (Optional Gemini Vision Math Transcriber)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function enhanceQuestionsWithAI(questoes: any[]): Promise<any[]> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY
+  if (!apiKey || !Array.isArray(questoes)) return questoes
+
+  try {
+    const { GoogleGenAI } = await import('@google/genai')
+    const ai = new GoogleGenAI({ apiKey })
+
+    const enhanced = await Promise.all(
+      questoes.map(async (q) => {
+        if (!q.imagens || q.imagens.length === 0) return q
+
+        // If question contains image tags like [IMAGEM 1]
+        if (!/\[IMAGEM \d+\]/i.test(q.enunciado) && !(q.alternativas || []).some((a: any) => /\[IMAGEM \d+\]/i.test(a.text))) {
+          return q
+        }
+
+        try {
+          const contents: any[] = []
+          contents.push({
+            text: `Você é um transcritor especialista em LaTeX.
+Abaixo está o enunciado e alternativas de uma questão com marcadores [IMAGEM N].
+Transcreva qualquer fórmula matemática contida nas imagens anexas em notação LaTeX precisa (ex: \\(2^{x+1}=32\\), \\(\\frac{a}{b}\\), \\(\\log_{10}(M_0)\\)).
+Mantenha diagramas e gráficos como imagens.
+Retorne exclusivamente JSON no formato:
+{ "enunciado": "...", "alternativas": [{ "letter": "A", "text": "...", "correct": false }] }
+
+Enunciado atual: ${q.enunciado}
+Alternativas atuais: ${JSON.stringify(q.alternativas || [])}`
+          })
+
+          for (const img of q.imagens) {
+            if (img.src && img.src.startsWith('data:')) {
+              const matches = img.src.match(/^data:([^;]+);base64,(.+)$/)
+              if (matches) {
+                contents.push({
+                  inlineData: {
+                    mimeType: matches[1],
+                    data: matches[2],
+                  },
+                })
+              }
+            }
+          }
+
+          if (contents.length > 1) {
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash',
+              contents,
+              config: { responseMimeType: 'application/json' },
+            })
+
+            const text = response.text
+            if (text) {
+              const parsed = JSON.parse(text)
+              if (parsed.enunciado) {
+                return {
+                  ...q,
+                  enunciado: parsed.enunciado,
+                  alternativas: parsed.alternativas && parsed.alternativas.length ? parsed.alternativas : q.alternativas,
+                }
+              }
+            }
+          }
+        } catch (imgErr) {
+          console.warn('[docxMathParser] AI transcription for single question skipped:', imgErr)
+        }
+
+        return q
+      })
+    )
+
+    return enhanced
+  } catch (e) {
+    console.warn('[docxMathParser] AI enhancement failed, returning original:', e)
+    return questoes
+  }
 }

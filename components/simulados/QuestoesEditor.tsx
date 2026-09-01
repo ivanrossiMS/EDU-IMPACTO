@@ -428,7 +428,7 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
                           {q.imagens.map((img, imgIdx) => (
                             <div key={imgIdx} style={{ position: 'relative', border: '1px solid hsl(var(--border-subtle))', borderRadius: 10, overflow: 'hidden', width: 160, height: 120, background: 'hsl(var(--bg-app))' }}>
-                              <img src={img.src} alt={`Imagem ${imgIdx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'white' }} />
+                              <img src={typeof img === 'string' ? img : img?.src} alt={`Imagem ${imgIdx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'white' }} />
                               <div style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>
                                 [IMAGEM {imgIdx + 1}]
                               </div>

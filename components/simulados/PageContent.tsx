@@ -1363,8 +1363,9 @@ export function PageContent({
                           const imgBaseUrl = hashIndex !== -1 ? img.substring(0, hashIndex) : img;
                           const hashStr = hashIndex !== -1 ? img.substring(hashIndex + 1) : '';
                           const params = new URLSearchParams(hashStr);
+                          const isSvg = (imgBaseUrl || '').startsWith('data:image/svg') || (imgBaseUrl || '').includes('.svg');
                           const imgWidthStr = params.get('w');
-                          const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : 350;
+                          const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : (isSvg ? null : 350);
                           const imgAlign = params.get('a') || 'center';
                           const justifyContent = imgAlign === 'left' ? 'flex-start' : imgAlign === 'right' ? 'flex-end' : 'center';
                           const menuKey = `${q.id}-img-${i}`;
@@ -1406,8 +1407,8 @@ export function PageContent({
                           };
 
                           return (
-                            <div key={`img-${i}-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%' }}>
-                              <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                            <div key={`img-${i}-${pIdx}`} className="alt-hover-group" style={{ position: 'relative', display: 'flex', justifyContent, width: imgWidth ? `${imgWidth}px` : 'auto', maxWidth: '100%', margin: isSvg ? '4px auto' : undefined }}>
+                              <img src={imgBaseUrl || undefined} style={{ width: imgWidth ? '100%' : 'auto', maxWidth: '100%', maxHeight: isSvg ? '75px' : '220mm', height: 'auto', borderRadius: isSvg ? 0 : 8, display: 'block', objectFit: 'contain' }} />
                               
                               {onEditEnunciadoImage && !readOnly && (
                                 <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>

@@ -116,9 +116,16 @@ export function cleanEnunciadoHtml(html: string): string {
 
 export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
   const parts: { type: 'text'|'img'|'lines', content?: string, url?: string, index?: number, count?: number, style?: 'pautado'|'branco' }[] = [];
+  
+  const getImgUrl = (item: any): string => {
+    if (!item) return '';
+    if (typeof item === 'string') return item;
+    return item.src || '';
+  };
+
   if (!enunciado) {
     if (imagens && imagens.length > 0) {
-      imagens.forEach((url, i) => parts.push({ type: 'img', url, index: i }));
+      imagens.forEach((url, i) => parts.push({ type: 'img', url: getImgUrl(url), index: i }));
     }
     return parts;
   }
@@ -137,7 +144,8 @@ export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
       let cleanSrc = src.split('#')[0].split('?')[0].replace(/&amp;/g, '&');
       try { cleanSrc = decodeURIComponent(cleanSrc); } catch(e) {}
       
-      const idx = imagens.findIndex((imgUrl: string) => {
+      const idx = imagens.findIndex((imgItem: any) => {
+         const imgUrl = getImgUrl(imgItem);
          if (!imgUrl) return false;
          let cleanImg = imgUrl.split('#')[0].split('?')[0].replace(/&amp;/g, '&');
          try { cleanImg = decodeURIComponent(cleanImg); } catch(e) {}
@@ -180,7 +188,7 @@ export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
       if (imgMatch) {
         const imgIndex = parseInt(imgMatch[0], 10) - 1; 
         if (imagens && imgIndex >= 0 && imgIndex < imagens.length) {
-          parts.push({ type: 'img', url: imagens[imgIndex], index: imgIndex });
+          parts.push({ type: 'img', url: getImgUrl(imagens[imgIndex]), index: imgIndex });
         }
       }
     } else if (tag.startsWith('[LINHAS')) {
@@ -202,7 +210,7 @@ export function parseEnunciadoParts(enunciado: string, imagens: any[]) {
     const referencedIndices = parts.filter(p => p.type === 'img').map(p => p.index);
     imagens.forEach((url, i) => {
       if (!referencedIndices.includes(i)) {
-        parts.push({ type: 'img', url, index: i });
+        parts.push({ type: 'img', url: getImgUrl(url), index: i });
       }
     });
   }
