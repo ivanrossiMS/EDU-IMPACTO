@@ -1,25 +1,55 @@
 workflows:
-  android-workflow:
-    name: Android Build
+  android-release-workflow:
+    name: Android Release Build (.aab)
     instance_type: mac_mini_m1
     max_build_duration: 120
     environment:
+      groups:
+        - supabase_credentials
       java: 21
       node: latest
     scripts:
       - name: Install npm dependencies
         script: npm install
+      - name: Build web app
+        script: npm run build
       - name: Sync Capacitor Android
         script: |
           mkdir -p android/app/src/main/assets
           npx cap sync android
-      - name: Build Android App (APK)
+      - name: Set up code signing keystore
+        script: |
+          KEYSTORE_DIR="$CM_BUILD_DIR/android/app"
+          mkdir -p "$KEYSTORE_DIR"
+          if [ -n "$CM_KEYSTORE" ]; then
+            echo "Usando keystore fornecida nas variáveis do Codemagic..."
+            echo "$CM_KEYSTORE" | base64 --decode > "$KEYSTORE_DIR/release-key.jks"
+          elif [ ! -f "$KEYSTORE_DIR/release-key.jks" ]; then
+            echo "Gerando nova chave de release..."
+            keytool -genkeypair \
+              -v \
+              -keystore "$KEYSTORE_DIR/release-key.jks" \
+              -alias "${CM_KEY_ALIAS:-impacto-edu}" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "${CM_KEYSTORE_PASSWORD:-ImpactoEdu2026!}" \
+              -keypass "${CM_KEY_PASSWORD:-ImpactoEdu2026!}" \
+              -dname "CN=Impacto Edu, OU=Mobile, O=Impacto Edu, C=BR"
+          fi
+          echo "CM_KEYSTORE_PATH=$KEYSTORE_DIR/release-key.jks" >> $CM_ENV
+          echo "CM_KEYSTORE_PASSWORD=${CM_KEYSTORE_PASSWORD:-ImpactoEdu2026!}" >> $CM_ENV
+          echo "CM_KEY_ALIAS=${CM_KEY_ALIAS:-impacto-edu}" >> $CM_ENV
+          echo "CM_KEY_PASSWORD=${CM_KEY_PASSWORD:-ImpactoEdu2026!}" >> $CM_ENV
+      - name: Build Android App Bundle (.aab)
         script: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew bundleRelease
     artifacts:
-      - android/app/build/outputs/**/*.apk
+      - android/app/build/outputs/bundle/release/*.aab
+      - android/app/build/outputs/apk/release/*.apk
+      - android/app/release-key.jks
 
   ios-simulator-workflow:
     name: iOS Build (Simulador)
