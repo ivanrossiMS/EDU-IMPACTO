@@ -192,11 +192,35 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
     if (savedMargins?.bottom !== undefined) return savedMargins.bottom
     return -90
   });
+  const [pageMargins, setPageMargins] = useState<{ [pageIndex: number]: { top?: number; bottom?: number; left?: number; right?: number } }>(() => {
+    if (prova?.config_estudio?.page_margins) {
+      return prova.config_estudio.page_margins;
+    }
+    const saved = readFromLocalStorage('simulador_page_margins');
+    if (saved && typeof saved === 'object') return saved;
+    return {};
+  });
   const [adicionarPaginaRedacao, setAdicionarPaginaRedacao] = useState<boolean>(prova?.config_estudio?.adicionar_pagina_redacao || false);
   const pageA4Ref = useRef<HTMLDivElement>(null)
   const [savingHeader, setSavingHeader] = useState(false)
   const [savingMargins, setSavingMargins] = useState(false)
+  const [autoSavedTime, setAutoSavedTime] = useState<string | null>(null)
   const [showBackModal, setShowBackModal] = useState(false)
+
+  const handlePageMarginChange = (pageIndex: number, delta: { top?: number; bottom?: number; left?: number; right?: number }) => {
+    setPageMargins(prev => ({
+      ...prev,
+      [pageIndex]: {
+        ...(prev[pageIndex] || {}),
+        ...delta
+      }
+    }));
+  };
+
+  const handleResetAllPageMargins = () => {
+    setPageMargins({});
+    saveToLocalStorage('simulador_page_margins', {});
+  };
 
   const handleSaveMargins = async () => {
     setSavingMargins(true)
@@ -209,6 +233,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
       }
 
       saveToLocalStorage('simulador_margins', margins)
+      saveToLocalStorage('simulador_page_margins', pageMargins)
 
       const updatedConfigEstudio = {
         ...(prova?.config_estudio || {}),
@@ -220,6 +245,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         config_margin_right: rightMarginOffset,
         config_margin_top: topMarginOffset,
         config_margin_bottom: bottomMarginOffset,
+        page_margins: pageMargins,
         adicionar_pagina_redacao: adicionarPaginaRedacao,
         header_layout: headerLayout
       }
@@ -253,6 +279,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
         config_margin_right: rightMarginOffset,
         config_margin_top: topMarginOffset,
         config_margin_bottom: bottomMarginOffset,
+        page_margins: pageMargins,
         adicionar_pagina_redacao: adicionarPaginaRedacao,
         header_layout: headerLayout
       }
@@ -304,6 +331,44 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
       handlePrint()
     }
   }, [printOnMount])
+
+  // Debounced auto-save for margin and layout changes
+  useEffect(() => {
+    if (!mounted) return;
+    const timer = setTimeout(async () => {
+      saveToLocalStorage('simulador_margins', {
+        left: leftMarginOffset,
+        right: rightMarginOffset,
+        top: topMarginOffset,
+        bottom: bottomMarginOffset
+      });
+      saveToLocalStorage('simulador_page_margins', pageMargins);
+
+      const updatedConfigEstudio = {
+        ...(prova?.config_estudio || {}),
+        config_fonte_enunciado: enunciadoFontSize,
+        config_fonte_alternativa: alternativasFontSize,
+        config_colunas: columns,
+        config_layout_alternativas: alternativasLayout,
+        config_margin_left: leftMarginOffset,
+        config_margin_right: rightMarginOffset,
+        config_margin_top: topMarginOffset,
+        config_margin_bottom: bottomMarginOffset,
+        page_margins: pageMargins,
+        adicionar_pagina_redacao: adicionarPaginaRedacao,
+        header_layout: headerLayout
+      };
+
+      if (prova) {
+        prova.config_estudio = updatedConfigEstudio;
+      }
+      await saveToDatabaseTables(updatedConfigEstudio);
+      const now = new Date();
+      setAutoSavedTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [leftMarginOffset, rightMarginOffset, topMarginOffset, bottomMarginOffset, pageMargins, enunciadoFontSize, alternativasFontSize, columns, alternativasLayout, adicionarPaginaRedacao, headerLayout, mounted]);
 
   const mappedQuestoes = localQuestoes.map((q, idx) => {
     let enunciadoHtml = q.enunciado
@@ -550,25 +615,47 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
           </div>
 
           <div style={{ marginBottom: 32 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', marginBottom: 16 }}>
-              <Maximize2 size={16} color="#f59e0b" /> Margens
-            </label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={() => setShowMargins(!showMargins)}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: showMargins ? '#fcd34d' : '#fef3c7', color: '#b45309', fontWeight: 600, cursor: 'pointer' }}
-              >
-                {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
-              </button>
-              {showMargins && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700, color: '#334155', margin: 0 }}>
+                <Maximize2 size={16} color="#f59e0b" /> Margens
+              </label>
+              {autoSavedTime && (
+                <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>
+                  ✓ Salvo {autoSavedTime}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <button
-                  onClick={handleSaveMargins}
-                  disabled={savingMargins}
-                  style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: savingMargins ? 'wait' : 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
-                  title="Salvar margens para esta prova"
+                  onClick={() => setShowMargins(!showMargins)}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 16px', borderRadius: 8, border: 'none', background: showMargins ? '#fcd34d' : '#fef3c7', color: '#b45309', fontWeight: 600, cursor: 'pointer' }}
                 >
-                  {savingMargins ? <Loader2 size={12} className="animate-spin" /> : null}
-                  Salvar Padrão
+                  {showMargins ? 'Ocultar Margens' : 'Mostrar Margens'}
+                </button>
+                {showMargins && (
+                  <button
+                    onClick={handleSaveMargins}
+                    disabled={savingMargins}
+                    style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#10b981', color: 'white', fontWeight: 600, cursor: savingMargins ? 'wait' : 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}
+                    title="Salvar margens para esta prova"
+                  >
+                    {savingMargins ? <Loader2 size={12} className="animate-spin" /> : null}
+                    Salvar Padrão
+                  </button>
+                )}
+              </div>
+
+              {Object.keys(pageMargins).length > 0 && (
+                <button
+                  onClick={handleResetAllPageMargins}
+                  style={{
+                    padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#64748b',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                  }}
+                  title="Remove ajustes individuais de páginas e volta para as margens padrão"
+                >
+                  <RotateCcw size={12} /> Redefinir Páginas para o Padrão ({Object.keys(pageMargins).length})
                 </button>
               )}
             </div>
@@ -728,6 +815,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                   top: topMarginOffset,
                   bottom: bottomMarginOffset
                 })
+                saveToLocalStorage('simulador_page_margins', pageMargins)
                 saveToLocalStorage('simulador_header', headerLayout)
 
                 const updatedConfigEstudio = {
@@ -740,6 +828,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
                   config_margin_right: rightMarginOffset,
                   config_margin_top: topMarginOffset,
                   config_margin_bottom: bottomMarginOffset,
+                  page_margins: pageMargins,
                   adicionar_pagina_redacao: adicionarPaginaRedacao,
                   header_layout: headerLayout
                 }
@@ -793,6 +882,7 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
             headerLayout={headerLayout}
             onUpdateHeaderField={handleUpdateHeaderField}
             pageA4Ref={pageA4Ref}
+            readOnly={isReadOnly}
             showMargins={showMargins}
             topMarginOffset={topMarginOffset}
             onTopMarginOffsetChange={setTopMarginOffset}
@@ -802,6 +892,8 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
             onLeftMarginOffsetChange={setLeftMarginOffset}
             rightMarginOffset={rightMarginOffset}
             onRightMarginOffsetChange={setRightMarginOffset}
+            pageMargins={pageMargins}
+            onPageMarginChange={handlePageMarginChange}
             adicionarPaginaRedacao={adicionarPaginaRedacao}
             onEditEnunciado={isReadOnly ? () => {} : (qId, newText) => {
               setLocalQuestoes(prev => prev.map(q => {

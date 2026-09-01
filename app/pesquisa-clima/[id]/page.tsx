@@ -5,13 +5,17 @@ import { motion } from 'framer-motion'
 import { CheckCircle, Heart, Star } from 'lucide-react'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 
+import { useParams } from 'next/navigation'
+
 const PERGUNTAS = [
   { id: 'q1', texto: 'Sinto que meu trabalho é valorizado pela instituição.' },
   { id: 'q2', texto: 'Tenho os recursos necessários para realizar minhas atividades.' },
   { id: 'q3', texto: 'O ambiente de trabalho é respeitoso e acolhedor.' },
 ]
 
-export default function ResponderPesquisaPage({ params }: { params: { id: string } }) {
+export default function ResponderPesquisaPage() {
+  const routerParams = useParams()
+  const id = routerParams?.id as string
   const isMobile = useIsMobile()
   const [step, setStep] = useState(0)
   const [respostas, setRespostas] = useState<Record<string, number>>({})

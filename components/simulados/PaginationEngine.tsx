@@ -5,6 +5,17 @@ import { Loader2, X, BookOpen } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { PageContent } from './PageContent';
 
+export interface PageMargin {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+}
+
+export type PageMarginsMap = {
+  [pageIndex: number]: PageMargin;
+};
+
 interface PaginationEngineProps {
   questoes: any[];
   columns: number;
@@ -35,6 +46,8 @@ interface PaginationEngineProps {
   onLeftMarginOffsetChange?: (offset: number) => void;
   rightMarginOffset?: number;
   onRightMarginOffsetChange?: (offset: number) => void;
+  pageMargins?: PageMarginsMap;
+  onPageMarginChange?: (pageIndex: number, delta: Partial<PageMargin>) => void;
   adicionarPaginaRedacao?: boolean;
 }
 
@@ -55,7 +68,8 @@ export function cleanEnunciadoHtml(html: string): string {
   });
 
   const isEmptyNode = (str: string) => {
-    if (/<img|video|iframe|audio/i.test(str)) return false;
+    if (/<img|video|iframe|audio|table|svg|math|canvas/i.test(str)) return false;
+    if (/ql-formula|katex|data-value|data-latex|<sup\b|<sub\b/i.test(str)) return false;
     const textOnly = str
       .replace(/<[^>]+>/g, '')
       .replace(/[\s\u00a0\ufeff]/g, '')
@@ -305,6 +319,7 @@ export function PaginationEngine({
   isEditHeaderMode, headerLayout, alternativasLayout, onUpdateHeaderField, pageA4Ref, forceExtraPage,
   showMargins, topMarginOffset, onTopMarginOffsetChange, bottomMarginOffset, onBottomMarginOffsetChange,
   leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange,
+  pageMargins, onPageMarginChange,
   readOnly = false, adicionarPaginaRedacao
 }: PaginationEngineProps) {
   const getAllItemIds = () => {
@@ -381,14 +396,12 @@ export function PaginationEngine({
       els.forEach(el => {
         const id = el.getAttribute('data-id');
         if (id) {
-          heights[id] = el.getBoundingClientRect().height;
+          // Use Math.ceil to prevent fractional pixel underestimation
+          heights[id] = Math.ceil(el.getBoundingClientRect().height);
         }
       });
 
-      const avail1El = shadow.querySelector('[data-measure-avail-1]');
-      const availNEl = shadow.querySelector('[data-measure-avail-n]');
-      const avail1Px = (avail1El ? avail1El.getBoundingClientRect().height : (297 - 75 - 42) * 3.7795) - (topMarginOffset ?? -10) - (bottomMarginOffset ?? -90);
-      const availNPx = (availNEl ? availNEl.getBoundingClientRect().height : (297 - 18 - 42) * 3.7795) - (topMarginOffset ?? -10) - (bottomMarginOffset ?? -90);
+      const MM = 3.7795275591;
 
       const newPages: any[] = [];
       let currentCols: any[][] = Array.from({length: columns}, () => []);
@@ -397,8 +410,17 @@ export function PaginationEngine({
       let pageIndex = 0;
 
       function getAvailableHeight() {
-        const baseAvail = pageIndex === 0 ? avail1Px : availNPx;
-        return Math.max(100, baseAvail);
+        // Compute available content height precisely for the CURRENT pageIndex
+        // including any per-page margin overrides
+        const pMargin = pageMargins?.[pageIndex];
+        const topOffset = pMargin?.top ?? topMarginOffset ?? -10;
+        const botOffset = pMargin?.bottom ?? bottomMarginOffset ?? -90;
+        const baseTopMm = pageIndex === 0 ? 75 : 18;
+        
+        // Available height in pixels = (297 - baseTop - 42)mm - topOffset - botOffset
+        // Subtract a 10px buffer to ensure NO text line ever crosses the margin line
+        const availPx = (297 - baseTopMm - 42) * MM - topOffset - botOffset - 10;
+        return Math.max(100, availPx);
       }
 
       function advanceCol() {
@@ -783,15 +805,20 @@ export function PaginationEngine({
     }, 300);
     
     return () => clearTimeout(timer);
-  }, [questoes, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayout, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset]);
+  }, [questoes, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayout, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMargins]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
-  const leftOffsetPx = leftMarginOffset || 0;
-  const rightOffsetPx = rightMarginOffset || 0;
-  const colWidthMm = columns === 1 
-    ? (174 - (leftOffsetPx + rightOffsetPx) / 3.7795) 
-    : ((174 - 10) / columns - (leftOffsetPx + rightOffsetPx) / (3.7795 * columns));
-  const shadowColWidth = `${Math.max(40, colWidthMm)}mm`;
+  const MM = 3.7795275591;
+  const leftOffsetPx = leftMarginOffset ?? -25;
+  const rightOffsetPx = rightMarginOffset ?? -20;
+  // Base content width = 210mm − left_padding − right_padding
+  // left_padding  = 18mm + leftOffsetPx  (px → mm via /MM)
+  // right_padding = 18mm + rightOffsetPx (px → mm via /MM)
+  const contentWidthMm = 210 - 18 - leftOffsetPx / MM - 18 - rightOffsetPx / MM;
+  // Inner column padding: col divider adds 6mm on each touching side = 12mm total for 2-col
+  const innerPaddingMm = columns > 1 ? 12 : 0;
+  const colWidthMm = Math.max(40, (contentWidthMm - innerPaddingMm) / columns);
+  const shadowColWidth = `${colWidthMm.toFixed(4)}mm`;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
@@ -810,9 +837,6 @@ export function PaginationEngine({
           zIndex: -1000 
         }}
       >
-        <div data-measure-avail-1 style={{ height: 'calc(297mm - 75mm - 42mm)' }} />
-        <div data-measure-avail-n style={{ height: 'calc(297mm - 18mm - 42mm)' }} />
-
         {questoes.map((q, idx) => {
           const isNewDisciplina = idx === 0 || q.id_disciplina !== questoes[idx - 1].id_disciplina;
           return (
@@ -867,14 +891,10 @@ export function PaginationEngine({
                     group.type === 'text' ? (
                       (() => {
                         const chunks = splitTextIntoChunks(group.content || '');
-                        const isFirstGroup = group.originalIndex === 0;
                         return (
                           <React.Fragment key={`txt-grp-${group.originalIndex}`}>
-                            <div data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}`} style={{ display: 'flex', gap: 10, width: '100%' }}>
-                              <div style={{ width: '28px', height: '28px', minWidth: '28px' }} />
-                              <div style={{ flex: 1, minWidth: 0, display: 'flow-root' }}>
-                                <HtmlContent html={group.content || ''} style={{ wordBreak: 'break-word' }} />
-                              </div>
+                            <div data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}`} style={{ width: '100%', display: 'flow-root' }}>
+                              <HtmlContent html={group.content || ''} style={{ wordBreak: 'break-word' }} />
                             </div>
                             {chunks.map((chunk, cIdx) => (
                               <div key={`txt-${group.originalIndex}-${cIdx}`} data-measure data-id={`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`} style={{ width: '100%', display: 'flow-root' }}>
@@ -924,129 +944,130 @@ export function PaginationEngine({
                     )
                   ));
                 })()}
-              </div>
-            </div>
 
-            {alternativasLayout === 'horizontal' ? (
-              <div data-measure data-id={`${q.id}-alts-container`} style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 12 }}>
-                {(() => {
-                  const imgWidths = q.simulados_alternativas
-                    ?.filter((a: any) => a.imagem_url)
-                    .map((a: any) => {
-                      const parts = a.imagem_url.split('#w=');
-                      return parts.length > 1 ? parseInt(parts[1]) : 250;
-                    }) || [];
-                  const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+                {/* Alternatives measured inside the 38px-indented content column */}
+                {alternativasLayout === 'horizontal' ? (
+                  <div data-measure data-id={`${q.id}-alts-container`} style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 12 }}>
+                    {(() => {
+                      const imgWidths = q.simulados_alternativas
+                        ?.filter((a: any) => a.imagem_url)
+                        .map((a: any) => {
+                          const parts = a.imagem_url.split('#w=');
+                          return parts.length > 1 ? parseInt(parts[1]) : 250;
+                        }) || [];
+                      const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
 
-                  return q.simulados_alternativas?.map((a: any) => {
-                    const urlParts = a.imagem_url ? a.imagem_url.split('#w=') : [];
-                    const imgBaseUrl = urlParts[0];
-                    const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
-                    const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
-                    const effectiveWidth = imgWidth || maxImgWidth;
+                      return q.simulados_alternativas?.map((a: any) => {
+                        const urlParts = a.imagem_url ? a.imagem_url.split('#w=') : [];
+                        const imgBaseUrl = urlParts[0];
+                        const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
+                        const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                        const effectiveWidth = imgWidth || maxImgWidth;
 
-                    return (
-                      <div key={`shadow-alt-${a.id}`} style={{ 
-                        display: 'flex', gap: 12, alignItems: 'flex-start',
-                        flex: effectiveWidth ? '0 0 auto' : '1 1 200px'
-                      }}>
-                        <div style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                          border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                        }}>
-                          {a.letra}
-                        </div>
-                        <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
-                          {a.imagem_url && <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
-                          {(() => {
-                            const altParts = parseEnunciadoParts(a.texto || '', []);
-                            return altParts.map((part: any, pIdx: number) => {
-                              if (part.type === 'text') {
-                                return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word' }} />;
-                              }
-                              if (part.type === 'lines') {
-                                return (
-                                  <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
-                                    {Array.from({ length: part.count }).map((_, li: number) => (
-                                      <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
-                                    ))}
-                                  </div>
-                                );
-                              }
-                              return null;
-                            });
-                          })()}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            ) : (
-              (() => {
-                const imgWidths = q.simulados_alternativas
-                  ?.filter((a: any) => a.imagem_url)
-                  .map((a: any) => {
-                    const hashStr = a.imagem_url.indexOf('#') >= 0 ? a.imagem_url.substring(a.imagem_url.indexOf('#') + 1) : '';
-                    const params = new URLSearchParams(hashStr);
-                    const wStr = params.get('w');
-                    return wStr ? parseInt(wStr) : 250;
-                  }) || [];
-                const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
-
-                return q.simulados_alternativas?.map((a: any) => {
-                  const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
-                  const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
-                  const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
-                  const params = new URLSearchParams(hashStr);
-                  const imgWidthStr = params.get('w');
-                  const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
-                  const imgAlign = params.get('a') || 'left';
-                  const justifyContent = imgAlign === 'center' ? 'center' : imgAlign === 'right' ? 'flex-end' : 'flex-start';
-                  const effectiveWidth = imgWidth || maxImgWidth;
-                  
-                  return (
-                    <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 12 }}>
-                      <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                        border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                      }}>
-                        {a.letra}
-                      </div>
-                      <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
-                        {a.imagem_url && (
-                          <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
-                            <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : '100%', maxWidth: '100%' }}>
-                              <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                        return (
+                          <div key={`shadow-alt-${a.id}`} style={{ 
+                            display: 'flex', gap: 12, alignItems: 'flex-start',
+                            flex: effectiveWidth ? '0 0 auto' : '1 1 200px'
+                          }}>
+                            <div style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                              border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                            }}>
+                              {a.letra}
+                            </div>
+                            <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                              {a.imagem_url && <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
+                              {(() => {
+                                const altParts = parseEnunciadoParts(a.texto || '', []);
+                                return altParts.map((part: any, pIdx: number) => {
+                                  if (part.type === 'text') {
+                                    return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word' }} />;
+                                  }
+                                  if (part.type === 'lines') {
+                                    return (
+                                      <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
+                                        {Array.from({ length: part.count }).map((_, li: number) => (
+                                          <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
+                                        ))}
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                });
+                              })()}
                             </div>
                           </div>
-                        )}
-                        {(() => {
-                          const altParts = parseEnunciadoParts(a.texto || '', []);
-                          return altParts.map((part: any, pIdx: number) => {
-                            if (part.type === 'text') {
-                              return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word' }} />;
-                            }
-                            if (part.type === 'lines') {
-                              return (
-                                <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
-                                  {Array.from({ length: part.count }).map((_, li: number) => (
-                                    <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
-                                  ))}
+                        );
+                      });
+                    })()}
+                  </div>
+                ) : (
+                  (() => {
+                    const imgWidths = q.simulados_alternativas
+                      ?.filter((a: any) => a.imagem_url)
+                      .map((a: any) => {
+                        const hashStr = a.imagem_url.indexOf('#') >= 0 ? a.imagem_url.substring(a.imagem_url.indexOf('#') + 1) : '';
+                        const params = new URLSearchParams(hashStr);
+                        const wStr = params.get('w');
+                        return wStr ? parseInt(wStr) : 250;
+                      }) || [];
+                    const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+
+                    return q.simulados_alternativas?.map((a: any) => {
+                      const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
+                      const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
+                      const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
+                      const params = new URLSearchParams(hashStr);
+                      const imgWidthStr = params.get('w');
+                      const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                      const imgAlign = params.get('a') || 'left';
+                      const justifyContent = imgAlign === 'center' ? 'center' : imgAlign === 'right' ? 'flex-end' : 'flex-start';
+                      const effectiveWidth = imgWidth || maxImgWidth;
+                      
+                      return (
+                        <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 6, width: '100%' }}>
+                          <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                            border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                          }}>
+                            {a.letra}
+                          </div>
+                          <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                            {a.imagem_url && (
+                              <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
+                                <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : '100%', maxWidth: '100%' }}>
+                                  <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                 </div>
-                              );
-                            }
-                            return null;
-                          });
-                        })()}
-                      </div>
-                    </div>
-                  );
-                });
-              })()
-            )}
+                              </div>
+                            )}
+                            {(() => {
+                              const altParts = parseEnunciadoParts(a.texto || '', []);
+                              return altParts.map((part: any, pIdx: number) => {
+                                if (part.type === 'text') {
+                                  return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word' }} />;
+                                }
+                                if (part.type === 'lines') {
+                                  return (
+                                    <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
+                                      {Array.from({ length: part.count }).map((_, li: number) => (
+                                        <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
+                                      ))}
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()
+                )}
+              </div>
+            </div>
           </div>
         )})}
       </div>
@@ -1106,6 +1127,8 @@ export function PaginationEngine({
               onLeftMarginOffsetChange={onLeftMarginOffsetChange}
               rightMarginOffset={rightMarginOffset} 
               onRightMarginOffsetChange={onRightMarginOffsetChange}
+              pageMargin={pageMargins?.[pIndex]}
+              onPageMarginChange={onPageMarginChange}
               readOnly={readOnly}
               totalPages={pages.length}
               adicionarPaginaRedacao={adicionarPaginaRedacao}
@@ -1156,6 +1179,8 @@ export function PaginationEngine({
                 onLeftMarginOffsetChange={onLeftMarginOffsetChange}
                 rightMarginOffset={rightMarginOffset} 
                 onRightMarginOffsetChange={onRightMarginOffsetChange}
+                pageMargin={pageMargins?.[pIndex]}
+                onPageMarginChange={onPageMarginChange}
                 readOnly={readOnly}
                 totalPages={pages.length}
                 adicionarPaginaRedacao={adicionarPaginaRedacao}

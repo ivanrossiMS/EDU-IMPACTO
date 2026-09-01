@@ -6,7 +6,7 @@ import {
   ArrowLeft, Upload, FileText, CheckCircle, AlertCircle, Loader2,
   Eye, EyeOff, Trash2, ChevronDown, ChevronUp, Image as ImageIcon,
   Save, RefreshCw, Sparkles, Plus, X, Printer, ZoomIn, ZoomOut, ChevronLeft, ChevronRight,
-  Calendar, Clock, Users
+  Calendar, Clock, Users, Download
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { ProvaPreviewModal, Questao, Alternative } from '@/components/simulados/ProvaPreviewModal'
-import { formatProfessorHeaderName } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadProvaPage() {
   const router = useRouter()
@@ -39,6 +39,7 @@ export default function UploadProvaPage() {
   const [parseError, setParseError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [fileName, setFileName] = useState('')
+  const [arquivoOriginal, setArquivoOriginal] = useState<{ url: string; nome: string; tamanho?: number; id_requisicao?: string } | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [simConfig, setSimConfig] = useState<any>(null)
 
@@ -79,15 +80,49 @@ export default function UploadProvaPage() {
       }
       setProva(provaData)
 
+      // Look for original file in config_estudio
+      const targetReq = searchParams.get('req')
+      const targetDisc = searchParams.get('disc')
+      const targetProf = searchParams.get('prof')
+      const showAll = searchParams.get('all') === 'true'
+
+      const arquivosList: any[] = Array.isArray(data?.config_estudio?.arquivos_originais) ? data.config_estudio.arquivos_originais : []
+      let matchedArquivo = null
+      if (targetReq) {
+        matchedArquivo = arquivosList.find((a: any) => a.id_requisicao === targetReq)
+      } else if (targetDisc) {
+        matchedArquivo = arquivosList.find((a: any) => a.id_disciplina === targetDisc)
+      } else if (targetProf) {
+        matchedArquivo = arquivosList.find((a: any) => a.id_professor === targetProf)
+      }
+      if (!matchedArquivo && arquivosList.length > 0) {
+        matchedArquivo = arquivosList[0]
+      }
+      if (!matchedArquivo && data?.config_estudio?.arquivo_original_url) {
+        matchedArquivo = {
+          url: data.config_estudio.arquivo_original_url,
+          nome: data.config_estudio.arquivo_original_nome || 'arquivo_original.docx',
+          tamanho: data.config_estudio.arquivo_original_tamanho
+        }
+      }
+      if (matchedArquivo) {
+        setArquivoOriginal(matchedArquivo)
+      }
+
       // If questions already exist, load them for review
       if (provaData?.questoes_json && provaData.questoes_json.length > 0) {
         let qs = provaData.questoes_json
         
-        const showAll = searchParams.get('all') === 'true'
-        const targetProf = searchParams.get('prof')
-        
         if (!showAll) {
-          if (targetProf) {
+          if (targetReq) {
+            qs = qs.filter((q: any) => 
+              q.id_requisicao === targetReq ||
+              (targetDisc && (q.id_disciplina === targetDisc || q.disciplina_id === targetDisc)) ||
+              (targetProf && q.id_professor === targetProf && (!q.id_requisicao || q.id_requisicao === targetReq))
+            )
+          } else if (targetDisc) {
+            qs = qs.filter((q: any) => q.id_disciplina === targetDisc || q.disciplina_id === targetDisc)
+          } else if (targetProf) {
             qs = qs.filter((q: any) => q.id_professor === targetProf)
           } else if (currentUser?.perfil === 'Professor') {
             qs = qs.filter((q: any) => q.id_professor === currentUser.id)
@@ -120,15 +155,35 @@ export default function UploadProvaPage() {
     setUploadStep('parsing')
 
     try {
+      const targetReq = searchParams.get('req') || ''
+      const targetProf = searchParams.get('prof') || ''
+      const targetDisc = searchParams.get('disc') || ''
+
       const fd = new FormData()
       fd.append('file', file)
-      const res = await fetch('/api/provas-upload/parse', { method: 'POST', body: fd })
+      fd.append('itemId', provaId)
+      fd.append('itemTipo', 'prova')
+      if (targetReq) fd.append('reqId', targetReq)
+      if (targetDisc) fd.append('discId', targetDisc)
+      if (targetProf) fd.append('profId', targetProf)
+
+      const res = await fetch('/api/simulados-upload/parse', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok || data.error) {
         setParseError(data.error || 'Erro ao processar arquivo.')
         setUploadStep('idle')
         return
       }
+
+      if (data.arquivoUrl) {
+        setArquivoOriginal({
+          url: data.arquivoUrl,
+          nome: data.arquivoNome || file.name,
+          tamanho: data.arquivoTamanho || file.size,
+          id_requisicao: targetReq || undefined
+        })
+      }
+
       const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({ ...q, expandido: true }))
       setQuestoes(parsed)
       setUploadStep('review')
@@ -153,13 +208,8 @@ export default function UploadProvaPage() {
 
     const myAssignment = prova?.provas_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
     if (currentUser?.perfil === 'Professor' && myAssignment) {
-      const actualQuestionsCount = currentQs.filter((q: any) => q.tipo_questao !== 'texto_apoio').length;
-      if (actualQuestionsCount > myAssignment.qtd_questoes) {
+      if (currentQs.length > myAssignment.qtd_questoes) {
         setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você nesta prova. Edite ou exclua algumas questões para prosseguir.` });
-        return;
-      }
-      if (actionType === 'enviar_revisao' && actualQuestionsCount < myAssignment.qtd_questoes) {
-        setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - actualQuestionsCount} questões.` });
         return;
       }
     }
@@ -167,18 +217,31 @@ export default function UploadProvaPage() {
     setSaving(true)
     try {
       // 1. Fetch current DB state to avoid overwriting other professors
-      const { data: dbData } = await (supabase as any).from('provas_upload').select('questoes_json').eq('id', provaId).single()
+      const { data: dbData } = await (supabase as any).from('provas_upload').select('questoes_json, config_estudio').eq('id', provaId).single()
       const dbQuestions = dbData?.questoes_json || []
 
+      const targetReq = searchParams.get('req')
+      const targetDisc = searchParams.get('disc')
       const targetProf = searchParams.get('prof')
       const showAll = searchParams.get('all') === 'true'
 
       // 2. Filter out questions we are NOT editing
-      let otherQuestions = []
-      if (currentUser?.perfil === 'Professor') {
-        otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== currentUser.id)
-      } else if (targetProf && !showAll) {
-        otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== targetProf)
+      let otherQuestions: any[] = []
+      if (!showAll) {
+        if (targetReq) {
+          otherQuestions = dbQuestions.filter((q: any) => {
+            if (q.id_requisicao && q.id_requisicao === targetReq) return false
+            if (targetDisc && (q.id_disciplina === targetDisc || q.disciplina_id === targetDisc)) return false
+            if (targetProf && q.id_professor === targetProf && (!q.id_requisicao || q.id_requisicao === targetReq)) return false
+            return true
+          })
+        } else if (targetDisc) {
+          otherQuestions = dbQuestions.filter((q: any) => q.id_disciplina !== targetDisc && q.disciplina_id !== targetDisc)
+        } else if (targetProf) {
+          otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== targetProf)
+        } else if (currentUser?.perfil === 'Professor') {
+          otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== currentUser.id)
+        }
       }
 
       // 3. Prepare our questions
@@ -186,24 +249,54 @@ export default function UploadProvaPage() {
         let profId = q.id_professor;
         if (currentUser?.perfil !== 'Professor' && targetProf && (!profId || profId === currentUser?.id)) {
           profId = targetProf;
-        } else if (currentUser?.perfil === 'Professor') {
+        } else if (currentUser?.perfil === 'Professor' && !showAll) {
           profId = currentUser.id;
         }
-        return { ...q, id_professor: profId };
+        return {
+          ...q,
+          id_professor: profId,
+          id_requisicao: targetReq || q.id_requisicao,
+          id_disciplina: targetDisc || q.id_disciplina
+        };
       })
 
       // 4. Merge
       const finalQToSave = [...otherQuestions, ...myQuestionsToSave]
 
+      // 5. Merge config_estudio with original file list
+      let currentConfig = dbData?.config_estudio || prova?.config_estudio || {}
+      let currentArquivos: any[] = Array.isArray(currentConfig.arquivos_originais) ? [...currentConfig.arquivos_originais] : []
+      if (arquivoOriginal?.url) {
+        const exists = currentArquivos.some((a: any) => a.url === arquivoOriginal.url || (targetReq && a.id_requisicao === targetReq))
+        if (!exists) {
+          currentArquivos.push({
+            id: `${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+            url: arquivoOriginal.url,
+            nome: arquivoOriginal.nome,
+            tamanho: arquivoOriginal.tamanho,
+            id_requisicao: targetReq || null,
+            id_disciplina: targetDisc || null,
+            id_professor: targetProf || null,
+            uploaded_at: new Date().toISOString()
+          })
+        }
+      }
+
       let updatePayload: any = {
         questoes_json: finalQToSave,
         questoes_count: finalQToSave.filter((q: any) => q.tipo_questao !== 'texto_apoio').length,
         ...(prova?.instrucoes !== undefined ? { instrucoes: prova.instrucoes } : {}),
+        config_estudio: {
+          ...currentConfig,
+          ...(config_estudio || {}),
+          arquivos_originais: currentArquivos,
+          ...(arquivoOriginal?.url ? {
+            arquivo_original_url: arquivoOriginal.url,
+            arquivo_original_nome: arquivoOriginal.nome,
+            arquivo_original_tamanho: arquivoOriginal.tamanho
+          } : {})
+        },
         updated_at: new Date().toISOString(),
-      }
-
-      if (config_estudio) {
-        updatePayload.config_estudio = config_estudio
       }
 
       if (actionType === 'aprovar') {
@@ -309,6 +402,31 @@ export default function UploadProvaPage() {
 
         {uploadStep === 'review' && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {arquivoOriginal?.url && (
+              <motion.button 
+                onClick={() => downloadOriginalFile(arquivoOriginal.url, arquivoOriginal.nome)}
+                whileHover={{ scale: 1.03, translateY: -1 }} 
+                whileTap={{ scale: 0.97 }}
+                style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: 8, 
+                  padding: '9px 16px', 
+                  borderRadius: 10, 
+                  background: 'rgba(59,130,246,0.08)', 
+                  color: '#2563eb', 
+                  border: '1px solid rgba(59,130,246,0.3)', 
+                  fontSize: 13, 
+                  fontWeight: 700, 
+                  cursor: 'pointer', 
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.03)', 
+                  transition: 'all 0.2s' 
+                }}
+                title={`Baixar arquivo original (${arquivoOriginal.nome})`}
+              >
+                <Download size={16} color="#2563eb" /> Baixar DOCX Original
+              </motion.button>
+            )}
             {!isProfessorViewAll && (
               <motion.button onClick={() => { setUploadStep('idle'); setQuestoes([]) }}
                 whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
@@ -586,6 +704,44 @@ export default function UploadProvaPage() {
                         Enviado em {new Date(req.enviado_em).toLocaleDateString('pt-BR')}
                       </div>
                     )}
+                    {(() => {
+                      const reqMatchedFile = prova?.config_estudio?.arquivos_originais?.find((a: any) => 
+                        (a.id_requisicao && a.id_requisicao === req.id) ||
+                        (a.id_disciplina && req.id_disciplina && a.id_disciplina === req.id_disciplina) ||
+                        (a.id_professor && req.id_professor && a.id_professor === req.id_professor)
+                      ) || (isCurrentActive && arquivoOriginal?.url ? arquivoOriginal : null)
+
+                      if (!reqMatchedFile?.url) return null
+                      return (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            downloadOriginalFile(reqMatchedFile.url, reqMatchedFile.nome)
+                          }}
+                          style={{
+                            marginTop: 10,
+                            width: '100%',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6,
+                            padding: '6px 10px',
+                            borderRadius: 8,
+                            background: 'rgba(59, 130, 246, 0.08)',
+                            border: '1px solid rgba(59, 130, 246, 0.25)',
+                            color: '#2563eb',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s'
+                          }}
+                          title={`Baixar arquivo original (${reqMatchedFile.nome})`}
+                        >
+                          <Download size={13} /> Baixar DOCX Original
+                        </button>
+                      )
+                    })()}
                   </div>
                 )
               })}

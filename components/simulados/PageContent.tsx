@@ -31,10 +31,17 @@ export function PageContent({
   bottomMarginOffset = -90, onBottomMarginOffsetChange,
   leftMarginOffset = -25, onLeftMarginOffsetChange,
   rightMarginOffset = -20, onRightMarginOffsetChange,
+  pageMargin,
+  onPageMarginChange,
   readOnly = false,
   totalPages = 0,
   adicionarPaginaRedacao = false
 }: any) {
+  const effectiveTop = pageMargin?.top ?? topMarginOffset ?? -10;
+  const effectiveBottom = pageMargin?.bottom ?? bottomMarginOffset ?? -90;
+  const effectiveLeft = pageMargin?.left ?? leftMarginOffset ?? -25;
+  const effectiveRight = pageMargin?.right ?? rightMarginOffset ?? -20;
+
   const isLastRedacaoPage = adicionarPaginaRedacao && pIndex === totalPages - 1 && pIndex > 0;
   const [imgMenuOpen, setImgMenuOpen] = useState<string | null>(null);
   const [altLinesModalOpen, setAltLinesModalOpen] = useState<{ qId: string, altId: string, altParts: any[], q: any, a: any } | null>(null);
@@ -304,14 +311,15 @@ export function PageContent({
 
       <div style={{ 
         position: 'relative', 
-        paddingTop: pIndex === 0 ? `calc(75mm + ${topMarginOffset}px)` : `calc(18mm + ${topMarginOffset}px)`, 
-        paddingLeft: `calc(18mm + ${leftMarginOffset}px)`, 
-        paddingRight: `calc(18mm + ${rightMarginOffset}px)`, 
-        paddingBottom: `calc(42mm + ${bottomMarginOffset}px)`,
+        paddingTop: pIndex === 0 ? `calc(75mm + ${effectiveTop}px)` : `calc(18mm + ${effectiveTop}px)`, 
+        paddingLeft: `calc(18mm + ${effectiveLeft}px)`, 
+        paddingRight: `calc(18mm + ${effectiveRight}px)`, 
+        paddingBottom: `calc(42mm + ${effectiveBottom}px)`,
         height: '100%', boxSizing: 'border-box',
         zIndex: 2,
         display: 'flex',
-        gap: 0
+        gap: 0,
+        overflow: 'hidden',
       }}>
         {page.map((col: any[], cIndex: number) => (
           <React.Fragment key={`col-${cIndex}`}>
@@ -2085,129 +2093,171 @@ export function PageContent({
         ))}
       </div>
       
-      {showMargins && onTopMarginOffsetChange && (
-        <div 
-          className="no-print"
-          style={{
-            position: 'absolute',
-            top: (pIndex === 0 ? 75 * 3.7795 : 18 * 3.7795) + topMarginOffset - 5,
-            left: 0, right: 0, height: 10, cursor: 'ns-resize', zIndex: 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          onMouseDown={(e) => {
-            const startY = e.clientY;
-            const startOffset = topMarginOffset || 0;
-            const handleMouseMove = (moveEvent: MouseEvent) => {
-              const deltaY = moveEvent.clientY - startY; 
-              onTopMarginOffsetChange(Math.max(-60, startOffset + deltaY));
-            };
-            const handleMouseUp = () => {
-              window.removeEventListener('mousemove', handleMouseMove);
-              window.removeEventListener('mouseup', handleMouseUp);
-            };
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-          }}
-        >
-          <div style={{ width: '100%', height: 2, background: 'rgba(59, 130, 246, 0.5)', borderBottom: '1px dashed #3b82f6' }} />
-          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, top: 5, pointerEvents: 'none', zIndex: 60 }}>
-            Margem Superior ({topMarginOffset.toFixed(0)}px)
+      {showMargins && (onPageMarginChange || onTopMarginOffsetChange) && (() => {
+        const MM = 3.7795275591;
+        const baseTopMm = pIndex === 0 ? 75 : 18;
+        const guideTop = baseTopMm * MM + effectiveTop;
+        return (
+          <div
+            className="no-print"
+            style={{
+              position: 'absolute',
+              top: guideTop - 10,
+              left: 0, right: 0, height: 20, cursor: 'ns-resize', zIndex: 50,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startY = e.clientY;
+              const startOffset = effectiveTop;
+              const handleMouseMove = (moveEvent: MouseEvent) => {
+                const deltaY = moveEvent.clientY - startY;
+                const newVal = Math.max(-60, Math.min(80, startOffset + deltaY));
+                if (onPageMarginChange) {
+                  onPageMarginChange(pIndex, { top: newVal });
+                } else if (onTopMarginOffsetChange) {
+                  onTopMarginOffsetChange(newVal);
+                }
+              };
+              const handleMouseUp = () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+              };
+              window.addEventListener('mousemove', handleMouseMove);
+              window.addEventListener('mouseup', handleMouseUp);
+            }}
+          >
+            <div style={{ width: '100%', height: 2, background: 'rgba(249,115,22,0.7)', borderBottom: '1px dashed #ea580c', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', background: '#ea580c', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, top: 2, pointerEvents: 'none', zIndex: 60, whiteSpace: 'nowrap' }}>
+              Pág. {pIndex + 1} • Margem Superior ({effectiveTop.toFixed(0)}px)
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {showMargins && onBottomMarginOffsetChange && (
-        <div 
-          className="no-print"
-          style={{
-            position: 'absolute',
-            bottom: (42 * 3.7795) + bottomMarginOffset - 5,
-            left: 0, right: 0, height: 10, cursor: 'ns-resize', zIndex: 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          onMouseDown={(e) => {
-            const startY = e.clientY;
-            const startOffset = bottomMarginOffset || 0;
-            const handleMouseMove = (moveEvent: MouseEvent) => {
-              const deltaY = moveEvent.clientY - startY; 
-              onBottomMarginOffsetChange(Math.max(-150, startOffset - deltaY));
-            };
-            const handleMouseUp = () => {
-              window.removeEventListener('mousemove', handleMouseMove);
-              window.removeEventListener('mouseup', handleMouseUp);
-            };
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-          }}
-        >
-          <div style={{ width: '100%', height: 2, background: 'rgba(59, 130, 246, 0.5)', borderBottom: '1px dashed #3b82f6' }} />
-          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, bottom: 5, pointerEvents: 'none', zIndex: 60 }}>
-            Margem Inferior ({bottomMarginOffset.toFixed(0)}px)
+      {showMargins && (onPageMarginChange || onBottomMarginOffsetChange) && (() => {
+        const MM = 3.7795275591;
+        const guideBottom = 42 * MM + effectiveBottom;
+        return (
+          <div
+            className="no-print"
+            style={{
+              position: 'absolute',
+              bottom: guideBottom - 10,
+              left: 0, right: 0, height: 20, cursor: 'ns-resize', zIndex: 50,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startY = e.clientY;
+              const startOffset = effectiveBottom;
+              const handleMouseMove = (moveEvent: MouseEvent) => {
+                const deltaY = moveEvent.clientY - startY;
+                const newVal = Math.max(-150, Math.min(0, startOffset - deltaY));
+                if (onPageMarginChange) {
+                  onPageMarginChange(pIndex, { bottom: newVal });
+                } else if (onBottomMarginOffsetChange) {
+                  onBottomMarginOffsetChange(newVal);
+                }
+              };
+              const handleMouseUp = () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+              };
+              window.addEventListener('mousemove', handleMouseMove);
+              window.addEventListener('mouseup', handleMouseUp);
+            }}
+          >
+            <div style={{ width: '100%', height: 2, background: 'rgba(249,115,22,0.7)', borderBottom: '1px dashed #ea580c', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', background: '#ea580c', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, right: 20, bottom: 2, pointerEvents: 'none', zIndex: 60, whiteSpace: 'nowrap' }}>
+              Pág. {pIndex + 1} • Margem Inferior ({effectiveBottom.toFixed(0)}px)
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {showMargins && onLeftMarginOffsetChange && (
-        <div 
-          className="no-print"
-          style={{
-            position: 'absolute',
-            left: (18 * 3.7795) + leftMarginOffset - 5,
-            top: 0, bottom: 0, width: 10, cursor: 'ew-resize', zIndex: 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          onMouseDown={(e) => {
-            const startX = e.clientX;
-            const startOffset = leftMarginOffset || 0;
-            const handleMouseMove = (moveEvent: MouseEvent) => {
-              const deltaX = moveEvent.clientX - startX; 
-              onLeftMarginOffsetChange(Math.max(-60, startOffset + deltaX));
-            };
-            const handleMouseUp = () => {
-              window.removeEventListener('mousemove', handleMouseMove);
-              window.removeEventListener('mouseup', handleMouseUp);
-            };
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-          }}
-        >
-          <div style={{ width: 2, height: '100%', background: 'rgba(59, 130, 246, 0.5)', borderRight: '1px dashed #3b82f6' }} />
-          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: pIndex === 0 ? 180 : 100, left: 12, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60 }}>
-            Margem Esquerda ({leftMarginOffset.toFixed(0)}px)
+      {showMargins && (onPageMarginChange || onLeftMarginOffsetChange) && (() => {
+        const MM = 3.7795275591;
+        const guideLeft = 18 * MM + effectiveLeft;
+        return (
+          <div
+            className="no-print"
+            style={{
+              position: 'absolute',
+              left: guideLeft - 10,
+              top: 0, bottom: 0, width: 20, cursor: 'ew-resize', zIndex: 50,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startOffset = effectiveLeft;
+              const handleMouseMove = (moveEvent: MouseEvent) => {
+                const deltaX = moveEvent.clientX - startX;
+                const newVal = Math.max(-60, Math.min(60, startOffset + deltaX));
+                if (onPageMarginChange) {
+                  onPageMarginChange(pIndex, { left: newVal });
+                } else if (onLeftMarginOffsetChange) {
+                  onLeftMarginOffsetChange(newVal);
+                }
+              };
+              const handleMouseUp = () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+              };
+              window.addEventListener('mousemove', handleMouseMove);
+              window.addEventListener('mouseup', handleMouseUp);
+            }}
+          >
+            <div style={{ width: 2, height: '100%', background: 'rgba(249,115,22,0.7)', borderRight: '1px dashed #ea580c', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', background: '#ea580c', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: pIndex === 0 ? 180 : 100, left: 14, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60 }}>
+              Pág. {pIndex + 1} • Margem Esquerda ({effectiveLeft.toFixed(0)}px)
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {showMargins && onRightMarginOffsetChange && (
-        <div 
-          className="no-print"
-          style={{
-            position: 'absolute',
-            right: (18 * 3.7795) + rightMarginOffset - 5,
-            top: 0, bottom: 0, width: 10, cursor: 'ew-resize', zIndex: 50,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          onMouseDown={(e) => {
-            const startX = e.clientX;
-            const startOffset = rightMarginOffset || 0;
-            const handleMouseMove = (moveEvent: MouseEvent) => {
-              const deltaX = moveEvent.clientX - startX; 
-              onRightMarginOffsetChange(Math.max(-60, startOffset - deltaX));
-            };
-            const handleMouseUp = () => {
-              window.removeEventListener('mousemove', handleMouseMove);
-              window.removeEventListener('mouseup', handleMouseUp);
-            };
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-          }}
-        >
-          <div style={{ width: 2, height: '100%', background: 'rgba(59, 130, 246, 0.5)', borderLeft: '1px dashed #3b82f6' }} />
-          <div style={{ position: 'absolute', background: '#3b82f6', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: pIndex === 0 ? 180 : 100, right: 12, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60 }}>
-            Margem Direita ({rightMarginOffset.toFixed(0)}px)
+      {showMargins && (onPageMarginChange || onRightMarginOffsetChange) && (() => {
+        const MM = 3.7795275591;
+        const guideRight = 18 * MM + effectiveRight;
+        return (
+          <div
+            className="no-print"
+            style={{
+              position: 'absolute',
+              right: guideRight - 10,
+              top: 0, bottom: 0, width: 20, cursor: 'ew-resize', zIndex: 50,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startOffset = effectiveRight;
+              const handleMouseMove = (moveEvent: MouseEvent) => {
+                const deltaX = moveEvent.clientX - startX;
+                const newVal = Math.max(-60, Math.min(60, startOffset - deltaX));
+                if (onPageMarginChange) {
+                  onPageMarginChange(pIndex, { right: newVal });
+                } else if (onRightMarginOffsetChange) {
+                  onRightMarginOffsetChange(newVal);
+                }
+              };
+              const handleMouseUp = () => {
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+              };
+              window.addEventListener('mousemove', handleMouseMove);
+              window.addEventListener('mouseup', handleMouseUp);
+            }}
+          >
+            <div style={{ width: 2, height: '100%', background: 'rgba(249,115,22,0.7)', borderLeft: '1px dashed #ea580c', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', background: '#ea580c', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4, top: pIndex === 0 ? 180 : 100, right: 14, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 60 }}>
+              Pág. {pIndex + 1} • Margem Direita ({effectiveRight.toFixed(0)}px)
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+
 
       {isGenerating && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(255,255,255,0.7)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

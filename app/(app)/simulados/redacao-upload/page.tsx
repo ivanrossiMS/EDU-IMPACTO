@@ -185,6 +185,7 @@ export default function UploadRedacoesGerenciamentoPage() {
   const [filterBimestre, setFilterBimestre] = useState('todos')
   const [filterSerie, setFilterSerie] = useState('todas')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [adaptarModalRedacao, setAdaptarModalRedacao] = useState<any | null>(null)
   
   const [expandedTurmas, setExpandedTurmas] = useState<Record<string, boolean>>({})
   const [gabaritoModalId, setGabaritoModalId] = useState<string | null>(null)
@@ -1108,11 +1109,13 @@ export default function UploadRedacoesGerenciamentoPage() {
                                                           </div>
                                                         </DropdownMenu.Item>
 
-                                                        <DropdownMenu.Item asChild>
-                                                          <div onClick={() => handleAdaptar(redacao)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
-                                                            <BookOpen size={15} color="#3b82f6" /> Adaptar redação
-                                                          </div>
-                                                        </DropdownMenu.Item>
+                                                        {!isAdaptada && (
+                                                          <DropdownMenu.Item asChild>
+                                                            <div onClick={() => setAdaptarModalRedacao(redacao)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
+                                                              <BookOpen size={15} color="#3b82f6" /> Adaptar redação
+                                                            </div>
+                                                          </DropdownMenu.Item>
+                                                        )}
 
                                                         <DropdownMenu.Item asChild>
                                                           <Link href={`/simulados/redacao-upload/${redacao.id}/upload?print=true&req=${req.id}`} style={{ textDecoration: 'none', outline: 'none' }}>
@@ -1175,6 +1178,101 @@ export default function UploadRedacoesGerenciamentoPage() {
             )}
           </div>
         )}
+
+        {/* Modal de Explicação e Confirmação de Adaptar */}
+        <AnimatePresence>
+          {adaptarModalRedacao && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 9999, padding: 16
+              }}
+              onClick={() => setAdaptarModalRedacao(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                  borderRadius: 20, padding: 28, maxWidth: 480, width: '100%',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.25)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <BookOpen size={24} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>
+                      Criar Versão Adaptada
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', margin: '2px 0 0' }}>
+                      Educação Especial & Inclusão
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', marginBottom: 16 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
+                    Redação selecionada
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                    {adaptarModalRedacao.titulo}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24, fontSize: 13, color: 'hsl(var(--text-secondary))', lineHeight: 1.5 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <span style={{ color: '#2563eb', fontWeight: 800 }}>•</span>
+                    <span><strong>Duplicação Completa:</strong> Uma nova cópia da proposta de redação será gerada com todas as configurações, professores e temas atuais.</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <span style={{ color: '#2563eb', fontWeight: 800 }}>•</span>
+                    <span><strong>Selo de Identificação:</strong> A nova redação receberá a tag <strong style={{ color: '#d97706' }}>ADAPTADA</strong> para fácil identificação.</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <span style={{ color: '#2563eb', fontWeight: 800 }}>•</span>
+                    <span><strong>Total Independência:</strong> As edições e adaptações feitas na nova versão não afetarão a proposta regular original.</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setAdaptarModalRedacao(null)}
+                    style={{
+                      padding: '10px 18px', borderRadius: 10, background: 'hsl(var(--bg-app))',
+                      border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))',
+                      fontSize: 13, fontWeight: 700, cursor: 'pointer'
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      const r = adaptarModalRedacao
+                      setAdaptarModalRedacao(null)
+                      handleAdaptar(r)
+                    }}
+                    style={{
+                      padding: '10px 20px', borderRadius: 10, background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                      border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)', display: 'inline-flex', alignItems: 'center', gap: 6
+                    }}
+                  >
+                    <BookOpen size={14} /> Confirmar e Adaptar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Modal de Exclusão */}
         <AnimatePresence>

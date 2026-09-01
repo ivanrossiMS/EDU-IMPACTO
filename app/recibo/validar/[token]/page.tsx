@@ -4,10 +4,11 @@ import { createClient } from '@supabase/supabase-js'
 import { createHash } from 'crypto'
 
 interface Props {
-  params: { token: string }
+  params: Promise<{ token: string }>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { token } = await params
   return {
     title: 'Validação de Recibo | IMPACTO EDU',
     description: 'Verifique a autenticidade deste recibo emitido pelo Sistema ERP IMPACTO EDU',
@@ -108,7 +109,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: string; color: string
 }
 
 export default async function PublicValidationPage({ params }: Props) {
-  const { token } = params
+  const { token } = await params
   const supabase = getSupabase()
 
   let status = 'nao_encontrado'

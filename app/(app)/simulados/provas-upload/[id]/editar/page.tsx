@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Save, Plus, Trash2, BookOpen, Calendar, Users, Upload, Sparkles, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, BookOpen, Calendar, Users, Upload, Sparkles, CheckCircle, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -16,6 +16,7 @@ export default function EditarProvaUploadPage() {
   const [loading, setLoading] = useState(false)
   const [initialLoading, setInitialLoading] = useState(true)
   const [successModal, setSuccessModal] = useState(false)
+  const [assignmentToDelete, setAssignmentToDelete] = useState<any | null>(null)
 
   // Form state
   const [titulo, setTitulo] = useState('')
@@ -98,20 +99,12 @@ export default function EditarProvaUploadPage() {
   }])
 
   const removeAssignment = (id: string) => {
-    setAssignments(prev => {
-      const assig = prev.find(a => a.id === id)
-      if (assig?.status === 'enviado') {
-        alert('Esta atribuição já foi enviada pelo professor e não pode ser removida.')
-        return prev
-      }
-      return prev.filter(a => a.id !== id)
-    })
+    setAssignments(prev => prev.filter(a => a.id !== id))
   }
 
   const updateAssignment = (id: string, field: string, value: any) => {
     setAssignments(prev => prev.map(a => {
       if (a.id !== id) return a
-      if (a.status === 'enviado' && field !== 'qtdQuestoes') return a // Bloqueia alterar disciplina e professor se já enviou
       
       const updated: any = { ...a, [field]: value }
       if (field === 'disciplinaId') {
@@ -149,6 +142,45 @@ export default function EditarProvaUploadPage() {
 
     setLoading(true)
     try {
+      // Get current requisitions from DB to know what to delete
+      const { data: existingReqs } = await (supabase as any)
+        .from('provas_upload_requisicoes')
+        .select('id, id_disciplina, disciplina_nome, id_professor, status')
+        .eq('id_prova_upload', params.id)
+      
+      const idsToKeep = assignments.filter(a => a.reqId).map(a => a.reqId)
+      const reqsToDelete = (existingReqs || []).filter((r: any) => !idsToKeep.includes(r.id))
+      
+      if (reqsToDelete.length > 0) {
+        await (supabase as any).from('provas_upload_requisicoes').delete().in('id', reqsToDelete.map((r: any) => r.id))
+      }
+
+      // Fetch current questoes_json and filter out questions belonging to deleted requisitions/disciplines
+      const { data: currentProva } = await (supabase as any)
+        .from('provas_upload')
+        .select('questoes_json')
+        .eq('id', params.id)
+        .single()
+
+      let currentQuestions = Array.isArray(currentProva?.questoes_json) ? currentProva.questoes_json : []
+
+      if (reqsToDelete.length > 0 && currentQuestions.length > 0) {
+        const deletedReqIds = new Set(reqsToDelete.map((r: any) => r.id))
+        const deletedDiscIds = new Set(reqsToDelete.map((r: any) => r.id_disciplina).filter(Boolean))
+        const deletedDiscNames = new Set(reqsToDelete.map((r: any) => (r.disciplina_nome || '').trim().toLowerCase()).filter(Boolean))
+
+        currentQuestions = currentQuestions.filter((q: any) => {
+          if (q.id_requisicao && deletedReqIds.has(q.id_requisicao)) return false
+          if (q.id_disciplina && deletedDiscIds.has(q.id_disciplina)) return false
+          if (q.disciplina_id && deletedDiscIds.has(q.disciplina_id)) return false
+          const qDiscName = (q.disciplina_nome || q.disciplina || '').trim().toLowerCase()
+          if (qDiscName && deletedDiscNames.has(qDiscName)) return false
+          return true
+        })
+      }
+
+      const newQuestoesCount = currentQuestions.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+
       const payload = {
         titulo: titulo.trim(),
         descricao: descricao.trim() || null,
@@ -158,6 +190,8 @@ export default function EditarProvaUploadPage() {
         series,
         valor: valor ? parseFloat(valor.replace(',', '.')) : null,
         instrucoes: instrucoes.trim() || null,
+        questoes_json: currentQuestions,
+        questoes_count: newQuestoesCount,
         updated_at: new Date().toISOString(),
       }
 
@@ -167,22 +201,6 @@ export default function EditarProvaUploadPage() {
         .eq('id', params.id)
 
       if (provaError) throw provaError
-
-      // Get current requisitions from DB to know what to delete
-      const { data: existingReqs } = await (supabase as any).from('provas_upload_requisicoes').select('id, status').eq('id_prova_upload', params.id)
-      
-      const idsToKeep = assignments.filter(a => a.reqId).map(a => a.reqId)
-      const reqsToDelete = (existingReqs || []).filter((r: any) => !idsToKeep.includes(r.id))
-      
-      for (const req of reqsToDelete) {
-        if (req.status === 'enviado') {
-          throw new Error('Não é possível excluir uma requisição que já foi enviada pelo professor.')
-        }
-      }
-      
-      if (reqsToDelete.length > 0) {
-        await (supabase as any).from('provas_upload_requisicoes').delete().in('id', reqsToDelete.map((r: any) => r.id))
-      }
 
       // Update or Insert
       for (const a of assignments) {
@@ -341,16 +359,13 @@ export default function EditarProvaUploadPage() {
                 ? professores.filter(p => allowedProfIds.includes(p.id))
                 : professores
 
-              const isDisabled = a.status === 'enviado'
-
               return (
                 <motion.div key={a.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px auto', gap: 14, alignItems: 'flex-end', background: 'hsl(var(--bg-app))', padding: '16px 20px', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))', opacity: isDisabled ? 0.7 : 1 }}>
+                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px auto', gap: 14, alignItems: 'flex-end', background: 'hsl(var(--bg-app))', padding: '16px 20px', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
                   <div>
                     <label style={{ ...labelStyle, marginBottom: 6 }}>Disciplina *</label>
                     <select value={a.disciplinaId} onChange={e => updateAssignment(a.id, 'disciplinaId', e.target.value)}
-                      disabled={isDisabled}
-                      style={{ ...inputStyle, padding: '10px 12px', fontSize: 14, opacity: isDisabled ? 0.8 : 1 }}>
+                      style={{ ...inputStyle, padding: '10px 12px', fontSize: 14 }}>
                       <option value="" disabled>Selecionar...</option>
                       {disciplinas.map(d => (
                         <option key={d.id} value={d.id}>
@@ -362,8 +377,7 @@ export default function EditarProvaUploadPage() {
                   <div>
                     <label style={{ ...labelStyle, marginBottom: 6 }}>Professor *</label>
                     <select value={a.professorId} onChange={e => updateAssignment(a.id, 'professorId', e.target.value)}
-                      disabled={isDisabled}
-                      style={{ ...inputStyle, padding: '10px 12px', fontSize: 14, opacity: isDisabled ? 0.8 : 1 }}>
+                      style={{ ...inputStyle, padding: '10px 12px', fontSize: 14 }}>
                       <option value="" disabled>Selecionar...</option>
                       {filteredProfs.length === 0 && !a.professorId
                         ? <option disabled>Nenhum professor vinculado</option>
@@ -381,8 +395,9 @@ export default function EditarProvaUploadPage() {
                       style={{ ...inputStyle, padding: '10px 12px', fontSize: 14, textAlign: 'center' }} />
                   </div>
                   <div>
-                    <motion.button onClick={() => removeAssignment(a.id)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }} disabled={assignments.length === 1 || isDisabled}
-                      style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (assignments.length === 1 || isDisabled) ? 'not-allowed' : 'pointer', opacity: (assignments.length === 1 || isDisabled) ? 0.3 : 1 }}>
+                    <motion.button onClick={() => setAssignmentToDelete(a)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }} disabled={assignments.length === 1}
+                      style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: assignments.length === 1 ? 'not-allowed' : 'pointer', opacity: assignments.length === 1 ? 0.3 : 1 }}
+                      title="Excluir disciplina e questões associadas">
                       <Trash2 size={16} />
                     </motion.button>
                   </div>
@@ -395,6 +410,49 @@ export default function EditarProvaUploadPage() {
       </motion.div>
 
       <AnimatePresence>
+        {/* Modal de confirmação de exclusão de disciplina */}
+        {assignmentToDelete && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setAssignmentToDelete(null)}
+              style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} />
+            
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: '32px 28px', width: '100%', maxWidth: 440, position: 'relative', boxShadow: '0 24px 48px rgba(0,0,0,0.3)', textAlign: 'center' }}>
+              
+              <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                <Trash2 size={28} color="#ef4444" />
+              </div>
+              
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 10px' }}>
+                Excluir Disciplina?
+              </h2>
+              
+              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, lineHeight: 1.5, margin: '0 0 24px' }}>
+                Você está prestes a remover <strong style={{ color: 'hsl(var(--text-primary))' }}>{assignmentToDelete.disciplinaNome || 'esta disciplina'}</strong>.
+                <br /><br />
+                <span style={{ color: '#ef4444', fontWeight: 700 }}>Atenção:</span> A atribuição e <strong>todas as questões já enviadas ou cadastradas para ela serão excluídas definitivamente</strong> desta prova ao salvar.
+              </p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <motion.button onClick={() => setAssignmentToDelete(null)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  style={{ padding: '12px 0', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                  Cancelar
+                </motion.button>
+                <motion.button 
+                  onClick={() => {
+                    removeAssignment(assignmentToDelete.id)
+                    setAssignmentToDelete(null)
+                  }} 
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  style={{ padding: '12px 0', borderRadius: 12, background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff', fontSize: 14, fontWeight: 700, border: 'none', cursor: 'pointer', boxShadow: '0 6px 16px rgba(239,68,68,0.3)' }}>
+                  Sim, Excluir
+                </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {successModal && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}

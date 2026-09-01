@@ -185,6 +185,7 @@ export default function UploadSimuladosGerenciamentoPage() {
   const [filterBimestre, setFilterBimestre] = useState('todos')
   const [filterSerie, setFilterSerie] = useState('todas')
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [adaptarModalSimulado, setAdaptarModalSimulado] = useState<any | null>(null)
   
   const [expandedTurmas, setExpandedTurmas] = useState<Record<string, boolean>>({})
   const [gabaritoModalId, setGabaritoModalId] = useState<string | null>(null)
@@ -353,11 +354,11 @@ export default function UploadSimuladosGerenciamentoPage() {
   }
 
   const handleAdaptar = async (simulado: any) => {
-    if (simulado.titulo?.includes('ADAPTADO')) {
-      window.location.href = `/simulados/simulados-upload/${simulado.id}/adaptar`;
-      return;
+    if (simulado.titulo?.toUpperCase().includes('ADAPTAD')) {
+      window.location.href = `/simulados/simulados-upload/${simulado.id}/adaptar`
+      return
     }
-    
+
     setLoading(true)
     try {
       const payload = { ...simulado }
@@ -365,9 +366,11 @@ export default function UploadSimuladosGerenciamentoPage() {
       delete payload.created_at
       delete payload.simulados_upload_requisicoes
       delete payload.criado_por_nome
+      delete payload.eh_adaptada
+      delete payload.config_estudio
       payload.titulo = `${simulado.titulo || 'Simulado'} ADAPTADO`
       payload.updated_at = new Date().toISOString()
-      
+
       const { data: newSimulado, error: simError } = await (supabase as any)
         .from('simulados_upload')
         .insert([payload])
@@ -376,6 +379,7 @@ export default function UploadSimuladosGerenciamentoPage() {
         
       if (simError) throw simError
 
+      // Duplicate all requisitions for this adapted simulado
       if (simulado.simulados_upload_requisicoes && simulado.simulados_upload_requisicoes.length > 0) {
         const reqsPayload = simulado.simulados_upload_requisicoes.map((r: any) => {
           const newReq = { ...r }
@@ -384,6 +388,7 @@ export default function UploadSimuladosGerenciamentoPage() {
           newReq.id_simulado_upload = newSimulado.id
           return newReq
         })
+
         const { error: reqError } = await (supabase as any)
           .from('simulados_upload_requisicoes')
           .insert(reqsPayload)
@@ -393,8 +398,8 @@ export default function UploadSimuladosGerenciamentoPage() {
       
       await loadData()
     } catch (e: any) {
-      console.error(e)
-      alert('Erro ao adaptar simulado: ' + e.message)
+      console.error('Erro ao adaptar simulado:', e)
+      alert('Erro ao adaptar simulado: ' + (e.message || e))
     } finally {
       setLoading(false)
     }
@@ -862,10 +867,10 @@ export default function UploadSimuladosGerenciamentoPage() {
 
                                 {/* Table List matching Reference Image UI */}
                                 <div className="table-responsive-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%' }}>
-                                  <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: '0 6px' }}>
+                                  <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: '0 10px' }}>
                                     <thead>
                                       <tr style={{ color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                                        <th style={{ width: 260, minWidth: 220, padding: '8px 12px 8px 16px', textAlign: 'left' }}>SIMULADO</th>
+                                        <th style={{ width: 270, minWidth: 230, padding: '8px 12px 8px 16px', textAlign: 'left' }}>SIMULADO</th>
                                         <th style={{ width: 130, minWidth: 110, padding: '8px 6px', textAlign: 'left' }}>DISCIPLINA</th>
                                         <th style={{ width: 160, minWidth: 140, padding: '8px 6px', textAlign: 'left' }}>PROFESSOR</th>
                                         <th style={{ width: 145, minWidth: 130, padding: '8px 6px', textAlign: 'left' }}>CRIAÇÃO / ENVIO</th>
@@ -888,9 +893,12 @@ export default function UploadSimuladosGerenciamentoPage() {
                                         const isAdaptada = simulado.titulo?.toUpperCase().includes('ADAPTAD') || Boolean(simulado.eh_adaptada)
                                         const dateCriacaoStr = simulado.created_at ? new Date(simulado.created_at).toLocaleDateString('pt-BR') : ''
                                         const rowSpanCount = reqs.length
+                                        const cardBorder = '2px solid hsl(var(--border-default))'
+                                        const innerBorder = '1px solid hsl(var(--border-subtle))'
 
                                         return reqs.map((req: any, rIdx: number) => {
                                           const isFirstRow = rIdx === 0
+                                          const isLastRow = rIdx === rowSpanCount - 1
                                           const disciplinaNome = req.disciplina_nome || 'Geral'
                                           const profName = req.professor_nome || simulado.criado_por_nome || 'Não atribuído'
                                           const discStyle = getDisciplinaStyle(disciplinaNome)
@@ -923,67 +931,105 @@ export default function UploadSimuladosGerenciamentoPage() {
                                             statusObj = { label: 'Em revisão', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.2)' }
                                           }
 
-                                          const editUrl = `/simulados/simulados-upload/${simulado.id}/upload?req=${req.id}&prof=${req.id_professor || ''}`
+                                          const openAllQuestionsUrl = `/simulados/simulados-upload/${simulado.id}/upload?all=true`
+                                          const openAllPrintUrl = `/simulados/simulados-upload/${simulado.id}/upload?all=true&print=true`
                                           const editConfigUrl = `/simulados/simulados-upload/${simulado.id}/editar`
+                                          const reqEditUrl = `/simulados/simulados-upload/${simulado.id}/upload?req=${req.id}&prof=${req.id_professor || ''}&disc=${req.id_disciplina || ''}`
+                                          const reqPrintUrl = `/simulados/simulados-upload/${simulado.id}/upload?print=true&req=${req.id}&prof=${req.id_professor || ''}&disc=${req.id_disciplina || ''}`
 
                                           return (
                                             <tr key={`${simulado.id}_${req.id || rIdx}`} className="table-row-hover" style={{ background: 'hsl(var(--bg-surface))' }}>
                                               {/* SIMULADO Title (spans all reqs of this simulado) */}
                                               {isFirstRow && (
-                                                <td rowSpan={rowSpanCount} style={{ background: 'hsl(var(--bg-surface))', padding: '8px 12px 8px 16px', borderRadius: '12px 0 0 12px', borderLeft: '1px solid hsl(var(--border-subtle))', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', verticalAlign: 'middle' }}>
-                                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
-                                                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
+                                                <td rowSpan={rowSpanCount} style={{ background: 'hsl(var(--bg-surface))', padding: '10px 12px 10px 16px', borderRadius: '12px 0 0 12px', borderLeft: cardBorder, borderTop: cardBorder, borderBottom: cardBorder, verticalAlign: 'middle' }}>
+                                                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0, marginTop: 1 }}>
                                                       <FileText size={15} />
                                                     </div>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={simulado.titulo}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', lineHeight: 1.35, wordBreak: 'break-word', whiteSpace: 'normal' }} title={simulado.titulo}>
                                                           {simulado.titulo}
                                                         </span>
                                                         {isAdaptada && (
-                                                          <span className="badge-adaptada-neon-brown">
+                                                          <span className="badge-adaptada-neon-brown" style={{ flexShrink: 0 }}>
                                                             ADAPTADA
                                                           </span>
                                                         )}
                                                       </div>
-                                                      <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 500, color: 'hsl(var(--text-secondary))', marginTop: 2, whiteSpace: 'nowrap' }}>
+                                                      <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 500, color: 'hsl(var(--text-secondary))', marginTop: 3, wordBreak: 'break-word', whiteSpace: 'normal' }}>
                                                         {formatCreatedInfo(simulado.created_at, simulado.criado_por_nome)}
                                                       </span>
-                                                      {/* Botões de ação do simulado: Config, Imprimir, Editar */}
-                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
-                                                        {/* Config: editar configurações do simulado */}
-                                                        <Link href={editConfigUrl} style={{ textDecoration: 'none' }}>
+                                                      {/* Botões de ação do simulado: Config, Imprimir, Editar e Adaptar embaixo do Config */}
+                                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 5 }}>
+                                                        {/* Linha 1: Config, Imprimir, Editar */}
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                                                          {/* Config: editar configurações do simulado */}
+                                                          <Link href={editConfigUrl} style={{ textDecoration: 'none' }}>
+                                                            <button
+                                                              style={{
+                                                                display: 'inline-flex', alignItems: 'center', gap: 3,
+                                                                padding: '3px 7px', borderRadius: 5,
+                                                                border: '1px solid rgba(139,92,246,0.35)', color: '#8b5cf6',
+                                                                background: 'rgba(139,92,246,0.06)', fontWeight: 700, fontSize: 10,
+                                                                cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
+                                                              }}
+                                                              title="Editar configurações do simulado"
+                                                            >
+                                                              <Edit size={10} /> Config
+                                                            </button>
+                                                          </Link>
+                                                          {/* Imprimir: abre todas as questões em modo impressão */}
+                                                          <Link href={openAllPrintUrl} style={{ textDecoration: 'none' }}>
+                                                            <button
+                                                              style={{
+                                                                display: 'inline-flex', alignItems: 'center', gap: 3,
+                                                                padding: '3px 7px', borderRadius: 5,
+                                                                border: '1px solid rgba(245,158,11,0.35)', color: '#d97706',
+                                                                background: 'rgba(245,158,11,0.06)', fontWeight: 700, fontSize: 10,
+                                                                cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
+                                                              }}
+                                                              title="Imprimir simulado completo (todas as matérias juntas)"
+                                                            >
+                                                              <Printer size={10} /> Imprimir
+                                                            </button>
+                                                          </Link>
+                                                          {/* Editar: abre todas as questões de todas as matérias em modo edição */}
+                                                          <Link href={openAllQuestionsUrl} style={{ textDecoration: 'none' }}>
+                                                            <button
+                                                              style={{
+                                                                display: 'inline-flex', alignItems: 'center', gap: 3,
+                                                                padding: '3px 7px', borderRadius: 5,
+                                                                border: '1px solid rgba(16,185,129,0.35)', color: '#059669',
+                                                                background: 'rgba(16,185,129,0.06)', fontWeight: 700, fontSize: 10,
+                                                                cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
+                                                              }}
+                                                              title="Editar todas as questões de todas as matérias juntas"
+                                                            >
+                                                              <Edit size={10} /> Editar
+                                                            </button>
+                                                          </Link>
+                                                        </div>
+                                                        {/* Linha 2: Adaptar (se !isAdaptada), Gabarito e Excluir */}
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                                                          {!isAdaptada && (
+                                                            <button
+                                                              onClick={() => setAdaptarModalSimulado(simulado)}
+                                                              style={{
+                                                                display: 'inline-flex', alignItems: 'center', gap: 3,
+                                                                padding: '3px 7px', borderRadius: 5,
+                                                                border: '1px solid rgba(59,130,246,0.35)', color: '#2563eb',
+                                                                background: 'rgba(59,130,246,0.06)', fontWeight: 700, fontSize: 10,
+                                                                cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
+                                                              }}
+                                                              title="Duplicar e criar versão adaptada do simulado"
+                                                            >
+                                                              <BookOpen size={10} /> Adaptar
+                                                            </button>
+                                                          )}
+                                                          {/* Gabarito */}
                                                           <button
-                                                            style={{
-                                                              display: 'inline-flex', alignItems: 'center', gap: 3,
-                                                              padding: '3px 7px', borderRadius: 5,
-                                                              border: '1px solid rgba(139,92,246,0.35)', color: '#8b5cf6',
-                                                              background: 'rgba(139,92,246,0.06)', fontWeight: 700, fontSize: 10,
-                                                              cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
-                                                            }}
-                                                            title="Editar configurações do simulado"
-                                                          >
-                                                            <Edit size={10} /> Config
-                                                          </button>
-                                                        </Link>
-                                                        {/* Imprimir: abre todas as questões em modo impressão */}
-                                                        <Link href={`/simulados/simulados-upload/${simulado.id}/upload?all=true&print=true`} style={{ textDecoration: 'none' }}>
-                                                          <button
-                                                            style={{
-                                                              display: 'inline-flex', alignItems: 'center', gap: 3,
-                                                              padding: '3px 7px', borderRadius: 5,
-                                                              border: '1px solid rgba(245,158,11,0.35)', color: '#d97706',
-                                                              background: 'rgba(245,158,11,0.06)', fontWeight: 700, fontSize: 10,
-                                                              cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
-                                                            }}
-                                                            title="Imprimir simulado completo (todas as matérias)"
-                                                          >
-                                                            <Printer size={10} /> Imprimir
-                                                          </button>
-                                                        </Link>
-                                                        {/* Editar: abre todas as questões de todas as matérias em modo edição */}
-                                                        <Link href={`/simulados/simulados-upload/${simulado.id}/upload?all=true`} style={{ textDecoration: 'none' }}>
-                                                          <button
+                                                            onClick={() => setGabaritoModalId(simulado.id)}
                                                             style={{
                                                               display: 'inline-flex', alignItems: 'center', gap: 3,
                                                               padding: '3px 7px', borderRadius: 5,
@@ -991,37 +1037,51 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                               background: 'rgba(16,185,129,0.06)', fontWeight: 700, fontSize: 10,
                                                               cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
                                                             }}
-                                                            title="Editar todas as questões de todas as matérias"
+                                                            title="Visualizar gabarito do simulado"
                                                           >
-                                                            <Edit size={10} /> Editar
+                                                            <CheckSquare size={10} /> Gabarito
                                                           </button>
-                                                        </Link>
+                                                          {/* Excluir */}
+                                                          <button
+                                                            onClick={() => setDeleteConfirmId(simulado.id)}
+                                                            style={{
+                                                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                                                              padding: '3px 7px', borderRadius: 5,
+                                                              border: '1px solid rgba(239,68,68,0.35)', color: '#ef4444',
+                                                              background: 'rgba(239,68,68,0.06)', fontWeight: 700, fontSize: 10,
+                                                              cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap'
+                                                            }}
+                                                            title="Excluir simulado"
+                                                          >
+                                                            <Trash2 size={10} /> Excluir
+                                                          </button>
+                                                        </div>
                                                       </div>
                                                     </div>
                                                   </div>
                                                 </td>
                                               )}
 
-                                               {/* DISCIPLINA (Individual per req) */}
-                                               <td style={{ padding: '8px 6px', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', verticalAlign: 'middle' }}>
-                                                 <Link href={editUrl} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', width: '100%', cursor: 'pointer' }} title={`Inserir/gerenciar questões de ${disciplinaNome}`}>
-                                                   <span style={{ 
-                                                     padding: '3px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700, 
-                                                     background: discStyle.bg, color: discStyle.color, border: `1px solid ${discStyle.border}`,
-                                                     display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
-                                                     cursor: 'pointer', transition: 'all 0.15s ease'
-                                                   }}>
-                                                     {disciplinaNome}
-                                                   </span>
-                                                 </Link>
-                                               </td>
+                                              {/* DISCIPLINA (abre apenas questões desta disciplina) */}
+                                              <td style={{ padding: '8px 6px', borderTop: isFirstRow ? cardBorder : innerBorder, borderBottom: isLastRow ? cardBorder : 'none', overflow: 'hidden', verticalAlign: 'middle' }}>
+                                                <Link href={reqEditUrl} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', width: '100%', cursor: 'pointer' }} title={`Visualizar questões de ${disciplinaNome}`}>
+                                                  <span style={{ 
+                                                    padding: '3px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700, 
+                                                    background: discStyle.bg, color: discStyle.color, border: `1px solid ${discStyle.border}`,
+                                                    display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
+                                                    cursor: 'pointer', transition: 'all 0.15s ease'
+                                                  }}>
+                                                    {disciplinaNome}
+                                                  </span>
+                                                </Link>
+                                              </td>
 
-                                              {/* PROFESSOR (Individual per req) */}
-                                              <td style={{ padding: '8px 6px', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', verticalAlign: 'middle' }}>
+                                              {/* PROFESSOR (abre apenas questões desta disciplina) */}
+                                              <td style={{ padding: '8px 6px', borderTop: isFirstRow ? cardBorder : innerBorder, borderBottom: isLastRow ? cardBorder : 'none', overflow: 'hidden', verticalAlign: 'middle' }}>
                                                 <Link 
-                                                  href={editUrl} 
+                                                  href={reqEditUrl} 
                                                   style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', cursor: 'pointer' }}
-                                                  title={`Clique para inserir questões do professor ${profName}`}
+                                                  title={`Visualizar questões de ${disciplinaNome} - Professor ${profName}`}
                                                   className="prof-link-hover"
                                                 >
                                                   <div style={{ 
@@ -1039,9 +1099,9 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                 </Link>
                                               </td>
 
-                                              {/* CRIAÇÃO / ENVIO (Individual per req) */}
-                                              <td style={{ padding: '8px 6px', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', whiteSpace: 'nowrap', overflow: 'hidden', verticalAlign: 'middle' }}>
-                                                <Link href={editUrl} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
+                                              {/* CRIAÇÃO / ENVIO (abre apenas questões desta disciplina) */}
+                                              <td style={{ padding: '8px 6px', borderTop: isFirstRow ? cardBorder : innerBorder, borderBottom: isLastRow ? cardBorder : 'none', whiteSpace: 'nowrap', overflow: 'hidden', verticalAlign: 'middle' }}>
+                                                <Link href={reqEditUrl} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }} title={`Visualizar questões de ${disciplinaNome}`}>
                                                   <span style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>
                                                     {dateCriacaoStr}
                                                   </span>
@@ -1051,18 +1111,18 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                 </Link>
                                               </td>
 
-                                              {/* QUESTÕES (Individual per req) */}
-                                              <td style={{ padding: '8px 4px', textAlign: 'center', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
-                                                <Link href={editUrl} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
+                                              {/* QUESTÕES (abre apenas questões desta disciplina) */}
+                                              <td style={{ padding: '8px 4px', textAlign: 'center', borderTop: isFirstRow ? cardBorder : innerBorder, borderBottom: isLastRow ? cardBorder : 'none', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                                                <Link href={reqEditUrl} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }} title={`Visualizar questões de ${disciplinaNome}`}>
                                                   <span style={{ fontSize: 12, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
                                                     {meQuestoesRatio}
                                                   </span>
                                                 </Link>
                                               </td>
 
-                                              {/* STATUS (Individual per req) */}
-                                              <td style={{ padding: '8px 4px', textAlign: 'center', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', verticalAlign: 'middle' }}>
-                                                <Link href={editUrl} style={{ textDecoration: 'none', cursor: 'pointer' }}>
+                                              {/* STATUS (abre apenas questões desta disciplina) */}
+                                              <td style={{ padding: '8px 4px', textAlign: 'center', borderTop: isFirstRow ? cardBorder : innerBorder, borderBottom: isLastRow ? cardBorder : 'none', verticalAlign: 'middle' }}>
+                                                <Link href={reqEditUrl} style={{ textDecoration: 'none', cursor: 'pointer' }} title={`Visualizar questões de ${disciplinaNome}`}>
                                                   <span style={{ 
                                                     padding: '3px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, 
                                                     background: statusObj.bg, color: statusObj.color, border: `1px solid ${statusObj.border}`,
@@ -1073,10 +1133,9 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                 </Link>
                                               </td>
 
-                                              {/* AÇÕES (Individual per req) */}
-                                              <td style={{ padding: '8px 4px', borderRadius: rIdx === rowSpanCount - 1 ? '0 12px 12px 0' : '0', borderRight: '1px solid hsl(var(--border-subtle))', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', textAlign: 'right', position: 'relative', overflow: 'visible', verticalAlign: 'middle' }}>
+                                              {/* AÇÕES (Dropdown Menu) */}
+                                              <td style={{ padding: '8px 8px 8px 4px', borderRadius: (isFirstRow && isLastRow) ? '0 12px 12px 0' : (isFirstRow ? '0 12px 0 0' : (isLastRow ? '0 0 12px 0' : '0')), borderRight: cardBorder, borderTop: isFirstRow ? cardBorder : innerBorder, borderBottom: isLastRow ? cardBorder : 'none', textAlign: 'right', position: 'relative', overflow: 'visible', verticalAlign: 'middle' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }} className="action-menu-container">
-                                                  {/* Radix DropdownMenu de 3 pontinhos para esta disciplina/professor */}
                                                   <DropdownMenu.Root>
                                                     <DropdownMenu.Trigger asChild>
                                                       <button
@@ -1102,7 +1161,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                         sideOffset={6}
                                                         collisionPadding={12}
                                                         style={{
-                                                          minWidth: 230,
+                                                          minWidth: 220,
                                                           background: 'hsl(var(--bg-elevated))',
                                                           border: '1px solid hsl(var(--border-subtle))',
                                                           borderRadius: 12,
@@ -1117,41 +1176,18 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                         onClick={(e) => e.stopPropagation()}
                                                       >
                                                         <DropdownMenu.Item asChild>
-                                                          <Link href={editUrl} style={{ textDecoration: 'none', outline: 'none' }}>
+                                                          <Link href={reqEditUrl} style={{ textDecoration: 'none', outline: 'none' }}>
                                                             <div style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none' }} className="menu-item-hover">
-                                                              <Eye size={15} color="#8b5cf6" /> Visualizar / Questões ({disciplinaNome})
+                                                              <Eye size={15} color="#8b5cf6" /> Visualizar questões ({disciplinaNome})
                                                             </div>
                                                           </Link>
                                                         </DropdownMenu.Item>
-
-
-
                                                         <DropdownMenu.Item asChild>
-                                                          <div onClick={() => setGabaritoModalId(simulado.id)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
-                                                            <CheckSquare size={15} color="#10b981" /> Gabarito
-                                                          </div>
-                                                        </DropdownMenu.Item>
-
-                                                        <DropdownMenu.Item asChild>
-                                                          <div onClick={() => handleAdaptar(simulado)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
-                                                            <BookOpen size={15} color="#3b82f6" /> Adaptar simulado
-                                                          </div>
-                                                        </DropdownMenu.Item>
-
-                                                        <DropdownMenu.Item asChild>
-                                                          <Link href={`/simulados/simulados-upload/${simulado.id}/upload?print=true&req=${req.id}`} style={{ textDecoration: 'none', outline: 'none' }}>
+                                                          <Link href={reqPrintUrl} style={{ textDecoration: 'none', outline: 'none' }}>
                                                             <div style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: 'hsl(var(--text-primary))', cursor: 'pointer', userSelect: 'none' }} className="menu-item-hover">
                                                               <Printer size={15} color="#f59e0b" /> Imprimir caderno ({disciplinaNome})
                                                             </div>
                                                           </Link>
-                                                        </DropdownMenu.Item>
-
-                                                        <DropdownMenu.Separator style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
-
-                                                        <DropdownMenu.Item asChild>
-                                                          <div onClick={() => setDeleteConfirmId(simulado.id)} style={{ minHeight: 40, padding: '8px 12px', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600, color: '#ef4444', cursor: 'pointer', userSelect: 'none', outline: 'none' }} className="menu-item-hover">
-                                                            <Trash2 size={15} color="#ef4444" /> Excluir
-                                                          </div>
                                                         </DropdownMenu.Item>
                                                       </DropdownMenu.Content>
                                                     </DropdownMenu.Portal>
@@ -1199,6 +1235,101 @@ export default function UploadSimuladosGerenciamentoPage() {
             )}
           </div>
         )}
+
+        {/* Modal de Explicação e Confirmação de Adaptar */}
+        <AnimatePresence>
+          {adaptarModalSimulado && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(4px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 9999, padding: 16
+              }}
+              onClick={() => setAdaptarModalSimulado(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))',
+                  borderRadius: 20, padding: 28, maxWidth: 480, width: '100%',
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.25)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(59, 130, 246, 0.12)', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <BookOpen size={24} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0 }}>
+                      Criar Versão Adaptada
+                    </h3>
+                    <p style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', margin: '2px 0 0' }}>
+                      Educação Especial & Inclusão
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ padding: '10px 14px', borderRadius: 10, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', marginBottom: 16 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
+                    Simulado selecionado
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                    {adaptarModalSimulado.titulo}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24, fontSize: 13, color: 'hsl(var(--text-secondary))', lineHeight: 1.5 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <span style={{ color: '#2563eb', fontWeight: 800 }}>•</span>
+                    <span><strong>Duplicação Completa:</strong> Uma nova cópia do simulado será gerada com todas as disciplinas, professores e questões atuais.</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <span style={{ color: '#2563eb', fontWeight: 800 }}>•</span>
+                    <span><strong>Selo de Identificação:</strong> O novo simulado receberá a tag <strong style={{ color: '#d97706' }}>ADAPTADA</strong> para fácil identificação.</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <span style={{ color: '#2563eb', fontWeight: 800 }}>•</span>
+                    <span><strong>Total Independência:</strong> As edições e adaptações nas questões feitas na nova versão não afetarão o simulado original.</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setAdaptarModalSimulado(null)}
+                    style={{
+                      padding: '10px 18px', borderRadius: 10, background: 'hsl(var(--bg-app))',
+                      border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))',
+                      fontSize: 13, fontWeight: 700, cursor: 'pointer'
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      const s = adaptarModalSimulado
+                      setAdaptarModalSimulado(null)
+                      handleAdaptar(s)
+                    }}
+                    style={{
+                      padding: '10px 20px', borderRadius: 10, background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                      border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)', display: 'inline-flex', alignItems: 'center', gap: 6
+                    }}
+                  >
+                    <BookOpen size={14} /> Confirmar e Adaptar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Modal de Exclusão */}
         <AnimatePresence>

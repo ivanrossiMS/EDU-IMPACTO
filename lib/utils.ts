@@ -238,3 +238,23 @@ export function isValidStudentPhoto(foto: string | null | undefined): boolean {
   return true
 }
 
+export async function downloadOriginalFile(url: string, filename?: string) {
+  if (!url) return
+  try {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    const blobUrl = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename || 'arquivo_original.docx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(blobUrl)
+  } catch (err) {
+    console.error('Erro no download:', err)
+    window.open(url, '_blank')
+  }
+}
+
+

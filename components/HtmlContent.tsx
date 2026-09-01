@@ -45,6 +45,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
       const parser = new DOMParser()
       const doc = parser.parseFromString(cleanedHtml, 'text/html')
       
+      // 1. Render all .ql-formula elements
       const formulaSpans = doc.querySelectorAll('.ql-formula')
       formulaSpans.forEach(span => {
         const formula = span.getAttribute('data-value') || span.textContent
@@ -61,6 +62,40 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
           }
         }
       })
+
+      // 2. Render any inline/display LaTeX patterns: \(...\), \[...\], $$...$$ in text nodes
+      const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null)
+      const textNodes: Text[] = []
+      let currentNode = walker.nextNode()
+      while (currentNode) {
+        // Skip text nodes that are already inside a .ql-formula span or katex element
+        const parent = (currentNode as Text).parentElement
+        if (!parent || (!parent.closest('.ql-formula') && !parent.closest('.katex'))) {
+          textNodes.push(currentNode as Text)
+        }
+        currentNode = walker.nextNode()
+      }
+
+      for (const node of textNodes) {
+        const val = node.nodeValue || ''
+        if (/\\[\(\[]|\$\$|\$[^\$]+\$/.test(val)) {
+          const replaced = val.replace(/\\(?:\[([\s\S]*?)\\\]|\(([\s\S]*?)\\\))|\$\$([\s\S]*?)\$\$|\$([^\$\n]+)\$/g, (match, d1, i1, d2, i2) => {
+            const formula = (d1 || i1 || d2 || i2 || '').trim()
+            const isDisplay = Boolean(d1 || d2)
+            if (!formula) return match
+            try {
+              return `<span class="ql-formula" data-value="${formula.replace(/"/g, '&quot;')}" contenteditable="false">${katex.renderToString(formula, { displayMode: isDisplay, throwOnError: false })}</span>`
+            } catch {
+              return match
+            }
+          })
+          if (replaced !== val) {
+            const temp = doc.createElement('span')
+            temp.innerHTML = replaced
+            node.parentNode?.replaceChild(temp, node)
+          }
+        }
+      }
 
       return doc.body.innerHTML
     } catch (e) {
