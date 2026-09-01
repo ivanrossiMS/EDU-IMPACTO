@@ -105,7 +105,8 @@ export async function GET(request: Request) {
       return NextResponse.json(DEFAULT_ANNOUNCEMENTS)
     }
 
-    if (data?.valor && Array.isArray(data.valor) && data.valor.length > 0) {
+    // Se o registro já existe no banco de dados, retorna o valor gravado exatamente (mesmo que seja um array com menos itens ou vazio)
+    if (data && data.valor !== undefined && data.valor !== null && Array.isArray(data.valor)) {
       return NextResponse.json(data.valor, {
         headers: {
           'Cache-Control': 'no-store, max-age=0',
@@ -114,7 +115,7 @@ export async function GET(request: Request) {
       })
     }
 
-    // Se ainda não existir registro no banco, inicializa com os padrões
+    // Se ainda não existir registro no banco pela primeira vez, inicializa com os padrões
     await supabase.from('configuracoes').upsert({
       chave: 'saida_anuncios',
       valor: DEFAULT_ANNOUNCEMENTS,

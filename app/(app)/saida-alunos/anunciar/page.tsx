@@ -155,19 +155,18 @@ function playHarmonicChime(): Promise<void> {
 export default function AnunciarPage() {
   const { currentUser } = useApp()
   const { config, realtimeStatus, broadcastAnnouncement, cancelAnnouncement } = useSaida()
-  
+
   // Persistência das Frases Salvas e Histórico
-  const [rawAnnouncements, setRawAnnouncements] = useSupabaseArray<SchoolAnnouncement>('saida/anuncios', DEFAULT_ANNOUNCEMENTS)
-  const [history, setHistory] = useSupabaseArray<AnnouncementHistoryItem>('saida/anuncios_historico', [])
-
-  const savedAnnouncements = useMemo(() => {
-    if (rawAnnouncements && Array.isArray(rawAnnouncements) && rawAnnouncements.length > 0) {
-      return rawAnnouncements
-    }
-    return DEFAULT_ANNOUNCEMENTS
-  }, [rawAnnouncements])
-
-  const setSavedAnnouncements = setRawAnnouncements
+  const [savedAnnouncements, setSavedAnnouncements] = useSupabaseArray<SchoolAnnouncement>(
+    'saida/anuncios',
+    DEFAULT_ANNOUNCEMENTS,
+    { mergeLocal: false, noCache: true }
+  )
+  const [history, setHistory] = useSupabaseArray<AnnouncementHistoryItem>(
+    'saida/anuncios_historico',
+    [],
+    { mergeLocal: false, noCache: true }
+  )
 
   // Hook de Voz Local para Prévia e Execução
   const voice = useVoice({
