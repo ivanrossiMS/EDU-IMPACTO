@@ -134,6 +134,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
       { label: 'USUARIOS E ACESSOS', href: '/configuracoes/usuarios', icon: <Shield size={16} /> },
       { label: 'CONFIG DO SISTEMA', href: '/configuracoes', icon: <Settings size={16} /> },
       { label: 'MULTI-UNIDADES', href: '/configuracoes/unidades', icon: <Building size={16} /> },
+      { label: 'PRIVACIDADE', href: '/privacidade', icon: <ShieldCheck size={16} /> },
       {
         label: 'CONFIG. FINANCEIRO', icon: <Landmark size={16} />,
         children: [
