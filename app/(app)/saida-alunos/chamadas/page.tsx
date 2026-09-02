@@ -26,7 +26,8 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { useApp } from '@/lib/context'
 import {
   CheckCircle2, Clock, Search, Megaphone, X, GraduationCap,
-  UserCheck, ChevronRight, RotateCcw, RefreshCw, Trash2, Pin
+  UserCheck, ChevronRight, RotateCcw, RefreshCw, Trash2, Pin,
+  Users, Sparkles, AlertCircle
 } from 'lucide-react'
 
 type FilterType = 'all' | 'waiting' | 'confirmed' | 'cancelled' | 'blocked'
@@ -77,12 +78,13 @@ function fmtTime(iso?: string) {
 }
 
 // ── Unified call card (Ultra Modern TV-Monitor style) ─────────────────────────
-const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert }: {
-  call:      PickupCall
-  onConfirm: (id: string) => void
-  onCancel:  (id: string) => void
-  onRecall:  (id: string) => void
-  onRevert:  (id: string) => void
+const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert, onOpenIrmaos }: {
+  call:         PickupCall
+  onConfirm:    (id: string) => void
+  onCancel:     (id: string) => void
+  onRecall:     (id: string) => void
+  onRevert:     (id: string) => void
+  onOpenIrmaos: (call: PickupCall) => void
 }) {
   const { config } = useSaida()
   const [recalling, setRecalling] = useState(false)
@@ -133,8 +135,8 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
       opacity: isFinished ? 0.85 : 1,
       transition: 'all 0.3s cubic-bezier(0.2, 1, 0.2, 1)',
       animation: urgent ? 'cardFloatUrgent 4s ease-in-out infinite' : 'none',
-      minHeight: 220,
-      aspectRatio: '1 / 1.3',
+      minHeight: 235,
+      aspectRatio: '1 / 1.32',
     }}>
 
       {/* ── BACKGROUND PHOTO ─────────────────────────────────────── */}
@@ -264,30 +266,56 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
 
         {/* ── ACTION BUTTONS ─────────────────────────────────────────────── */}
         {isActive && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn-modern btn-chamar" onClick={handleRecall} disabled={recalling} style={{
-              flex: 1, height: 34, borderRadius: 10,
-              fontWeight: 800, fontSize: 10, cursor: recalling ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              textTransform: 'uppercase',
-            }}>
-              <Megaphone size={11}/> {recalling ? 'Chamando...' : 'CHAMAR'}
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn-modern btn-chamar" onClick={handleRecall} disabled={recalling} style={{
+                flex: 1, height: 34, borderRadius: 10,
+                fontWeight: 800, fontSize: 10, cursor: recalling ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                textTransform: 'uppercase',
+              }}>
+                <Megaphone size={11}/> {recalling ? 'Chamando...' : 'CHAMAR'}
+              </button>
 
-            <button className="btn-modern btn-confirmar" onClick={() => onConfirm(call.id)} style={{
-              flex: 1.4, height: 34, borderRadius: 10,
-              fontWeight: 800, fontSize: 10, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              textTransform: 'uppercase',
-            }}>
-              <CheckCircle2 size={11}/> Confirmar
-            </button>
+              <button className="btn-modern btn-confirmar" onClick={() => onConfirm(call.id)} style={{
+                flex: 1.4, height: 34, borderRadius: 10,
+                fontWeight: 800, fontSize: 10, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                textTransform: 'uppercase',
+              }}>
+                <CheckCircle2 size={11}/> Confirmar
+              </button>
 
-            <button className="btn-modern btn-cancelar" onClick={() => onCancel(call.id)} style={{
-              width: 34, height: 34, flexShrink: 0, borderRadius: 10,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <X size={13}/>
+              <button className="btn-modern btn-cancelar" onClick={() => onCancel(call.id)} style={{
+                width: 34, height: 34, flexShrink: 0, borderRadius: 10,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <X size={13}/>
+              </button>
+            </div>
+
+            {/* ── BOTÃO CHAMAR IRMÃOS (EMBAIXO DO CHAMAR) ── */}
+            <button
+              type="button"
+              className="btn-modern btn-irmaos"
+              onMouseEnter={() => prefetchSiblings(call)}
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenIrmaos(call)
+              }}
+              title="Chamar irmãos e outros dependentes vinculados a este responsável"
+              style={{
+                width: '100%', height: 28, borderRadius: 8,
+                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(168, 85, 247, 0.18))',
+                border: '1px solid rgba(168, 85, 247, 0.35)',
+                color: '#c084fc',
+                fontWeight: 800, fontSize: 9.5, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+                boxShadow: '0 2px 8px rgba(168, 85, 247, 0.12)',
+              }}
+            >
+              <Users size={12} /> Chamar Irmãos
             </button>
           </div>
         )}
@@ -312,6 +340,785 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
          prev.call.calledAt === next.call.calledAt &&
          prev.call.blockType === next.call.blockType
 })
+
+// ── Client-side Ultra Fast Cache & Prefetching ─────────────────────────────────
+const globalSiblingsCache = new Map<string, { data: SiblingStudent[]; timestamp: number }>()
+
+function getSiblingsCacheKey(call: PickupCall): string {
+  return `${call.guardianId || ''}|${(call.guardianName || '').toLowerCase().trim()}|${call.studentId || ''}`
+}
+
+function prefetchSiblings(call: PickupCall) {
+  if (!call) return
+  const key = getSiblingsCacheKey(call)
+  const cached = globalSiblingsCache.get(key)
+  if (cached && Date.now() - cached.timestamp < 45000) return
+
+  const params = new URLSearchParams()
+  if (call.guardianId) params.set('guardianId', call.guardianId)
+  if (call.guardianName) params.set('guardianName', call.guardianName)
+  if (call.studentId) params.set('studentId', call.studentId)
+
+  fetch(`/api/saida/irmaos?${params.toString()}`)
+    .then(res => res.ok ? res.json() : null)
+    .then(json => {
+      if (json?.siblings) {
+        globalSiblingsCache.set(key, { data: json.siblings, timestamp: Date.now() })
+      }
+    })
+    .catch(() => {})
+}
+
+// ── Modal Ultra Moderno de Chamada de Irmãos ──────────────────────────────────
+interface SiblingStudent {
+  id: string
+  nome: string
+  matricula?: string
+  turma?: string
+  turmaNome: string
+  turno?: string
+  foto?: string | null
+  autorizadoSairSozinho?: boolean
+  parentescoVinculo?: string
+  isCurrentStudent?: boolean
+  responsaveis?: any[]
+}
+
+function ModalChamarIrmaos({
+  call,
+  onClose,
+  activeCalls,
+  onCallStudent,
+  onRecallStudent,
+  showToast,
+}: {
+  call: PickupCall
+  onClose: () => void
+  activeCalls: PickupCall[]
+  onCallStudent: (studentId: string, studentName: string, studentClass: string, guardianId: string, guardianName: string, studentPhoto?: string | null) => void
+  onRecallStudent: (callId: string) => void
+  showToast: (msg: string, ok?: boolean) => void
+}) {
+  const cacheKey = useMemo(() => getSiblingsCacheKey(call), [call])
+  const cachedEntry = useMemo(() => globalSiblingsCache.get(cacheKey), [cacheKey])
+
+  const [siblings, setSiblings] = useState<SiblingStudent[]>(cachedEntry?.data || [])
+  const [loading, setLoading] = useState(!cachedEntry)
+  const [callingIds, setCallingIds] = useState<Set<string>>(new Set())
+  const [callingAll, setCallingAll] = useState(false)
+  const isMobile = useIsMobile()
+
+  useEffect(() => {
+    let isMounted = true
+    const fetchSiblings = async () => {
+      // If we already have fresh cached data, don't show loading spinner
+      if (!cachedEntry) {
+        setLoading(true)
+      }
+      try {
+        const params = new URLSearchParams()
+        if (call.guardianId) params.set('guardianId', call.guardianId)
+        if (call.guardianName) params.set('guardianName', call.guardianName)
+        if (call.studentId) params.set('studentId', call.studentId)
+
+        const res = await fetch(`/api/saida/irmaos?${params.toString()}`)
+        if (res.ok) {
+          const json = await res.json()
+          if (isMounted) {
+            const list = json.siblings || []
+            setSiblings(list)
+            globalSiblingsCache.set(cacheKey, { data: list, timestamp: Date.now() })
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao buscar irmãos:', err)
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    fetchSiblings()
+    return () => { isMounted = false }
+  }, [call, cacheKey, cachedEntry])
+
+  // Esc key listener
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  const otherSiblings = useMemo(() => {
+    return siblings.filter(s => String(s.id) !== String(call.studentId))
+  }, [siblings, call.studentId])
+
+  // Helper to check live status of any sibling in activeCalls
+  const getSiblingCallStatus = useCallback((sId: string) => {
+    const sIdStr = String(sId).trim()
+    const active = activeCalls.find(c => c.studentId != null && String(c.studentId).trim() === sIdStr && (c.status === 'waiting' || c.status === 'called'))
+    if (active) return { status: 'waiting' as const, call: active }
+    const confirmed = activeCalls.find(c => c.studentId != null && String(c.studentId).trim() === sIdStr && c.status === 'confirmed')
+    if (confirmed) return { status: 'confirmed' as const, call: confirmed }
+    const blocked = activeCalls.find(c => c.studentId != null && String(c.studentId).trim() === sIdStr && c.status === 'blocked')
+    if (blocked) return { status: 'blocked' as const, call: blocked }
+    return { status: 'uncalled' as const, call: null }
+  }, [activeCalls])
+
+  // Uncalled other siblings (ready to be called)
+  const uncalledCount = useMemo(() => {
+    return otherSiblings.filter(s => {
+      const { status } = getSiblingCallStatus(s.id)
+      return status === 'uncalled'
+    }).length
+  }, [otherSiblings, getSiblingCallStatus])
+
+  const handleCallSingle = (s: SiblingStudent) => {
+    if (callingIds.has(s.id)) return
+    setCallingIds(prev => new Set(prev).add(s.id))
+    onCallStudent(
+      s.id,
+      s.nome,
+      s.turmaNome || s.turma || '',
+      call.guardianId,
+      call.guardianName,
+      s.foto
+    )
+    showToast(`Aluno(a) ${s.nome} chamado(a) na TV!`, true)
+    setTimeout(() => {
+      setCallingIds(prev => {
+        const next = new Set(prev)
+        next.delete(s.id)
+        return next
+      })
+    }, 1500)
+  }
+
+  const handleCallAll = async () => {
+    const targets = otherSiblings.filter(s => {
+      const { status } = getSiblingCallStatus(s.id)
+      return status === 'uncalled'
+    })
+
+    if (targets.length === 0) {
+      showToast('Todos os irmãos já foram chamados ou liberados!', false)
+      return
+    }
+
+    setCallingAll(true)
+    for (let i = 0; i < targets.length; i++) {
+      const s = targets[i]
+      setCallingIds(prev => new Set(prev).add(s.id))
+      onCallStudent(
+        s.id,
+        s.nome,
+        s.turmaNome || s.turma || '',
+        call.guardianId,
+        call.guardianName,
+        s.foto
+      )
+      if (i < targets.length - 1) {
+        await new Promise(r => setTimeout(r, 350))
+      }
+    }
+    showToast(`⚡ ${targets.length} irmão(s) chamado(s) na TV com sucesso!`, true)
+    setTimeout(() => {
+      setCallingAll(false)
+      setCallingIds(new Set())
+    }, 1500)
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(10, 15, 30, 0.82)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        zIndex: 99999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '16px',
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.92, opacity: 0, y: 20 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 360 }}
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 640,
+          maxHeight: '90vh',
+          background: 'linear-gradient(180deg, #18182b 0%, #0c0e18 100%)',
+          borderRadius: 24,
+          border: '1.5px solid rgba(168, 85, 247, 0.35)',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.8), 0 0 40px rgba(168,85,247,0.18)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        {/* TOP GLOW BAR */}
+        <div style={{
+          height: 3,
+          width: '100%',
+          background: 'linear-gradient(90deg, #6366f1, #a855f7, #ec4899)',
+        }} />
+
+        {/* MODAL HEADER */}
+        <div style={{
+          padding: '20px 24px 16px',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 16,
+          background: 'rgba(255,255,255,0.02)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              width: 48,
+              height: 48,
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.25), rgba(168,85,247,0.35))',
+              border: '1px solid rgba(168,85,247,0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#c084fc',
+              boxShadow: '0 4px 16px rgba(168,85,247,0.25)',
+              flexShrink: 0,
+            }}>
+              <Users size={24} />
+            </div>
+            <div>
+              <div style={{
+                fontFamily: 'Outfit, sans-serif',
+                fontWeight: 900,
+                fontSize: 18,
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}>
+                Alunos do Responsável
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 100,
+                  background: 'rgba(168,85,247,0.2)',
+                  color: '#d8b4fe',
+                  border: '1px solid rgba(168,85,247,0.35)',
+                }}>
+                  {siblings.length} {siblings.length === 1 ? 'aluno vinculado' : 'alunos vinculados'}
+                </span>
+              </div>
+              <div style={{
+                fontSize: 12,
+                color: '#94a3b8',
+                marginTop: 4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#38bdf8', fontWeight: 700 }}>
+                  <UserCheck size={13} color="#38bdf8" />
+                  {call.guardianName || 'Responsável'}
+                </span>
+                <span style={{ opacity: 0.4 }}>•</span>
+                <span style={{ color: '#cbd5e1', fontSize: 11.5 }}>
+                  Chamada iniciada com <strong style={{ color: '#fff' }}>{call.studentName}</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: '#cbd5e1',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              flexShrink: 0,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(239,68,68,0.15)'
+              e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)'
+              e.currentTarget.style.color = '#ef4444'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+              e.currentTarget.style.color = '#cbd5e1'
+            }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* QUICK ACTION BANNER (CALL ALL SIBLINGS) */}
+        {uncalledCount > 1 && (
+          <div style={{
+            padding: '10px 24px',
+            background: 'linear-gradient(90deg, rgba(99,102,241,0.15), rgba(168,85,247,0.15))',
+            borderBottom: '1px solid rgba(168,85,247,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}>
+            <div style={{ fontSize: 12, color: '#e0e7ff', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+              <Sparkles size={14} color="#c084fc" />
+              <span>Há <strong>{uncalledCount}</strong> irmãos prontos para serem chamados juntos.</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleCallAll}
+              disabled={callingAll}
+              style={{
+                height: 32,
+                padding: '0 14px',
+                borderRadius: 8,
+                background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                border: 'none',
+                color: '#fff',
+                fontWeight: 900,
+                fontSize: 10.5,
+                cursor: callingAll ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+                boxShadow: '0 4px 12px rgba(168,85,247,0.3)',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => {
+                if (!callingAll) {
+                  e.currentTarget.style.filter = 'brightness(1.15)'
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                }
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.filter = 'none'
+                e.currentTarget.style.transform = 'none'
+              }}
+            >
+              <Megaphone size={12} />
+              {callingAll ? 'Chamando Todos...' : `Chamar Todos (${uncalledCount})`}
+            </button>
+          </div>
+        )}
+
+        {/* MODAL BODY (SCROLLABLE LIST) */}
+        <div style={{
+          padding: '20px 24px',
+          overflowY: 'auto',
+          maxHeight: 'calc(90vh - 160px)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}>
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} className="skeleton-shimmer" style={{
+                  height: 80,
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }} />
+              ))}
+            </div>
+          ) : siblings.length === 0 ? (
+            <div style={{
+              textAlign: 'center',
+              padding: '40px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 12,
+            }}>
+              <div style={{
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                background: 'rgba(168,85,247,0.1)',
+                border: '1px solid rgba(168,85,247,0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#c084fc',
+                fontSize: 26,
+              }}>
+                👥
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: '#fff', marginBottom: 4 }}>
+                  Nenhum irmão encontrado
+                </div>
+                <p style={{ margin: 0, fontSize: 12.5, color: '#94a3b8', maxWidth: 380, lineHeight: 1.5 }}>
+                  Não localizamos outros alunos ativos no sistema vinculados ao mesmo responsável ({call.guardianName || 'não informado'}).
+                </p>
+              </div>
+            </div>
+          ) : (
+            siblings.map(s => {
+              const { status, call: activeCall } = getSiblingCallStatus(s.id)
+              const isCurrent = s.isCurrentStudent || String(s.id) === String(call.studentId)
+              const isBeingCalled = callingIds.has(s.id)
+              const initials = s.nome ? s.nome.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase() : 'AL'
+
+              return (
+                <div
+                  key={s.id}
+                  style={{
+                    background: isCurrent
+                      ? 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(15,23,42,0.6))'
+                      : status === 'confirmed'
+                        ? 'linear-gradient(135deg, rgba(16,185,129,0.08), rgba(15,23,42,0.6))'
+                        : status === 'waiting'
+                          ? 'linear-gradient(135deg, rgba(245,158,11,0.08), rgba(15,23,42,0.6))'
+                          : 'rgba(255,255,255,0.03)',
+                    border: isCurrent
+                      ? '1px solid rgba(99,102,241,0.45)'
+                      : status === 'confirmed'
+                        ? '1px solid rgba(16,185,129,0.35)'
+                        : status === 'waiting'
+                          ? '1px solid rgba(245,158,11,0.35)'
+                          : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 16,
+                    padding: '14px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 16,
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {/* LEFT: STUDENT PHOTO & INFO */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
+                    <div style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 14,
+                      overflow: 'hidden',
+                      background: s.foto ? 'none' : 'linear-gradient(135deg, #6366f1, #a855f7)',
+                      border: '1.5px solid rgba(255,255,255,0.12)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 900,
+                      fontSize: 18,
+                      color: '#fff',
+                      flexShrink: 0,
+                    }}>
+                      {s.foto ? (
+                        <img
+                          src={s.foto}
+                          alt={s.nome}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        initials
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{
+                          fontWeight: 800,
+                          fontSize: 14.5,
+                          color: '#fff',
+                          fontFamily: 'Outfit, sans-serif',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}>
+                          {s.nome}
+                        </span>
+                        {isCurrent && (
+                          <span style={{
+                            fontSize: 9,
+                            fontWeight: 900,
+                            padding: '2px 7px',
+                            borderRadius: 100,
+                            background: 'rgba(99,102,241,0.25)',
+                            color: '#a5b4fc',
+                            border: '1px solid rgba(99,102,241,0.4)',
+                            textTransform: 'uppercase',
+                          }}>
+                            Aluno Desta Chamada
+                          </span>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#38bdf8', fontWeight: 700 }}>
+                        <GraduationCap size={13} />
+                        <span>{s.turmaNome || s.turma} {s.turno ? `· ${s.turno.toUpperCase()}` : ''}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                        {s.parentescoVinculo && (
+                          <span style={{
+                            fontSize: 9.5,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(255,255,255,0.06)',
+                            color: '#cbd5e1',
+                          }}>
+                            {s.parentescoVinculo}
+                          </span>
+                        )}
+                        {s.autorizadoSairSozinho ? (
+                          <span style={{
+                            fontSize: 9.5,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: 'rgba(16,185,129,0.12)',
+                            color: '#10b981',
+                            border: '1px solid rgba(16,185,129,0.25)',
+                          }}>
+                            Pode sair sozinho
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* RIGHT: ACTION / STATUS BUTTON */}
+                  <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    {isCurrent ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{
+                          padding: '6px 12px',
+                          borderRadius: 10,
+                          background: call.status === 'confirmed' ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.18)',
+                          border: call.status === 'confirmed' ? '1px solid rgba(16,185,129,0.35)' : '1px solid rgba(99,102,241,0.4)',
+                          color: call.status === 'confirmed' ? '#10b981' : '#a5b4fc',
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                        }}>
+                          {call.status === 'confirmed' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                          {call.status === 'confirmed' ? 'Saída Confirmada' : 'Em Chamada'}
+                        </div>
+                        {call.status !== 'confirmed' && (
+                          <button
+                            type="button"
+                            onClick={() => onRecallStudent(call.id)}
+                            title="Rechamar aluno na TV"
+                            style={{
+                              height: 32,
+                              padding: '0 10px',
+                              borderRadius: 10,
+                              background: 'rgba(168,85,247,0.15)',
+                              border: '1px solid rgba(168,85,247,0.35)',
+                              color: '#c084fc',
+                              fontWeight: 800,
+                              fontSize: 10,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <Megaphone size={11} /> Rechamar
+                          </button>
+                        )}
+                      </div>
+                    ) : status === 'confirmed' ? (
+                      <div style={{
+                        padding: '6px 14px',
+                        borderRadius: 10,
+                        background: 'rgba(16,185,129,0.15)',
+                        border: '1px solid rgba(16,185,129,0.3)',
+                        color: '#10b981',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        textTransform: 'uppercase',
+                      }}>
+                        <CheckCircle2 size={13} />
+                        Saída Confirmada
+                      </div>
+                    ) : status === 'waiting' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{
+                          padding: '6px 12px',
+                          borderRadius: 10,
+                          background: 'rgba(245,158,11,0.15)',
+                          border: '1px solid rgba(245,158,11,0.35)',
+                          color: '#f59e0b',
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          textTransform: 'uppercase',
+                        }}>
+                          <Clock size={12} />
+                          Aguardando
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeCall) onRecallStudent(activeCall.id)
+                          }}
+                          title="Rechamar aluno na TV"
+                          style={{
+                            height: 32,
+                            padding: '0 10px',
+                            borderRadius: 10,
+                            background: 'rgba(168,85,247,0.15)',
+                            border: '1px solid rgba(168,85,247,0.35)',
+                            color: '#c084fc',
+                            fontWeight: 800,
+                            fontSize: 10,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          <Megaphone size={11} /> Rechamar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleCallSingle(s)}
+                        disabled={isBeingCalled || callingAll}
+                        style={{
+                          height: 38,
+                          padding: '0 18px',
+                          borderRadius: 12,
+                          background: isBeingCalled
+                            ? 'rgba(99,102,241,0.3)'
+                            : 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                          border: 'none',
+                          color: '#fff',
+                          fontWeight: 900,
+                          fontSize: 11.5,
+                          cursor: isBeingCalled || callingAll ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          boxShadow: isBeingCalled ? 'none' : '0 4px 14px rgba(59,130,246,0.35)',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={e => {
+                          if (!isBeingCalled && !callingAll) {
+                            e.currentTarget.style.filter = 'brightness(1.15)'
+                            e.currentTarget.style.transform = 'translateY(-1px)'
+                            e.currentTarget.style.boxShadow = '0 6px 18px rgba(59,130,246,0.45)'
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.filter = 'none'
+                          e.currentTarget.style.transform = 'none'
+                          e.currentTarget.style.boxShadow = '0 4px 14px rgba(59,130,246,0.35)'
+                        }}
+                      >
+                        <Megaphone size={13} />
+                        {isBeingCalled ? 'Chamando...' : 'Chamar Aluno'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+
+          {/* SINGLE STUDENT HELPER NOTICE */}
+          {!loading && siblings.length === 1 && (
+            <div style={{
+              padding: '12px 16px',
+              background: 'rgba(99,102,241,0.08)',
+              border: '1px solid rgba(99,102,241,0.2)',
+              borderRadius: 14,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              fontSize: 12,
+              color: '#c7d2fe',
+              marginTop: 4,
+            }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>ℹ️</span>
+              <span><strong>{call.guardianName}</strong> possui apenas 1 dependente cadastrado no sistema (não há irmãos para chamar).</span>
+            </div>
+          )}
+        </div>
+
+        {/* MODAL FOOTER */}
+        <div style={{
+          padding: '14px 24px',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255,255,255,0.02)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div style={{ fontSize: 11, color: '#64748b' }}>
+            💡 Ao chamar, o aluno é anunciado imediatamente no Monitor TV e na portaria.
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '8px 18px',
+              borderRadius: 10,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: '#e2e8f0',
+              fontWeight: 700,
+              fontSize: 12,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+          >
+            Fechar
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
 
 // ── Student search row with inline guardian buttons & solo exit button ─────────
 const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeCalls, onCall, showToast }: {
@@ -1691,6 +2498,7 @@ function ChamadasContent() {
   const [callSearch,    setCallSearch]    = useState('')
   const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
   const [confirmClearAll, setConfirmClearAll] = useState(false)
+  const [selectedCallForIrmaos, setSelectedCallForIrmaos] = useState<PickupCall | null>(null)
 
   // -- Busca de Alunos Refatorada Direct Supabase --
   const [studentSearch, setStudentSearch] = useState('')
@@ -2206,11 +3014,28 @@ function ChamadasContent() {
                 onCancel={cancelCall}
                 onRecall={handleRecall}
                 onRevert={revertCall}
+                onOpenIrmaos={setSelectedCallForIrmaos}
               />
             )
           })}
         </div>
       )}
+
+      {/* ── MODAL ULTRA MODERNO DE CHAMAR IRMÃOS ────────────────────────── */}
+      <AnimatePresence>
+        {selectedCallForIrmaos && (
+          <ModalChamarIrmaos
+            call={selectedCallForIrmaos}
+            onClose={() => setSelectedCallForIrmaos(null)}
+            activeCalls={activeCalls}
+            onCallStudent={(sId, sName, sClass, gId, gName, sFoto) => {
+              handleCall(sId, sName, sClass, gId, gName, sFoto)
+            }}
+            onRecallStudent={handleRecall}
+            showToast={showToast}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ── MODAL DE CONFIRMAÇÃO (ZERAR CHAMADAS) ───────────────────────── */}
       <AnimatePresence>
@@ -2365,6 +3190,17 @@ function ChamadasContent() {
           color: #fff;
           box-shadow: 0 6px 16px rgba(239,68,68,0.35);
           transform: translateY(-2px);
+        }
+
+        .btn-irmaos {
+          transition: all 0.2s cubic-bezier(0.2, 1, 0.2, 1);
+        }
+        .btn-irmaos:hover {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.4)) !important;
+          border-color: rgba(192, 132, 252, 0.7) !important;
+          color: #ffffff !important;
+          box-shadow: 0 4px 14px rgba(168, 85, 247, 0.35) !important;
+          transform: translateY(-1px);
         }
 
         @keyframes pinBob {
