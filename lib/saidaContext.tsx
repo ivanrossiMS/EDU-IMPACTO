@@ -243,15 +243,12 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     let channel: any = null
 
     const setupRealtime = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      // Allow connection even without auth so Monitor TV can receive broadcasts
-      
       setRealtimeStatus('connecting')
       
-      // Clean up any stale channel from React Strict Mode re-mounts fully
+      // Clean up any stale channel from React Strict Mode re-mounts
       const existingChannels = supabase.getChannels().filter(c => c.topic === 'realtime:saida_calls_shared_room')
-      for (const c of existingChannels) {
-        await supabase.removeChannel(c)
+      if (existingChannels.length > 0) {
+        await Promise.all(existingChannels.map(c => supabase.removeChannel(c)))
       }
 
       if (!isMounted) return

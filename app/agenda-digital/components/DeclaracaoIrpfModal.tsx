@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import {
@@ -19,7 +19,11 @@ import {
   Sparkles,
   ArrowRight,
   Eye,
-  FileCheck2
+  FileCheck2,
+  Plus,
+  UserPlus,
+  User,
+  UserCheck
 } from 'lucide-react'
 import { DeclaracaoIrpfDocument, DeclaracaoIrpfData } from './DeclaracaoIrpfDocument'
 import { generateDeclaracaoHtml } from './declaracaoHtmlGenerator'
@@ -45,12 +49,39 @@ const ANOS_IRPF = ['2026', '2025', '2024', '2023']
 export function DeclaracaoIrpfModal({
   isOpen,
   onClose,
-  alunos,
+  alunos = [],
   currentAno = '2026',
   responsavelId,
 }: DeclaracaoIrpfModalProps) {
   const [mounted, setMounted] = useState(false)
-  const [selectedAluno, setSelectedAluno] = useState<StudentOption | null>(alunos[0] || null)
+  const [customStudents, setCustomStudents] = useState<StudentOption[]>([])
+  const [isAddingStudent, setIsAddingStudent] = useState(false)
+  const [newStudentName, setNewStudentName] = useState('')
+  const [newStudentTurma, setNewStudentTurma] = useState('')
+
+  // Lista unificada de alunos (props + adicionados dinamicamente)
+  const allStudents = useMemo(() => {
+    const list: StudentOption[] = []
+    const seen = new Set<string>()
+
+    for (const a of alunos || []) {
+      if (a?.nome && !seen.has(a.nome.trim().toLowerCase())) {
+        seen.add(a.nome.trim().toLowerCase())
+        list.push(a)
+      }
+    }
+
+    for (const a of customStudents) {
+      if (a?.nome && !seen.has(a.nome.trim().toLowerCase())) {
+        seen.add(a.nome.trim().toLowerCase())
+        list.push(a)
+      }
+    }
+
+    return list
+  }, [alunos, customStudents])
+
+  const [selectedAluno, setSelectedAluno] = useState<StudentOption | null>(allStudents[0] || null)
   const [selectedAno, setSelectedAno] = useState<string>(currentAno)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,10 +97,32 @@ export function DeclaracaoIrpfModal({
 
   // Atualiza o aluno selecionado quando a lista mudar
   useEffect(() => {
-    if (alunos.length > 0 && !selectedAluno) {
-      setSelectedAluno(alunos[0])
+    if (allStudents.length > 0 && !selectedAluno) {
+      setSelectedAluno(allStudents[0])
     }
-  }, [alunos, selectedAluno])
+  }, [allStudents, selectedAluno])
+
+  // Handler para adicionar novo aluno manualmente
+  const handleAddCustomStudent = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    const trimmed = newStudentName.trim()
+    if (!trimmed) {
+      toast.error('Informe o nome do aluno.')
+      return
+    }
+
+    const newStudent: StudentOption = {
+      nome: trimmed,
+      turma: newStudentTurma.trim() || 'Ensino Regular',
+    }
+
+    setCustomStudents((prev) => [...prev, newStudent])
+    setSelectedAluno(newStudent)
+    setNewStudentName('')
+    setNewStudentTurma('')
+    setIsAddingStudent(false)
+    toast.success(`Aluno "${trimmed}" adicionado com sucesso!`)
+  }
 
   // Buscar dados da declaração
   const fetchDeclaracao = useCallback(async () => {
@@ -420,84 +473,220 @@ export function DeclaracaoIrpfModal({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {/* Seleção de Aluno */}
                 <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 800,
-                      color: '#475569',
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.5,
-                      marginBottom: 8,
-                    }}
-                  >
-                    1. Selecione o Aluno / Beneficiário:
-                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <label
+                      style={{
+                        display: 'block',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: '#475569',
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      1. Selecione o Aluno / Beneficiário:
+                    </label>
+                    {allStudents.length > 0 && !isAddingStudent && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAddingStudent(true)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          background: 'none',
+                          border: 'none',
+                          color: '#4f46e5',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: '2px 6px',
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Plus size={14} />
+                        <span>Adicionar outro</span>
+                      </button>
+                    )}
+                  </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {alunos.map((al) => {
-                      const isSelected = selectedAluno?.nome === al.nome
-                      const initials = al.nome
-                        .split(' ')
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((n) => n[0])
-                        .join('')
-                        .toUpperCase()
+                  {/* Formulário para Adicionar Aluno (quando a lista estiver vazia ou usuário desejar adicionar) */}
+                  {(allStudents.length === 0 || isAddingStudent) && (
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1.5px dashed #818cf8',
+                        borderRadius: 16,
+                        padding: '14px 16px',
+                        marginBottom: allStudents.length > 0 ? 12 : 0,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                        <UserPlus size={18} color="#4f46e5" />
+                        <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>
+                          {allStudents.length === 0 ? 'Informe o Nome do Aluno' : 'Adicionar Outro Aluno'}
+                        </span>
+                      </div>
 
-                      return (
-                        <div
-                          key={al.nome}
-                          onClick={() => setSelectedAluno(al)}
-                          style={{
-                            padding: '12px 16px',
-                            borderRadius: 16,
-                            border: isSelected ? '2px solid #4f46e5' : '1.5px solid #e2e8f0',
-                            background: isSelected ? '#f5f3ff' : '#ffffff',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 12,
-                            transition: 'all 0.2s',
-                            boxShadow: isSelected ? '0 4px 14px rgba(79, 70, 229, 0.15)' : 'none',
-                          }}
-                        >
-                          <div
+                      <form onSubmit={handleAddCustomStudent} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div>
+                          <input
+                            type="text"
+                            value={newStudentName}
+                            onChange={(e) => setNewStudentName(e.target.value)}
+                            placeholder="Nome completo do aluno (ex: João Silva Santos)"
+                            autoFocus
                             style={{
-                              width: 38,
-                              height: 38,
+                              width: '100%',
+                              padding: '10px 14px',
                               borderRadius: 12,
-                              background: isSelected ? '#4f46e5' : '#e0e7ff',
-                              color: isSelected ? '#ffffff' : '#4f46e5',
+                              border: '1.5px solid #cbd5e1',
+                              fontSize: 13.5,
+                              color: '#0f172a',
+                              background: '#ffffff',
+                              outline: 'none',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input
+                            type="text"
+                            value={newStudentTurma}
+                            onChange={(e) => setNewStudentTurma(e.target.value)}
+                            placeholder="Turma / Série (opcional, ex: 3º Ano EM)"
+                            style={{
+                              flex: 1,
+                              padding: '9px 12px',
+                              borderRadius: 12,
+                              border: '1.5px solid #cbd5e1',
+                              fontSize: 12.5,
+                              color: '#0f172a',
+                              background: '#ffffff',
+                              outline: 'none',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+
+                          <button
+                            type="submit"
+                            disabled={!newStudentName.trim()}
+                            style={{
+                              padding: '9px 16px',
+                              borderRadius: 12,
+                              border: 'none',
+                              background: newStudentName.trim()
+                                ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'
+                                : '#cbd5e1',
+                              color: '#ffffff',
+                              fontSize: 12.5,
+                              fontWeight: 800,
+                              cursor: newStudentName.trim() ? 'pointer' : 'not-allowed',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 13,
-                              fontWeight: 900,
-                              flexShrink: 0,
+                              gap: 6,
+                              whiteSpace: 'nowrap',
                             }}
                           >
-                            {initials}
-                          </div>
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div
+                            <UserCheck size={14} />
+                            <span>Confirmar Aluno</span>
+                          </button>
+
+                          {isAddingStudent && allStudents.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAddingStudent(false)
+                                setNewStudentName('')
+                                setNewStudentTurma('')
+                              }}
                               style={{
-                                fontSize: 13.5,
-                                fontWeight: 800,
-                                color: isSelected ? '#4338ca' : '#0f172a',
+                                padding: '9px 12px',
+                                borderRadius: 12,
+                                border: '1.5px solid #e2e8f0',
+                                background: '#ffffff',
+                                color: '#64748b',
+                                fontSize: 12.5,
+                                fontWeight: 700,
+                                cursor: 'pointer',
                               }}
                             >
-                              {al.nome}
-                            </div>
-                            <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 1 }}>
-                              {al.turma || 'Aluno Colégio Impacto'}
-                            </div>
-                          </div>
-                          {isSelected && <CheckCircle2 size={20} color="#4f46e5" style={{ flexShrink: 0 }} />}
+                              Cancelar
+                            </button>
+                          )}
                         </div>
-                      )
-                    })}
-                  </div>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* Lista de Alunos Disponíveis */}
+                  {allStudents.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {allStudents.map((al) => {
+                        const isSelected = selectedAluno?.nome === al.nome
+                        const initials = al.nome
+                          .split(' ')
+                          .filter(Boolean)
+                          .slice(0, 2)
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase()
+
+                        return (
+                          <div
+                            key={al.nome}
+                            onClick={() => setSelectedAluno(al)}
+                            style={{
+                              padding: '12px 16px',
+                              borderRadius: 16,
+                              border: isSelected ? '2px solid #4f46e5' : '1.5px solid #e2e8f0',
+                              background: isSelected ? '#f5f3ff' : '#ffffff',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 12,
+                              transition: 'all 0.2s',
+                              boxShadow: isSelected ? '0 4px 14px rgba(79, 70, 229, 0.15)' : 'none',
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: 38,
+                                height: 38,
+                                borderRadius: 12,
+                                background: isSelected ? '#4f46e5' : '#e0e7ff',
+                                color: isSelected ? '#ffffff' : '#4f46e5',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 13,
+                                fontWeight: 900,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {initials}
+                            </div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div
+                                style={{
+                                  fontSize: 13.5,
+                                  fontWeight: 800,
+                                  color: isSelected ? '#4338ca' : '#0f172a',
+                                }}
+                              >
+                                {al.nome}
+                              </div>
+                              <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 1 }}>
+                                {al.turma || 'Aluno Colégio Impacto'}
+                              </div>
+                            </div>
+                            {isSelected && <CheckCircle2 size={20} color="#4f46e5" style={{ flexShrink: 0 }} />}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Seleção do Ano Letivo */}

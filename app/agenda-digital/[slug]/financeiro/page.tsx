@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { PixBottomSheet } from '../../components/PixBottomSheet'
 import { DeclaracaoIrpfModal } from '../../components/DeclaracaoIrpfModal'
@@ -531,6 +532,7 @@ function MobileInvoiceCard({
 
 export default function ADFinanceiroPage() {
   const { adConfig } = useAgendaDigital()
+  const { aluno: currentStudent } = useSelectedStudent()
 
   const [data, setData] = useState<IsaacData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -601,20 +603,33 @@ export default function ADFinanceiroPage() {
 
   // Lista estruturada de alunos para a Declaração de IRPF
   const alunosOptions = useMemo(() => {
-    if (!data?.parcelas) return []
     const map = new Map<string, { id?: string; nome: string; turma?: string }>()
-    for (const p of data.parcelas) {
-      if (!p.aluno) continue
-      if (!map.has(p.aluno)) {
-        map.set(p.aluno, {
-          id: p.alunoId,
-          nome: p.aluno,
-          turma: p.descricao?.split('-')?.[1]?.trim() || '',
-        })
+
+    // 1. Inclui o aluno ativo na sessão se disponível
+    if (currentStudent?.nome) {
+      map.set(currentStudent.nome, {
+        id: currentStudent.id ? String(currentStudent.id) : undefined,
+        nome: currentStudent.nome,
+        turma: currentStudent.turma_nome || currentStudent.turma || '',
+      })
+    }
+
+    // 2. Inclui os alunos retornados pelas faturas do Isaac
+    if (data?.parcelas) {
+      for (const p of data.parcelas) {
+        if (!p.aluno) continue
+        if (!map.has(p.aluno)) {
+          map.set(p.aluno, {
+            id: p.alunoId,
+            nome: p.aluno,
+            turma: p.descricao?.split('-')?.[1]?.trim() || '',
+          })
+        }
       }
     }
+
     return Array.from(map.values())
-  }, [data])
+  }, [data, currentStudent])
 
   // ── Filtro de Faturas ──────────────────────────────────────────────────────
   const filteredList = useMemo(() => {

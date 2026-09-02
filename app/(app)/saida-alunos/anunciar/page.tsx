@@ -36,96 +36,26 @@ const CATEGORIES: CategoryMeta[] = [
   { key: 'emergencia', label: 'Atenção & Silêncio', icon: AlertTriangle, color: '#dc2626', bg: 'rgba(220, 38, 38, 0.08)', border: 'rgba(220, 38, 38, 0.25)', text: '#b91c1c' },
 ]
 
-// ── Modelos de Frases Padrão Iniciais ─────────────────────────────────────────
-const DEFAULT_ANNOUNCEMENTS: SchoolAnnouncement[] = [
-  {
-    id: 'ann-1',
-    title: 'Van Escolar no Portão',
-    phrase: 'Atenção alunos que utilizam transporte escolar, as vans já estão aguardando no portão principal.',
-    category: 'portaria',
-    isFavorite: true,
-    playChime: true,
-    repeatCount: 1,
-    createdAt: new Date().toISOString(),
-    tags: ['transporte', 'vans', 'saída']
-  },
-  {
-    id: 'ann-2',
-    title: 'Fim do Intervalo / Retorno às Salas',
-    phrase: 'Atenção alunos e professores, encerramento do intervalo. Todos devem retornar imediatamente às salas de aula.',
-    category: 'intervalo',
-    isFavorite: true,
-    playChime: true,
-    repeatCount: 1,
-    createdAt: new Date().toISOString(),
-    tags: ['recreio', 'salas', 'sinal']
-  },
-  {
-    id: 'ann-3',
-    title: 'Chamada de Professores à Coordenação',
-    phrase: 'Atenção professores, favor comparecer à sala da coordenação pedagógica.',
-    category: 'comunicado',
-    isFavorite: false,
-    playChime: true,
-    repeatCount: 1,
-    createdAt: new Date().toISOString(),
-    tags: ['professores', 'coordenação']
-  },
-  {
-    id: 'ann-4',
-    title: 'Veículo Bloqueando Portão',
-    phrase: 'Atenção, solicitamos ao proprietário do veículo estacionado em frente ao portão de saída que compareça para remanejamento.',
-    category: 'veiculos',
-    isFavorite: false,
-    playChime: true,
-    repeatCount: 1,
-    createdAt: new Date().toISOString(),
-    tags: ['estacionamento', 'carro']
-  },
-  {
-    id: 'ann-5',
-    title: 'Silêncio no Corredor (Simulado / Provas)',
-    phrase: 'Atenção, solicitamos silêncio nos corredores. Alunos em período de avaliação e provas.',
-    category: 'emergencia',
-    isFavorite: true,
-    playChime: true,
-    repeatCount: 0,
-    createdAt: new Date().toISOString(),
-    tags: ['silêncio', 'provas', 'simulados']
-  },
-  {
-    id: 'ann-6',
-    title: 'Aviso de Pais no Portão',
-    phrase: 'Atenção alunos do Ensino Médio, liberação autorizada para a saída.',
-    category: 'portaria',
-    isFavorite: false,
-    playChime: true,
-    repeatCount: 0,
-    createdAt: new Date().toISOString(),
-    tags: ['ensino médio', 'saída']
-  },
-  {
-    id: 'ann-7',
-    title: 'Início do Intervalo / Recreio',
-    phrase: 'Sinal de intervalo. Bom recreio a todos os alunos e colaboradores.',
-    category: 'intervalo',
-    isFavorite: false,
-    playChime: true,
-    repeatCount: 0,
-    createdAt: new Date().toISOString(),
-    tags: ['início', 'recreio']
+// ── Síntese de Sino Escolar Harmônico com AudioContext Compartilhado ──────────
+let sharedAudioCtx: AudioContext | null = null
+function getSharedAudioCtx(): AudioContext | null {
+  if (typeof window === 'undefined') return null
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+  if (!AudioContextClass) return null
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+    sharedAudioCtx = new AudioContextClass()
   }
-]
+  if (sharedAudioCtx.state === 'suspended') {
+    sharedAudioCtx.resume().catch(() => {})
+  }
+  return sharedAudioCtx
+}
 
-// ── Síntese de Sino Escolar Harmônico (Web Audio API) ─────────────────────────
 function playHarmonicChime(): Promise<void> {
   return new Promise((resolve) => {
     try {
-      if (typeof window === 'undefined') return resolve()
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
-      if (!AudioContextClass) return resolve()
-      const ctx = new AudioContextClass()
-      if (ctx.state === 'suspended') ctx.resume()
+      const ctx = getSharedAudioCtx()
+      if (!ctx) return resolve()
 
       const now = ctx.currentTime
       // C5 (523.25Hz) -> E5 (659.25Hz) -> G5 (783.99Hz)
@@ -156,16 +86,16 @@ export default function AnunciarPage() {
   const { currentUser } = useApp()
   const { config, realtimeStatus, broadcastAnnouncement, cancelAnnouncement } = useSaida()
 
-  // Persistência das Frases Salvas e Histórico
-  const [savedAnnouncements, setSavedAnnouncements] = useSupabaseArray<SchoolAnnouncement>(
+  // Persistência das Frases Salvas e Histórico (inicializado sempre com [] para não recriar itens apagados)
+  const [savedAnnouncements, setSavedAnnouncements, { loading: isLoadingAnnouncements }] = useSupabaseArray<SchoolAnnouncement>(
     'saida/anuncios',
-    DEFAULT_ANNOUNCEMENTS,
-    { mergeLocal: false, noCache: true }
+    [],
+    { mergeLocal: false }
   )
   const [history, setHistory] = useSupabaseArray<AnnouncementHistoryItem>(
     'saida/anuncios_historico',
     [],
-    { mergeLocal: false, noCache: true }
+    { mergeLocal: false }
   )
 
   // Hook de Voz Local para Prévia e Execução
@@ -385,15 +315,43 @@ export default function AnunciarPage() {
     }
   }
 
-  // Filtragem das Frases (busca por texto ou todas)
+  // Contagem de Frases por Categoria
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState<CategoryKey>('todas')
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { todas: 0, favoritas: 0 }
+    const list = savedAnnouncements || []
+    counts.todas = list.length
+    list.forEach((item) => {
+      if (item.isFavorite) counts.favoritas = (counts.favoritas || 0) + 1
+      if (item.category) {
+        counts[item.category] = (counts[item.category] || 0) + 1
+      }
+    })
+    return counts
+  }, [savedAnnouncements])
+
+  // Filtragem das Frases (busca por texto e por categoria)
   const filteredPhrases = useMemo(() => {
     let list = savedAnnouncements || []
+
+    if (selectedCategoryTab === 'favoritas') {
+      list = list.filter((x) => x.isFavorite)
+    } else if (selectedCategoryTab !== 'todas') {
+      list = list.filter((x) => x.category === selectedCategoryTab)
+    }
+
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      list = list.filter((x) => x.title.toLowerCase().includes(q) || x.phrase.toLowerCase().includes(q))
+      const q = searchQuery.toLowerCase().trim()
+      list = list.filter(
+        (x) =>
+          x.title.toLowerCase().includes(q) ||
+          x.phrase.toLowerCase().includes(q) ||
+          (x.tags && x.tags.some((t) => t.toLowerCase().includes(q)))
+      )
     }
     return list
-  }, [savedAnnouncements, searchQuery])
+  }, [savedAnnouncements, selectedCategoryTab, searchQuery])
 
   return (
     <div style={{ minHeight: '100%', paddingBottom: 60, position: 'relative' }}>
@@ -991,8 +949,94 @@ export default function AnunciarPage() {
           </div>
         </div>
 
-        {/* Grid de Cards de Frases */}
-        {filteredPhrases.length === 0 ? (
+        {/* Barra de Filtro de Categorias */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            overflowX: 'auto',
+            paddingBottom: 8,
+            marginBottom: 16,
+            scrollbarWidth: 'none',
+          }}
+        >
+          {CATEGORIES.map((cat) => {
+            const isSelected = selectedCategoryTab === cat.key
+            const count = categoryCounts[cat.key] || 0
+            const CatIcon = cat.icon
+
+            return (
+              <button
+                key={cat.key}
+                onClick={() => setSelectedCategoryTab(cat.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '7px 13px',
+                  borderRadius: 12,
+                  background: isSelected ? cat.color : 'hsl(var(--bg-surface, 0 0% 100%))',
+                  border: `1px solid ${isSelected ? cat.color : 'hsl(var(--border-subtle, 220 12% 88%))'}`,
+                  color: isSelected ? '#ffffff' : 'hsl(var(--text-secondary, 220 15% 30%))',
+                  fontSize: 12,
+                  fontWeight: isSelected ? 800 : 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'all 0.15s ease',
+                  boxShadow: isSelected ? `0 4px 12px ${cat.color}35` : 'none',
+                }}
+              >
+                <CatIcon size={13} color={isSelected ? '#ffffff' : cat.color} />
+                <span>{cat.label}</span>
+                {count > 0 && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      background: isSelected ? 'rgba(255, 255, 255, 0.25)' : 'hsl(var(--bg-elevated, 220 18% 94%))',
+                      color: isSelected ? '#ffffff' : 'hsl(var(--text-muted, 220 10% 50%))',
+                    }}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Grid de Cards ou Skeletons */}
+        {isLoadingAnnouncements && (!savedAnnouncements || savedAnnouncements.length === 0) ? (
+          /* Skeletons de Carregamento Ultra-rápido */
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                style={{
+                  borderRadius: 20,
+                  background: 'hsl(var(--bg-surface, 0 0% 100%))',
+                  border: '1px solid hsl(var(--border-subtle, 220 12% 88%))',
+                  padding: '20px 22px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
+                  opacity: 0.7,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ width: 90, height: 20, background: 'hsl(var(--bg-elevated, 220 18% 94%))', borderRadius: 10 }} />
+                  <div style={{ width: 40, height: 20, background: 'hsl(var(--bg-elevated, 220 18% 94%))', borderRadius: 6 }} />
+                </div>
+                <div style={{ width: '70%', height: 18, background: 'hsl(var(--bg-elevated, 220 18% 94%))', borderRadius: 8 }} />
+                <div style={{ width: '100%', height: 54, background: 'hsl(var(--bg-elevated, 220 18% 96%))', borderRadius: 12 }} />
+                <div style={{ width: '100%', height: 38, background: 'hsl(var(--bg-elevated, 220 18% 94%))', borderRadius: 12, marginTop: 6 }} />
+              </div>
+            ))}
+          </div>
+        ) : filteredPhrases.length === 0 ? (
           <div style={{
             padding: '48px 24px', borderRadius: 20,
             background: 'hsl(var(--bg-surface, 0 0% 100%))',
@@ -1001,26 +1045,49 @@ export default function AnunciarPage() {
           }}>
             <Radio size={36} color="hsl(var(--text-muted, 220 10% 50%))" style={{ margin: '0 auto 12px', opacity: 0.5 }} />
             <div style={{ fontSize: 15, fontWeight: 700, color: 'hsl(var(--text-primary, 220 25% 10%))', marginBottom: 4 }}>
-              Nenhuma frase cadastrada
+              {searchQuery.trim() || selectedCategoryTab !== 'todas' ? 'Nenhuma frase encontrada para este filtro' : 'Nenhuma frase cadastrada'}
             </div>
             <p style={{ fontSize: 12, color: 'hsl(var(--text-muted, 220 10% 50%))', margin: '0 0 16px' }}>
-              Crie uma nova frase personalizada clicando no botão abaixo
+              {searchQuery.trim() || selectedCategoryTab !== 'todas'
+                ? 'Tente limpar a busca ou selecionar outra categoria.'
+                : 'Crie uma nova frase personalizada clicando no botão abaixo'}
             </p>
-            <button
-              onClick={() => {
-                setEditingItem({ title: '', phrase: '', category: 'portaria', playChime: true, repeatCount: 0 })
-                setIsModalOpen(true)
-              }}
-              style={{
-                padding: '8px 16px', borderRadius: 10,
-                background: 'hsl(var(--bg-elevated, 220 18% 94%))',
-                border: '1px solid hsl(var(--border-subtle, 220 12% 88%))',
-                color: 'hsl(var(--text-primary, 220 25% 10%))',
-                fontSize: 12, fontWeight: 700, cursor: 'pointer'
-              }}
-            >
-              + Criar Primeira Frase
-            </button>
+            {searchQuery.trim() || selectedCategoryTab !== 'todas' ? (
+              <button
+                onClick={() => {
+                  setSearchQuery('')
+                  setSelectedCategoryTab('todas')
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 10,
+                  background: 'hsl(var(--bg-elevated, 220 18% 94%))',
+                  border: '1px solid hsl(var(--border-subtle, 220 12% 88%))',
+                  color: 'hsl(var(--text-primary, 220 25% 10%))',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Limpar Filtros
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setEditingItem({ title: '', phrase: '', category: 'portaria', playChime: true, repeatCount: 0 })
+                  setIsModalOpen(true)
+                }}
+                style={{
+                  padding: '8px 16px', borderRadius: 10,
+                  background: 'hsl(var(--bg-elevated, 220 18% 94%))',
+                  border: '1px solid hsl(var(--border-subtle, 220 12% 88%))',
+                  color: 'hsl(var(--text-primary, 220 25% 10%))',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                + Criar Primeira Frase
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
