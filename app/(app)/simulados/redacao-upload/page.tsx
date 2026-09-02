@@ -546,20 +546,32 @@ export default function UploadRedacoesGerenciamentoPage() {
         [data-radix-menu-content] {
           outline: none !important;
         }
-        @media (max-width: 768px) {
+        @media (max-width: 900px) {
           .simulados-upload-container { padding: 14px 10px !important; }
           .provas-header-flex { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
           .provas-header-flex button { width: 100% !important; justify-content: center !important; }
           .provas-filters-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
-          .provas-filters-grid select { font-size: 12px !important; padding-left: 8px !important; padding-right: 22px !important; height: 40px !important; }
+          .provas-filters-grid select { font-size: 12px !important; padding-left: 10px !important; padding-right: 24px !important; height: 42px !important; border-radius: 10px !important; }
           .turma-accordion-header { padding: 12px 10px !important; }
           .bimestre-group-container { padding: 12px 4px !important; }
           .bimestre-card-box { padding: 12px 8px !important; }
           .bimestre-header-flex { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
           .bimestre-header-flex > div { width: 100% !important; justify-content: space-between !important; }
-          .mobile-scroll-hint { display: block !important; }
-          .table-responsive-wrapper { overflow-x: auto !important; -webkit-overflow-scrolling: touch; width: 100% !important; margin: 0 !important; display: block !important; }
-          .table-responsive-wrapper table { min-width: 920px !important; }
+          .mobile-scroll-hint { 
+            display: flex !important; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 6px; 
+            background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(217,70,239,0.08)) !important; 
+            border: 1px solid rgba(139,92,246,0.25) !important; 
+            border-radius: 10px !important; 
+            padding: 8px 12px !important; 
+            color: #8b5cf6 !important; 
+            font-size: 11px !important; 
+            font-weight: 700 !important; 
+          }
+          .table-responsive-wrapper { overflow-x: auto !important; -webkit-overflow-scrolling: touch; width: 100% !important; margin: 0 !important; display: block !important; border-radius: 10px; }
+          .table-responsive-wrapper table { min-width: 820px !important; }
         }
       `}</style>
 

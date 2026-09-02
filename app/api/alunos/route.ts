@@ -137,8 +137,14 @@ export async function GET(request: Request) {
     } else if (status === 'pode_sair_nao') {
       query = query.or('dados->autorizadoSairSozinho.eq.false,dados->autorizadoSairSozinho.is.null')
     } else if (status === 'integral_sim') {
+      if (!search) {
+        query = query.or('status.neq.inativo,status.is.null')
+      }
       integralIntermediario = 'sim'
     } else if (status === 'integral_nao') {
+      if (!search) {
+        query = query.or('status.neq.inativo,status.is.null')
+      }
       integralIntermediario = 'nao'
     } else if (status === 'com_responsaveis' || status === 'sem_responsaveis') {
       // Como os responsáveis estão em uma tabela de relacionamento (aluno_responsavel) e também em campos de texto,

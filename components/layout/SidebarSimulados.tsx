@@ -13,20 +13,22 @@ import { useApp } from '@/lib/context'
 
 interface NavItem {
   label: string
+  shortLabel?: string
+  profLabel?: string
   href: string
   icon: React.ReactNode
   groupId?: string
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/simulados', icon: <LayoutDashboard size={18} /> },
-  { label: 'Provas via Upload', href: '/simulados/provas-upload', icon: <Upload size={18} />, groupId: 'upload-provas' },
-  { label: 'Simulados via Upload', href: '/simulados/simulados-upload', icon: <Upload size={18} />, groupId: 'upload-simulados' },
-  { label: 'Redação via Upload', href: '/simulados/redacao-upload', icon: <Upload size={18} />, groupId: 'upload-redacao' },
-  { label: 'Arquivo Adaptadas', href: '/simulados/arquivo-adaptadas', icon: <FolderArchive size={18} /> },
-  { label: 'Banco de Questões', href: '/simulados/banco', icon: <Library size={18} /> },
-  { label: 'Configurações', href: '/simulados/configuracoes', icon: <Settings size={18} /> },
-  { label: 'Ajuda', href: '/ajuda', icon: <BookOpen size={18} /> },
+  { label: 'Dashboard', shortLabel: 'Início', href: '/simulados', icon: <LayoutDashboard size={20} /> },
+  { label: 'Provas via Upload', shortLabel: 'Provas', profLabel: 'Minhas Provas', href: '/simulados/provas-upload', icon: <FileText size={20} />, groupId: 'upload-provas' },
+  { label: 'Simulados via Upload', shortLabel: 'Simulados', profLabel: 'Meus Simulados', href: '/simulados/simulados-upload', icon: <BookOpen size={20} />, groupId: 'upload-simulados' },
+  { label: 'Redação via Upload', shortLabel: 'Redações', profLabel: 'Minhas Redações', href: '/simulados/redacao-upload', icon: <PenTool size={20} />, groupId: 'upload-redacao' },
+  { label: 'Arquivo Adaptadas', shortLabel: 'Adaptadas', href: '/simulados/arquivo-adaptadas', icon: <FolderArchive size={20} /> },
+  { label: 'Banco de Questões', shortLabel: 'Banco', href: '/simulados/banco', icon: <Library size={20} /> },
+  { label: 'Configurações', shortLabel: 'Config', href: '/simulados/configuracoes', icon: <Settings size={20} /> },
+  { label: 'Ajuda', shortLabel: 'Ajuda', href: '/ajuda', icon: <Sparkles size={20} /> },
 ]
 
 export function SidebarSimulados() {
@@ -65,9 +67,9 @@ export function SidebarSimulados() {
     return true
   }).map(item => {
     if (isProfessor) {
-      if (item.label === 'Provas via Upload') return { ...item, label: 'Minhas Provas' }
-      if (item.label === 'Simulados via Upload') return { ...item, label: 'Meus Simulados' }
-      if (item.label === 'Redação via Upload') return { ...item, label: 'Minhas Redações' }
+      if (item.label === 'Provas via Upload') return { ...item, label: 'Minhas Provas', shortLabel: 'Minhas Provas' }
+      if (item.label === 'Simulados via Upload') return { ...item, label: 'Meus Simulados', shortLabel: 'Meus Simulados' }
+      if (item.label === 'Redação via Upload') return { ...item, label: 'Minhas Redações', shortLabel: 'Redações' }
     }
     return item
   })
@@ -78,100 +80,175 @@ export function SidebarSimulados() {
   }, [isMobile])
 
   if (isMobile) {
+    const mobileNavItems = activeNavItems.filter(item => item.label !== 'Banco de Questões')
+
     return (
       <>
       {overlay}
-      <div 
+      <nav 
+        aria-label="Navegação inferior móvel"
         className="no-scrollbar"
         style={{
           position: 'fixed',
           bottom: 0,
           left: 0,
           right: 0,
-          height: 70,
-          background: 'rgba(15, 23, 42, 0.85)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          borderTop: '1px solid rgba(255,255,255,0.08)',
+          background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(2, 6, 23, 0.97) 100%)',
+          backdropFilter: 'blur(24px) saturate(190%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(190%)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
           display: 'flex',
           flexDirection: 'row',
           alignItems: 'center',
-          padding: '0 12px',
-          paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
-          gap: 16,
-          zIndex: 100,
+          paddingTop: 8,
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
+          paddingLeft: 12,
+          paddingRight: 12,
+          gap: 6,
+          zIndex: 9999,
           overflowX: 'auto',
-          boxShadow: '0 -4px 30px rgba(0,0,0,0.5)'
+          boxShadow: '0 -8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+          WebkitOverflowScrolling: 'touch',
+          scrollBehavior: 'smooth'
         }}
       >
-        {activeNavItems.map((item, idx) => {
+        {mobileNavItems.map((item, idx) => {
           const isActive = pathname === item.href || (item.href !== '/simulados' && item.href !== '/login?step=choose_system' && pathname?.startsWith(item.href))
+          const displayLabel = item.shortLabel || (item.label === 'Dashboard' ? 'Início' : item.label)
           return (
-            <Link key={idx} href={item.href} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flexShrink: 0, minWidth: 60 }}>
-              <div style={{
-                color: isActive ? '#f43f5e' : 'rgba(255,255,255,0.5)',
-                padding: '8px 16px',
-                borderRadius: 100,
-                background: isActive ? 'rgba(244,63,94,0.15)' : 'transparent',
-                display: 'flex',
-                alignItems: 'center',
+            <Link 
+              key={idx} 
+              href={item.href} 
+              style={{ 
+                textDecoration: 'none', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
                 justifyContent: 'center',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: isActive ? 'inset 0 0 0 1px rgba(244,63,94,0.3), 0 4px 10px rgba(244,63,94,0.2)' : 'none'
-              }}>
+                gap: 4, 
+                flexShrink: 0, 
+                minWidth: 62,
+                padding: '4px 6px',
+                borderRadius: 14,
+                position: 'relative'
+              }}
+            >
+              <motion.div 
+                whileTap={{ scale: 0.9 }}
+                style={{
+                  color: isActive ? '#ff4d6d' : 'rgba(255,255,255,0.48)',
+                  padding: '7px 15px',
+                  borderRadius: 16,
+                  background: isActive ? 'linear-gradient(135deg, rgba(244,63,94,0.22) 0%, rgba(225,29,72,0.1) 100%)' : 'rgba(255,255,255,0.02)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                  border: isActive ? '1px solid rgba(244,63,94,0.4)' : '1px solid rgba(255,255,255,0.03)',
+                  boxShadow: isActive ? '0 0 18px rgba(244,63,94,0.35), inset 0 1px 0 rgba(255,255,255,0.2)' : 'none'
+                }}
+              >
                 {item.icon}
-              </div>
-              <span style={{ fontSize: 10, color: isActive ? '#f43f5e' : 'rgba(255,255,255,0.5)', fontWeight: isActive ? 700 : 500, transition: 'all 0.2s' }}>
-                {item.label === 'Dashboard' ? 'Início' : item.label === 'Voltar ao ERP' ? 'Seleção' : item.label === 'Trocar Sistema' ? 'Seleção' : item.label}
+                {isActive && (
+                  <div 
+                    style={{
+                      position: 'absolute',
+                      bottom: -3,
+                      width: 14,
+                      height: 3,
+                      borderRadius: 2,
+                      background: '#f43f5e',
+                      boxShadow: '0 0 10px #f43f5e'
+                    }}
+                  />
+                )}
+              </motion.div>
+              <span style={{ 
+                fontSize: 10.5, 
+                color: isActive ? '#ff4d6d' : 'rgba(255,255,255,0.5)', 
+                fontWeight: isActive ? 700 : 500, 
+                letterSpacing: isActive ? '-0.01em' : '0',
+                transition: 'all 0.2s', 
+                whiteSpace: 'nowrap',
+                textShadow: isActive ? '0 0 10px rgba(244,63,94,0.3)' : 'none'
+              }}>
+                {displayLabel}
               </span>
             </Link>
           )
         })}
 
-        <div style={{ width: 1, height: 24, background: 'rgba(255,255,255,0.1)', flexShrink: 0, margin: '0 4px' }} />
+        <div style={{ width: 1, height: 26, background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 100%)', flexShrink: 0, margin: '0 4px' }} />
 
-        <button
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={() => window.location.href = '/login?step=choose_system'}
           style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: 4,
             flexShrink: 0,
             background: 'transparent',
             border: 'none',
-            color: '#00D2FF',
-            minWidth: 60,
+            color: '#06b6d4',
+            minWidth: 62,
+            padding: '4px 6px',
+            borderRadius: 14,
             cursor: 'pointer'
           }}
         >
-          <div style={{ padding: '8px 16px', borderRadius: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-             <LayoutDashboard size={18} />
+          <div style={{ 
+            padding: '7px 15px', 
+            borderRadius: 16, 
+            background: 'rgba(6, 182, 212, 0.08)',
+            border: '1px solid rgba(6, 182, 212, 0.2)',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            color: '#06b6d4'
+          }}>
+             <Grid size={20} />
           </div>
-          <span style={{ fontSize: 10, color: '#00D2FF', fontWeight: 600, textAlign: 'center', lineHeight: 1.1 }}>Trocar<br/>Módulo</span>
-        </button>
+          <span style={{ fontSize: 10.5, color: '#06b6d4', fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap' }}>Módulos</span>
+        </motion.button>
 
-        <button
+        <motion.button
+          whileTap={{ scale: 0.9 }}
           onClick={handleLogout}
           style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: 4,
             flexShrink: 0,
             background: 'transparent',
             border: 'none',
             color: '#ef4444',
-            minWidth: 60,
+            minWidth: 62,
+            padding: '4px 6px',
+            borderRadius: 14,
             cursor: 'pointer'
           }}
         >
-          <div style={{ padding: '8px 16px', borderRadius: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-             <LogOut size={18} />
+          <div style={{ 
+            padding: '7px 15px', 
+            borderRadius: 16, 
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            color: '#ef4444'
+          }}>
+             <LogOut size={20} />
           </div>
-          <span style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>Sair</span>
-        </button>
-      </div>
+          <span style={{ fontSize: 10.5, color: '#ef4444', fontWeight: 600, whiteSpace: 'nowrap' }}>Sair</span>
+        </motion.button>
+      </nav>
       </>
     )
   }

@@ -8,7 +8,8 @@ import {
   MapPin, Shield, DoorOpen, HardHat, Briefcase, Tag, Sparkles,
   Loader2, Lock, AlertTriangle, CheckCircle2, Info,
   ChevronUp, ChevronDown, ArrowUpDown, FileText, Sun, Moon, ShieldCheck,
-  Lightbulb, CloudSun, CircleDot, Clock, CheckCircle, GraduationCap
+  Lightbulb, CloudSun, CircleDot, Clock, CheckCircle, GraduationCap,
+  UserCheck, UserX
 } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import ImportarAlunosModal from '@/components/alunos/ImportarAlunosModal'
@@ -887,6 +888,15 @@ export default function AlunosPage() {
   const alunos = apiResponse?.data || []
   const total = apiResponse?.total || 0
 
+  // Query para estatísticas dos cards (Ativos, Inativos, Integral/Intermediário, Total)
+  const { data: statsData, isLoading: loadingStats } = useApiQuery<{
+    total: number
+    ativos: number
+    inativos: number
+    integral: number
+    integralAtivos: number
+  }>(['alunos-stats'], '/api/alunos/stats', {}, { staleTime: 30000 })
+
   useEffect(() => {
     const fetchTodasTurmas = async () => {
       try {
@@ -1222,6 +1232,7 @@ export default function AlunosPage() {
           { registroId: realId, detalhesDepois: newAluno }
         )
         queryClient.invalidateQueries({ queryKey: ['alunos'] })
+        queryClient.invalidateQueries({ queryKey: ['alunos-stats'] })
         toggleModal()
         setEditingAlunoId(null)
       } else {
@@ -1404,6 +1415,7 @@ export default function AlunosPage() {
         { registroId: aluno.id, detalhesDepois: updated }
       )
       queryClient.invalidateQueries({ queryKey: ['alunos'] })
+      queryClient.invalidateQueries({ queryKey: ['alunos-stats'] })
     } else {
       alert('Erro ao atualizar status do aluno')
     }
@@ -1424,6 +1436,7 @@ export default function AlunosPage() {
         { registroId: aluno.id, detalhesDepois: updated }
       )
       queryClient.invalidateQueries({ queryKey: ['alunos'] })
+      queryClient.invalidateQueries({ queryKey: ['alunos-stats'] })
     } else {
       alert('Erro ao atualizar permissão de saída')
     }
@@ -1442,6 +1455,7 @@ export default function AlunosPage() {
           { registroId: id, detalhesAntes: alunoExcluido }
         )
         queryClient.invalidateQueries({ queryKey: ['alunos'] })
+        queryClient.invalidateQueries({ queryKey: ['alunos-stats'] })
       } else {
         try {
           const json = await res.json()
@@ -1497,6 +1511,7 @@ export default function AlunosPage() {
             { detalhesAntes: 'Todos os alunos cadastrados' }
           )
           queryClient.invalidateQueries({ queryKey: ['alunos'] })
+          queryClient.invalidateQueries({ queryKey: ['alunos-stats'] })
           setDeleteModal(prev => ({ ...prev, step: 'success', count: deletedCount }))
         } else {
           setDeleteModal(prev => ({ ...prev, step: 'error', errorMsg: apiErrorMsg }))
@@ -1901,6 +1916,184 @@ export default function AlunosPage() {
               <Plus size={18} /> Novo Aluno
             </button>
           </div>
+        </div>
+
+        {/* KPI METRIC CARDS */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+          {[
+            {
+              id: 'total',
+              label: 'Total de Alunos',
+              value: statsData?.total ?? 0,
+              sub: 'Cadastros no sistema',
+              icon: <Users size={22} />,
+              color: '#3b82f6',
+              bg: 'rgba(59, 130, 246, 0.08)',
+              bd: 'rgba(59, 130, 246, 0.25)',
+              active: statusFiltro === 'todos_com_inativos',
+              onClick: () => {
+                setStatusFiltro(prev => prev === 'todos_com_inativos' ? 'todos' : 'todos_com_inativos')
+                setPaginaAtual(1)
+              }
+            },
+            {
+              id: 'ativos',
+              label: 'Alunos Ativos',
+              value: statsData?.ativos ?? 0,
+              sub: 'Matriculados no ano',
+              icon: <UserCheck size={22} />,
+              color: '#10b981',
+              bg: 'rgba(16, 185, 129, 0.08)',
+              bd: 'rgba(16, 185, 129, 0.25)',
+              active: statusFiltro === 'ativo' || statusFiltro === 'todos',
+              onClick: () => {
+                setStatusFiltro(prev => prev === 'ativo' ? 'todos' : 'ativo')
+                setPaginaAtual(1)
+              }
+            },
+            {
+              id: 'inativos',
+              label: 'Alunos Inativos',
+              value: statsData?.inativos ?? 0,
+              sub: 'Desativados / trancados',
+              icon: <UserX size={22} />,
+              color: '#f43f5e',
+              bg: 'rgba(244, 63, 94, 0.08)',
+              bd: 'rgba(244, 63, 94, 0.25)',
+              active: statusFiltro === 'inativo',
+              onClick: () => {
+                setStatusFiltro(prev => prev === 'inativo' ? 'todos' : 'inativo')
+                setPaginaAtual(1)
+              }
+            },
+            {
+              id: 'integral',
+              label: 'Integral / Intermediário',
+              value: statsData?.integralAtivos ?? statsData?.integral ?? 0,
+              sub: 'Apenas alunos ativos',
+              icon: <Sparkles size={22} />,
+              color: '#8b5cf6',
+              bg: 'rgba(139, 92, 246, 0.08)',
+              bd: 'rgba(139, 92, 246, 0.25)',
+              active: statusFiltro === 'integral_sim',
+              onClick: () => {
+                setStatusFiltro(prev => prev === 'integral_sim' ? 'todos' : 'integral_sim')
+                setPaginaAtual(1)
+              }
+            }
+          ].map((kpi) => (
+            <div
+              key={kpi.id}
+              onClick={kpi.onClick}
+              className="glass-card"
+              style={{
+                borderRadius: 20,
+                padding: '18px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                cursor: 'pointer',
+                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: kpi.active ? `2px solid ${kpi.color}` : `1px solid ${kpi.bd}`,
+                boxShadow: kpi.active
+                  ? `0 10px 25px ${kpi.color}25, 0 0 0 1px ${kpi.color}`
+                  : `0 4px 15px rgba(0, 0, 0, 0.03)`,
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+              onMouseEnter={e => {
+                if (!kpi.active) {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = `0 12px 25px ${kpi.color}18`
+                }
+              }}
+              onMouseLeave={e => {
+                if (!kpi.active) {
+                  e.currentTarget.style.transform = 'none'
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.03)'
+                }
+              }}
+            >
+              <div
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 14,
+                  background: kpi.bg,
+                  border: `1px solid ${kpi.bd}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: kpi.color,
+                  flexShrink: 0
+                }}
+              >
+                {kpi.icon}
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                  <div
+                    style={{
+                      fontSize: 26,
+                      fontWeight: 900,
+                      fontFamily: 'Outfit, sans-serif',
+                      color: 'hsl(var(--text-primary, #0f172a))',
+                      letterSpacing: '-0.02em',
+                      lineHeight: 1.1
+                    }}
+                  >
+                    {loadingStats ? (
+                      <Loader2 className="animate-spin" size={24} style={{ color: kpi.color, margin: '2px 0' }} />
+                    ) : (
+                      kpi.value
+                    )}
+                  </div>
+                  {kpi.active && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        background: kpi.color,
+                        color: '#fff',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em'
+                      }}
+                    >
+                      Filtrado
+                    </span>
+                  )}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: 'hsl(var(--text-primary, #1e293b))',
+                    marginTop: 2,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {kpi.label}
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'hsl(var(--text-muted, #64748b))',
+                    fontWeight: 500,
+                    marginTop: 1,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {kpi.sub}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* FILTERS & SEARCH */}
@@ -3606,6 +3799,7 @@ export default function AlunosPage() {
           onSuccess={() => {
             console.log('Importação de alunos concluída com sucesso. Atualizando cache...');
             queryClient.invalidateQueries({ queryKey: ['alunos'] });
+            queryClient.invalidateQueries({ queryKey: ['alunos-stats'] });
           }} 
         />
       )}

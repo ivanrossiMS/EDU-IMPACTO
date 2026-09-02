@@ -116,11 +116,42 @@ export default function VerRedaçãoUploadPage() {
   }
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1400, margin: '0 auto', overflowX: 'hidden', wordBreak: 'break-word' }}>
-      <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+    <div className="detail-page-container" style={{ padding: '32px 40px', maxWidth: 1400, margin: '0 auto', overflowX: 'hidden' }}>
+      <style>{`
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @media (max-width: 900px) {
+          .detail-page-container {
+            padding: 16px 12px !important;
+          }
+          .detail-header-flex {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 16px !important;
+          }
+          .detail-header-actions {
+            width: 100% !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+          }
+          .detail-header-actions button, .detail-header-actions a {
+            flex: 1 1 calc(50% - 8px) !important;
+            min-width: 130px !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: nowrap !important;
+          }
+          .detail-main-grid {
+            grid-template-columns: 1fr !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 20px !important;
+          }
+        }
+      `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginBottom: 32 }}>
+      <div className="detail-header-flex" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Link href="/simulados/redacao-upload"
             style={{ width: 44, height: 44, borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', textDecoration: 'none', flexShrink: 0, transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
@@ -161,38 +192,40 @@ export default function VerRedaçãoUploadPage() {
 
         {/* Coordinator Actions */}
         {isCoord && redacao.status === 'em_revisao' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="detail-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <motion.button onClick={() => setShowPreview(true)}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>
               <Printer size={16} color="#3b82f6" /> Pré-visualizar A4
             </motion.button>
             <motion.button onClick={() => updateStatus('reredacaodo')} disabled={saving}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-              <XCircle size={16} /> Reredacaor
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <XCircle size={16} /> Reprovar
             </motion.button>
             <motion.button onClick={() => updateStatus('publicado')} disabled={saving}
               whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)' }}>
-              <Send size={16} /> Aredacaor e Publicar
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)', whiteSpace: 'nowrap' }}>
+              <Send size={16} /> Aprovar e Publicar
             </motion.button>
           </div>
         )}
 
         {/* Professor Actions */}
         {!isCoord && requisicoes.some(r => r.id_professor === currentUser?.id && r.status === 'pendente') && (
-          <Link href={`/simulados/redacao-upload/${redacao.id}/upload`} style={{ textDecoration: 'none' }}>
-            <motion.button
-              whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)' }}>
-              <Upload size={16} /> Fazer Upload da Redação
-            </motion.button>
-          </Link>
+          <div className="detail-header-actions">
+            <Link href={`/simulados/redacao-upload/${redacao.id}/upload`} style={{ textDecoration: 'none' }}>
+              <motion.button
+                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)', whiteSpace: 'nowrap' }}>
+                <Upload size={16} /> Fazer Upload da Redação
+              </motion.button>
+            </Link>
+          </div>
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24 }}>
+      <div className="detail-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24 }}>
 
         {/* Questions Panel */}
         <div style={{ minWidth: 0 }}>

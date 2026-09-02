@@ -139,15 +139,16 @@ function SimuladosLayoutInner({ children }: { children: React.ReactNode }) {
         }}
         className="no-scrollbar"
       >
-        <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', minHeight: '100vh', paddingBottom: 60 }} className="simulados-content">
+        <div style={{ maxWidth: 1400, margin: '0 auto', width: '100%', minHeight: '100vh', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 95px)' }} className="simulados-content">
           {children}
         </div>
       </div>
       <style dangerouslySetInnerHTML={{__html: `
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .simulados-content * { max-width: 100%; box-sizing: border-box; word-break: break-word; overflow-wrap: anywhere; }
-        .simulados-content img { height: auto; }
+        .simulados-content * { box-sizing: border-box; }
+        .simulados-content img { height: auto; max-width: 100%; }
+        .simulados-content p, .simulados-content span, .simulados-content h1, .simulados-content h2, .simulados-content h3, .simulados-content h4 { overflow-wrap: break-word; }
       `}} />
     </div>
   )

@@ -167,7 +167,7 @@ export default function UploadProvaPage() {
       if (targetDisc) fd.append('discId', targetDisc)
       if (targetProf) fd.append('profId', targetProf)
 
-      const res = await fetch('/api/simulados-upload/parse', { method: 'POST', body: fd })
+      const res = await fetch('/api/provas-upload/parse', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok || data.error) {
         setParseError(data.error || 'Erro ao processar arquivo.')
@@ -340,7 +340,7 @@ export default function UploadProvaPage() {
   }
 
   return (
-    <div style={{ padding: '32px 40px', maxWidth: 1100, margin: '0 auto', overflowX: 'hidden', wordBreak: 'break-word' }}>
+    <div className="upload-page-container" style={{ padding: '32px 40px', maxWidth: 1100, margin: '0 auto', overflowX: 'hidden' }}>
       <style>{`
         @keyframes spin { 100% { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
@@ -365,10 +365,46 @@ export default function UploadProvaPage() {
         }
         .alt-row:hover { background: rgba(139,92,246,0.04) !important; }
         .questao-card:hover { border-color: rgba(139,92,246,0.3) !important; }
+        
+        @media (max-width: 900px) {
+          .upload-page-container {
+            padding: 16px 12px !important;
+          }
+          .upload-header-flex {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 16px !important;
+          }
+          .upload-header-actions {
+            width: 100% !important;
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+            justify-content: stretch !important;
+          }
+          .upload-header-actions button, .upload-header-actions a {
+            flex: 1 1 calc(50% - 8px) !important;
+            min-width: 130px !important;
+            justify-content: center !important;
+            text-align: center !important;
+            white-space: nowrap !important;
+            padding: 10px 12px !important;
+            font-size: 12px !important;
+          }
+          .upload-main-grid {
+            grid-template-columns: 1fr !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 20px !important;
+          }
+          .upload-tips-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
       `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginBottom: 32 }}>
+      <div className="upload-header-flex" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Link href="/simulados/provas-upload"
             style={{ width: 44, height: 44, borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', textDecoration: 'none', flexShrink: 0, transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
@@ -401,7 +437,7 @@ export default function UploadProvaPage() {
         </div>
 
         {uploadStep === 'review' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div className="upload-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             {arquivoOriginal?.url && (
               <motion.button 
                 onClick={() => downloadOriginalFile(arquivoOriginal.url, arquivoOriginal.nome)}
@@ -420,7 +456,8 @@ export default function UploadProvaPage() {
                   fontWeight: 700, 
                   cursor: 'pointer', 
                   boxShadow: '0 2px 6px rgba(0,0,0,0.03)', 
-                  transition: 'all 0.2s' 
+                  transition: 'all 0.2s',
+                  whiteSpace: 'nowrap'
                 }}
                 title={`Baixar arquivo original (${arquivoOriginal.nome})`}
               >
@@ -430,7 +467,7 @@ export default function UploadProvaPage() {
             {!isProfessorViewAll && (
               <motion.button onClick={() => { setUploadStep('idle'); setQuestoes([]) }}
                 whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.03)', transition: 'all 0.2s' }}>
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.03)', transition: 'all 0.2s', whiteSpace: 'nowrap' }}>
                 <RefreshCw size={16} color="#64748b" /> Reenviar Arquivo
               </motion.button>
             )}
@@ -444,27 +481,27 @@ export default function UploadProvaPage() {
               setShowPreview(true);
             }}
               whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', color: '#2563eb', border: '1px solid rgba(37,99,235,0.3)', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(37,99,235,0.05)', transition: 'all 0.2s' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 10, background: 'hsl(var(--bg-surface))', color: '#2563eb', border: '1px solid rgba(37,99,235,0.3)', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 6px rgba(37,99,235,0.05)', transition: 'all 0.2s', whiteSpace: 'nowrap' }}>
               <Printer size={16} color="#2563eb" /> Pré-visualizar A4
             </motion.button>
             {!isProfessorViewAll && (
               <>
                 <motion.button onClick={() => handleSave()} disabled={saving}
                   whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'rgba(59,130,246,0.08)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, transition: 'all 0.2s' }}>
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'rgba(59,130,246,0.08)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, transition: 'all 0.2s', whiteSpace: 'nowrap' }}>
                   {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={16} /> Salvar</>}
                 </motion.button>
                 
                 {currentUser?.perfil === 'Professor' ? (
                   <motion.button onClick={() => handleSave(undefined, 'enviar_revisao')} disabled={saving}
                     whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.35)', transition: 'all 0.2s' }}>
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.35)', transition: 'all 0.2s', whiteSpace: 'nowrap' }}>
                     {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><Save size={16} /> Salvar e Enviar para Revisão</>}
                   </motion.button>
                 ) : (
                   <motion.button onClick={() => handleSave(undefined, 'aprovar')} disabled={saving}
                     whileHover={{ scale: 1.03, translateY: -1 }} whileTap={{ scale: 0.97 }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.35)', transition: 'all 0.2s' }}>
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', borderRadius: 10, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 14px rgba(16,185,129,0.35)', transition: 'all 0.2s', whiteSpace: 'nowrap' }}>
                     {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><CheckCircle size={16} /> Salvar e Aprovar</>}
                   </motion.button>
                 )}
@@ -475,7 +512,7 @@ export default function UploadProvaPage() {
       </div>
 
       {/* Main Grid Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
+      <div className="upload-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
         <div style={{ minWidth: 0 }}>
 
       {/* ─── STEP: Upload Zone ─── */}
@@ -542,7 +579,7 @@ export default function UploadProvaPage() {
             <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 15, fontWeight: 700, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Sparkles size={16} color="#f59e0b" /> Dicas de Formatação para Melhor Reconhecimento
             </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="upload-tips-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {[
                 { emoji: '🧠', title: 'Listas Inteligentes', desc: 'Use numeração manual ("1.", "1-", "1)") ou listas automáticas do Word. O sistema entende tudo!' },
                 { emoji: '🅰️', title: 'Alternativas Flexíveis', desc: 'Formatos aceitos: "a.", "a-", "a)", listas manuais ou automáticas em múltiplos níveis.' },
