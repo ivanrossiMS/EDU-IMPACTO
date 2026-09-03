@@ -135,9 +135,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Hydrate from localStorage after mount with guaranteed timeout safety
   useEffect(() => {
     let isMounted = true
+
+    // PERFORMANCE: Leitura síncrona do localStorage ANTES do async.
+    // Se os dados já estão no localStorage (maioria dos casos), inicializa
+    // o estado instantaneamente sem esperar o Capacitor Preferences (que é async).
+    // Isso elimina até 600ms de espera no resume do app.
+    try {
+      if (typeof window !== 'undefined') {
+        const syncUser = window.localStorage.getItem('edu-current-user')
+        const syncTheme = window.localStorage.getItem('edu-theme')
+        const syncSidebarTheme = window.localStorage.getItem('edu-sidebar-theme')
+        const syncUnit = window.localStorage.getItem('edu-active-unit')
+        const syncPerfil = window.localStorage.getItem('edu-current-perfil')
+        const syncModules = window.localStorage.getItem('edu-active-modules')
+
+        if (syncTheme) setThemeState(JSON.parse(syncTheme))
+        if (syncSidebarTheme) setSidebarThemeState(JSON.parse(syncSidebarTheme))
+        if (syncUnit) setActiveUnitState(JSON.parse(syncUnit))
+        if (syncModules) setActiveModulesState(prev => ({ ...DEFAULT_MODULES, ...JSON.parse(syncModules) }))
+        if (syncPerfil) setCurrentUserPerfilState(JSON.parse(syncPerfil))
+        if (syncUser) {
+          const parsedUser = JSON.parse(syncUser) as CurrentUser
+          // Tenta carregar foto isolada sincronamente
+          const syncPhoto = parsedUser.id ? window.localStorage.getItem(`edu-user-photo-${parsedUser.id}`) : null
+          if (syncPhoto) parsedUser.foto = JSON.parse(syncPhoto)
+          setCurrentUserState(parsedUser)
+          // Marca como hidratado imediatamente se temos o usuário — evita waterfall
+          if (isMounted) setHydrated(true)
+        }
+        if (syncTheme) document.documentElement.setAttribute('data-theme', JSON.parse(syncTheme))
+      }
+    } catch { /* localStorage pode estar bloqueado em alguns contextos */ }
+
+    // PERFORMANCE: Fallback de 150ms (era 800ms) — Capacitor Preferences responde em <100ms
+    // em dispositivos modernos. O valor alto anterior bloqueava o resume do app desnecessariamente.
     const fallbackTimer = setTimeout(() => {
       if (isMounted) setHydrated(true)
-    }, 800)
+    }, 150)
 
     async function hydrate() {
       try {

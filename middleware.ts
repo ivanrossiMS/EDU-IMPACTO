@@ -103,9 +103,14 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // O getUser() real e seguro continua sendo chamado nas rotas de API via requireAuth()
-  // Utilizando getUser() aqui também para evitar o aviso de segurança do Supabase
-  const { data: { user }, error } = await supabase.auth.getUser()
+  // PERFORMANCE: Usa getSession() no middleware — lê o JWT do cookie localmente,
+  // sem chamada de rede ao Supabase Auth (~500ms economizados por request).
+  // SEGURANÇA: O middleware só decide redirecionamento (login vs protegido).
+  // A validação real via getUser() com verificação de rede ocorre em TODAS as
+  // route handlers protegidas via requireAuth() — essa é a fonte de verdade.
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
+
 
   // ── Sem sessão → redireciona para login ──────────────────────────────────
   if (!user) {

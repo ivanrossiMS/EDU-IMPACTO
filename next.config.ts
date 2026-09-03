@@ -41,7 +41,23 @@ const nextConfig: NextConfig = {
       'framer-motion',
       'recharts',
       'date-fns',
+      // PERFORMANCE: Adicional — evita importar o pacote inteiro nos bundles
+      '@radix-ui/react-accordion',
+      '@radix-ui/react-avatar',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-select',
+      '@radix-ui/react-tabs',
+      '@tanstack/react-query',
+      '@tanstack/react-table',
     ],
+    // PERFORMANCE: staleTimes — controla por quanto tempo (ms) o Next.js
+    // considera os dados de rota "frescos" no cliente antes de re-fetch.
+    // Reduz re-fetches desnecessários ao navegar entre páginas.
+    staleTimes: {
+      dynamic: 30,   // rotas dinâmicas: 30s antes de re-fetch (era 0s)
+      static: 300,   // rotas estáticas: 5min (padrão do Next.js)
+    },
     serverActions: {
       bodySizeLimit: '50mb',
     },

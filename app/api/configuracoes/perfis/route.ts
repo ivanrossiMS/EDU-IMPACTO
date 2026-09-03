@@ -14,7 +14,9 @@ export async function GET(request: Request) {
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ ...row, ...(row.dados || {}) }))
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store, max-age=0' }
+      // PERFORMANCE: Perfis mudam raramente — cache de 60s com revalidação silenciosa de 5min.
+      // A autenticação (requireAuth) é verificada em cada request independentemente do cache.
+      headers: { 'Cache-Control': 'private, s-maxage=60, stale-while-revalidate=300' }
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
