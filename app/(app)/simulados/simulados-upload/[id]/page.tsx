@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus, formatProfessorHeaderName } from '@/lib/utils'
+import { getDerivedStatus, formatProfessorHeaderName, isQuestionForRequisicao } from '@/lib/utils'
 import { ProvaPreviewModal, Questao } from '@/components/simulados/ProvaPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -274,23 +274,18 @@ export default function VerProvaUploadPage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {requisicoes.map((req: any, i: number) => {
+                  const reqCount = questoes.filter((q: any) => isQuestionForRequisicao(q, req, requisicoes, true)).length
+
                   const reqStatuses: Record<string, { color: string; label: string }> = {
                     pendente: { color: '#f59e0b', label: 'Pendente' },
                     enviado: { color: '#3b82f6', label: 'Em Revisão' },
                     aprovado: { color: '#10b981', label: 'Aprovado' },
+                    concluido: { color: '#10b981', label: 'Concluído' },
                     reprovado: { color: '#ef4444', label: 'Reprovado' },
                   }
-                  const rs = reqStatuses[req.status] || reqStatuses['pendente']
-                  
-                  const reqCount = questoes.filter((q: any) => {
-                    if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
-                    if (q.id_requisicao) return q.id_requisicao === req.id
-                    const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
-                                      (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
-                                      (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
-                    const profMatch = !q.id_professor || q.id_professor === req.id_professor
-                    return Boolean(discMatch && profMatch)
-                  }).length
+                  const rs = (req.status === 'pendente' && reqCount > 0)
+                    ? { color: '#3b82f6', label: 'Em Revisão' }
+                    : (reqStatuses[req.status] || reqStatuses['pendente'])
 
                   return (
                     <div key={i} style={{ padding: '12px 14px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>

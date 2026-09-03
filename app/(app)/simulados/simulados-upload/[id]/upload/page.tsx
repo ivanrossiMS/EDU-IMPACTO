@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
-import { formatProfessorHeaderName, downloadOriginalFile } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
 export default function UploadSimuladoPage() {
@@ -104,10 +104,11 @@ export default function UploadSimuladoPage() {
       const { data, error } = await (supabase as any).from('simulados_upload').select('*').eq('id', simuladoId).single()
       if (error) throw error
 
-      const { data: reqs } = await (supabase as any).from('simulados_upload_requisicoes').select('*').eq('id_simulado_upload', simuladoId)
+      const { data: rawReqs } = await (supabase as any).from('simulados_upload_requisicoes').select('*').eq('id_simulado_upload', simuladoId)
+      const reqs = rawReqs || []
       
-      const formattedDisciplinas = Array.from(new Set(reqs?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', ')
-      const formattedProfessors = Array.from(new Set(reqs?.map((r: any) => {
+      const formattedDisciplinas = Array.from(new Set(reqs.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', ')
+      const formattedProfessors = Array.from(new Set(reqs.map((r: any) => {
         const nome = r.professores?.nome || r.professor_nome || '';
         return nome ? formatProfessorHeaderName(nome) : '';
       }))).filter(Boolean).join(', ')
@@ -116,7 +117,7 @@ export default function UploadSimuladoPage() {
 
       const simuladoData = { 
         ...data, 
-        simulados_upload_requisicoes: reqs || [],
+        simulados_upload_requisicoes: reqs,
         formattedDisciplinas,
         formattedProfessors,
         formattedDate,
@@ -127,7 +128,7 @@ export default function UploadSimuladoPage() {
 
       // Determine active requisition for initial selection
       let currentActiveReq: any = null
-      if (!showAll && reqs && reqs.length > 0) {
+      if (!showAll && reqs.length > 0) {
         if (targetReqId) {
           currentActiveReq = reqs.find((r: any) => r.id === targetReqId)
         } else if (targetDiscId) {
@@ -147,10 +148,7 @@ export default function UploadSimuladoPage() {
       let matchedArquivo: any = null
 
       if (currentActiveReq) {
-        matchedArquivo = arquivosList.find((a: any) => 
-          (a.id_requisicao && a.id_requisicao === currentActiveReq.id) ||
-          (!a.id_requisicao && a.id_disciplina && a.id_disciplina === currentActiveReq.id_disciplina && (!a.id_professor || a.id_professor === currentActiveReq.id_professor))
-        )
+        matchedArquivo = arquivosList.find((a: any) => isFileForRequisicao(a, currentActiveReq, reqs))
       } else if (showAll) {
         matchedArquivo = arquivosList[0] || null
       }
@@ -169,17 +167,9 @@ export default function UploadSimuladoPage() {
         if (showAll) {
           filteredQs = allQuestions
         } else if (currentActiveReq) {
-          filteredQs = allQuestions.filter((q: any) => {
-            if (q.id_requisicao) {
-              return q.id_requisicao === currentActiveReq.id
-            }
-            // Legacy match by discipline and professor
-            const discMatch = (q.id_disciplina && (q.id_disciplina === currentActiveReq.id_disciplina || q.disciplina_id === currentActiveReq.id_disciplina)) ||
-                              (q.disciplina_nome && currentActiveReq.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === currentActiveReq.disciplina_nome.trim().toLowerCase()) ||
-                              (q.disciplina && currentActiveReq.disciplina_nome && q.disciplina.trim().toLowerCase() === currentActiveReq.disciplina_nome.trim().toLowerCase())
-            const profMatch = !q.id_professor || q.id_professor === currentActiveReq.id_professor
-            return Boolean(discMatch && profMatch)
-          })
+          filteredQs = allQuestions.filter((q: any) => isQuestionForRequisicao(q, currentActiveReq, reqs, false))
+        } else if (reqs.length === 1) {
+          filteredQs = allQuestions
         }
 
         if (filteredQs.length > 0) {
@@ -188,6 +178,42 @@ export default function UploadSimuladoPage() {
         } else {
           setQuestoes([])
           setUploadStep('idle')
+        }
+
+        // Auto-heal orphaned/unlinked id_requisicao in background so database is permanently accurate
+        if (reqs.length > 0) {
+          let hasOrphan = false
+          const healedQs = allQuestions.map((q: any) => {
+            // If already matches a valid req in this simulado, keep it
+            if (q.id_requisicao && reqs.some((r: any) => r.id === q.id_requisicao)) {
+              return q
+            }
+            const matchingReq = reqs.find((r: any) => isQuestionForRequisicao(q, r, reqs, false))
+            if (matchingReq) {
+              hasOrphan = true
+              return {
+                ...q,
+                id_requisicao: matchingReq.id,
+                id_disciplina: matchingReq.id_disciplina || q.id_disciplina,
+                disciplina_nome: matchingReq.disciplina_nome || q.disciplina_nome,
+                id_professor: matchingReq.id_professor || q.id_professor,
+                professor_nome: matchingReq.professor_nome || q.professor_nome
+              }
+            }
+            return q
+          })
+
+          if (hasOrphan) {
+            (supabase as any)
+              .from('simulados_upload')
+              .update({
+                questoes_json: healedQs,
+                questoes_count: healedQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', simuladoId)
+              .then(() => {})
+          }
         }
       } else {
         setQuestoes([])
@@ -309,16 +335,7 @@ export default function UploadSimuladoPage() {
       let otherQuestions: any[] = []
       if (!showAll && activeRequisicao) {
         otherQuestions = dbQuestions.filter((q: any) => {
-          if (q.id_requisicao) {
-            return q.id_requisicao !== activeRequisicao.id
-          }
-          // Legacy check
-          const discMatch = (q.id_disciplina && (q.id_disciplina === activeRequisicao.id_disciplina || q.disciplina_id === activeRequisicao.id_disciplina)) ||
-                            (q.disciplina_nome && activeRequisicao.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === activeRequisicao.disciplina_nome.trim().toLowerCase()) ||
-                            (q.disciplina && activeRequisicao.disciplina_nome && q.disciplina.trim().toLowerCase() === activeRequisicao.disciplina_nome.trim().toLowerCase())
-          const profMatch = !q.id_professor || q.id_professor === activeRequisicao.id_professor
-          if (discMatch && profMatch) return false
-          return true
+          return !isQuestionForRequisicao(q, activeRequisicao, simulado?.simulados_upload_requisicoes || [], false)
         })
       }
 
@@ -792,14 +809,31 @@ export default function UploadSimuladoPage() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {simulado.simulados_upload_requisicoes.map((req: any, i: number) => {
+                const allDbQs = Array.isArray(simulado.questoes_json) ? simulado.questoes_json : []
+                const isCurrentActive = activeRequisicao?.id === req.id
+
+                let qCount = 0
+                if (isCurrentActive && uploadStep === 'review') {
+                  qCount = questoes.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+                } else {
+                  qCount = allDbQs.filter((q: any) => isQuestionForRequisicao(q, req, simulado.simulados_upload_requisicoes || [], true)).length
+                }
+
                 const reqStatuses: Record<string, { color: string; label: string }> = {
                   pendente: { color: '#f59e0b', label: 'Pendente' },
                   enviado: { color: '#3b82f6', label: 'Enviado' },
                   aprovado: { color: '#10b981', label: 'Aprovado' },
-                  resimuladodo: { color: '#ef4444', label: 'Resimuladodo' },
+                  concluido: { color: '#10b981', label: 'Concluído' },
+                  rejeitado: { color: '#ef4444', label: 'Devolvido' },
                 }
-                const rs = reqStatuses[req.status] || reqStatuses['pendente']
-                const isCurrentActive = activeRequisicao?.id === req.id
+                const hasQuestoes = qCount > 0
+                const rs = (req.status === 'pendente' && hasQuestoes)
+                  ? { color: '#3b82f6', label: 'Enviado' }
+                  : (reqStatuses[req.status] || reqStatuses['pendente'])
+
+                const totalReq = req.qtd_questoes || 1
+                const progress = Math.min(100, Math.round((qCount / totalReq) * 100))
+                const progressColor = qCount >= totalReq ? '#10b981' : '#f59e0b'
 
                 return (
                   <div 
@@ -834,42 +868,17 @@ export default function UploadSimuladoPage() {
                       <span style={{ padding: '2px 8px', borderRadius: 100, fontSize: 10, fontWeight: 700, background: `${rs.color}15`, color: rs.color }}>{rs.label}</span>
                     </div>
                     <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>{req.professor_nome}</div>
-                    {(() => {
-                      // Accurate calculation of questions belonging strictly to this requisition
-                      const allDbQs = Array.isArray(simulado.questoes_json) ? simulado.questoes_json : []
-                      
-                      const isQuestionForReq = (q: any) => {
-                        if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
-                        if (q.id_requisicao) return q.id_requisicao === req.id
-                        const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
-                                          (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
-                                          (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
-                        const profMatch = !q.id_professor || q.id_professor === req.id_professor
-                        return Boolean(discMatch && profMatch)
-                      }
 
-                      let qCount = 0
-                      if (isCurrentActive && uploadStep === 'review') {
-                        qCount = questoes.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
-                      } else {
-                        qCount = allDbQs.filter(isQuestionForReq).length
-                      }
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4, color: 'hsl(var(--text-secondary))' }}>
+                        <span><span style={{ fontWeight: 600, color: progressColor }}>{qCount}</span> / {req.qtd_questoes} questões</span>
+                        <span style={{ fontWeight: 700, color: progressColor }}>{progress}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: 6, background: 'hsl(var(--border-subtle))', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ width: `${progress}%`, height: '100%', background: progressColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                      </div>
+                    </div>
 
-                      const totalReq = req.qtd_questoes || 1
-                      const progress = Math.min(100, Math.round((qCount / totalReq) * 100))
-                      const progressColor = qCount >= totalReq ? '#10b981' : '#f59e0b'
-                      return (
-                        <div style={{ marginTop: 10 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4, color: 'hsl(var(--text-secondary))' }}>
-                            <span><span style={{ fontWeight: 600, color: progressColor }}>{qCount}</span> / {req.qtd_questoes} questões</span>
-                            <span style={{ fontWeight: 700, color: progressColor }}>{progress}%</span>
-                          </div>
-                          <div style={{ width: '100%', height: 6, background: 'hsl(var(--border-subtle))', borderRadius: 4, overflow: 'hidden' }}>
-                            <div style={{ width: `${progress}%`, height: '100%', background: progressColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
-                          </div>
-                        </div>
-                      )
-                    })()}
                     {req.enviado_em && (
                       <div style={{ fontSize: 11, color: '#3b82f6', marginTop: 4 }}>
                         Enviado em {new Date(req.enviado_em).toLocaleDateString('pt-BR')}
@@ -877,8 +886,7 @@ export default function UploadSimuladoPage() {
                     )}
                     {(() => {
                       const reqMatchedFile = simulado?.config_estudio?.arquivos_originais?.find((a: any) => 
-                        (a.id_requisicao && a.id_requisicao === req.id) ||
-                        (a.id_disciplina && req.id_disciplina && a.id_disciplina === req.id_disciplina && (!a.id_professor || a.id_professor === req.id_professor))
+                        isFileForRequisicao(a, req, simulado.simulados_upload_requisicoes || [])
                       ) || (isCurrentActive && arquivoOriginal?.url ? arquivoOriginal : null)
 
                       if (!reqMatchedFile?.url) return null
@@ -925,7 +933,7 @@ export default function UploadSimuladoPage() {
               <div style={{ fontSize: 13, color: 'hsl(var(--text-primary))' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Total questões:</span>
-                  <span style={{ fontWeight: 700 }}>{simulado.questoes_count || 0}</span>
+                  <span style={{ fontWeight: 700 }}>{simulado.questoes_count || (Array.isArray(simulado.questoes_json) ? simulado.questoes_json.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length : 0)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Atribuições:</span>
@@ -933,7 +941,14 @@ export default function UploadSimuladoPage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Enviadas:</span>
-                  <span style={{ fontWeight: 700, color: '#10b981' }}>{simulado.simulados_upload_requisicoes.filter((r: any) => r.status === 'enviado' || r.status === 'aprovado').length}</span>
+                  <span style={{ fontWeight: 700, color: '#10b981' }}>
+                    {simulado.simulados_upload_requisicoes.filter((r: any) => {
+                      if (r.status === 'enviado' || r.status === 'aprovado' || r.status === 'concluido' || !!r.enviado_em) return true
+                      const allQs = Array.isArray(simulado.questoes_json) ? simulado.questoes_json : []
+                      const count = allQs.filter((q: any) => isQuestionForRequisicao(q, r, simulado.simulados_upload_requisicoes || [], true)).length
+                      return count > 0
+                    }).length}
+                  </span>
                 </div>
               </div>
             </div>

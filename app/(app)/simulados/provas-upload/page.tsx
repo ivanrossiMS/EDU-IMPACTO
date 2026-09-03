@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { getDerivedStatus } from '@/lib/utils'
+import { getDerivedStatus, isQuestionForRequisicao } from '@/lib/utils'
 import { GabaritoProvaModal } from '@/components/simulados/GabaritoProvaModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -383,6 +383,8 @@ export default function UploadProvasGerenciamentoPage() {
       delete payload.created_at
       delete payload.provas_upload_requisicoes
       delete payload.criado_por_nome
+      delete payload.config_estudio
+      payload.eh_adaptada = true
       payload.titulo = `${prova.titulo || 'Prova'} ADAPTADO`
       payload.updated_at = new Date().toISOString()
       
@@ -394,19 +396,68 @@ export default function UploadProvasGerenciamentoPage() {
         
       if (simError) throw simError
 
-      if (prova.provas_upload_requisicoes && prova.provas_upload_requisicoes.length > 0) {
-        const reqsPayload = prova.provas_upload_requisicoes.map((r: any) => {
+      const oldReqs = prova.provas_upload_requisicoes || []
+      const idMap: Record<string, string> = {}
+
+      if (oldReqs.length > 0) {
+        const reqsPayload = oldReqs.map((r: any) => {
           const newReq = { ...r }
           delete newReq.id
           delete newReq.created_at
           newReq.id_prova_upload = newProva.id
+          if (Array.isArray(payload.questoes_json) && payload.questoes_json.length > 0) {
+            newReq.status = r.status === 'aprovado' || r.status === 'concluido' ? r.status : 'enviado'
+            newReq.enviado_em = r.enviado_em || new Date().toISOString()
+          }
           return newReq
         })
-        const { error: reqError } = await (supabase as any)
+        const { data: insertedReqs, error: reqError } = await (supabase as any)
           .from('provas_upload_requisicoes')
           .insert(reqsPayload)
+          .select()
           
         if (reqError) throw reqError
+
+        if (insertedReqs && Array.isArray(insertedReqs)) {
+          oldReqs.forEach((oldR: any, idx: number) => {
+            const newR = insertedReqs[idx] || insertedReqs.find((nr: any) => nr.disciplina_nome === oldR.disciplina_nome && nr.id_professor === oldR.id_professor)
+            if (newR && oldR.id) {
+              idMap[oldR.id] = newR.id
+            }
+          })
+        }
+      }
+
+      const existingQs = Array.isArray(payload.questoes_json) ? payload.questoes_json : []
+      if (existingQs.length > 0) {
+        const mappedQs = existingQs.map((q: any) => {
+          const newReqId = (q.id_requisicao && idMap[q.id_requisicao]) 
+            ? idMap[q.id_requisicao] 
+            : (Object.values(idMap).length === 1 ? Object.values(idMap)[0] : q.id_requisicao)
+
+          return {
+            ...q,
+            id_requisicao: newReqId || q.id_requisicao
+          }
+        })
+
+        let newConfig = prova.config_estudio ? { ...prova.config_estudio } : {}
+        if (Array.isArray(newConfig.arquivos_originais)) {
+          newConfig.arquivos_originais = newConfig.arquivos_originais.map((a: any) => ({
+            ...a,
+            id_requisicao: (a.id_requisicao && idMap[a.id_requisicao]) ? idMap[a.id_requisicao] : a.id_requisicao
+          }))
+        }
+
+        await (supabase as any)
+          .from('provas_upload')
+          .update({
+            questoes_json: mappedQs,
+            questoes_count: mappedQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
+            config_estudio: newConfig,
+            eh_adaptada: true
+          })
+          .eq('id', newProva.id)
       }
       
       await loadData()
@@ -939,31 +990,22 @@ export default function UploadProvasGerenciamentoPage() {
                                           const profName = req.professor_nome || prova.criado_por_nome || 'Não atribuído'
                                           const discStyle = getDisciplinaStyle(disciplinaNome)
 
-                                          // Requisition-specific question count ratio (e.g. 0/10)
+                                          // Requisition-specific question count ratio (e.g. 25/15)
                                           const reqUploadedCount = Array.isArray(prova.questoes_json)
-                                            ? prova.questoes_json.filter((q: any) => {
-                                                if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
-                                                if (q.id_requisicao) {
-                                                  return q.id_requisicao === req.id
-                                                }
-                                                const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
-                                                                  (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
-                                                                  (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
-                                                const profMatch = !q.id_professor || q.id_professor === req.id_professor
-                                                return Boolean(discMatch && profMatch)
-                                              }).length
+                                            ? prova.questoes_json.filter((q: any) => isQuestionForRequisicao(q, req, reqs, true)).length
                                             : 0
                                           const reqTotalRequested = req.qtd_questoes || 10
                                           const meQuestoesRatio = `${reqUploadedCount}/${reqTotalRequested}`
 
                                           // Requisition-specific envio status
-                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || prova.status === 'aprovado' || prova.status === 'publicado') && req.status !== 'pendente'
+                                          const hasUploadedQuestions = reqUploadedCount > 0
+                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || prova.status === 'aprovado' || prova.status === 'publicado' || hasUploadedQuestions) && (req.status !== 'pendente' || hasUploadedQuestions)
                                           const envioLabel = isReqEnviada ? 'Enviada' : 'Pendente'
 
                                           // Requisition-specific status badge
                                           const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || prova.status === 'aprovado' || prova.status === 'publicado'
-                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em) && req.status !== 'pendente' && !isReqConcluida
                                           const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado'
+                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em || hasUploadedQuestions) && (req.status !== 'pendente' || hasUploadedQuestions) && !isReqConcluida && !isReqReprovada
 
                                           let statusObj = { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' }
                                           if (isReqConcluida) {

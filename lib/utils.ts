@@ -201,21 +201,176 @@ export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redaca
              
   if (!reqs || reqs.length === 0) return item.status || 'aguardando'
   
-  const statuses = reqs.map((r: any) => r.status)
-  
-  // Se existe algum professor que ainda está pendente ou teve upload rejeitado,
-  // ou se a requisição acabou de ser criada, no geral o painel fica "Aguardando"
-  if (statuses.some((s: string) => s === 'pendente' || s === 'rejeitado')) {
+  const allQs = Array.isArray(item.questoes_json) ? item.questoes_json : []
+
+  // Verifica se todas as requisições foram concluídas ou aprovadas
+  const allApproved = reqs.every((r: any) => r.status === 'aprovado' || r.status === 'concluido' || r.status === 'publicado')
+  if (allApproved) return 'aprovado'
+
+  // Verifica se alguma requisição foi expressamente rejeitada
+  if (reqs.some((r: any) => r.status === 'rejeitado' || r.status === 'reprovado')) {
     return 'aguardando'
   }
-  
-  // Se TODOS os professores já enviaram e o coordenador aprovou TODOS, então a prova está aprovada
-  if (statuses.every((s: string) => s === 'aprovado' || s === 'publicado')) {
-    return 'aprovado'
+
+  // Verifica se cada requisição está enviada ou possui questões cadastradas
+  const isReqDoneOrUploaded = (r: any) => {
+    if (r.status === 'enviado' || r.status === 'em_revisao' || r.status === 'aprovado' || r.status === 'concluido' || !!r.enviado_em) {
+      return true
+    }
+    if (allQs.length > 0 && allQs.some((q: any) => isQuestionForRequisicao(q, r, reqs, true))) {
+      return true
+    }
+    return false
   }
-  
-  // Se todos enviaram mas ainda não foram todos aprovados, então está em revisão
-  return 'em_revisao'
+
+  // Se todas as requisições já enviaram ou possuem questões
+  if (reqs.every(isReqDoneOrUploaded)) {
+    return 'em_revisao'
+  }
+
+  // Se pelo menos uma enviou ou tem questões
+  if (reqs.some(isReqDoneOrUploaded)) {
+    return 'em_revisao'
+  }
+
+  return 'aguardando'
+}
+
+/**
+ * Determina com precisão e robustez se uma questão pertence a uma requisição específica.
+ * Suporta simulados adaptados/duplicados onde os IDs das requisições mudaram,
+ * itens com requisição única, e correspondência por disciplina e professor.
+ */
+export function isQuestionForRequisicao(
+  q: any,
+  req: any,
+  allReqs: any[] = [],
+  excludeTextoApoio: boolean = false
+): boolean {
+  if (!q || !req) return false
+
+  // Se solicitado excluir textos de apoio (ex: contagem de questões)
+  if (excludeTextoApoio) {
+    if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) {
+      return false
+    }
+  }
+
+  // 1. Match direto e exato pelo ID da requisição
+  if (q.id_requisicao && q.id_requisicao === req.id) {
+    return true
+  }
+
+  // 2. Se o simulado/prova possui apenas 1 requisição no total, todas as questões pertencem a ela!
+  if (Array.isArray(allReqs) && allReqs.length === 1) {
+    if (!req.id || allReqs[0].id === req.id) {
+      return true
+    }
+  }
+
+  // 3. Se q.id_requisicao aponta explicitamente para OUTRA requisição válida deste mesmo item:
+  if (
+    q.id_requisicao &&
+    Array.isArray(allReqs) &&
+    allReqs.some((r: any) => r.id === q.id_requisicao && r.id !== req.id)
+  ) {
+    return false
+  }
+
+  const normalizeStr = (s: string) =>
+    (s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+
+  // 4. Correspondência por Disciplina (ID ou Nome normalizado)
+  const qDiscId = q.id_disciplina || q.disciplina_id
+  const reqDiscId = req.id_disciplina
+  const discIdMatch = Boolean(qDiscId && reqDiscId && qDiscId === reqDiscId)
+
+  const qDiscName = normalizeStr(q.disciplina_nome || q.disciplina)
+  const reqDiscName = normalizeStr(req.disciplina_nome)
+
+  const discNameMatch = Boolean(
+    qDiscName &&
+    reqDiscName &&
+    (qDiscName === reqDiscName ||
+      qDiscName.includes(reqDiscName) ||
+      reqDiscName.includes(qDiscName))
+  )
+
+  const discMatch = discIdMatch || discNameMatch
+
+  // 5. Correspondência por Professor (ID ou Nome normalizado)
+  const qProfId = q.id_professor
+  const reqProfId = req.id_professor
+  const profIdMatch = !qProfId || !reqProfId || qProfId === reqProfId
+
+  const qProfName = normalizeStr(q.professor_nome)
+  const reqProfName = normalizeStr(req.professor_nome)
+
+  const profNameMatch =
+    !qProfName ||
+    !reqProfName ||
+    qProfName === reqProfName ||
+    qProfName.includes(reqProfName) ||
+    reqProfName.includes(qProfName)
+
+  const profMatch = profIdMatch || profNameMatch
+
+  // Se disciplina e professor batem
+  if (discMatch && profMatch) {
+    return true
+  }
+
+  // Se apenas a disciplina bate e não há outra requisição concorrente para esta disciplina
+  if (discMatch && Array.isArray(allReqs)) {
+    const otherReqsSameDisc = allReqs.filter((r: any) => {
+      if (r.id === req.id) return false
+      const rName = normalizeStr(r.disciplina_nome)
+      return (reqDiscId && r.id_disciplina === reqDiscId) || (qDiscName && rName === qDiscName)
+    })
+    if (otherReqsSameDisc.length === 0) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * Localiza o arquivo original (.docx) associado à requisição ativa,
+ * com suporte a requisições únicas e simulados adaptados.
+ */
+export function isFileForRequisicao(a: any, req: any, allReqs: any[] = []): boolean {
+  if (!a || !req) return false
+  if (a.id_requisicao && a.id_requisicao === req.id) return true
+  if (Array.isArray(allReqs) && allReqs.length === 1) {
+    if (!req.id || allReqs[0].id === req.id) return true
+  }
+  if (
+    a.id_requisicao &&
+    Array.isArray(allReqs) &&
+    allReqs.some((r: any) => r.id === a.id_requisicao && r.id !== req.id)
+  ) {
+    return false
+  }
+
+  const normalizeStr = (s: string) =>
+    (s || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+
+  const discMatch =
+    (a.id_disciplina && req.id_disciplina && a.id_disciplina === req.id_disciplina) ||
+    (normalizeStr(a.disciplina_nome) && normalizeStr(req.disciplina_nome) &&
+      normalizeStr(a.disciplina_nome) === normalizeStr(req.disciplina_nome))
+
+  const profMatch = !a.id_professor || !req.id_professor || a.id_professor === req.id_professor
+  return Boolean(discMatch && profMatch)
 }
 
 /**
@@ -256,5 +411,6 @@ export async function downloadOriginalFile(url: string, filename?: string) {
     window.open(url, '_blank')
   }
 }
+
 
 
