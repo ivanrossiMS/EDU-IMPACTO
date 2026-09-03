@@ -113,14 +113,6 @@ export default function UploadRedaçãoPage() {
           }
         }
         
-        if (qs.length === 0 && (redacaoData?.questoes_json?.length || 0) > 0) {
-          const isSingleReq = !redacaoData?.redacao_upload_requisicoes || redacaoData.redacao_upload_requisicoes.length <= 1
-          const isAdapted = redacaoData?.titulo?.includes('ADAPTAD') || Boolean(redacaoData?.eh_adaptada)
-          if (isSingleReq || isAdapted) {
-            qs = redacaoData.questoes_json
-          }
-        }
-
         if (qs.length > 0) {
           setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true })))
           setUploadStep('review')

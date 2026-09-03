@@ -182,8 +182,6 @@ export default function UploadSimuladoPage() {
         updatePayload.status = 'aprovado'
       } else if (actionType === 'enviar_revisao') {
         updatePayload.status = 'em_revisao'
-      } else if (simulado?.status === 'aguardando' && finalQToSave.length > 0) {
-        updatePayload.status = 'em_revisao'
       }
 
       const { error } = await (supabase as any).from('simulados_upload').update(updatePayload).eq('id', simuladoId)
@@ -197,11 +195,6 @@ export default function UploadSimuladoPage() {
          await (supabase as any).from('simulados_upload_requisicoes').update({
            status: 'aprovado'
          }).eq('id_simulado_upload', simuladoId)
-      } else if (myAssignment && myAssignment.status === 'pendente' && finalQToSave.length > 0) {
-         await (supabase as any).from('simulados_upload_requisicoes').update({
-           status: 'enviado',
-           enviado_em: myAssignment.enviado_em || new Date().toISOString()
-         }).eq('id', myAssignment.id)
       }
 
       if (error) throw error

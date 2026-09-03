@@ -190,87 +190,6 @@ export function formatPhone(value: string): string {
   return `(${digits.slice(0, 2)})${digits.slice(2, 7)}-${digits.slice(7, 11)}`
 }
 
-export function isQuestionForRequisicao(
-  q: any,
-  req: any,
-  allReqs: any[] = []
-): boolean {
-  if (!req) return true
-  if (!q) return false
-
-  const currentReqIds = new Set(allReqs.map((r: any) => r?.id).filter(Boolean))
-
-  // 1. Correspondência direta por id_requisicao quando pertence a este exame
-  if (q.id_requisicao && currentReqIds.has(q.id_requisicao)) {
-    return q.id_requisicao === req.id
-  }
-
-  // 2. Se o exame possui apenas 1 requisição, todas as questões pertencem a ela
-  if (allReqs.length <= 1) {
-    return true
-  }
-
-  const normalize = (s: any) =>
-    String(s || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .trim()
-
-  const reqDiscNome = normalize(req.disciplina_nome)
-  const qDiscNome = normalize(q.disciplina_nome || q.disciplina)
-  const reqDiscId = req.id_disciplina ? String(req.id_disciplina).trim() : ''
-  const qDiscId = (q.id_disciplina || q.disciplina_id) ? String(q.id_disciplina || q.disciplina_id).trim() : ''
-
-  const discMatches =
-    (reqDiscId && qDiscId && reqDiscId === qDiscId) ||
-    (reqDiscNome && qDiscNome && reqDiscNome === qDiscNome)
-
-  const reqProfNome = normalize(req.professor_nome)
-  const qProfNome = normalize(q.professor_nome)
-  const reqProfId = req.id_professor ? String(req.id_professor).trim() : ''
-  const qProfId = q.id_professor ? String(q.id_professor).trim() : ''
-
-  const profMatches =
-    !qProfId && !qProfNome
-      ? true
-      : (reqProfId && qProfId && reqProfId === qProfId) ||
-        (reqProfNome && qProfNome && reqProfNome === qProfNome)
-
-  // Se disciplina e professor batem
-  if (discMatches && profMatches) {
-    return true
-  }
-
-  // Se disciplina bate e não há múltiplas requisições da mesma disciplina
-  if (discMatches) {
-    const reqsWithSameDisc = allReqs.filter(r =>
-      (reqDiscId && r.id_disciplina === reqDiscId) ||
-      (reqDiscNome && normalize(r.disciplina_nome) === reqDiscNome)
-    )
-    if (reqsWithSameDisc.length <= 1) {
-      return true
-    }
-  }
-
-  // Fallback: se a questão não tem disciplina definida, mas o professor bate
-  if (!qDiscId && !qDiscNome && profMatches) {
-    return true
-  }
-
-  return false
-}
-
-export function isQuestionCountableForRequisicao(
-  q: any,
-  req: any,
-  allReqs: any[] = []
-): boolean {
-  if (!q) return false
-  if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
-  return isQuestionForRequisicao(q, req, allReqs)
-}
-
 export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redacao'): string {
   if (!item) return 'aguardando'
   // Se já foi publicado, esse status prevalece (pode ser forçado pelo coordenador)
@@ -282,16 +201,7 @@ export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redaca
              
   if (!reqs || reqs.length === 0) return item.status || 'aguardando'
   
-  const allQs = Array.isArray(item.questoes_json) ? item.questoes_json : []
-
-  const statuses = reqs.map((r: any) => {
-    // Se há questões cadastradas para esta requisição, não deve ficar como pendente
-    const hasQs = allQs.some((q: any) => isQuestionCountableForRequisicao(q, r, reqs))
-    if (r.status === 'pendente' && hasQs) {
-      return 'enviado'
-    }
-    return r.status
-  })
+  const statuses = reqs.map((r: any) => r.status)
   
   // Se existe algum professor que ainda está pendente ou teve upload rejeitado,
   // ou se a requisição acabou de ser criada, no geral o painel fica "Aguardando"

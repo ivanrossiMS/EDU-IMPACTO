@@ -129,14 +129,6 @@ export default function UploadProvaPage() {
           }
         }
         
-        if (qs.length === 0 && (provaData?.questoes_json?.length || 0) > 0) {
-          const isSingleReq = !provaData?.provas_upload_requisicoes || provaData.provas_upload_requisicoes.length <= 1
-          const isAdapted = provaData?.titulo?.includes('ADAPTADO') || Boolean(provaData?.eh_adaptada)
-          if (isSingleReq || isAdapted) {
-            qs = provaData.questoes_json
-          }
-        }
-
         if (qs.length > 0) {
           setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true })))
           setUploadStep('review')
