@@ -100,7 +100,7 @@ export default function SimuladosDashboard() {
                 bimestre: extractBimestreProf(r.provas_upload),
                 prazo: r.provas_upload.data_limite_upload,
                 statusReq: r.status,
-                link: `/simulados/provas-upload/${r.provas_upload.id}/upload`,
+                link: `/simulados/provas-upload/${r.provas_upload.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`,
                 icon: FileSignature,
                 color: '#10b981'
               })
@@ -118,7 +118,7 @@ export default function SimuladosDashboard() {
                 bimestre: extractBimestreProf(r.simulados_upload),
                 prazo: r.simulados_upload.data_limite_upload,
                 statusReq: r.status,
-                link: `/simulados/simulados-upload/${r.simulados_upload.id}/upload`,
+                link: `/simulados/simulados-upload/${r.simulados_upload.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`,
                 icon: BookOpen,
                 color: '#3b82f6'
               })
@@ -136,7 +136,7 @@ export default function SimuladosDashboard() {
                 bimestre: extractBimestreProf(r.redacao_upload),
                 prazo: r.redacao_upload.data_limite_upload,
                 statusReq: r.status,
-                link: `/simulados/redacao-upload/${r.redacao_upload.id}/upload`,
+                link: `/simulados/redacao-upload/${r.redacao_upload.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`,
                 icon: PenTool,
                 color: '#f43f5e'
               })

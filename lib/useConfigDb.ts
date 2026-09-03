@@ -33,7 +33,7 @@ const ALL_CONFIG_CHAVES = [
   'cfgFormulasNotas',
   'cfgCentrosCusto', 'cfgMetodosPagamento', 'cfgCartoes', 'cfgEventos',
   'cfgGruposDesconto', 'cfgPadroesPagamento', 'cfgPlanoContas', 'cfgTiposDocumento',
-  'cfgConvenios', 'cfgCalendarioLetivo',
+  'cfgConvenios', 'cfgCalendarioLetivo', 'cfgWhatsAppMatriculas',
 ]
 
 /**

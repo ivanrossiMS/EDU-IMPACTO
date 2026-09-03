@@ -52,6 +52,13 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: 'MATRÍCULAS',
+    collapsible: true,
+    items: [
+      { label: 'ENVIO P/ WHATSAPP', href: '/matriculas/whatsapp', icon: <MessageSquare size={16} />, badge: '2026', badgeColor: 'pink' },
+    ],
+  },
+  {
     title: 'ACADÊMICO',
     collapsible: true,
     items: [

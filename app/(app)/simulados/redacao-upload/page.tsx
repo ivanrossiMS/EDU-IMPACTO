@@ -910,21 +910,28 @@ export default function UploadRedacoesGerenciamentoPage() {
 
                                           // Requisition-specific proposition count ratio (e.g. 1/1)
                                           const reqUploadedCount = Array.isArray(redacao.questoes_json)
-                                            ? redacao.questoes_json.filter((q: any) => 
-                                                (q.id_professor === req.id_professor || q.id_requisicao === req.id) &&
-                                                q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio
-                                              ).length
+                                            ? redacao.questoes_json.filter((q: any) => {
+                                                if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
+                                                if (q.id_requisicao) {
+                                                  return q.id_requisicao === req.id
+                                                }
+                                                const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
+                                                                  (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
+                                                                  (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
+                                                const profMatch = !q.id_professor || q.id_professor === req.id_professor
+                                                return Boolean(discMatch && profMatch)
+                                              }).length
                                             : (redacao.questoes_count || 0)
                                           const reqTotalRequested = req.qtd_questoes || 1
                                           const meQuestoesRatio = `${reqUploadedCount}/${reqTotalRequested}`
 
                                           // Requisition-specific envio status
-                                          const isReqEnviada = req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || redacao.status === 'aprovado' || redacao.status === 'publicado'
+                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || redacao.status === 'aprovado' || redacao.status === 'publicado') && req.status !== 'pendente'
                                           const envioLabel = isReqEnviada ? 'Enviada' : 'Pendente'
 
                                           // Requisition-specific status badge
                                           const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || redacao.status === 'aprovado' || redacao.status === 'publicado'
-                                          const isReqEmRevisao = req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em
+                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em) && req.status !== 'pendente' && !isReqConcluida
                                           const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado'
 
                                           let statusObj = { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' }

@@ -212,15 +212,19 @@ export default function VerProvaUploadPage() {
         )}
 
         {/* Professor Actions */}
-        {!isCoord && requisicoes.some(r => r.id_professor === currentUser?.id && r.status === 'pendente') && (
-          <div className="detail-header-actions">
-            <Link href={`/simulados/simulados-upload/${prova.id}/upload`} style={{ textDecoration: 'none' }}>
-              <motion.button
-                whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 22px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)', whiteSpace: 'nowrap' }}>
-                <Upload size={16} /> Fazer Upload do Simulado
-              </motion.button>
-            </Link>
+        {!isCoord && (
+          <div className="detail-header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {requisicoes
+              .filter(r => r.id_professor === currentUser?.id)
+              .map(r => (
+                <Link key={r.id} href={`/simulados/simulados-upload/${prova.id}/upload?req=${r.id}&prof=${r.id_professor || ''}&disc=${r.id_disciplina || ''}`} style={{ textDecoration: 'none' }}>
+                  <motion.button
+                    whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 6px 16px rgba(139,92,246,0.3)', whiteSpace: 'nowrap' }}>
+                    <Upload size={15} /> Upload ({r.disciplina_nome})
+                  </motion.button>
+                </Link>
+              ))}
           </div>
         )}
       </div>
@@ -248,9 +252,8 @@ export default function VerProvaUploadPage() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
                   <motion.button onClick={() => handleSaveQuestoes()} disabled={saving}
                     whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', borderRadius: 12, background: 'hsl(var(--bg-app))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>
-                    {saving ? <Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Save size={16} />}
-                    Salvar Alterações
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', boxShadow: '0 4px 14px rgba(139,92,246,0.3)' }}>
+                    {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={16} /> Salvar Alterações</>}
                   </motion.button>
                 </div>
               )}
@@ -258,15 +261,12 @@ export default function VerProvaUploadPage() {
           )}
         </div>
 
-        {/* Sidebar: Requisitions */}
+        {/* Sidebar: Status & Info */}
         <div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 24 }}>
-            
-
-
             <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24 }}>
               <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 15, fontWeight: 700, margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Users size={16} color="#8b5cf6" /> Atribuições
+                <Users size={16} color="#8b5cf6" /> Matérias do Simulado
               </h4>
 
             {requisicoes.length === 0 ? (
@@ -276,11 +276,22 @@ export default function VerProvaUploadPage() {
                 {requisicoes.map((req: any, i: number) => {
                   const reqStatuses: Record<string, { color: string; label: string }> = {
                     pendente: { color: '#f59e0b', label: 'Pendente' },
-                    enviado: { color: '#3b82f6', label: 'Enviado' },
+                    enviado: { color: '#3b82f6', label: 'Em Revisão' },
                     aprovado: { color: '#10b981', label: 'Aprovado' },
                     reprovado: { color: '#ef4444', label: 'Reprovado' },
                   }
                   const rs = reqStatuses[req.status] || reqStatuses['pendente']
+                  
+                  const reqCount = questoes.filter((q: any) => {
+                    if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
+                    if (q.id_requisicao) return q.id_requisicao === req.id
+                    const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
+                                      (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
+                                      (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
+                    const profMatch = !q.id_professor || q.id_professor === req.id_professor
+                    return Boolean(discMatch && profMatch)
+                  }).length
+
                   return (
                     <div key={i} style={{ padding: '12px 14px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -289,8 +300,8 @@ export default function VerProvaUploadPage() {
                       </div>
                       <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>{req.professor_nome}</div>
                       <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 4 }}>
-                        <span style={{ fontWeight: 600, color: questoes.filter((q: any) => q.id_professor === req.id_professor && q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length >= req.qtd_questoes ? '#10b981' : '#f59e0b' }}>
-                          {questoes.filter((q: any) => q.id_professor === req.id_professor && q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length}
+                        <span style={{ fontWeight: 600, color: reqCount >= req.qtd_questoes ? '#10b981' : '#f59e0b' }}>
+                          {reqCount}
                         </span> / {req.qtd_questoes} questões
                       </div>
                       {req.enviado_em && (
@@ -303,6 +314,7 @@ export default function VerProvaUploadPage() {
                 })}
               </div>
             )}
+            </div>
 
             {/* Coord action summary */}
             {isCoord && (
@@ -324,7 +336,6 @@ export default function VerProvaUploadPage() {
                 </div>
               </div>
             )}
-            </div>
           </div>
         </div>
       </div>

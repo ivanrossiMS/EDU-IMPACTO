@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowLeft, Upload, FileText, CheckCircle, AlertCircle, Loader2,
   Eye, EyeOff, Trash2, ChevronDown, ChevronUp, Image as ImageIcon,
   Save, RefreshCw, Sparkles, Plus, X, Printer, ZoomIn, ZoomOut, ChevronLeft, ChevronRight,
-  Calendar, Clock, Users, Download
+  Calendar, Clock, Users, Download, BookOpen
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
@@ -18,6 +18,7 @@ import { HtmlContent } from '@/components/HtmlContent'
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
 import { formatProfessorHeaderName, downloadOriginalFile } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
+
 export default function UploadSimuladoPage() {
   const router = useRouter()
   const params = useParams()
@@ -44,15 +45,58 @@ export default function UploadSimuladoPage() {
   const [showPreviewIsolated, setShowPreviewIsolated] = useState(false)
   const [simConfig, setSimConfig] = useState<any>(null)
 
+  const targetReqId = searchParams.get('req')
+  const targetDiscId = searchParams.get('disc')
+  const targetProfId = searchParams.get('prof')
+  const showAll = searchParams.get('all') === 'true'
+
   useEffect(() => {
     loadSimulado()
     loadConfig()
-  }, [simuladoId])
+  }, [simuladoId, targetReqId, targetDiscId, targetProfId, showAll])
 
   const loadConfig = async () => {
     const { data } = await (supabase as any).from('simulados_configuracoes').select('*').eq('id', 'default').single()
     if (data) setSimConfig(data)
   }
+
+  // Active requisition computation
+  const activeRequisicao = useMemo(() => {
+    if (!simulado?.simulados_upload_requisicoes || simulado.simulados_upload_requisicoes.length === 0) return null
+    if (showAll) return null
+
+    const reqs = simulado.simulados_upload_requisicoes
+
+    if (targetReqId) {
+      const found = reqs.find((r: any) => r.id === targetReqId)
+      if (found) return found
+    }
+    if (targetDiscId) {
+      const found = reqs.find((r: any) => (r.id_disciplina === targetDiscId || r.disciplina_nome === targetDiscId) && (!targetProfId || r.id_professor === targetProfId))
+      if (found) return found
+    }
+    if (currentUser?.perfil === 'Professor') {
+      const myReqs = reqs.filter((r: any) => r.id_professor === currentUser.id)
+      if (myReqs.length > 0) {
+        return myReqs.find((r: any) => r.status === 'pendente') || myReqs[0]
+      }
+    }
+    if (targetProfId) {
+      const found = reqs.find((r: any) => r.id_professor === targetProfId)
+      if (found) return found
+    }
+
+    return reqs[0] || null
+  }, [simulado, targetReqId, targetDiscId, targetProfId, showAll, currentUser])
+
+  // Requisitions relevant to current user
+  const userRelevantRequisicoes = useMemo(() => {
+    if (!simulado?.simulados_upload_requisicoes) return []
+    if (currentUser?.perfil === 'Professor') {
+      return simulado.simulados_upload_requisicoes.filter((r: any) => r.id_professor === currentUser.id)
+    }
+    return simulado.simulados_upload_requisicoes
+  }, [simulado, currentUser])
 
   const loadSimulado = async () => {
     setLoading(true)
@@ -81,59 +125,73 @@ export default function UploadSimuladoPage() {
       }
       setSimulado(simuladoData)
 
-      // Look for original file in config_estudio
-      const targetReq = searchParams.get('req')
-      const targetDisc = searchParams.get('disc')
-      const targetProf = searchParams.get('prof')
-      const showAll = searchParams.get('all') === 'true'
-
-      const arquivosList: any[] = Array.isArray(data?.config_estudio?.arquivos_originais) ? data.config_estudio.arquivos_originais : []
-      let matchedArquivo = null
-      if (targetReq) {
-        matchedArquivo = arquivosList.find((a: any) => a.id_requisicao === targetReq)
-      } else if (targetDisc) {
-        matchedArquivo = arquivosList.find((a: any) => a.id_disciplina === targetDisc)
-      } else if (targetProf) {
-        matchedArquivo = arquivosList.find((a: any) => a.id_professor === targetProf)
-      }
-      if (!matchedArquivo && arquivosList.length > 0) {
-        matchedArquivo = arquivosList[0]
-      }
-      if (!matchedArquivo && data?.config_estudio?.arquivo_original_url) {
-        matchedArquivo = {
-          url: data.config_estudio.arquivo_original_url,
-          nome: data.config_estudio.arquivo_original_nome || 'arquivo_original.docx',
-          tamanho: data.config_estudio.arquivo_original_tamanho
+      // Determine active requisition for initial selection
+      let currentActiveReq: any = null
+      if (!showAll && reqs && reqs.length > 0) {
+        if (targetReqId) {
+          currentActiveReq = reqs.find((r: any) => r.id === targetReqId)
+        } else if (targetDiscId) {
+          currentActiveReq = reqs.find((r: any) => (r.id_disciplina === targetDiscId || r.disciplina_nome === targetDiscId) && (!targetProfId || r.id_professor === targetProfId))
+        } else if (currentUser?.perfil === 'Professor') {
+          const myReqs = reqs.filter((r: any) => r.id_professor === currentUser.id)
+          currentActiveReq = myReqs.find((r: any) => r.status === 'pendente') || myReqs[0]
+        } else if (targetProfId) {
+          currentActiveReq = reqs.find((r: any) => r.id_professor === targetProfId)
+        } else {
+          currentActiveReq = reqs[0]
         }
       }
+
+      // Look for original file in config_estudio specifically for this active requisition
+      const arquivosList: any[] = Array.isArray(data?.config_estudio?.arquivos_originais) ? data.config_estudio.arquivos_originais : []
+      let matchedArquivo: any = null
+
+      if (currentActiveReq) {
+        matchedArquivo = arquivosList.find((a: any) => 
+          (a.id_requisicao && a.id_requisicao === currentActiveReq.id) ||
+          (!a.id_requisicao && a.id_disciplina && a.id_disciplina === currentActiveReq.id_disciplina && (!a.id_professor || a.id_professor === currentActiveReq.id_professor))
+        )
+      } else if (showAll) {
+        matchedArquivo = arquivosList[0] || null
+      }
+
       if (matchedArquivo) {
         setArquivoOriginal(matchedArquivo)
+      } else {
+        setArquivoOriginal(null)
       }
 
-      // If questions already exist, load them for review
-      if (simuladoData?.questoes_json && simuladoData.questoes_json.length > 0) {
-        let qs = simuladoData.questoes_json
-        
-        if (!showAll) {
-          if (targetReq) {
-            qs = qs.filter((q: any) => 
-              q.id_requisicao === targetReq ||
-              (targetDisc && (q.id_disciplina === targetDisc || q.disciplina_id === targetDisc)) ||
-              (targetProf && q.id_professor === targetProf && (!q.id_requisicao || q.id_requisicao === targetReq))
-            )
-          } else if (targetDisc) {
-            qs = qs.filter((q: any) => q.id_disciplina === targetDisc || q.disciplina_id === targetDisc)
-          } else if (targetProf) {
-            qs = qs.filter((q: any) => q.id_professor === targetProf)
-          } else if (currentUser?.perfil === 'Professor') {
-            qs = qs.filter((q: any) => q.id_professor === currentUser.id)
-          }
+      // Load questions strictly matching active requisition (or all if showAll)
+      const allQuestions = Array.isArray(simuladoData?.questoes_json) ? simuladoData.questoes_json : []
+      if (allQuestions.length > 0) {
+        let filteredQs: any[] = []
+
+        if (showAll) {
+          filteredQs = allQuestions
+        } else if (currentActiveReq) {
+          filteredQs = allQuestions.filter((q: any) => {
+            if (q.id_requisicao) {
+              return q.id_requisicao === currentActiveReq.id
+            }
+            // Legacy match by discipline and professor
+            const discMatch = (q.id_disciplina && (q.id_disciplina === currentActiveReq.id_disciplina || q.disciplina_id === currentActiveReq.id_disciplina)) ||
+                              (q.disciplina_nome && currentActiveReq.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === currentActiveReq.disciplina_nome.trim().toLowerCase()) ||
+                              (q.disciplina && currentActiveReq.disciplina_nome && q.disciplina.trim().toLowerCase() === currentActiveReq.disciplina_nome.trim().toLowerCase())
+            const profMatch = !q.id_professor || q.id_professor === currentActiveReq.id_professor
+            return Boolean(discMatch && profMatch)
+          })
         }
-        
-        if (qs.length > 0) {
-          setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
+
+        if (filteredQs.length > 0) {
+          setQuestoes(filteredQs.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
           setUploadStep('review')
+        } else {
+          setQuestoes([])
+          setUploadStep('idle')
         }
+      } else {
+        setQuestoes([])
+        setUploadStep('idle')
       }
       
       if (searchParams.get('print') === 'true') {
@@ -141,6 +199,11 @@ export default function UploadSimuladoPage() {
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
+  }
+
+  const switchDiscipline = (req: any) => {
+    if (!req) return
+    router.push(`/simulados/simulados-upload/${simuladoId}/upload?req=${req.id}&prof=${req.id_professor || ''}&disc=${req.id_disciplina || ''}`)
   }
 
   const handleFile = async (file: File) => {
@@ -156,9 +219,9 @@ export default function UploadSimuladoPage() {
     setUploadStep('parsing')
 
     try {
-      const targetReq = searchParams.get('req') || ''
-      const targetProf = searchParams.get('prof') || ''
-      const targetDisc = searchParams.get('disc') || ''
+      const targetReq = activeRequisicao?.id || targetReqId || ''
+      const targetProf = activeRequisicao?.id_professor || targetProfId || currentUser?.id || ''
+      const targetDisc = activeRequisicao?.id_disciplina || targetDiscId || ''
 
       const fd = new FormData()
       fd.append('file', file)
@@ -185,7 +248,19 @@ export default function UploadSimuladoPage() {
         })
       }
 
-      const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 }))
+      const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({
+        ...q,
+        expandido: true,
+        numero: i + 1,
+        id_requisicao: targetReq || undefined,
+        id_disciplina: targetDisc || undefined,
+        disciplina_id: targetDisc || undefined,
+        disciplina_nome: activeRequisicao?.disciplina_nome || q.disciplina_nome || undefined,
+        disciplina: activeRequisicao?.disciplina_nome || q.disciplina || undefined,
+        id_professor: targetProf || undefined,
+        professor_nome: activeRequisicao?.professor_nome || q.professor_nome || undefined
+      }))
+
       setQuestoes(parsed)
       setUploadStep('review')
     } catch (e: any) {
@@ -203,88 +278,88 @@ export default function UploadSimuladoPage() {
     if (file) handleFile(file)
   }
 
-
   const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aprovar', config_estudio?: any) => {
     const currentQs = Array.isArray(updatedQuestoes) ? updatedQuestoes : questoes;
 
-    const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-    if (currentUser?.perfil === 'Professor' && myAssignment) {
-      if (currentQs.length > myAssignment.qtd_questoes) {
-        setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para prosseguir.` });
+    // Validate limit for active requisition
+    if (currentUser?.perfil === 'Professor' && activeRequisicao) {
+      if (currentQs.length > activeRequisicao.qtd_questoes) {
+        setAlertModal({ 
+          open: true, 
+          message: `Você não pode salvar. Estão liberadas apenas ${activeRequisicao.qtd_questoes} questões para ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Edite ou exclua algumas questões para prosseguir.` 
+        });
         return;
       }
-      if (actionType === 'enviar_revisao' && currentQs.length < myAssignment.qtd_questoes) {
-        setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - currentQs.length} questões.` });
+      if (actionType === 'enviar_revisao' && currentQs.length < activeRequisicao.qtd_questoes) {
+        setAlertModal({ 
+          open: true, 
+          message: `Você só pode enviar para revisão quando completar todas as ${activeRequisicao.qtd_questoes} questões de ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Faltam ${activeRequisicao.qtd_questoes - currentQs.length} questões.` 
+        });
         return;
       }
     }
 
     setSaving(true)
     try {
-      // 1. Fetch the latest simulado questions from DB to avoid overwriting other teachers' questions
+      // 1. Fetch latest questions and config from DB to preserve all other disciplines
       const { data: dbData } = await (supabase as any).from('simulados_upload').select('questoes_json, config_estudio').eq('id', simuladoId).single()
-      const dbQuestions = dbData?.questoes_json || []
+      const dbQuestions: any[] = Array.isArray(dbData?.questoes_json) ? dbData.questoes_json : []
 
-      const targetReq = searchParams.get('req')
-      const targetDisc = searchParams.get('disc')
-      const targetProf = searchParams.get('prof')
-      const showAll = searchParams.get('all') === 'true'
-
-      // 2. Filter out questions we are NOT editing
+      // 2. Filter out ONLY questions belonging to the active requisition
       let otherQuestions: any[] = []
-      if (!showAll) {
-        if (targetReq) {
-          otherQuestions = dbQuestions.filter((q: any) => {
-            if (q.id_requisicao && q.id_requisicao === targetReq) return false
-            if (targetDisc && (q.id_disciplina === targetDisc || q.disciplina_id === targetDisc)) return false
-            if (targetProf && q.id_professor === targetProf && (!q.id_requisicao || q.id_requisicao === targetReq)) return false
-            return true
-          })
-        } else if (targetDisc) {
-          otherQuestions = dbQuestions.filter((q: any) => q.id_disciplina !== targetDisc && q.disciplina_id !== targetDisc)
-        } else if (targetProf) {
-          otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== targetProf)
-        } else if (currentUser?.perfil === 'Professor') {
-          otherQuestions = dbQuestions.filter((q: any) => q.id_professor !== currentUser.id)
-        }
+      if (!showAll && activeRequisicao) {
+        otherQuestions = dbQuestions.filter((q: any) => {
+          if (q.id_requisicao) {
+            return q.id_requisicao !== activeRequisicao.id
+          }
+          // Legacy check
+          const discMatch = (q.id_disciplina && (q.id_disciplina === activeRequisicao.id_disciplina || q.disciplina_id === activeRequisicao.id_disciplina)) ||
+                            (q.disciplina_nome && activeRequisicao.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === activeRequisicao.disciplina_nome.trim().toLowerCase()) ||
+                            (q.disciplina && activeRequisicao.disciplina_nome && q.disciplina.trim().toLowerCase() === activeRequisicao.disciplina_nome.trim().toLowerCase())
+          const profMatch = !q.id_professor || q.id_professor === activeRequisicao.id_professor
+          if (discMatch && profMatch) return false
+          return true
+        })
       }
 
-      // 3. Prepare our questions
+      // 3. Tag and prepare our active questions
       const myQuestionsToSave = currentQs.map(({ expandido, ...q }) => {
-        let profId = q.id_professor;
-        if (currentUser?.perfil !== 'Professor' && targetProf && (!profId || profId === currentUser?.id)) {
-          profId = targetProf;
-        } else if (currentUser?.perfil === 'Professor' && !showAll) {
-          profId = currentUser.id;
-        }
+        const profId = activeRequisicao?.id_professor || targetProfId || (currentUser?.perfil === 'Professor' ? currentUser.id : q.id_professor)
+        const profNome = activeRequisicao?.professor_nome || q.professor_nome || (currentUser?.perfil === 'Professor' ? currentUser.nome : '')
+        const discId = activeRequisicao?.id_disciplina || targetDiscId || q.id_disciplina
+        const discNome = activeRequisicao?.disciplina_nome || q.disciplina_nome || q.disciplina || ''
+
         return {
           ...q,
           id_professor: profId,
-          id_requisicao: targetReq || q.id_requisicao,
-          id_disciplina: targetDisc || q.id_disciplina
-        };
+          professor_nome: profNome,
+          id_requisicao: activeRequisicao?.id || targetReqId || q.id_requisicao,
+          id_disciplina: discId,
+          disciplina_id: discId,
+          disciplina_nome: discNome,
+          disciplina: discNome
+        }
       })
 
-      // 4. Merge
-      const finalQToSave = [...otherQuestions, ...myQuestionsToSave]
+      // 4. Merge preserved other questions with our updated active questions
+      const finalQToSave = showAll ? myQuestionsToSave : [...otherQuestions, ...myQuestionsToSave]
 
       // 5. Merge config_estudio with original file list
       let currentConfig = dbData?.config_estudio || simulado?.config_estudio || {}
       let currentArquivos: any[] = Array.isArray(currentConfig.arquivos_originais) ? [...currentConfig.arquivos_originais] : []
-      if (arquivoOriginal?.url) {
-        const exists = currentArquivos.some((a: any) => a.url === arquivoOriginal.url || (targetReq && a.id_requisicao === targetReq))
-        if (!exists) {
-          currentArquivos.push({
-            id: `${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-            url: arquivoOriginal.url,
-            nome: arquivoOriginal.nome,
-            tamanho: arquivoOriginal.tamanho,
-            id_requisicao: targetReq || null,
-            id_disciplina: targetDisc || null,
-            id_professor: targetProf || null,
-            uploaded_at: new Date().toISOString()
-          })
-        }
+
+      if (arquivoOriginal?.url && activeRequisicao) {
+        currentArquivos = currentArquivos.filter((a: any) => a.id_requisicao !== activeRequisicao.id)
+        currentArquivos.push({
+          id: `${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          url: arquivoOriginal.url,
+          nome: arquivoOriginal.nome,
+          tamanho: arquivoOriginal.tamanho,
+          id_requisicao: activeRequisicao.id,
+          id_disciplina: activeRequisicao.id_disciplina || null,
+          id_professor: activeRequisicao.id_professor || null,
+          uploaded_at: new Date().toISOString()
+        })
       }
 
       let updatePayload: any = {
@@ -311,15 +386,22 @@ export default function UploadSimuladoPage() {
 
       const { error } = await (supabase as any).from('simulados_upload').update(updatePayload).eq('id', simuladoId)
 
-      if (actionType === 'enviar_revisao' && myAssignment) {
-         await (supabase as any).from('simulados_upload_requisicoes').update({
-           status: 'enviado',
-           enviado_em: new Date().toISOString()
-         }).eq('id', myAssignment.id)
+      // 6. Update requisition status
+      if (actionType === 'enviar_revisao' && activeRequisicao) {
+        await (supabase as any).from('simulados_upload_requisicoes').update({
+          status: 'enviado',
+          enviado_em: new Date().toISOString()
+        }).eq('id', activeRequisicao.id)
       } else if (actionType === 'aprovar') {
-         await (supabase as any).from('simulados_upload_requisicoes').update({
-           status: 'aprovado'
-         }).eq('id_simulado_upload', simuladoId)
+        if (showAll) {
+          await (supabase as any).from('simulados_upload_requisicoes').update({
+            status: 'aprovado'
+          }).eq('id_simulado_upload', simuladoId)
+        } else if (activeRequisicao) {
+          await (supabase as any).from('simulados_upload_requisicoes').update({
+            status: 'aprovado'
+          }).eq('id', activeRequisicao.id)
+        }
       }
 
       if (error) throw error
@@ -408,7 +490,7 @@ export default function UploadSimuladoPage() {
       `}</style>
 
       {/* Header */}
-      <div className="upload-header-flex" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginBottom: 32 }}>
+      <div className="upload-header-flex" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 24, marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Link href="/simulados/simulados-upload"
             style={{ width: 44, height: 44, borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', textDecoration: 'none', flexShrink: 0, transition: 'all 0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}
@@ -416,23 +498,30 @@ export default function UploadSimuladoPage() {
             onMouseLeave={e => { e.currentTarget.style.color = 'hsl(var(--text-secondary))'; e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))' }}>
             <ArrowLeft size={20} />
           </Link>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <h1 style={{ fontSize: 24, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: 0, letterSpacing: '-0.02em' }}>
                 {simulado?.titulo || 'Envio de Simulado'}
               </h1>
+              {activeRequisicao && (
+                <span style={{
+                  padding: '4px 12px', borderRadius: 8, fontSize: 12, fontWeight: 800,
+                  background: 'rgba(139, 92, 246, 0.12)', color: '#8b5cf6', border: '1px solid rgba(139, 92, 246, 0.3)',
+                  display: 'inline-flex', alignItems: 'center', gap: 6
+                }}>
+                  <BookOpen size={13} /> {activeRequisicao.disciplina_nome} ({activeRequisicao.qtd_questoes} questões)
+                </span>
+              )}
             </div>
             
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {simulado?.data_aplicacao ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
+              {simulado?.data_aplicacao && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
                   <Calendar size={14} color="#8b5cf6" /> Aplicação: {simulado.data_aplicacao.split('-').reverse().join('/')}
                 </div>
-              ) : (
-                <p style={{ color: 'hsl(var(--text-secondary))', margin: 0, fontSize: 13 }}>Faça upload do arquivo DOC ou DOCX com as questões elaboradas</p>
               )}
               {simulado?.data_limite_upload && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', fontSize: 12, color: 'hsl(var(--text-secondary))', fontWeight: 600 }}>
                   <Clock size={14} color="#f59e0b" /> Prazo: {simulado.data_limite_upload.split('-').reverse().join('/')}
                 </div>
               )}
@@ -465,7 +554,7 @@ export default function UploadSimuladoPage() {
                 }}
                 title={`Baixar arquivo original (${arquivoOriginal.nome})`}
               >
-                <Download size={16} color="#2563eb" /> Baixar DOCX Original
+                <Download size={16} color="#2563eb" /> Baixar DOCX ({activeRequisicao?.disciplina_nome || 'Original'})
               </motion.button>
             )}
 
@@ -477,9 +566,8 @@ export default function UploadSimuladoPage() {
               </motion.button>
             )}
             <motion.button onClick={() => {
-              const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
-              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && myAssignment && questoes.length > myAssignment.qtd_questoes) {
-                setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para acessar.` });
+              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && activeRequisicao && questoes.length > activeRequisicao.qtd_questoes) {
+                setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${activeRequisicao.qtd_questoes} questões para ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Edite ou exclua algumas questões para acessar.` });
                 return;
               }
               setShowPreview(true);
@@ -500,7 +588,7 @@ export default function UploadSimuladoPage() {
                   <motion.button onClick={() => handleSave(undefined, 'enviar_revisao')} disabled={saving}
                     whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #10b981, #059669)', color: 'white', border: 'none', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 4px 12px rgba(16,185,129,0.3)', whiteSpace: 'nowrap' }}>
-                    {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><Save size={16} /> Salvar e Enviar para Revisão</>}
+                    {saving ? <><Loader2 size={16} style={{ animation: 'spin 0.8s linear infinite' }} /> Processando...</> : <><Save size={16} /> Enviar {activeRequisicao?.disciplina_nome ? `de ${activeRequisicao.disciplina_nome}` : ''} para Revisão</>}
                   </motion.button>
                 ) : (
                   <motion.button onClick={() => handleSave(undefined, 'aprovar')} disabled={saving}
@@ -514,6 +602,55 @@ export default function UploadSimuladoPage() {
           </div>
         )}
       </div>
+
+      {/* ─── MULTI-DISCIPLINE SELECTOR TABS ─── */}
+      {userRelevantRequisicoes.length > 1 && !showAll && (
+        <div style={{
+          marginBottom: 24, padding: '12px 16px', background: 'hsl(var(--bg-surface))',
+          borderRadius: 16, border: '1px solid hsl(var(--border-subtle))',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Selecione a Matéria:
+          </span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+            {userRelevantRequisicoes.map((r: any) => {
+              const isActive = activeRequisicao?.id === r.id
+              const isEnviada = r.status === 'enviado' || r.status === 'aprovado' || !!r.enviado_em
+
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => switchDiscipline(r)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                    padding: '8px 14px', borderRadius: 10,
+                    background: isActive ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)' : 'hsl(var(--bg-app))',
+                    color: isActive ? '#ffffff' : 'hsl(var(--text-primary))',
+                    border: isActive ? '1px solid #7c3aed' : '1px solid hsl(var(--border-subtle))',
+                    fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                    boxShadow: isActive ? '0 4px 12px rgba(139,92,246,0.35)' : 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <BookOpen size={14} color={isActive ? '#ffffff' : '#8b5cf6'} />
+                  <span>{r.disciplina_nome || 'Disciplina'}</span>
+                  <span style={{
+                    padding: '2px 6px', borderRadius: 6, fontSize: 10, fontWeight: 800,
+                    background: isActive ? 'rgba(255,255,255,0.2)' : 'rgba(100,116,139,0.1)',
+                    color: isActive ? '#ffffff' : 'hsl(var(--text-secondary))'
+                  }}>
+                    {r.qtd_questoes}q
+                  </span>
+                  {isEnviada && (
+                    <CheckCircle size={13} color={isActive ? '#ffffff' : '#10b981'} />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Main Grid Layout */}
       <div className="upload-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
@@ -529,7 +666,7 @@ export default function UploadSimuladoPage() {
             onClick={() => fileInputRef.current?.click()}
             style={{
               border: `2px dashed ${dragOver ? '#8b5cf6' : 'rgba(139,92,246,0.3)'}`,
-              borderRadius: 24, padding: '80px 40px', textAlign: 'center',
+              borderRadius: 24, padding: '70px 40px', textAlign: 'center',
               background: dragOver ? 'rgba(139,92,246,0.05)' : 'hsl(var(--bg-surface))',
               cursor: 'pointer', transition: 'all 0.25s', marginBottom: 24,
             }}>
@@ -537,20 +674,20 @@ export default function UploadSimuladoPage() {
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
 
             <motion.div animate={{ y: dragOver ? -8 : 0 }} transition={{ type: 'spring', stiffness: 300 }}>
-              <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', border: '2px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-                <Upload size={32} color="#8b5cf6" />
+              <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'rgba(139,92,246,0.1)', border: '2px solid rgba(139,92,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+                <Upload size={30} color="#8b5cf6" />
               </div>
-              <h3 style={{ fontSize: 22, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 10px' }}>
-                {dragOver ? 'Solte o arquivo aqui!' : 'Arraste ou clique para enviar'}
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 8px' }}>
+                {dragOver ? 'Solte o arquivo aqui!' : activeRequisicao ? `Enviar arquivo de ${activeRequisicao.disciplina_nome}` : 'Arraste ou clique para enviar'}
               </h3>
-              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, margin: '0 0 20px' }}>
-                Suportamos arquivos <strong>.DOCX</strong> (Word) com questões e alternativas
+              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, margin: '0 0 16px' }}>
+                Envie o arquivo <strong>.DOCX</strong> (Word) contendo apenas as questões de <strong>{activeRequisicao?.disciplina_nome || 'sua disciplina'}</strong> ({activeRequisicao?.qtd_questoes || 10} questões)
               </p>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
                 {[{ icon: FileText, label: '.DOCX — Word', color: '#3b82f6' }].map((t, i) => (
-                  <div key={i} style={{ padding: '8px 16px', borderRadius: 10, background: `${t.color}11`, border: `1px solid ${t.color}33`, display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <t.icon size={14} color={t.color} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: t.color }}>{t.label}</span>
+                  <div key={i} style={{ padding: '6px 14px', borderRadius: 8, background: `${t.color}11`, border: `1px solid ${t.color}33`, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <t.icon size={13} color={t.color} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: t.color }}>{t.label}</span>
                   </div>
                 ))}
               </div>
@@ -566,7 +703,7 @@ export default function UploadSimuladoPage() {
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139, 92, 246, 0.05)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
             >
-              <Plus size={18} /> Inserir questões manualmente
+              <Plus size={18} /> Inserir questões de {activeRequisicao?.disciplina_nome || 'disciplina'} manualmente
             </motion.button>
           </div>
 
@@ -579,8 +716,8 @@ export default function UploadSimuladoPage() {
           )}
 
           {/* Format Tips */}
-          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 28, marginTop: 24 }}>
-            <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 15, fontWeight: 700, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24, marginTop: 24 }}>
+            <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Sparkles size={16} color="#f59e0b" /> Dicas de Formatação para Melhor Reconhecimento
             </h4>
             <div className="upload-tips-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -590,11 +727,11 @@ export default function UploadSimuladoPage() {
                 { emoji: '🎯', title: 'Gabarito Automático', desc: 'Pinte o texto da alternativa correta de vermelho (qualquer tom) no Word.' },
                 { emoji: '🖼️', title: 'Imagens Nativas', desc: 'Cole imagens diretamente no arquivo DOCX e elas serão importadas automaticamente.' },
               ].map((tip, i) => (
-                <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 16px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
-                  <span style={{ fontSize: 24 }}>{tip.emoji}</span>
+                <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 14px', background: 'hsl(var(--bg-app))', borderRadius: 10, border: '1px solid hsl(var(--border-subtle))' }}>
+                  <span style={{ fontSize: 20 }}>{tip.emoji}</span>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>{tip.title}</div>
-                    <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>{tip.desc}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-primary))', marginBottom: 2 }}>{tip.title}</div>
+                    <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))' }}>{tip.desc}</div>
                   </div>
                 </div>
               ))}
@@ -612,7 +749,7 @@ export default function UploadSimuladoPage() {
           </div>
           <h3 style={{ fontSize: 22, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 10px' }}>Analisando o arquivo...</h3>
           <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 14, margin: 0 }}>
-            Extraindo questões, alternativas e imagens de <strong>{fileName}</strong>
+            Extraindo questões e gabarito de <strong>{fileName}</strong> para <strong>{activeRequisicao?.disciplina_nome || 'o simulado'}</strong>
           </p>
         </motion.div>
       )}
@@ -623,8 +760,8 @@ export default function UploadSimuladoPage() {
           <QuestoesEditor 
             questoes={questoes} 
             setQuestoes={setQuestoes} 
-            defaultDisciplinaId={simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === (searchParams.get('prof') || currentUser?.id))?.id_disciplina}
-            defaultProfessorId={searchParams.get('prof') || currentUser?.id}
+            defaultDisciplinaId={activeRequisicao?.id_disciplina || targetDiscId}
+            defaultProfessorId={activeRequisicao?.id_professor || targetProfId || currentUser?.id}
             readOnly={isProfessorViewAll}
           />
 
@@ -633,7 +770,7 @@ export default function UploadSimuladoPage() {
               <motion.button onClick={() => handleSave()} disabled={saving}
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 32px', borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', color: 'white', border: 'none', fontSize: 16, fontWeight: 800, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1, boxShadow: '0 8px 24px rgba(139,92,246,0.3)' }}>
-                {saving ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={18} /> Salvar Simulado</>}
+                {saving ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Salvando...</> : <><Save size={18} /> Salvar Questões de {activeRequisicao?.disciplina_nome || 'Simulado'}</>}
               </motion.button>
             </div>
           )}
@@ -645,11 +782,9 @@ export default function UploadSimuladoPage() {
       <div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, position: 'sticky', top: 24 }}>
           
-
-
           <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 24 }}>
             <h4 style={{ color: 'hsl(var(--text-primary))', fontSize: 15, fontWeight: 700, margin: '0 0 18px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Users size={16} color="#8b5cf6" /> Atribuições
+              <Users size={16} color="#8b5cf6" /> Matérias do Simulado
             </h4>
 
           {!simulado?.simulados_upload_requisicoes || simulado.simulados_upload_requisicoes.length === 0 ? (
@@ -664,26 +799,21 @@ export default function UploadSimuladoPage() {
                   resimuladodo: { color: '#ef4444', label: 'Resimuladodo' },
                 }
                 const rs = reqStatuses[req.status] || reqStatuses['pendente']
-                const activeReqParam = searchParams.get('req')
-                const activeProfParam = searchParams.get('prof')
-                const isShowAll = searchParams.get('all') === 'true'
-
-                const isCurrentActive = !isShowAll && (
-                  (activeReqParam && req.id === activeReqParam) ||
-                  (!activeReqParam && activeProfParam && req.id_professor === activeProfParam) ||
-                  (!activeReqParam && !activeProfParam && currentUser?.perfil === 'Professor' && req.id_professor === currentUser.id) ||
-                  (!activeReqParam && !activeProfParam && currentUser?.perfil !== 'Professor' && i === 0)
-                )
+                const isCurrentActive = activeRequisicao?.id === req.id
 
                 return (
                   <div 
-                    key={i} 
+                    key={req.id || i} 
                     className={isCurrentActive ? 'neon-active-card' : ''}
+                    onClick={() => {
+                      if (!isCurrentActive) switchDiscipline(req)
+                    }}
                     style={{ 
                       padding: '12px 14px', 
                       background: isCurrentActive ? 'linear-gradient(135deg, rgba(139,92,246,0.12), rgba(217,70,239,0.06))' : 'hsl(var(--bg-app))', 
                       borderRadius: 12, 
                       border: isCurrentActive ? '2px solid #8b5cf6' : '1px solid hsl(var(--border-subtle))',
+                      cursor: isCurrentActive ? 'default' : 'pointer',
                       transition: 'all 0.3s ease'
                     }}
                   >
@@ -697,7 +827,7 @@ export default function UploadSimuladoPage() {
                             boxShadow: '0 0 10px rgba(217,70,239,0.6)', display: 'inline-flex', alignItems: 'center', gap: 4
                           }}>
                             <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', boxShadow: '0 0 6px #fff' }} />
-                            ENVIANDO AGORA
+                            SELECIONADA
                           </span>
                         )}
                       </div>
@@ -705,26 +835,26 @@ export default function UploadSimuladoPage() {
                     </div>
                     <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))' }}>{req.professor_nome}</div>
                     {(() => {
-                      const targetProf = searchParams.get('prof')
-                      const showAll = searchParams.get('all') === 'true'
+                      // Accurate calculation of questions belonging strictly to this requisition
+                      const allDbQs = Array.isArray(simulado.questoes_json) ? simulado.questoes_json : []
                       
-                      let otherQuestions = []
-                      if (currentUser?.perfil === 'Professor') {
-                        otherQuestions = (simulado.questoes_json || []).filter((q: any) => q.id_professor !== currentUser.id)
-                      } else if (targetProf && !showAll) {
-                        otherQuestions = (simulado.questoes_json || []).filter((q: any) => q.id_professor !== targetProf)
-                      } else if (!showAll) {
-                        otherQuestions = (simulado.questoes_json || [])
+                      const isQuestionForReq = (q: any) => {
+                        if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
+                        if (q.id_requisicao) return q.id_requisicao === req.id
+                        const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
+                                          (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
+                                          (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
+                        const profMatch = !q.id_professor || q.id_professor === req.id_professor
+                        return Boolean(discMatch && profMatch)
                       }
-                      
-                      const myLiveQs = questoes.map((q) => ({
-                        ...q,
-                        id_professor: currentUser?.perfil === 'Professor' ? currentUser.id : (q.id_professor || targetProf)
-                      }))
-                      
-                      const liveQuestions = showAll ? questoes : [...otherQuestions, ...myLiveQs]
-                      
-                      const qCount = liveQuestions.filter((q: any) => q.id_professor === req.id_professor).length
+
+                      let qCount = 0
+                      if (isCurrentActive && uploadStep === 'review') {
+                        qCount = questoes.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+                      } else {
+                        qCount = allDbQs.filter(isQuestionForReq).length
+                      }
+
                       const totalReq = req.qtd_questoes || 1
                       const progress = Math.min(100, Math.round((qCount / totalReq) * 100))
                       const progressColor = qCount >= totalReq ? '#10b981' : '#f59e0b'
@@ -748,8 +878,7 @@ export default function UploadSimuladoPage() {
                     {(() => {
                       const reqMatchedFile = simulado?.config_estudio?.arquivos_originais?.find((a: any) => 
                         (a.id_requisicao && a.id_requisicao === req.id) ||
-                        (a.id_disciplina && req.id_disciplina && a.id_disciplina === req.id_disciplina) ||
-                        (a.id_professor && req.id_professor && a.id_professor === req.id_professor)
+                        (a.id_disciplina && req.id_disciplina && a.id_disciplina === req.id_disciplina && (!a.id_professor || a.id_professor === req.id_professor))
                       ) || (isCurrentActive && arquivoOriginal?.url ? arquivoOriginal : null)
 
                       if (!reqMatchedFile?.url) return null
@@ -792,7 +921,7 @@ export default function UploadSimuladoPage() {
           {/* Coord action summary */}
           {currentUser?.perfil !== 'Professor' && (
             <div style={{ marginTop: 20, padding: '14px 16px', background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)', borderRadius: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#8b5cf6', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Resumo</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#8b5cf6', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Resumo Geral</div>
               <div style={{ fontSize: 13, color: 'hsl(var(--text-primary))' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Total questões:</span>
