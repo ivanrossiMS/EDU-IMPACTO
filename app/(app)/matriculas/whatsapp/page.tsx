@@ -49,7 +49,7 @@ const DEFAULT_TEMPLATES: WhatsAppTemplate[] = [
     segmento: 'Villa Baby',
     anoLetivo: '2026',
     atalho: '/baby',
-    destaque: 'Berçário & Níveis 1 e 2',
+    destaque: 'Níveis 1 e 2',
     tags: ['Villa Baby', '2026', 'Desconto Pontualidade', 'Almoço Cortesia'],
     conteudo: `✨*2026 – VILLA BABY – Nível 1 e Nível 2*
 *MEIO PERÍODO* - DIA DA FRUTA CORTESIA = *R$ 1.365,00*
@@ -387,7 +387,13 @@ export default function WhatsAppMatriculasPage() {
   }, [cfgCalendarioLetivo])
 
   // Estados principais
-  const [selectedAnoLetivo, setSelectedAnoLetivo] = useState<string>('2026')
+  const [selectedAnoLetivo, setSelectedAnoLetivo] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('edu_whatsapp_selected_ano')
+      if (stored) return stored
+    }
+    return '2026'
+  })
   const [selectedSegment, setSelectedSegment] = useState<string>('Todos')
   const [searchTerm, setSearchTerm] = useState<string>('')
   
@@ -455,13 +461,33 @@ export default function WhatsAppMatriculasPage() {
     return Array.from(set).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
   }, [cfgCalendarioLetivo, templates])
 
-  // Selecionar SEMPRE o último (mais recente) ano letivo por padrão
+  // Selecionar o último ano letivo por padrão ou o salvo no localStorage
   useEffect(() => {
     if (anosDisponiveis.length > 0) {
-      const ultimoAno = anosDisponiveis[0]
-      setSelectedAnoLetivo(ultimoAno)
+      const stored = typeof window !== 'undefined' ? localStorage.getItem('edu_whatsapp_selected_ano') : null
+      if (stored && anosDisponiveis.includes(stored)) {
+        setSelectedAnoLetivo(stored)
+      } else {
+        const ultimoAno = anosDisponiveis[0]
+        setSelectedAnoLetivo(ultimoAno)
+        try {
+          localStorage.setItem('edu_whatsapp_selected_ano', ultimoAno)
+          window.dispatchEvent(new CustomEvent('edu_whatsapp_ano_changed', { detail: ultimoAno }))
+        } catch (e) {}
+      }
     }
   }, [anosDisponiveis])
+
+  // Função para trocar de ano letivo e atualizar badge global da sidebar
+  const handleSelectAno = (ano: string) => {
+    setSelectedAnoLetivo(ano)
+    setSelectedSegment('Todos')
+    showToast(`Visualizando Ano Letivo ${ano}`)
+    try {
+      localStorage.setItem('edu_whatsapp_selected_ano', ano)
+      window.dispatchEvent(new CustomEvent('edu_whatsapp_ano_changed', { detail: ano }))
+    } catch (e) {}
+  }
 
   // Filtrar templates pelo Ano Selecionado
   const templatesDoAno = useMemo(() => {
@@ -1079,11 +1105,7 @@ export default function WhatsAppMatriculasPage() {
               return (
                 <button
                   key={ano}
-                  onClick={() => {
-                    setSelectedAnoLetivo(ano)
-                    setSelectedSegment('Todos')
-                    showToast(`Visualizando Ano Letivo ${ano}`)
-                  }}
+                  onClick={() => handleSelectAno(ano)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     background: isActive ? '#00d2ff' : 'rgba(255,255,255,0.06)',

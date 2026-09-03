@@ -167,7 +167,7 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     mensalidadeBase: 2195.00,
     anuidadeBase: 26340.00,
     taxaMaterial: 480.00,
-    taxaMaterialDesc: 'Taxa anual de material / berçário'
+    taxaMaterialDesc: 'Taxa anual de material'
   },
   {
     id: 'intermediario',
@@ -182,12 +182,12 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
   {
     id: 'villa-baby',
     nome: 'Villa Baby',
-    detalhe: 'Berçário, N1 e N2',
+    detalhe: 'N1 e N2',
     segmento: 'Villa Baby',
     mensalidadeBase: 1395.00,
     anuidadeBase: 16740.00,
     taxaMaterial: 480.00,
-    taxaMaterialDesc: 'Taxa de material (Berçário e N1) R$ 480 / N2 Livros R$ 600'
+    taxaMaterialDesc: 'Taxa de material (N1) R$ 480 / N2 Livros R$ 600'
   },
   {
     id: 'ed-infantil',
@@ -367,7 +367,7 @@ export default function ValoresPage() {
   const [descontoPercent, setDescontoPercent] = useState<number>(10)
   const [convenioSelecionado, setConvenioSelecionado] = useState<string>('')
   const [mesAntecipacao, setMesAntecipacao] = useState<string>('Outubro')
-  const [formaMatricula, setFormaMatricula] = useState<'avista' | 'parcelado'>('avista')
+  const [formaMatricula, setFormaMatricula] = useState<'avista' | 'parcelado' | 'ambos'>('avista')
   const [numParcelasMatricula, setNumParcelasMatricula] = useState<number>(5)
 
   // Informações do Aluno / Responsável
@@ -665,11 +665,32 @@ export default function ValoresPage() {
     const anuidadeComDesconto = mensalidadeComDesconto * 12
     const economiaAnualMensalidades = valorDescontoMensal * 12
 
-    let descontoMatriculaPct = formaMatricula === 'avista' ? currentAntecipacao.aVistaPct : currentAntecipacao.parceladoPct
     const valorMatriculaOriginal = mensalidadeOriginal
-    const valorDescontoMatricula = valorMatriculaOriginal * (descontoMatriculaPct / 100)
-    const valorMatriculaFinal = valorMatriculaOriginal - valorDescontoMatricula
-    const valorParcelaMatricula = numParcelasMatricula > 0 ? (valorMatriculaFinal / numParcelasMatricula) : valorMatriculaFinal
+
+    // Condição À Vista
+    const aVistaPct = currentAntecipacao.aVistaPct
+    const valorDescontoMatriculaAVista = valorMatriculaOriginal * (aVistaPct / 100)
+    const valorMatriculaFinalAVista = valorMatriculaOriginal - valorDescontoMatriculaAVista
+
+    // Condição Parcelada
+    const parceladoPct = currentAntecipacao.parceladoPct
+    const valorDescontoMatriculaParcelado = valorMatriculaOriginal * (parceladoPct / 100)
+    const valorMatriculaFinalParcelado = valorMatriculaOriginal - valorDescontoMatriculaParcelado
+    const valorParcelaMatricula = numParcelasMatricula > 0 ? (valorMatriculaFinalParcelado / numParcelasMatricula) : valorMatriculaFinalParcelado
+
+    let descontoMatriculaPct = aVistaPct
+    let valorDescontoMatricula = valorDescontoMatriculaAVista
+    let valorMatriculaFinal = valorMatriculaFinalAVista
+
+    if (formaMatricula === 'parcelado') {
+      descontoMatriculaPct = parceladoPct
+      valorDescontoMatricula = valorDescontoMatriculaParcelado
+      valorMatriculaFinal = valorMatriculaFinalParcelado
+    } else if (formaMatricula === 'ambos') {
+      descontoMatriculaPct = aVistaPct
+      valorDescontoMatricula = valorDescontoMatriculaAVista
+      valorMatriculaFinal = valorMatriculaFinalAVista
+    }
 
     const valorMaterial = incluirMaterial ? (currentSerie.taxaMaterial || 0) : 0
     const valorExtracurricular = incluirExtracurricular ? SERVICOS_ADICIONAIS.extracurricularMensal : 0
@@ -690,6 +711,12 @@ export default function ValoresPage() {
       valorDescontoMatricula,
       valorMatriculaFinal,
       valorParcelaMatricula,
+      aVistaPct,
+      valorDescontoMatriculaAVista,
+      valorMatriculaFinalAVista,
+      parceladoPct,
+      valorDescontoMatriculaParcelado,
+      valorMatriculaFinalParcelado,
       valorMaterial,
       valorExtracurricular,
       mensalidadeTotalFinal,
@@ -726,9 +753,22 @@ export default function ValoresPage() {
     const refAluno = nomeAluno.trim() ? ` para o(a) aluno(a) *${nomeAluno.trim()}*` : ''
     const nomeDest = nomeResponsavel.trim() ? ` ${nomeResponsavel.trim()}` : ''
 
-    const detalheMatricula = formaMatricula === 'avista'
-      ? `• *À VISTA (${calculations.descontoMatriculaPct}% de desconto):* *${fmt(calculations.valorMatriculaFinal)}*`
-      : `• *PARCELADO EM ATÉ ${numParcelasMatricula}x (${calculations.descontoMatriculaPct}% de desconto):* Total de *${fmt(calculations.valorMatriculaFinal)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}*`
+    let detalheMatricula = ''
+    if (formaMatricula === 'ambos') {
+      detalheMatricula = `• *Opção 1 (À VISTA - ${calculations.aVistaPct}% OFF):* *${fmt(calculations.valorMatriculaFinalAVista)}* _(Economia de ${fmt(calculations.valorDescontoMatriculaAVista)})_\n• *Opção 2 (PARCELADO em até ${numParcelasMatricula}x - ${calculations.parceladoPct}% OFF):* Total de *${fmt(calculations.valorMatriculaFinalParcelado)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}*`
+    } else if (formaMatricula === 'avista') {
+      detalheMatricula = `• *À VISTA (${calculations.descontoMatriculaPct}% de desconto):* *${fmt(calculations.valorMatriculaFinal)}*`
+    } else {
+      detalheMatricula = `• *PARCELADO EM ATÉ ${numParcelasMatricula}x (${calculations.descontoMatriculaPct}% de desconto):* Total de *${fmt(calculations.valorMatriculaFinal)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}*`
+    }
+
+    const descontoMatriculaPctDesc = formaMatricula === 'ambos'
+      ? `${calculations.aVistaPct}% (à vista) / ${calculations.parceladoPct}% (parcelado)`
+      : String(calculations.descontoMatriculaPct)
+
+    const economiaMatriculaDesc = formaMatricula === 'ambos'
+      ? `até ${fmt(calculations.valorDescontoMatriculaAVista)}`
+      : fmt(calculations.valorDescontoMatricula)
 
     const linhaMaterial = incluirMaterial ? `📦 *Material Didático:* ${fmt(calculations.valorMaterial)} (anual)` : ''
     const linhaExtracurricular = incluirExtracurricular ? `⚽ *Atividade Extracurricular (${atividadeSelecionada}):* ${fmt(calculations.valorExtracurricular)} / mês (2 aulas por semana)` : ''
@@ -747,9 +787,9 @@ export default function ValoresPage() {
       mensalidade_liquida: fmt(calculations.mensalidadeComDesconto),
       economia_anual: fmt(calculations.economiaAnualMensalidades),
       mes_antecipacao: mesAntecipacao.toUpperCase(),
-      desconto_matricula_pct: String(calculations.descontoMatriculaPct),
+      desconto_matricula_pct: descontoMatriculaPctDesc,
       detalhe_matricula: detalheMatricula,
-      economia_matricula: fmt(calculations.valorDescontoMatricula),
+      economia_matricula: economiaMatriculaDesc,
       linha_material: linhaMaterial,
       linha_extracurricular: linhaExtracurricular,
       economia_total: fmt(calculations.economiaTotalGeral),
@@ -857,6 +897,38 @@ export default function ValoresPage() {
       } finally {
         setIsSavingDb(false)
       }
+    }
+  }
+
+  const handleCreateNewTemplate = () => {
+    const newId = `custom-${Date.now()}`
+    setEditingTemplate({
+      id: newId,
+      titulo: 'Novo Modelo',
+      conteudo: ''
+    })
+  }
+
+  const handleDeleteTemplate = async (id: string) => {
+    const isDefault = DEFAULT_VALORES_TEMPLATES.some(t => t.id === id)
+    if (isDefault) {
+      showToast('⚠️ Modelos padrão não podem ser excluídos. Use "Restaurar Padrões" para redefini-los.')
+      return
+    }
+    if (!confirm('Deseja excluir este modelo? Esta ação não pode ser desfeita.')) return
+    setIsSavingDb(true)
+    try {
+      const updated = templates.filter(t => t.id !== id)
+      await setDbTemplates(updated)
+      // Se o modelo excluído estava sendo editado, seleciona o primeiro disponível
+      if (editingTemplate?.id === id) {
+        setEditingTemplate(updated[0] ? { ...updated[0] } : null)
+      }
+      showToast('🗑️ Modelo excluído com sucesso!')
+    } catch (e) {
+      showToast('❌ Erro ao excluir modelo.')
+    } finally {
+      setIsSavingDb(false)
     }
   }
 
@@ -1072,15 +1144,15 @@ export default function ValoresPage() {
                 flexDirection: 'column'
               }}>
                 <div style={{
-                  background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
+                  background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%)',
                   padding: '16px 22px',
-                  borderBottom: '1px solid #e2e8f0',
+                  borderBottom: '1px solid #1e293b',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
-                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                    <User size={18} color="#2563eb" />
+                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                    <User size={18} color="#60a5fa" />
                     1. Identificação & Busca no Banco de Alunos
                   </h2>
                   {nomeAluno && (
@@ -1088,10 +1160,10 @@ export default function ValoresPage() {
                       onClick={handleClearStudent}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 4,
-                        fontSize: 11, fontWeight: 700, color: '#ef4444',
-                        background: '#ffffff', border: '1px solid #fecaca',
+                        fontSize: 11, fontWeight: 700, color: '#f87171',
+                        background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)',
                         padding: '4px 10px', borderRadius: 8, cursor: 'pointer',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
                       }}
                     >
                       <X size={12} />
@@ -1272,18 +1344,18 @@ export default function ValoresPage() {
                 flexDirection: 'column'
               }}>
                 <div style={{
-                  background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)',
+                  background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #2e1065 100%)',
                   padding: '16px 22px',
-                  borderBottom: '1px solid #e2e8f0',
+                  borderBottom: '1px solid #1e1b4b',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
-                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                    <GraduationCap size={18} color="#2563eb" />
+                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                    <GraduationCap size={18} color="#a5b4fc" />
                     2. Escolha a Série & Defina o Desconto
                   </h2>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8', background: '#ffffff', border: '1px solid #bfdbfe', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#e0e7ff', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
                     Tabela Oficial {anoLetivo}
                   </span>
                 </div>
@@ -1468,18 +1540,18 @@ export default function ValoresPage() {
                 flexDirection: 'column'
               }}>
                 <div style={{
-                  background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)',
+                  background: 'linear-gradient(135deg, #022c22 0%, #064e3b 50%, #065f46 100%)',
                   padding: '16px 22px',
-                  borderBottom: '1px solid #a7f3d0',
+                  borderBottom: '1px solid #064e3b',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
-                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                    <Calendar size={18} color="#059669" />
+                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                    <Calendar size={18} color="#6ee7b7" />
                     3. Campanha de Matrícula Antecipada ({anoLetivo})
                   </h2>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#047857', background: '#ffffff', border: '1px solid #a7f3d0', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#a7f3d0', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
                     Base: 1 Mensalidade
                   </span>
                 </div>
@@ -1515,14 +1587,15 @@ export default function ValoresPage() {
                   <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: '#334155' }}>Condição de Pagamento:</span>
-                      <div style={{ display: 'flex', gap: 6 }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         <button
                           onClick={() => setFormaMatricula('avista')}
                           style={{
                             padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer',
                             background: formaMatricula === 'avista' ? '#059669' : '#ffffff',
                             color: formaMatricula === 'avista' ? '#ffffff' : '#475569',
-                            boxShadow: formaMatricula === 'avista' ? '0 2px 6px rgba(5,150,105,0.25)' : '0 1px 3px rgba(0,0,0,0.05)'
+                            boxShadow: formaMatricula === 'avista' ? '0 2px 6px rgba(5,150,105,0.25)' : '0 1px 3px rgba(0,0,0,0.05)',
+                            transition: 'all 0.15s ease'
                           }}
                         >
                           À Vista ({currentAntecipacao.aVistaPct}% desc.)
@@ -1533,17 +1606,30 @@ export default function ValoresPage() {
                             padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer',
                             background: formaMatricula === 'parcelado' ? '#059669' : '#ffffff',
                             color: formaMatricula === 'parcelado' ? '#ffffff' : '#475569',
-                            boxShadow: formaMatricula === 'parcelado' ? '0 2px 6px rgba(5,150,105,0.25)' : '0 1px 3px rgba(0,0,0,0.05)'
+                            boxShadow: formaMatricula === 'parcelado' ? '0 2px 6px rgba(5,150,105,0.25)' : '0 1px 3px rgba(0,0,0,0.05)',
+                            transition: 'all 0.15s ease'
                           }}
                         >
                           Parcelado ({currentAntecipacao.parceladoPct}% desc.)
                         </button>
+                        <button
+                          onClick={() => setFormaMatricula('ambos')}
+                          style={{
+                            padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 800, border: 'none', cursor: 'pointer',
+                            background: formaMatricula === 'ambos' ? 'linear-gradient(135deg, #059669, #2563eb)' : '#ffffff',
+                            color: formaMatricula === 'ambos' ? '#ffffff' : '#475569',
+                            boxShadow: formaMatricula === 'ambos' ? '0 2px 8px rgba(37,99,235,0.3)' : '0 1px 3px rgba(0,0,0,0.05)',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          Ambos (À Vista + Parcelado)
+                        </button>
                       </div>
                     </div>
 
-                    {formaMatricula === 'parcelado' && (
+                    {(formaMatricula === 'parcelado' || formaMatricula === 'ambos') && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
-                        <span style={{ fontSize: 11, color: '#64748b' }}>Parcelas (em até 5x):</span>
+                        <span style={{ fontSize: 11, color: '#64748b' }}>Parcelas do Cartão (em até 5x):</span>
                         <div style={{ display: 'flex', gap: 4 }}>
                           {[1, 2, 3, 4, 5].map(p => (
                             <button
@@ -1564,24 +1650,54 @@ export default function ValoresPage() {
                     )}
 
                     {/* Valor Calculado */}
-                    <div style={{ background: '#ffffff', borderRadius: 10, padding: '10px 14px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', display: 'block' }}>
-                          Matrícula ({formaMatricula === 'avista' ? 'À Vista' : `${numParcelasMatricula}x`}):
-                        </span>
-                        <span style={{ fontSize: 10, color: '#64748b' }}>De ~{fmt(calculations.valorMatriculaOriginal)}~</span>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: 16, fontWeight: 900, color: '#047857', display: 'block' }}>
-                          {fmt(calculations.valorMatriculaFinal)}
-                        </span>
-                        {formaMatricula === 'parcelado' && (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
-                            ({numParcelasMatricula}x de {fmt(calculations.valorParcelaMatricula)})
+                    {formaMatricula === 'ambos' ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+                        {/* Opção 1: À Vista */}
+                        <div style={{ background: '#ffffff', borderRadius: 10, padding: '10px 12px', border: '1px solid #a7f3d0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: '#047857', textTransform: 'uppercase' }}>
+                            1. À Vista ({calculations.aVistaPct}% OFF):
                           </span>
-                        )}
+                          <span style={{ fontSize: 16, fontWeight: 900, color: '#047857' }}>
+                            {fmt(calculations.valorMatriculaFinalAVista)}
+                          </span>
+                          <span style={{ fontSize: 10, color: '#64748b' }}>
+                            De ~{fmt(calculations.valorMatriculaOriginal)}~ (Economia de {fmt(calculations.valorDescontoMatriculaAVista)})
+                          </span>
+                        </div>
+
+                        {/* Opção 2: Parcelado */}
+                        <div style={{ background: '#ffffff', borderRadius: 10, padding: '10px 12px', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase' }}>
+                            2. Parcelado ({calculations.parceladoPct}% OFF):
+                          </span>
+                          <span style={{ fontSize: 16, fontWeight: 900, color: '#1d4ed8' }}>
+                            {fmt(calculations.valorMatriculaFinalParcelado)}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#475569' }}>
+                            {numParcelasMatricula}x de {fmt(calculations.valorParcelaMatricula)} sem juros
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div style={{ background: '#ffffff', borderRadius: 10, padding: '10px 14px', border: '1px solid #a7f3d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#0f172a', display: 'block' }}>
+                            Matrícula ({formaMatricula === 'avista' ? 'À Vista' : `${numParcelasMatricula}x`}):
+                          </span>
+                          <span style={{ fontSize: 10, color: '#64748b' }}>De ~{fmt(calculations.valorMatriculaOriginal)}~</span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: 16, fontWeight: 900, color: '#047857', display: 'block' }}>
+                            {fmt(calculations.valorMatriculaFinal)}
+                          </span>
+                          {formaMatricula === 'parcelado' && (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                              ({numParcelasMatricula}x de {fmt(calculations.valorParcelaMatricula)})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1597,18 +1713,18 @@ export default function ValoresPage() {
                 flexDirection: 'column'
               }}>
                 <div style={{
-                  background: 'linear-gradient(135deg, #faf5ff 0%, #fdf2f8 100%)',
+                  background: 'linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #4c1d95 100%)',
                   padding: '16px 22px',
-                  borderBottom: '1px solid #e9d5ff',
+                  borderBottom: '1px solid #2e1065',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
-                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                    <Layers size={18} color="#7c3aed" />
+                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                    <Layers size={18} color="#c084fc" />
                     4. Serviços Opcionais & Extracurriculares
                   </h2>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', background: '#ffffff', border: '1px solid #e9d5ff', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#e9d5ff', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
                     Marque para incluir
                   </span>
                 </div>
@@ -1690,20 +1806,20 @@ export default function ValoresPage() {
                 flexDirection: 'column'
               }}>
                 <div style={{
-                  background: 'linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%)',
+                  background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #1d4ed8 100%)',
                   padding: '18px 24px',
-                  borderBottom: '1px solid #bfdbfe',
+                  borderBottom: '1px solid #1e3a8a',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
                   <div>
-                    <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2563eb', display: 'block' }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#93c5fd', display: 'block' }}>
                       Orçamento Comercial
                     </span>
-                    <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0 }}>{currentSerie.nome}</h3>
+                    <h3 style={{ fontSize: 18, fontWeight: 900, color: '#ffffff', margin: 0 }}>{currentSerie.nome}</h3>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8', background: '#ffffff', border: '1px solid #bfdbfe', padding: '4px 12px', borderRadius: 20, boxShadow: '0 1px 3px rgba(37,99,235,0.08)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#ffffff', background: 'rgba(255, 255, 255, 0.15)', border: '1px solid rgba(255, 255, 255, 0.25)', padding: '4px 12px', borderRadius: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}>
                     Ano {anoLetivo}
                   </span>
                 </div>
@@ -1721,9 +1837,13 @@ export default function ValoresPage() {
 
                     <div style={{ padding: '12px 14px', borderRadius: 14, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#065f46', display: 'block', marginBottom: 2 }}>Matrícula ({mesAntecipacao})</span>
-                      <span style={{ fontSize: 20, fontWeight: 900, color: '#047857', display: 'block' }}>{fmt(calculations.valorMatriculaFinal)}</span>
+                      <span style={{ fontSize: 20, fontWeight: 900, color: '#047857', display: 'block' }}>
+                        {formaMatricula === 'ambos' ? fmt(calculations.valorMatriculaFinalAVista) : fmt(calculations.valorMatriculaFinal)}
+                      </span>
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginTop: 2 }}>
-                        {formaMatricula === 'avista' ? 'À vista' : `${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`}
+                        {formaMatricula === 'ambos'
+                          ? `À vista ou ${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`
+                          : (formaMatricula === 'avista' ? 'À vista' : `${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`)}
                       </span>
                     </div>
                   </div>
@@ -1782,15 +1902,15 @@ export default function ValoresPage() {
                 flexDirection: 'column'
               }}>
                 <div style={{
-                  background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+                  background: 'linear-gradient(135deg, #022c22 0%, #064e3b 50%, #047857 100%)',
                   padding: '18px 24px',
-                  borderBottom: '1px solid #a7f3d0',
+                  borderBottom: '1px solid #064e3b',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                    <MessageSquare size={18} color="#10b981" />
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                    <MessageSquare size={18} color="#34d399" />
                     Gerador de Mensagem WhatsApp
                   </h3>
                   
@@ -1799,16 +1919,16 @@ export default function ValoresPage() {
                       onClick={handleOpenEditorModal}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 4,
-                        fontSize: 11, fontWeight: 800, color: '#2563eb',
-                        background: '#ffffff', border: '1px solid #bfdbfe',
+                        fontSize: 11, fontWeight: 800, color: '#ffffff',
+                        background: 'rgba(255, 255, 255, 0.15)', border: '1px solid rgba(255, 255, 255, 0.3)',
                         padding: '4px 10px', borderRadius: 8, cursor: 'pointer',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
                       }}
                     >
                       <Settings size={13} />
                       Editar Modelos
                     </button>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: '#047857', background: '#ffffff', border: '1px solid #a7f3d0', padding: '3px 8px', borderRadius: 6, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#6ee7b7', background: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '3px 8px', borderRadius: 6, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
                       Banco Conectado 🟢
                     </span>
                   </div>
@@ -1934,9 +2054,9 @@ export default function ValoresPage() {
               overflow: 'hidden'
             }}>
               <div style={{
-                background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)',
+                background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%)',
                 padding: '22px 28px',
-                borderBottom: '1px solid #e2e8f0',
+                borderBottom: '1px solid #1e293b',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -1944,9 +2064,9 @@ export default function ValoresPage() {
                 gap: 14
               }}>
                 <div>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase' }}>Colégio Impacto • {anoLetivo}</span>
-                  <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: '2px 0 0' }}>Matrículas, Mensalidades e Serviços</h2>
-                  <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Descontos de antecipação com até 20% de desconto e simulação em até 5 parcelas.</p>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase' }}>Colégio Impacto • {anoLetivo}</span>
+                  <h2 style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', margin: '2px 0 0' }}>Matrículas, Mensalidades e Serviços</h2>
+                  <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Descontos de antecipação com até 20% de desconto e simulação em até 5 parcelas.</p>
                 </div>
 
                 <div style={{ position: 'relative', width: 260 }}>
@@ -2067,9 +2187,9 @@ export default function ValoresPage() {
               overflow: 'hidden'
             }}>
               <div style={{
-                background: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 50%, #f8fafc 100%)',
+                background: 'linear-gradient(135deg, #1e293b 0%, #451a03 50%, #78350f 100%)',
                 padding: '22px 28px',
-                borderBottom: '1px solid #fde68a',
+                borderBottom: '1px solid #451a03',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -2077,9 +2197,9 @@ export default function ValoresPage() {
                 gap: 14
               }}>
                 <div>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#d97706', textTransform: 'uppercase' }}>Colégio Impacto • {anoLetivo}</span>
-                  <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: '2px 0 0' }}>Grade de Mensalidades e Descontos</h2>
-                  <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Valores mensais líquidos por faixa de desconto (5% a 15%).</p>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#fcd34d', textTransform: 'uppercase' }}>Colégio Impacto • {anoLetivo}</span>
+                  <h2 style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', margin: '2px 0 0' }}>Grade de Mensalidades e Descontos</h2>
+                  <p style={{ fontSize: 12, color: '#cbd5e1', margin: 0 }}>Valores mensais líquidos por faixa de desconto (5% a 15%).</p>
                 </div>
 
                 <div style={{ position: 'relative', width: 260 }}>
@@ -2193,11 +2313,11 @@ export default function ValoresPage() {
             
             {/* Card 1: Diárias */}
             <div style={{ background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)', padding: '16px 20px', borderBottom: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ padding: 8, borderRadius: 10, background: '#ffffff', color: '#2563eb', boxShadow: '0 1px 3px rgba(37,99,235,0.1)' }}><Calendar size={18} /></div>
+              <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%)', padding: '16px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ padding: 8, borderRadius: 10, background: 'rgba(255, 255, 255, 0.15)', color: '#60a5fa', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}><Calendar size={18} /></div>
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Diárias Adicionais</h3>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>Permanência avulsa no contraturno</span>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', margin: 0 }}>Diárias Adicionais</h3>
+                  <span style={{ fontSize: 11, color: '#93c5fd' }}>Permanência avulsa no contraturno</span>
                 </div>
               </div>
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2214,11 +2334,11 @@ export default function ValoresPage() {
 
             {/* Card 2: DP */}
             <div style={{ background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ background: 'linear-gradient(135deg, #fffbeb 0%, #f8fafc 100%)', padding: '16px 20px', borderBottom: '1px solid #fde68a', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ padding: 8, borderRadius: 10, background: '#ffffff', color: '#d97706', boxShadow: '0 1px 3px rgba(217,119,6,0.1)' }}><BookOpen size={18} /></div>
+              <div style={{ background: 'linear-gradient(135deg, #1e293b 0%, #451a03 50%, #78350f 100%)', padding: '16px 20px', borderBottom: '1px solid #451a03', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ padding: 8, borderRadius: 10, background: 'rgba(255, 255, 255, 0.15)', color: '#fbbf24', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}><BookOpen size={18} /></div>
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Progressão Parcial (DP)</h3>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>Dependência curricular</span>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', margin: 0 }}>Progressão Parcial (DP)</h3>
+                  <span style={{ fontSize: 11, color: '#fde68a' }}>Dependência curricular</span>
                 </div>
               </div>
               <div style={{ padding: 20 }}>
@@ -2231,16 +2351,16 @@ export default function ValoresPage() {
 
             {/* Card 3: Material */}
             <div style={{ background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ background: 'linear-gradient(135deg, #faf5ff 0%, #f8fafc 100%)', padding: '16px 20px', borderBottom: '1px solid #e9d5ff', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ padding: 8, borderRadius: 10, background: '#ffffff', color: '#7c3aed', boxShadow: '0 1px 3px rgba(124,58,237,0.1)' }}><Layers size={18} /></div>
+              <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #4c1d95 100%)', padding: '16px 20px', borderBottom: '1px solid #2e1065', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ padding: 8, borderRadius: 10, background: 'rgba(255, 255, 255, 0.15)', color: '#c084fc', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}><Layers size={18} /></div>
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Taxa de Material</h3>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>Berçário e Nível 1</span>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', margin: 0 }}>Taxa de Material</h3>
+                  <span style={{ fontSize: 11, color: '#e9d5ff' }}>Nível 1</span>
                 </div>
               </div>
               <div style={{ padding: 20 }}>
                 <div style={{ padding: '14px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>Berçário e N1 (Anual)</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>Nível 1 (Anual)</span>
                   <span style={{ fontSize: 16, fontWeight: 900, color: '#7c3aed' }}>R$ 480,00</span>
                 </div>
               </div>
@@ -2248,11 +2368,11 @@ export default function ValoresPage() {
 
             {/* Card 4: Idades */}
             <div style={{ background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ background: 'linear-gradient(135deg, #ecfdf5 0%, #f8fafc 100%)', padding: '16px 20px', borderBottom: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ padding: 8, borderRadius: 10, background: '#ffffff', color: '#059669', boxShadow: '0 1px 3px rgba(5,150,105,0.1)' }}><ShieldCheck size={18} /></div>
+              <div style={{ background: 'linear-gradient(135deg, #022c22 0%, #064e3b 50%, #065f46 100%)', padding: '16px 20px', borderBottom: '1px solid #064e3b', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ padding: 8, borderRadius: 10, background: 'rgba(255, 255, 255, 0.15)', color: '#6ee7b7', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}><ShieldCheck size={18} /></div>
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Idades por Nível</h3>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>Completos até 31/03/{anoLetivo}</span>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', margin: 0 }}>Idades por Nível</h3>
+                  <span style={{ fontSize: 11, color: '#a7f3d0' }}>Completos até 31/03/{anoLetivo}</span>
                 </div>
               </div>
               <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -2267,11 +2387,11 @@ export default function ValoresPage() {
 
             {/* Card 5: Convênios */}
             <div style={{ background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ background: 'linear-gradient(135deg, #fff1f2 0%, #f8fafc 100%)', padding: '16px 20px', borderBottom: '1px solid #fecdd3', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ padding: 8, borderRadius: 10, background: '#ffffff', color: '#e11d48', boxShadow: '0 1px 3px rgba(225,29,72,0.1)' }}><HeartHandshake size={18} /></div>
+              <div style={{ background: 'linear-gradient(135deg, #4c0519 0%, #881337 50%, #9f1239 100%)', padding: '16px 20px', borderBottom: '1px solid #881337', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ padding: 8, borderRadius: 10, background: 'rgba(255, 255, 255, 0.15)', color: '#fda4af', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}><HeartHandshake size={18} /></div>
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Descontos por Convênio</h3>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>11% de desconto na mensalidade</span>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', margin: 0 }}>Descontos por Convênio</h3>
+                  <span style={{ fontSize: 11, color: '#fecdd3' }}>11% de desconto na mensalidade</span>
                 </div>
               </div>
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -2292,11 +2412,11 @@ export default function ValoresPage() {
 
             {/* Card 6: Extracurriculares */}
             <div style={{ background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)', padding: '16px 20px', borderBottom: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ padding: 8, borderRadius: 10, background: '#ffffff', color: '#2563eb', boxShadow: '0 1px 3px rgba(37,99,235,0.1)' }}><Award size={18} /></div>
+              <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #1e3a8a 100%)', padding: '16px 20px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ padding: 8, borderRadius: 10, background: 'rgba(255, 255, 255, 0.15)', color: '#60a5fa', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}><Award size={18} /></div>
                 <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', margin: 0 }}>Atividades Extracurriculares</h3>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>2 aulas por semana</span>
+                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', margin: 0 }}>Atividades Extracurriculares</h3>
+                  <span style={{ fontSize: 11, color: '#93c5fd' }}>2 aulas por semana</span>
                 </div>
               </div>
               <div style={{ padding: 20 }}>
@@ -2358,25 +2478,66 @@ export default function ValoresPage() {
               </div>
 
               {/* Seletor do Modelo em Edição */}
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {templates.map(tpl => {
                   const isCurrent = editingTemplate.id === tpl.id
+                  const isDefaultTemplate = DEFAULT_VALORES_TEMPLATES.some(d => d.id === tpl.id)
                   return (
-                    <button
+                    <div
                       key={tpl.id}
-                      onClick={() => setEditingTemplate({ ...tpl })}
                       style={{
-                        padding: '6px 14px', borderRadius: 10, fontSize: 12, fontWeight: 800,
+                        display: 'flex', alignItems: 'center', gap: 0,
+                        borderRadius: 10,
                         border: isCurrent ? '2px solid #2563eb' : '1px solid #e2e8f0',
                         background: isCurrent ? '#eff6ff' : '#ffffff',
-                        color: isCurrent ? '#1d4ed8' : '#475569',
-                        cursor: 'pointer'
+                        overflow: 'hidden'
                       }}
                     >
-                      {tpl.titulo}
-                    </button>
+                      <button
+                        onClick={() => setEditingTemplate({ ...tpl })}
+                        style={{
+                          padding: '6px 12px', fontSize: 12, fontWeight: 800,
+                          border: 'none',
+                          background: 'transparent',
+                          color: isCurrent ? '#1d4ed8' : '#475569',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {tpl.titulo}
+                      </button>
+                      {!isDefaultTemplate && (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteTemplate(tpl.id) }}
+                          title="Excluir modelo"
+                          disabled={isSavingDb}
+                          style={{
+                            padding: '4px 6px', border: 'none',
+                            background: 'transparent',
+                            color: isCurrent ? '#ef4444' : '#94a3b8',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center',
+                            borderLeft: '1px solid #e2e8f0'
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
                   )
                 })}
+                {/* Botão Novo Modelo */}
+                <button
+                  onClick={handleCreateNewTemplate}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: '6px 12px', borderRadius: 10, fontSize: 12, fontWeight: 800,
+                    border: '2px dashed #10b981',
+                    background: '#f0fdf4', color: '#059669',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Plus size={14} />
+                  Novo Modelo
+                </button>
               </div>
 
               {/* Título do Modelo */}
@@ -2472,12 +2633,17 @@ export default function ValoresPage() {
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
                       padding: '10px 20px', borderRadius: 12, fontSize: 12, fontWeight: 900,
-                      border: 'none', background: '#2563eb', color: '#ffffff',
-                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)', cursor: 'pointer'
+                      border: 'none',
+                      background: templates.some(t => t.id === editingTemplate.id) ? '#2563eb' : '#059669',
+                      color: '#ffffff',
+                      boxShadow: templates.some(t => t.id === editingTemplate.id)
+                        ? '0 4px 14px rgba(37, 99, 235, 0.3)'
+                        : '0 4px 14px rgba(5, 150, 105, 0.3)',
+                      cursor: 'pointer'
                     }}
                   >
                     {isSavingDb ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                    Salvar no Banco de Dados
+                    {templates.some(t => t.id === editingTemplate.id) ? 'Salvar no Banco de Dados' : 'Criar Modelo'}
                   </button>
                 </div>
               </div>

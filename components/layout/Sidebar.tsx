@@ -56,7 +56,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     items: [
       { label: 'VALORES', href: '/matriculas/valores', icon: <Calculator size={16} />, badge: '2027', badgeColor: 'green' },
-      { label: 'ENVIO P/ WHATSAPP', href: '/matriculas/whatsapp', icon: <MessageSquare size={16} />, badge: '2026', badgeColor: 'pink' },
+      { label: 'ENVIO P/ WHATSAPP', href: '/matriculas/whatsapp', icon: <MessageSquare size={16} />, badge: '2027', badgeColor: 'pink' },
     ],
   },
   {
@@ -369,6 +369,51 @@ export function Sidebar() {
   const [showTopMenu, setShowTopMenu] = useState(false)
   const pathname = usePathname()
 
+  // Badge do último ano letivo selecionado para Envio p/ WhatsApp
+  const [whatsappAnoBadge, setWhatsappAnoBadge] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('edu_whatsapp_selected_ano')
+      if (stored) return stored
+    }
+    return '2027'
+  })
+
+  useEffect(() => {
+    const updateBadgeFromStorageOrConfig = () => {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('edu_whatsapp_selected_ano')
+        if (stored) {
+          setWhatsappAnoBadge(stored)
+          return
+        }
+      }
+      if (cfgCalendarioLetivo && cfgCalendarioLetivo.length > 0) {
+        const anos = cfgCalendarioLetivo.map((c: any) => String(c.ano || '')).filter(Boolean)
+        const sorted = anos.sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }))
+        if (sorted.length > 0) {
+          setWhatsappAnoBadge(sorted[0])
+        }
+      }
+    }
+
+    updateBadgeFromStorageOrConfig()
+
+    const handleAnoChange = (e: any) => {
+      if (e?.detail) {
+        setWhatsappAnoBadge(String(e.detail))
+      } else {
+        updateBadgeFromStorageOrConfig()
+      }
+    }
+
+    window.addEventListener('edu_whatsapp_ano_changed', handleAnoChange)
+    window.addEventListener('storage', handleAnoChange)
+    return () => {
+      window.removeEventListener('edu_whatsapp_ano_changed', handleAnoChange)
+      window.removeEventListener('storage', handleAnoChange)
+    }
+  }, [cfgCalendarioLetivo])
+
   const menuRef = useRef<HTMLDivElement>(null)
   const profileCardRef = useRef<HTMLDivElement>(null)
 
@@ -503,6 +548,20 @@ export function Sidebar() {
                   items: group.items.filter(item => {
                     if (item.label === 'AGENDA DIGITAL' && isAgendaBlocked) return false
                     return true
+                  })
+                }
+              }
+              if (group.title === 'MATRÍCULAS') {
+                return {
+                  ...group,
+                  items: group.items.map(item => {
+                    if (item.href === '/matriculas/whatsapp') {
+                      return {
+                        ...item,
+                        badge: whatsappAnoBadge || item.badge
+                      }
+                    }
+                    return item
                   })
                 }
               }
