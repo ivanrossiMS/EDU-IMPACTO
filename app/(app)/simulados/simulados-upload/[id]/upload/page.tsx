@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
-import { formatProfessorHeaderName, downloadOriginalFile } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isQuestionCountableForRequisicao } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
 export default function UploadSimuladoPage() {
@@ -169,17 +169,19 @@ export default function UploadSimuladoPage() {
         if (showAll) {
           filteredQs = allQuestions
         } else if (currentActiveReq) {
-          filteredQs = allQuestions.filter((q: any) => {
-            if (q.id_requisicao) {
-              return q.id_requisicao === currentActiveReq.id
-            }
-            // Legacy match by discipline and professor
-            const discMatch = (q.id_disciplina && (q.id_disciplina === currentActiveReq.id_disciplina || q.disciplina_id === currentActiveReq.id_disciplina)) ||
-                              (q.disciplina_nome && currentActiveReq.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === currentActiveReq.disciplina_nome.trim().toLowerCase()) ||
-                              (q.disciplina && currentActiveReq.disciplina_nome && q.disciplina.trim().toLowerCase() === currentActiveReq.disciplina_nome.trim().toLowerCase())
-            const profMatch = !q.id_professor || q.id_professor === currentActiveReq.id_professor
-            return Boolean(discMatch && profMatch)
-          })
+          filteredQs = allQuestions.filter((q: any) => 
+            isQuestionForRequisicao(q, currentActiveReq, reqs || [])
+          )
+        }
+
+        // Se filteredQs ficou vazio mas existem questões no simulado,
+        // e o simulado tem apenas 1 requisição ou é adaptado, carregar todas as questões
+        if (filteredQs.length === 0 && allQuestions.length > 0) {
+          const isSingleReq = !reqs || reqs.length <= 1
+          const isSimuladoAdaptado = simuladoData?.titulo?.toUpperCase().includes('ADAPTAD') || Boolean(simuladoData?.eh_adaptada)
+          if (isSingleReq || isSimuladoAdaptado) {
+            filteredQs = allQuestions
+          }
         }
 
         if (filteredQs.length > 0) {
@@ -308,18 +310,9 @@ export default function UploadSimuladoPage() {
       // 2. Filter out ONLY questions belonging to the active requisition
       let otherQuestions: any[] = []
       if (!showAll && activeRequisicao) {
-        otherQuestions = dbQuestions.filter((q: any) => {
-          if (q.id_requisicao) {
-            return q.id_requisicao !== activeRequisicao.id
-          }
-          // Legacy check
-          const discMatch = (q.id_disciplina && (q.id_disciplina === activeRequisicao.id_disciplina || q.disciplina_id === activeRequisicao.id_disciplina)) ||
-                            (q.disciplina_nome && activeRequisicao.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === activeRequisicao.disciplina_nome.trim().toLowerCase()) ||
-                            (q.disciplina && activeRequisicao.disciplina_nome && q.disciplina.trim().toLowerCase() === activeRequisicao.disciplina_nome.trim().toLowerCase())
-          const profMatch = !q.id_professor || q.id_professor === activeRequisicao.id_professor
-          if (discMatch && profMatch) return false
-          return true
-        })
+        otherQuestions = dbQuestions.filter((q: any) => 
+          !isQuestionForRequisicao(q, activeRequisicao, simulado?.simulados_upload_requisicoes || [])
+        )
       }
 
       // 3. Tag and prepare our active questions
@@ -382,6 +375,8 @@ export default function UploadSimuladoPage() {
         updatePayload.status = 'aprovado'
       } else if (actionType === 'enviar_revisao') {
         updatePayload.status = 'em_revisao'
+      } else if (simulado?.status === 'aguardando' && finalQToSave.length > 0) {
+        updatePayload.status = 'em_revisao'
       }
 
       const { error } = await (supabase as any).from('simulados_upload').update(updatePayload).eq('id', simuladoId)
@@ -402,6 +397,11 @@ export default function UploadSimuladoPage() {
             status: 'aprovado'
           }).eq('id', activeRequisicao.id)
         }
+      } else if (activeRequisicao && activeRequisicao.status === 'pendente' && myQuestionsToSave.length > 0) {
+        await (supabase as any).from('simulados_upload_requisicoes').update({
+          status: 'enviado',
+          enviado_em: activeRequisicao.enviado_em || new Date().toISOString()
+        }).eq('id', activeRequisicao.id)
       }
 
       if (error) throw error
@@ -616,7 +616,8 @@ export default function UploadSimuladoPage() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 1 }}>
             {userRelevantRequisicoes.map((r: any) => {
               const isActive = activeRequisicao?.id === r.id
-              const isEnviada = r.status === 'enviado' || r.status === 'aprovado' || !!r.enviado_em
+              const hasQs = Array.isArray(simulado?.questoes_json) && simulado.questoes_json.some((q: any) => isQuestionCountableForRequisicao(q, r, userRelevantRequisicoes))
+              const isEnviada = r.status === 'enviado' || r.status === 'aprovado' || !!r.enviado_em || hasQs
 
               return (
                 <button
@@ -798,7 +799,9 @@ export default function UploadSimuladoPage() {
                   aprovado: { color: '#10b981', label: 'Aprovado' },
                   resimuladodo: { color: '#ef4444', label: 'Resimuladodo' },
                 }
-                const rs = reqStatuses[req.status] || reqStatuses['pendente']
+                const hasExistingQuestions = Array.isArray(simulado?.questoes_json) && simulado.questoes_json.some((q: any) => isQuestionCountableForRequisicao(q, req, simulado.simulados_upload_requisicoes || []))
+                const effectiveStatus = (req.status === 'pendente' && hasExistingQuestions) ? 'enviado' : req.status
+                const rs = reqStatuses[effectiveStatus] || reqStatuses['pendente']
                 const isCurrentActive = activeRequisicao?.id === req.id
 
                 return (
@@ -838,21 +841,11 @@ export default function UploadSimuladoPage() {
                       // Accurate calculation of questions belonging strictly to this requisition
                       const allDbQs = Array.isArray(simulado.questoes_json) ? simulado.questoes_json : []
                       
-                      const isQuestionForReq = (q: any) => {
-                        if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
-                        if (q.id_requisicao) return q.id_requisicao === req.id
-                        const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
-                                          (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
-                                          (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
-                        const profMatch = !q.id_professor || q.id_professor === req.id_professor
-                        return Boolean(discMatch && profMatch)
-                      }
-
                       let qCount = 0
                       if (isCurrentActive && uploadStep === 'review') {
                         qCount = questoes.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
                       } else {
-                        qCount = allDbQs.filter(isQuestionForReq).length
+                        qCount = allDbQs.filter((q: any) => isQuestionCountableForRequisicao(q, req, simulado.simulados_upload_requisicoes || [])).length
                       }
 
                       const totalReq = req.qtd_questoes || 1
@@ -933,7 +926,10 @@ export default function UploadSimuladoPage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'hsl(var(--text-secondary))' }}>Enviadas:</span>
-                  <span style={{ fontWeight: 700, color: '#10b981' }}>{simulado.simulados_upload_requisicoes.filter((r: any) => r.status === 'enviado' || r.status === 'aprovado').length}</span>
+                  <span style={{ fontWeight: 700, color: '#10b981' }}>{simulado.simulados_upload_requisicoes.filter((r: any) => {
+                    const hasQs = Array.isArray(simulado.questoes_json) && simulado.questoes_json.some((q: any) => isQuestionCountableForRequisicao(q, r, simulado.simulados_upload_requisicoes))
+                    return r.status === 'enviado' || r.status === 'aprovado' || !!r.enviado_em || hasQs
+                  }).length}</span>
                 </div>
               </div>
             </div>

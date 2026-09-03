@@ -12,7 +12,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { useData } from '@/lib/dataContext'
-import { getDerivedStatus } from '@/lib/utils'
+import { getDerivedStatus, isQuestionForRequisicao, isQuestionCountableForRequisicao } from '@/lib/utils'
 import { GabaritoSimuladoModal } from '@/components/simulados/GabaritoSimuladoModal'
 import { AnoLetivoModal } from '@/components/simulados/AnoLetivoModal'
 
@@ -366,9 +366,12 @@ export default function UploadSimuladosGerenciamentoPage() {
       delete payload.created_at
       delete payload.simulados_upload_requisicoes
       delete payload.criado_por_nome
-      delete payload.eh_adaptada
-      delete payload.config_estudio
+      payload.eh_adaptada = true
+      if (simulado.config_estudio) {
+        payload.config_estudio = simulado.config_estudio
+      }
       payload.titulo = `${simulado.titulo || 'Simulado'} ADAPTADO`
+      payload.status = (simulado.questoes_json && simulado.questoes_json.length > 0) ? 'em_revisao' : (simulado.status || 'aguardando')
       payload.updated_at = new Date().toISOString()
 
       const { data: newSimulado, error: simError } = await (supabase as any)
@@ -381,19 +384,62 @@ export default function UploadSimuladosGerenciamentoPage() {
 
       // Duplicate all requisitions for this adapted simulado
       if (simulado.simulados_upload_requisicoes && simulado.simulados_upload_requisicoes.length > 0) {
-        const reqsPayload = simulado.simulados_upload_requisicoes.map((r: any) => {
+        const oldReqs = simulado.simulados_upload_requisicoes
+        const reqsPayload = oldReqs.map((r: any) => {
           const newReq = { ...r }
           delete newReq.id
           delete newReq.created_at
           newReq.id_simulado_upload = newSimulado.id
+          const hasQs = Array.isArray(simulado.questoes_json) && simulado.questoes_json.some((q: any) => isQuestionCountableForRequisicao(q, r, oldReqs))
+          if (r.status === 'aprovado' || r.status === 'enviado' || r.enviado_em || hasQs) {
+            newReq.status = r.status === 'aprovado' ? 'aprovado' : 'enviado'
+            newReq.enviado_em = r.enviado_em || new Date().toISOString()
+          }
           return newReq
         })
 
-        const { error: reqError } = await (supabase as any)
+        const { data: insertedReqs, error: reqError } = await (supabase as any)
           .from('simulados_upload_requisicoes')
           .insert(reqsPayload)
+          .select()
           
         if (reqError) throw reqError
+
+        // Remapeia os id_requisicao nas questões do novo simulado para as novas requisições
+        const newReqs = insertedReqs || []
+        const reqIdMap = new Map<string, string>()
+
+        oldReqs.forEach((oldR: any, idx: number) => {
+          const matchedNew = newReqs[idx] || newReqs.find((nR: any) =>
+            nR.id_disciplina === oldR.id_disciplina && nR.id_professor === oldR.id_professor
+          )
+          if (matchedNew && oldR.id) {
+            reqIdMap.set(oldR.id, matchedNew.id)
+          }
+        })
+
+        const remappedQuestions = (newSimulado.questoes_json || []).map((q: any) => {
+          let newReqId = q.id_requisicao ? reqIdMap.get(q.id_requisicao) : undefined
+          if (!newReqId && newReqs.length === 1) {
+            newReqId = newReqs[0].id
+          } else if (!newReqId) {
+            const matched = newReqs.find((nR: any) => isQuestionForRequisicao(q, nR, newReqs))
+            if (matched) newReqId = matched.id
+          }
+          return {
+            ...q,
+            id_requisicao: newReqId || q.id_requisicao
+          }
+        })
+
+        await (supabase as any)
+          .from('simulados_upload')
+          .update({
+            questoes_json: remappedQuestions,
+            status: 'em_revisao',
+            eh_adaptada: true
+          })
+          .eq('id', newSimulado.id)
       }
       
       await loadData()
@@ -939,29 +985,18 @@ export default function UploadSimuladosGerenciamentoPage() {
 
                                           // Requisition-specific question count ratio (e.g. 0/10)
                                           const reqUploadedCount = Array.isArray(simulado.questoes_json)
-                                            ? simulado.questoes_json.filter((q: any) => {
-                                                if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
-                                                if (q.id_requisicao) {
-                                                  return q.id_requisicao === req.id
-                                                }
-                                                // Fallback matching by discipline and professor
-                                                const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
-                                                                  (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
-                                                                  (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
-                                                const profMatch = !q.id_professor || q.id_professor === req.id_professor
-                                                return Boolean(discMatch && profMatch)
-                                              }).length
+                                            ? simulado.questoes_json.filter((q: any) => isQuestionCountableForRequisicao(q, req, reqs)).length
                                             : 0
                                           const reqTotalRequested = req.qtd_questoes || 10
                                           const meQuestoesRatio = `${reqUploadedCount}/${reqTotalRequested}`
 
-                                          // Requisition-specific envio status
-                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado') && req.status !== 'pendente'
+                                          const hasQuestionsUploaded = reqUploadedCount > 0
+                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado' || hasQuestionsUploaded) && (req.status !== 'pendente' || hasQuestionsUploaded)
                                           const envioLabel = isReqEnviada ? 'Enviada' : 'Pendente'
 
                                           // Requisition-specific status badge
                                           const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado'
-                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em) && req.status !== 'pendente' && !isReqConcluida
+                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em || hasQuestionsUploaded) && !isReqConcluida
                                           const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado'
 
                                           let statusObj = { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' }

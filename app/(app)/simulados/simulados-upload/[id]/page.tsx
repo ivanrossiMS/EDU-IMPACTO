@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus, formatProfessorHeaderName } from '@/lib/utils'
+import { getDerivedStatus, formatProfessorHeaderName, isQuestionCountableForRequisicao } from '@/lib/utils'
 import { ProvaPreviewModal, Questao } from '@/components/simulados/ProvaPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -280,17 +280,9 @@ export default function VerProvaUploadPage() {
                     aprovado: { color: '#10b981', label: 'Aprovado' },
                     reprovado: { color: '#ef4444', label: 'Reprovado' },
                   }
-                  const rs = reqStatuses[req.status] || reqStatuses['pendente']
-                  
-                  const reqCount = questoes.filter((q: any) => {
-                    if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return false
-                    if (q.id_requisicao) return q.id_requisicao === req.id
-                    const discMatch = (q.id_disciplina && (q.id_disciplina === req.id_disciplina || q.disciplina_id === req.id_disciplina)) ||
-                                      (q.disciplina_nome && req.disciplina_nome && q.disciplina_nome.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase()) ||
-                                      (q.disciplina && req.disciplina_nome && q.disciplina.trim().toLowerCase() === req.disciplina_nome.trim().toLowerCase())
-                    const profMatch = !q.id_professor || q.id_professor === req.id_professor
-                    return Boolean(discMatch && profMatch)
-                  }).length
+                  const reqCount = questoes.filter((q: any) => isQuestionCountableForRequisicao(q, req, requisicoes)).length
+                  const effectiveStatus = (req.status === 'pendente' && reqCount > 0) ? 'enviado' : req.status
+                  const rs = reqStatuses[effectiveStatus] || reqStatuses['pendente']
 
                   return (
                     <div key={i} style={{ padding: '12px 14px', background: 'hsl(var(--bg-app))', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
