@@ -15,7 +15,7 @@ import {
   Home, LineChart, BookMarked, Database, Globe, Webhook, FolderOpen,
   BookOpenCheck, CalendarDays, FlaskConical, HardHat, ClipboardPenLine, Clock3, Banknote, Wallet, AlertTriangle, DoorOpen, Scan, Monitor, ListChecks, BookHeart, ShieldCheck, LogOut, Handshake,
   UserCircle, Laptop, ShieldAlert, History, Landmark, Coins, CreditCard as CardIcon, FileSpreadsheet, Building, Tablet, FileStack,
-  Sun, Moon, FileCheck2
+  Sun, Moon, FileCheck2, Calculator
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -55,6 +55,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     title: 'MATRÍCULAS',
     collapsible: true,
     items: [
+      { label: 'VALORES', href: '/matriculas/valores', icon: <Calculator size={16} />, badge: '2027', badgeColor: 'green' },
       { label: 'ENVIO P/ WHATSAPP', href: '/matriculas/whatsapp', icon: <MessageSquare size={16} />, badge: '2026', badgeColor: 'pink' },
     ],
   },

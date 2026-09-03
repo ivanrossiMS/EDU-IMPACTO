@@ -404,7 +404,29 @@ export default function UploadRedacoesGerenciamentoPage() {
   const isProfView = currentUserPerfil === 'Professor'
   const isCoord = currentUserPerfil !== 'Professor'
 
-  const bimsInYear = useMemo(() => bimestres.filter(b => b.ano_letivo === selectedAnoLetivo).map(b => b.id), [bimestres, selectedAnoLetivo])
+  const getBimestreAno = (b: any): string => {
+    if (!b) return ''
+    if (b.ano_letivo) return String(b.ano_letivo).trim()
+    if (b.nome) {
+      const match = b.nome.match(/\b(20\d{2})\b/)
+      if (match) return match[1]
+    }
+    if (b.data_inicio) {
+      return b.data_inicio.substring(0, 4)
+    }
+    return ''
+  }
+
+  const anosDisponiveis = useMemo(() => {
+    const yearsSet = new Set<string>()
+    bimestres.forEach((b: any) => {
+      const y = getBimestreAno(b)
+      if (y) yearsSet.add(y)
+    })
+    return Array.from(yearsSet).sort((a, b) => parseInt(b) - parseInt(a))
+  }, [bimestres])
+
+  const bimsInYear = useMemo(() => bimestres.filter(b => getBimestreAno(b) === String(selectedAnoLetivo)).map(b => b.id), [bimestres, selectedAnoLetivo])
   const redacoesInYear = useMemo(() => redacoes.filter(p => bimsInYear.includes(p.id_bimestre)), [redacoes, bimsInYear])
 
   const filtered = useMemo(() => {
@@ -621,7 +643,7 @@ export default function UploadRedacoesGerenciamentoPage() {
                 const newAno = e.target.value;
                 setSelectedAnoLetivo(newAno);
                 sessionStorage.setItem('selectedAnoLetivo', newAno);
-                const newYearBims = bimestres.filter(b => String(b.ano_letivo) === newAno || (!b.ano_letivo && b.nome?.includes(newAno)));
+                const newYearBims = bimestres.filter(b => getBimestreAno(b) === newAno);
                 const lastBim = newYearBims.length > 0 ? newYearBims[newYearBims.length - 1] : null;
                 if (lastBim) {
                   setFilterBimestre(lastBim.id);
@@ -633,8 +655,8 @@ export default function UploadRedacoesGerenciamentoPage() {
               }}
               style={{ width: '100%', padding: '12px 32px 12px 16px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
             >
-              {[...cfgCalendarioLetivo].sort((a: any, b: any) => parseInt(b.ano) - parseInt(a.ano)).map((item: any) => (
-                <option key={item.id} value={item.ano}>{item.ano}</option>
+              {anosDisponiveis.map((ano: string) => (
+                <option key={ano} value={ano}>{ano}</option>
               ))}
             </select>
             <ChevronDown size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
@@ -651,7 +673,7 @@ export default function UploadRedacoesGerenciamentoPage() {
               style={{ width: '100%', padding: '12px 32px 12px 16px', borderRadius: 12, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 13, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
             >
               <option value="todos">Todos os bimestres</option>
-              {bimestres.filter(b => b.ano_letivo === selectedAnoLetivo).map(bim => (
+              {bimestres.filter(b => getBimestreAno(b) === String(selectedAnoLetivo)).map(bim => (
                 <option key={bim.id} value={bim.id}>{bim.nome}</option>
               ))}
             </select>

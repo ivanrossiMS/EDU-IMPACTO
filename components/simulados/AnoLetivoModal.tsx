@@ -2,12 +2,24 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Calendar, ChevronDown, Loader2 } from 'lucide-react'
+import { Calendar, ChevronDown, Loader2, AlertCircle } from 'lucide-react'
 import { useConfigDb } from '@/lib/useConfigDb'
 import { supabase } from '@/lib/supabase'
 
 interface AnoLetivoModalProps {
   onSelect: (ano: string, bimestreId?: string) => void
+}
+
+function getBimestreAno(b: any): string {
+  if (b.ano_letivo) return String(b.ano_letivo).trim()
+  if (b.nome) {
+    const match = b.nome.match(/\b(20\d{2})\b/)
+    if (match) return match[1]
+  }
+  if (b.data_inicio) {
+    return b.data_inicio.substring(0, 4)
+  }
+  return ''
 }
 
 export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
@@ -16,7 +28,7 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
   const [loadingBimestres, setLoadingBimestres] = useState(true)
   const [isOpen, setIsOpen] = useState(true)
 
-  // Carregar bimestres cadastrados
+  // Carregar bimestres cadastrados e ativos em /simulados/configuracoes
   useEffect(() => {
     async function loadBimestres() {
       try {
@@ -35,29 +47,37 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
     loadBimestres()
   }, [])
   
-  // Ordena para que o mais recente (maior ano) seja o primeiro
-  const anosOrdenados = useMemo(() => {
-    return [...cfgCalendarioLetivo].sort((a: any, b: any) => parseInt(b.ano) - parseInt(a.ano))
-  }, [cfgCalendarioLetivo])
+  // Extrai apenas os anos letivos configurados nos bimestres do módulo de simulados
+  const anosDisponiveis = useMemo(() => {
+    const yearsSet = new Set<string>()
+    bimestres.forEach((b: any) => {
+      const y = getBimestreAno(b)
+      if (y) yearsSet.add(y)
+    })
+    return Array.from(yearsSet).sort((a, b) => parseInt(b) - parseInt(a))
+  }, [bimestres])
 
-  const ultimoAno = anosOrdenados[0]?.ano || ''
-  
-  const [selectedAno, setSelectedAno] = useState(ultimoAno)
+  const [selectedAno, setSelectedAno] = useState('')
   const [selectedBimestre, setSelectedBimestre] = useState('todos')
 
+  // Auto-seleciona o ano letivo padrão (prioriza o ano marcado como Aberto se configurado, senão o mais recente)
   useEffect(() => {
-    if (!selectedAno && ultimoAno) setSelectedAno(ultimoAno)
-  }, [ultimoAno, selectedAno])
+    if (anosDisponiveis.length > 0) {
+      if (!selectedAno || !anosDisponiveis.includes(selectedAno)) {
+        const anoAberto = cfgCalendarioLetivo?.find((c: any) => c.status === 'Aberto')?.ano
+        if (anoAberto && anosDisponiveis.includes(String(anoAberto))) {
+          setSelectedAno(String(anoAberto))
+        } else {
+          setSelectedAno(anosDisponiveis[0])
+        }
+      }
+    }
+  }, [anosDisponiveis, selectedAno, cfgCalendarioLetivo])
 
   // Obter bimestres do ano selecionado
   const bimestresDoAno = useMemo(() => {
-    if (!selectedAno) return bimestres
-    const filtered = bimestres.filter((b: any) => {
-      if (b.ano_letivo) return String(b.ano_letivo) === String(selectedAno)
-      if (b.nome) return b.nome.includes(String(selectedAno))
-      return true
-    })
-    return filtered.length > 0 ? filtered : bimestres
+    if (!selectedAno) return []
+    return bimestres.filter((b: any) => getBimestreAno(b) === String(selectedAno))
   }, [bimestres, selectedAno])
 
   // Sempre que o ano letivo selecionado mudar (ou os bimestres carregarem),
@@ -71,7 +91,7 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
     } else {
       setSelectedBimestre('todos')
     }
-  }, [selectedAno, bimestresDoAno])
+  }, [bimestresDoAno])
 
   const handleConfirm = () => {
     if (!selectedAno) return
@@ -134,7 +154,7 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
                 <Loader2 size={24} className="animate-spin" style={{ color: '#3b82f6' }} />
                 <div style={{ color: 'hsl(var(--text-secondary))', fontSize: 14 }}>Carregando dados...</div>
               </div>
-            ) : cfgCalendarioLetivo.length > 0 ? (
+            ) : anosDisponiveis.length > 0 ? (
               <>
                 {/* 1. Seleção de Ano Letivo */}
                 <div>
@@ -168,9 +188,14 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
                         e.currentTarget.style.boxShadow = 'none'
                       }}
                     >
-                      {anosOrdenados.map((item: any) => (
-                        <option key={item.id} value={item.ano}>Ano de {item.ano} {item.status === 'Aberto' ? '(Ativo)' : ''}</option>
-                      ))}
+                      {anosDisponiveis.map((ano: string) => {
+                        const isAberto = cfgCalendarioLetivo?.some((c: any) => String(c.ano) === String(ano) && c.status === 'Aberto')
+                        return (
+                          <option key={ano} value={ano}>
+                            Ano de {ano} {isAberto ? '(Ativo)' : ''}
+                          </option>
+                        )
+                      })}
                     </select>
                     <ChevronDown size={18} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
                   </div>
@@ -239,8 +264,9 @@ export function AnoLetivoModal({ onSelect }: AnoLetivoModalProps) {
                 </motion.button>
               </>
             ) : (
-              <div style={{ textAlign: 'center', padding: '20px 0', color: 'hsl(var(--text-secondary))', fontSize: 14 }}>
-                Nenhum ano letivo configurado no ERP.
+              <div style={{ textAlign: 'center', padding: '20px 0', color: 'hsl(var(--text-secondary))', fontSize: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={24} color="#f59e0b" />
+                <span>Nenhum ano letivo ou bimestre cadastrado em <strong>Configurações &gt; Bimestres</strong>.</span>
               </div>
             )}
           </div>
