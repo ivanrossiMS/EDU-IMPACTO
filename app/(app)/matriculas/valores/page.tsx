@@ -220,19 +220,9 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     taxaMaterialDesc: 'Sistema Didático / Livros anuais'
   },
   {
-    id: 'em-1',
-    nome: 'Ensino Médio 1ª série',
-    detalhe: '1ª série',
-    segmento: 'Ensino Médio',
-    mensalidadeBase: 1495.00,
-    anuidadeBase: 17940.00,
-    taxaMaterial: 1620.00,
-    taxaMaterialDesc: 'Material Didático Novo Ensino Médio'
-  },
-  {
-    id: 'em-2',
-    nome: 'Ensino Médio 2ª série',
-    detalhe: '2ª série',
+    id: 'em-1-2',
+    nome: 'Ensino Médio 1ª e 2ª séries',
+    detalhe: '1ª e 2ª séries',
     segmento: 'Ensino Médio',
     mensalidadeBase: 1545.00,
     anuidadeBase: 18540.00,
@@ -347,8 +337,9 @@ function detectSerieIdFromTurma(turmaOrSerie: string): string | null {
   if (t.includes('infantil') || t.includes('n3') || t.includes('n4') || t.includes('n5')) return 'ed-infantil'
   if (t.includes('1º ano') || t.includes('2º ano') || t.includes('3º ano') || t.includes('4º ano') || t.includes('5º ano') || t.includes('fund 1') || t.includes('fundamental 1') || t.includes('fundamental i')) return 'fund-1'
   if (t.includes('6º') || t.includes('7º') || t.includes('8º') || t.includes('9º') || t.includes('fund 2') || t.includes('fundamental 2') || t.includes('fundamental ii')) return 'fund-2'
-  if (t.includes('1ª série') || t.includes('1a serie') || t.includes('1º em') || t.includes('1º médio') || t.includes('1ª serie')) return 'em-1'
-  if (t.includes('2ª série') || t.includes('2a serie') || t.includes('2º em') || t.includes('2º médio') || t.includes('2ª serie')) return 'em-2'
+  if (t.includes('1ª série') || t.includes('1a serie') || t.includes('1º em') || t.includes('1º médio') || t.includes('1ª serie') ||
+      t.includes('2ª série') || t.includes('2a serie') || t.includes('2º em') || t.includes('2º médio') || t.includes('2ª serie') ||
+      t.includes('1ª e 2ª') || t.includes('1a e 2a')) return 'em-1-2'
   if (t.includes('3ª série') || t.includes('3a serie') || t.includes('terceir') || t.includes('3º em') || t.includes('3º médio') || t.includes('3ª serie') || t.includes('vestibular')) return 'em-3'
   return null
 }
@@ -649,7 +640,7 @@ export default function ValoresPage() {
   }
 
   const currentSerie = useMemo(() => {
-    return seriesList.find(s => s.id === selectedSerieId) || seriesList[0]
+    return seriesList.find(s => s.id === selectedSerieId || (selectedSerieId === 'em-2' && s.id === 'em-1-2') || (selectedSerieId === 'em-1' && s.id === 'em-1-2')) || seriesList[0]
   }, [seriesList, selectedSerieId])
 
   const currentAntecipacao = useMemo(() => {
