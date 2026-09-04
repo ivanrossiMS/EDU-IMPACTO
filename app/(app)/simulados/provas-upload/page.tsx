@@ -287,10 +287,31 @@ export default function UploadProvasGerenciamentoPage() {
       
       if (newProvasData.length > 0) {
         try {
-          newProvasData = newProvasData.map((p: any) => ({
-            ...p,
-            status: getDerivedStatus(p, 'prova')
-          }))
+          newProvasData = newProvasData.map((p: any) => {
+            const pReqs = p.provas_upload_requisicoes || []
+            const pQs = Array.isArray(p.questoes_json) ? p.questoes_json : []
+            const fixedReqs = pReqs.map((r: any) => {
+              const qCount = pQs.filter((q: any) => isQuestionForRequisicao(q, r, pReqs, true)).length
+              if (qCount === 0 && r.status !== 'pendente' && r.status !== 'aprovado' && r.status !== 'concluido') {
+                if (r.id) {
+                  (supabase as any)
+                    .from('provas_upload_requisicoes')
+                    .update({ status: 'pendente', enviado_em: null })
+                    .eq('id', r.id)
+                    .then(() => {})
+                    .catch(() => {})
+                }
+                return { ...r, status: 'pendente', enviado_em: null }
+              }
+              return r
+            })
+
+            return {
+              ...p,
+              provas_upload_requisicoes: fixedReqs,
+              status: getDerivedStatus({ ...p, provas_upload_requisicoes: fixedReqs, questoes_json: pQs }, 'prova')
+            }
+          })
           
           const userIds = Array.from(new Set(newProvasData.map((p: any) => p.criado_por).filter(Boolean)))
           if (userIds.length > 0) {
@@ -405,9 +426,13 @@ export default function UploadProvasGerenciamentoPage() {
           delete newReq.id
           delete newReq.created_at
           newReq.id_prova_upload = newProva.id
-          if (Array.isArray(payload.questoes_json) && payload.questoes_json.length > 0) {
+          const rHasQuestions = Array.isArray(payload.questoes_json) && payload.questoes_json.some((q: any) => isQuestionForRequisicao(q, r, oldReqs, true))
+          if (rHasQuestions) {
             newReq.status = r.status === 'aprovado' || r.status === 'concluido' ? r.status : 'enviado'
             newReq.enviado_em = r.enviado_em || new Date().toISOString()
+          } else {
+            newReq.status = 'pendente'
+            newReq.enviado_em = null
           }
           return newReq
         })
@@ -1017,13 +1042,13 @@ export default function UploadProvasGerenciamentoPage() {
 
                                           // Requisition-specific envio status
                                           const hasUploadedQuestions = reqUploadedCount > 0
-                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || prova.status === 'aprovado' || prova.status === 'publicado' || hasUploadedQuestions) && (req.status !== 'pendente' || hasUploadedQuestions)
+                                          const isReqEnviada = hasUploadedQuestions || (req.status === 'aprovado' || req.status === 'concluido')
                                           const envioLabel = isReqEnviada ? 'Enviada' : 'Pendente'
 
                                           // Requisition-specific status badge
-                                          const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || prova.status === 'aprovado' || prova.status === 'publicado'
+                                          const isReqConcluida = (req.status === 'aprovado' || req.status === 'concluido' || prova.status === 'aprovado' || prova.status === 'publicado') && hasUploadedQuestions
                                           const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado'
-                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em || hasUploadedQuestions) && (req.status !== 'pendente' || hasUploadedQuestions) && !isReqConcluida && !isReqReprovada
+                                          const isReqEmRevisao = hasUploadedQuestions && !isReqConcluida && !isReqReprovada
 
                                           let statusObj = { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' }
                                           if (isReqConcluida) {

@@ -308,10 +308,27 @@ export default function UploadSimuladosGerenciamentoPage() {
               }
             }
 
+            const fixedReqs = pReqs.map((r: any) => {
+              const qCount = pQs.filter((q: any) => isQuestionForRequisicao(q, r, pReqs, true)).length
+              if (qCount === 0 && r.status !== 'pendente' && r.status !== 'aprovado' && r.status !== 'concluido') {
+                if (r.id) {
+                  (supabase as any)
+                    .from('simulados_upload_requisicoes')
+                    .update({ status: 'pendente', enviado_em: null })
+                    .eq('id', r.id)
+                    .then(() => {})
+                    .catch(() => {})
+                }
+                return { ...r, status: 'pendente', enviado_em: null }
+              }
+              return r
+            })
+
             return {
               ...p,
+              simulados_upload_requisicoes: fixedReqs,
               questoes_json: pQs,
-              status: getDerivedStatus({ ...p, questoes_json: pQs }, 'simulado')
+              status: getDerivedStatus({ ...p, simulados_upload_requisicoes: fixedReqs, questoes_json: pQs }, 'simulado')
             }
           })
           
@@ -429,10 +446,14 @@ export default function UploadSimuladosGerenciamentoPage() {
           delete newReq.id
           delete newReq.created_at
           newReq.id_simulado_upload = newSimulado.id
-          // Se já havia questões enviadas, mantém status coerente
-          if (Array.isArray(payload.questoes_json) && payload.questoes_json.length > 0) {
+          // Verifica se ESTA requisição específica possui questões vinculadas
+          const rHasQuestions = Array.isArray(payload.questoes_json) && payload.questoes_json.some((q: any) => isQuestionForRequisicao(q, r, oldReqs, true))
+          if (rHasQuestions) {
             newReq.status = r.status === 'aprovado' || r.status === 'concluido' ? r.status : 'enviado'
             newReq.enviado_em = r.enviado_em || new Date().toISOString()
+          } else {
+            newReq.status = 'pendente'
+            newReq.enviado_em = null
           }
           return newReq
         })
@@ -1056,13 +1077,13 @@ export default function UploadSimuladosGerenciamentoPage() {
 
                                           // Requisition-specific envio status
                                           const hasUploadedQuestions = reqUploadedCount > 0
-                                          const isReqEnviada = (req.enviado_em || req.status === 'enviado' || req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado' || hasUploadedQuestions) && (req.status !== 'pendente' || hasUploadedQuestions)
+                                          const isReqEnviada = hasUploadedQuestions || (req.status === 'aprovado' || req.status === 'concluido')
                                           const envioLabel = isReqEnviada ? 'Enviada' : 'Pendente'
 
                                           // Requisition-specific status badge
-                                          const isReqConcluida = req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado'
+                                          const isReqConcluida = (req.status === 'aprovado' || req.status === 'concluido' || simulado.status === 'aprovado' || simulado.status === 'publicado') && hasUploadedQuestions
                                           const isReqReprovada = req.status === 'rejeitado' || req.status === 'reprovado'
-                                          const isReqEmRevisao = (req.status === 'enviado' || req.status === 'em_revisao' || !!req.enviado_em || hasUploadedQuestions) && (req.status !== 'pendente' || hasUploadedQuestions) && !isReqConcluida && !isReqReprovada
+                                          const isReqEmRevisao = hasUploadedQuestions && !isReqConcluida && !isReqReprovada
 
                                           let statusObj = { label: 'Aguardando', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)' }
                                           if (isReqConcluida) {

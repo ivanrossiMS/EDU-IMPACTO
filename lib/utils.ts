@@ -214,10 +214,11 @@ export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redaca
 
   // Verifica se cada requisição está enviada ou possui questões cadastradas
   const isReqDoneOrUploaded = (r: any) => {
-    if (r.status === 'enviado' || r.status === 'em_revisao' || r.status === 'aprovado' || r.status === 'concluido' || !!r.enviado_em) {
+    const hasQs = allQs.length > 0 && allQs.some((q: any) => isQuestionForRequisicao(q, r, reqs, true))
+    if (r.status === 'aprovado' || r.status === 'concluido' || r.status === 'publicado') {
       return true
     }
-    if (allQs.length > 0 && allQs.some((q: any) => isQuestionForRequisicao(q, r, reqs, true))) {
+    if (hasQs) {
       return true
     }
     return false
