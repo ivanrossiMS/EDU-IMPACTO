@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
 import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut, ArrowLeft } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
+import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -774,6 +775,12 @@ function SelecionarAlunoContent() {
   const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
   const emailBusca = (currentUser?.email || '').toLowerCase().trim();
   const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
+
+  useEffect(() => {
+    if (hydrated) {
+      hideSplashScreen(300);
+    }
+  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated || !currentUser) return;

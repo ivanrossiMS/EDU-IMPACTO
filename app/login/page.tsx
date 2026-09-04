@@ -9,6 +9,7 @@ import { performLogout } from '@/lib/auth/logout'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { LogOut } from 'lucide-react'
+import { hideSplashScreen } from '@/lib/capacitor/splash'
 type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
@@ -117,6 +118,7 @@ export default function LoginPage() {
   const headline = 'Bem-vindo de volta!'
 
   useEffect(() => {
+    hideSplashScreen(300)
     let i = 0; setTypedText('')
     const iv = setInterval(() => { if (i <= headline.length) { setTypedText(headline.slice(0, i)); i++ } else clearInterval(iv) }, 55)
     return () => clearInterval(iv)

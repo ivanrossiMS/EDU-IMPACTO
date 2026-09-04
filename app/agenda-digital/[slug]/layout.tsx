@@ -23,6 +23,7 @@ import {
   Megaphone, Loader2, CheckCircle2, Building, ShieldCheck, KeyRound, Send, Check, MonitorSmartphone
 } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
+import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 function abbreviateName(name: string): string {
   if (!name) return '';
@@ -707,6 +708,12 @@ export default function ADInnerLayout({
   const isAlunoLogado = isMirroringAluno || currentUser?.cargo === 'Aluno'
   
   const isMirrorMode = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria'
+
+  useEffect(() => {
+    if (hydrated) {
+      hideSplashScreen(300)
+    }
+  }, [hydrated])
 
   useEffect(() => {
      if (!hydrated || !currentUser) return

@@ -12,11 +12,15 @@ interface TurmaDropdownProps {
   anosLetivos?: string[]
   selectedAno?: string
   setSelectedAno?: (ano: string) => void
+  buttonStyle?: React.CSSProperties
+  className?: string
+  icon?: React.ReactNode
 }
 
 export function TurmaDropdown({ 
   turmaOptions, selectedTurmaId, setSelectedTurmaId, selectedTurmaName,
-  anosLetivos = [], selectedAno = 'todos', setSelectedAno
+  anosLetivos = [], selectedAno = 'todos', setSelectedAno,
+  buttonStyle, className, icon
 }: TurmaDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -34,7 +38,9 @@ export function TurmaDropdown({
   return (
     <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button 
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
+        className={className}
         style={{
           display: 'flex', alignItems: 'center', gap: 10,
           background: 'hsl(var(--bg-surface))',
@@ -45,10 +51,12 @@ export function TurmaDropdown({
           fontWeight: 600,
           fontSize: '14px',
           cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+          transition: 'all 0.15s ease',
+          ...buttonStyle
         }}
       >
-        <Menu size={16} color="#4f46e5" />
+        {icon || <Menu size={16} color="#4f46e5" />}
         <span style={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {selectedTurmaName}
         </span>

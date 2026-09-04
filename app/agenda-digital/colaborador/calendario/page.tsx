@@ -7,7 +7,7 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData, EventoAgenda, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2, Plus, Users, Globe, Edit2, Trash2, X, Upload, Search, UserCheck, Check } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
@@ -461,43 +461,57 @@ export default function ADCalendarioPage() {
 
   const [aniversariantes, setAniversariantes] = useState<any[]>([])
   const [loadingNivers, setLoadingNivers] = useState(false)
+  const niversCacheRef = useRef<Record<number, any[]>>({})
 
   useEffect(() => {
+    const mesView = month + 1
+
+    if (niversCacheRef.current[mesView]) {
+      setAniversariantes(niversCacheRef.current[mesView])
+      setLoadingNivers(false)
+      return
+    }
+
+    let isCancelled = false
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        const mesView = month + 1
         const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}`)
         if (!req.ok) throw new Error('Falha ao buscar aniversariantes')
         const todos = await req.json()
+        if (isCancelled) return
         
         // Filter birthdays only for peers in the SAME CLASS or teachers
-        const niversMes = todos.filter((p: any) => {
+        const niversMes = (todos || []).filter((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           if (!data) return false
           
-          let m = -1;
-          if (data.includes('-')) m = parseInt(data.split('-')[1]);
-          else if (data.includes('/')) m = parseInt(data.split('/')[1]);
-          
+          let m = -1
+          if (data.includes('-')) m = parseInt(data.split('-')[1])
+          else if (data.includes('/')) m = parseInt(data.split('/')[1])
           if (m !== mesView) return false
           
           if (p.tipo === 'Aluno') {
-            const pTurmaRaw = p.turma || ''
-            const pTurmaObj = turmas.find((t: any) => String(t.id) === String(pTurmaRaw) || String(t.codigo) === String(pTurmaRaw) || String(t.nome) === String(pTurmaRaw))
-            const pNomeTurma = pTurmaObj?.nome || p.turma_nome || pTurmaRaw
-            return activeTurmas.some(at => 
-              (pTurmaObj && (String(pTurmaObj.id) === String(at.id) || String(pTurmaObj.codigo) === String(at.codigo))) ||
-              pNomeTurma.toLowerCase().trim() === at.nome.toLowerCase().trim()
-            )
-
+            const pTurmaRaw = String(p.turma || '').trim()
+            const pNomeTurma = String(p.turma_nome || '').trim().toLowerCase()
+            const pTurmaObj = turmas.find((t: any) => String(t.id) === pTurmaRaw || String(t.codigo) === pTurmaRaw || String(t.nome).toLowerCase() === pNomeTurma)
+            return activeTurmas.some(at => {
+              const atId = String(at.id || '').trim()
+              const atNome = String(at.nome || '').trim().toLowerCase()
+              const atCodigo = String(at.codigo || '').trim()
+              return (
+                (pTurmaRaw && (pTurmaRaw === atId || (atCodigo && pTurmaRaw === atCodigo))) ||
+                (pNomeTurma && (pNomeTurma === atNome || pNomeTurma.includes(atNome) || atNome.includes(pNomeTurma))) ||
+                (pTurmaObj && (String(pTurmaObj.id) === atId || String(pTurmaObj.codigo) === atCodigo || String(pTurmaObj.nome).toLowerCase() === atNome))
+              )
+            })
           }
           return true // Keep teachers visible
         }).map((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
-          let dia = -1;
-          if (data.includes('-')) dia = parseInt(data.split('-')[2]);
-          else if (data.includes('/')) dia = parseInt(data.split('/')[0]); // in DD/MM/YYYY, day is first
+          let dia = -1
+          if (data.includes('-')) dia = parseInt(data.split('-')[2])
+          else if (data.includes('/')) dia = parseInt(data.split('/')[0])
           
           let isProximo = false
           if (mesView === (hoje.getMonth() + 1)) {
@@ -506,11 +520,21 @@ export default function ADCalendarioPage() {
           }
           return { ...p, dia, isProximo }
         }).sort((a: any, b: any) => a.dia - b.dia)
-        setAniversariantes(niversMes)
-      } catch (e) { console.error(e) } finally { setLoadingNivers(false) }
+
+        if (!isCancelled) {
+          niversCacheRef.current[mesView] = niversMes
+          setAniversariantes(niversMes)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        if (!isCancelled) setLoadingNivers(false)
+      }
     }
+
     fetchNivers()
-  }, [month, activeTurmas])
+    return () => { isCancelled = true }
+  }, [month, activeTurmas, turmas])
 
   const [searchQuery, setSearchQuery] = useState('')
 

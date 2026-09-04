@@ -15,6 +15,7 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { Menu } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { restoreSessionSecurely } from '@/lib/auth/secureSession'
+import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, toggleSidebar, setCurrentUser, currentUser } = useApp()
@@ -75,6 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         setCurrentUser(serverUser)
         setAuthState('authorized')
+        hideSplashScreen(300)
       } catch (err) {
         // ✅ CORREÇÃO DE SEGURANÇA & OFFLINE: Erro de rede (falta de internet)
         console.warn('[Auth] Network error checking session.');

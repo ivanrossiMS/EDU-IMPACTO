@@ -17,11 +17,14 @@ const config: CapacitorConfig = {
       style: 'DARK'
     },
     SplashScreen: {
-      launchShowDuration: 0,
+      launchShowDuration: 3000,
+      launchAutoHide: false,
       backgroundColor: "#0A0F24",
       showSpinner: false,
       androidSplashResourceName: "splash",
-      androidScaleType: "CENTER_CROP"
+      androidScaleType: "CENTER_CROP",
+      splashFullScreen: true,
+      splashImmersive: true,
     },
     PrivacyScreen: {
       enable: false,

@@ -4,7 +4,7 @@ import { useData, EventoAgenda, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2, Clock, MapPin } from 'lucide-react'
 
@@ -312,23 +312,39 @@ export default function CalendarioPage() {
 
   const [aniversariantes, setAniversariantes] = useState<any[]>([])
   const [loadingNivers, setLoadingNivers] = useState(false)
+  const niversCacheRef = useRef<Record<number, any[]>>({})
 
   useEffect(() => {
+    const mesView = month + 1
+
+    if (niversCacheRef.current[mesView]) {
+      setAniversariantes(niversCacheRef.current[mesView])
+      setLoadingNivers(false)
+      return
+    }
+
+    let isCancelled = false
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        const mesView = month + 1
         const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}`)
         if (!req.ok) throw new Error('Falha ao buscar aniversariantes')
         const todos = await req.json()
-        const niversMes = todos.filter((p: any) => {
+        if (isCancelled) return
+
+        const niversMes = (todos || []).filter((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           if (!data) return false
-          const m = parseInt(data.split('-')[1])
+          let m = -1
+          if (data.includes('-')) m = parseInt(data.split('-')[1])
+          else if (data.includes('/')) m = parseInt(data.split('/')[1])
           return m === mesView
         }).map((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
-          const dia = parseInt(data.split('-')[2])
+          let dia = -1
+          if (data.includes('-')) dia = parseInt(data.split('-')[2])
+          else if (data.includes('/')) dia = parseInt(data.split('/')[0])
+          
           let isProximo = false
           if (mesView === (hoje.getMonth() + 1)) {
             const diaHoje = hoje.getDate()
@@ -336,10 +352,20 @@ export default function CalendarioPage() {
           }
           return { ...p, dia, isProximo }
         }).sort((a: any, b: any) => a.dia - b.dia)
-        setAniversariantes(niversMes)
-      } catch (e) { console.error(e) } finally { setLoadingNivers(false) }
+
+        if (!isCancelled) {
+          niversCacheRef.current[mesView] = niversMes
+          setAniversariantes(niversMes)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        if (!isCancelled) setLoadingNivers(false)
+      }
     }
+
     fetchNivers()
+    return () => { isCancelled = true }
   }, [month])
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -797,8 +823,8 @@ export default function CalendarioPage() {
                       <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {p.nome}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>
-                        {p.tipo}
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {p.tipo === 'Aluno' ? (p.turmaNome || (p.turma && !/^\d+$/.test(p.turma) && !/^[0-9a-fA-F-]{10,}$/.test(p.turma) ? p.turma : 'Aluno')) : (p.cargo || p.funcao || p.tipo)}
                       </div>
                     </div>
 

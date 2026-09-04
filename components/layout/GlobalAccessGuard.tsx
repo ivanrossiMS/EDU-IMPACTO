@@ -119,18 +119,8 @@ export function GlobalAccessGuard({ children }: { children: React.ReactNode }) {
   const { currentUser, hydrated } = useApp()
   const router = useRouter()
 
-  // Redirect root path based on user role once hydrated
-  useEffect(() => {
-    if (hydrated && currentUser && pathname === '/') {
-      const isFamilyOrStudent = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
-      if (isFamilyOrStudent) {
-        router.replace('/agenda-digital')
-      } else {
-        router.replace('/login?step=choose_system')
-      }
-    }
-  }, [hydrated, currentUser, pathname, router])
-
+  // Decisão de roteamento da raiz '/' é centralizada exclusivamente em app/page.tsx,
+  // eliminando o race-condition de redirects concorrentes (double-hop).
   const isFamilyOrStudent = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
   const isAllowedPath =
     pathname === '/' ||

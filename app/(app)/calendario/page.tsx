@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useData, EventoAgenda, newId } from '@/lib/dataContext'
 import { useLocalStorage } from '@/lib/useLocalStorage'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar, Trash, PieChart, Clock, Activity, FileText, GraduationCap, MapPin, Info, Bus, Sun, Download, List, Grid, ArrowRight, ArrowDown, Upload } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { TurmaDropdown } from '@/app/agenda-digital/colaborador/components/TurmaDropdown'
@@ -242,6 +242,39 @@ export default function CalendarioPage() {
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
   const selectedEvents = selectedDay ? eventosPorDia(selectedDay) : []
 
+  const isCurrentMonth = today.startsWith(`${year}-${String(month + 1).padStart(2, '0')}`)
+  const hasActiveFilters = filtroTurma !== 'todas' || filtroTipo !== 'todos' || searchQuery.trim() !== ''
+
+  const handleExportEvents = () => {
+    if (eventosFiltrados.length === 0) {
+      alert('Nenhum evento para exportar no período selecionado.')
+      return
+    }
+    const headers = ['Título', 'Data', 'Horário Início', 'Horário Fim', 'Tipo', 'Local', 'Descrição']
+    const csvContent = [
+      headers.join(','),
+      ...eventosFiltrados.map(e => [
+        `"${(e.titulo || '').replace(/"/g, '""')}"`,
+        `"${e.data || ''}"`,
+        `"${e.horaInicio || ''}"`,
+        `"${e.horaFim || ''}"`,
+        `"${TIPO_LABELS[e.tipo] || e.tipo}"`,
+        `"${(e.local || '').replace(/"/g, '""')}"`,
+        `"${(e.descricao || '').replace(/"/g, '""')}"`,
+      ].join(','))
+    ].join('\n')
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `calendario_${MESES[month]}_${year}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   const handleAdd = () => {
     if (!form.titulo.trim() || !form.data) return
     if (visibilidade.tipo === 'todos' && !visibilidade.anoTodos) {
@@ -428,6 +461,43 @@ export default function CalendarioPage() {
     }
     fetchNivers()
   }, [month])
+
+  const resolveTurmaNomeAluno = useCallback((p: any) => {
+    // 1. Se já veio resolvido do endpoint de aniversariantes
+    if (p.turmaNome && typeof p.turmaNome === 'string' && p.turmaNome.trim() !== '') {
+      const tStr = p.turmaNome.trim()
+      if (!/^\d+$/.test(tStr) && !/^[0-9a-fA-F-]{10,}$/.test(tStr)) {
+        return tStr
+      }
+    }
+
+    // 2. Busca na lista de turmas carregada em memória na página
+    const ref = String(p.turma || p.dados?.turma || p.dados?.turmaId || p.dados?.dadosMatricula?.turmaId || '').trim()
+    if (ref && turmas && turmas.length > 0) {
+      const match = turmas.find((t: any) => 
+        String(t.id).trim() === ref ||
+        String(t.codigo || '').trim().toLowerCase() === ref.toLowerCase() ||
+        String(t.nome || '').trim().toLowerCase() === ref.toLowerCase()
+      )
+      if (match?.nome) return match.nome
+    }
+
+    // 3. Verifica dados adicionais
+    const dadosNome = p.dados?.turmaNome || p.dados?.dadosMatricula?.turmaNome
+    if (dadosNome && !/^\d+$/.test(dadosNome) && !/^[0-9a-fA-F-]{10,}$/.test(dadosNome)) {
+      return dadosNome
+    }
+
+    // 4. Se p.turma for texto com nome legível (e não ID numérico ou UUID)
+    if (p.turma) {
+      const tStr = String(p.turma).trim()
+      if (!/^\d+$/.test(tStr) && !/^[0-9a-fA-F-]{10,}$/.test(tStr)) {
+        return tStr
+      }
+    }
+
+    return 'Sem turma'
+  }, [turmas])
 
 function TurmasBadgeList({ turmas }: { turmas: string[] }) {
   const [showPopover, setShowPopover] = useState(false);
@@ -650,7 +720,6 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
         }
         @media (max-width: 640px) {
            .ad-calendar-summary-cards { grid-template-columns: 1fr !important; }
-           .ad-calendar-toolbar { flex-direction: column !important; align-items: stretch !important; }
         }
         .calendar-card {
            background: #ffffff;
@@ -658,6 +727,155 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
            box-shadow: 0 4px 20px rgba(0,0,0,0.02);
            border: 1px solid rgba(226, 232, 240, 0.6);
            padding: 24px;
+        }
+
+        /* Toolbar Nova - Muito mais leve, limpa e coesa */
+        .ad-calendar-toolbar {
+          padding: 10px 16px !important;
+          margin-bottom: 24px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          flex-wrap: wrap !important;
+          gap: 12px !important;
+          background: #ffffff !important;
+          border-radius: 16px !important;
+          border: 1px solid rgba(226, 232, 240, 0.8) !important;
+          box-shadow: 0 2px 10px rgba(15, 23, 42, 0.02) !important;
+        }
+        .ad-calendar-toolbar-left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .ad-calendar-toolbar-right {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          flex: 0 0 auto;
+        }
+        .ad-cal-select {
+          height: 38px !important;
+          width: auto !important;
+          min-width: 140px !important;
+          background: #ffffff !important;
+          border: 1px solid #e2e8f0 !important;
+          border-radius: 10px !important;
+          padding: 0 28px 0 32px !important;
+          font-size: 13px !important;
+          font-weight: 600 !important;
+          color: #334155 !important;
+          cursor: pointer !important;
+          outline: none !important;
+          appearance: none !important;
+          -webkit-appearance: none !important;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.02) !important;
+          transition: all 0.15s ease !important;
+        }
+        .ad-cal-select:hover {
+          border-color: #cbd5e1 !important;
+          background: #f8fafc !important;
+        }
+        .ad-cal-select:focus {
+          border-color: #6366f1 !important;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12) !important;
+        }
+        .ad-cal-search-wrap {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          width: 190px;
+          transition: width 0.2s ease;
+        }
+        .ad-cal-search-wrap:focus-within {
+          width: 230px;
+        }
+        .ad-cal-search-input {
+          height: 38px !important;
+          width: 100% !important;
+          background: #f8fafc !important;
+          border: 1px solid #e2e8f0 !important;
+          border-radius: 10px !important;
+          padding-left: 32px !important;
+          padding-right: 28px !important;
+          font-size: 13px !important;
+          font-weight: 500 !important;
+          color: #1e293b !important;
+          outline: none !important;
+          transition: all 0.15s ease !important;
+        }
+        .ad-cal-search-input:hover {
+          background: #ffffff !important;
+          border-color: #cbd5e1 !important;
+        }
+        .ad-cal-search-input:focus {
+          background: #ffffff !important;
+          border-color: #6366f1 !important;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12) !important;
+        }
+        .ad-cal-btn-nav {
+          height: 38px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          display: inline-flex;
+          align-items: center;
+          padding: 0 4px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+        .ad-cal-view-toggle {
+          display: inline-flex;
+          align-items: center;
+          background: #f1f5f9;
+          border-radius: 10px;
+          padding: 3px;
+          height: 38px;
+        }
+        .ad-cal-btn-export {
+          height: 38px;
+          padding: 0 14px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          font-size: 13px;
+          font-weight: 600;
+          color: #334155;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+          transition: all 0.15s ease;
+        }
+        .ad-cal-btn-export:hover {
+          background: #f8fafc;
+          border-color: #cbd5e1;
+          color: #0f172a;
+        }
+        @media (max-width: 1200px) {
+          .ad-calendar-toolbar {
+            gap: 12px !important;
+          }
+          .ad-calendar-toolbar-left,
+          .ad-calendar-toolbar-right {
+            width: 100%;
+            justify-content: flex-start;
+          }
+        }
+        @media (max-width: 640px) {
+          .ad-calendar-toolbar { flex-direction: column !important; align-items: stretch !important; padding: 12px !important; }
+          .ad-calendar-toolbar-left,
+          .ad-calendar-toolbar-right { flex-direction: column !important; align-items: stretch !important; width: 100% !important; }
+          .ad-cal-select,
+          .ad-cal-search-wrap,
+          .ad-cal-btn-nav,
+          .ad-cal-view-toggle,
+          .ad-cal-btn-export { width: 100% !important; }
+          .ad-cal-search-wrap:focus-within { width: 100% !important; }
         }
         /* Custom scrollbar for timeline and lists */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
@@ -700,11 +918,11 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
         ))}
       </div>
 
-      {/* 3. Barra de Filtros e Controles (Toolbar) */}
-      <div className="calendar-card ad-calendar-toolbar" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+      {/* 3. Barra de Filtros e Controles (Toolbar Reorganizada) */}
+      <div className="calendar-card ad-calendar-toolbar">
         
         {/* Esquerda: Filtros e Busca */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div className="ad-calendar-toolbar-left">
           
           <TurmaDropdown 
             turmaOptions={turmaDropdownOptions} 
@@ -714,68 +932,207 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
             anosLetivos={anosLetivos}
             selectedAno={filtroAnoLetivoPrincipal}
             setSelectedAno={ano => { setFiltroAnoLetivoPrincipal(ano); setFiltroTurma('todas'); }}
+            icon={<Users size={15} style={{ color: '#4f46e5' }} />}
+            buttonStyle={{
+              height: 38,
+              padding: '0 12px',
+              borderRadius: 10,
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#334155',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+            }}
           />
 
-          <select 
-            style={{ height: 40, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '0 32px 0 16px', fontSize: 13, fontWeight: 600, color: '#334155', cursor: 'pointer', outline: 'none' }} 
-            value={filtroTipo} 
-            onChange={e => setFiltroTipo(e.target.value as any)}
-          >
-            <option value="todos">Todos os tipos</option>
-            {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
+          <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <Filter size={14} style={{ position: 'absolute', left: 11, color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+            <select 
+              className="ad-cal-select"
+              value={filtroTipo} 
+              onChange={e => setFiltroTipo(e.target.value as any)}
+            >
+              <option value="todos">Todos os tipos</option>
+              {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <ChevronDown size={14} style={{ position: 'absolute', right: 10, color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
+          </div>
 
-          <div style={{ position: 'relative', width: 200 }}>
-            <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: '#94a3b8' }} />
+          <div className="ad-cal-search-wrap">
+            <Search size={14} style={{ position: 'absolute', left: 11, color: '#94a3b8', pointerEvents: 'none', zIndex: 1 }} />
             <input 
               type="text" 
               placeholder="Buscar evento..." 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              style={{ width: '100%', height: 40, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, paddingLeft: 36, paddingRight: 12, fontSize: 13, fontWeight: 500, outline: 'none' }}
+              className="ad-cal-search-input"
             />
+            {searchQuery && (
+              <button 
+                type="button"
+                onClick={() => setSearchQuery('')}
+                title="Limpar busca"
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  zIndex: 2,
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: '#f1f5f9',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  padding: 0
+                }}
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroTurma('todas')
+                setFiltroTipo('todos')
+                setSearchQuery('')
+              }}
+              title="Limpar todos os filtros"
+              style={{
+                height: 38,
+                padding: '0 10px',
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: 10,
+                color: '#ef4444',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+              onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+            >
+              <X size={13} />
+              <span>Limpar</span>
+            </button>
+          )}
 
         </div>
 
         {/* Direita: Controles de Data e View */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div className="ad-calendar-toolbar-right">
           
-          {/* Navegação do Mês */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '4px' }}>
-            <button onClick={() => setViewDate(new Date(year, month - 1, 1))} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', borderRadius: 6 }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}><ChevronLeft size={16} /></button>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', width: 140, textAlign: 'center' }}>
-              {MESES[month]} {year}
+          {/* Navegação do Mês com Atalho "Hoje" */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date()
+                setViewDate(now)
+                setSelectedDay(todayStr())
+              }}
+              title="Ir para o mês e dia de hoje"
+              style={{
+                height: 38,
+                padding: '0 12px',
+                background: isCurrentMonth ? '#f8fafc' : '#ffffff',
+                border: `1px solid ${isCurrentMonth ? '#e2e8f0' : '#c7d2fe'}`,
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: 700,
+                color: isCurrentMonth ? '#64748b' : '#4f46e5',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#f1f5f9'
+                if (!isCurrentMonth) e.currentTarget.style.borderColor = '#818cf8'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = isCurrentMonth ? '#f8fafc' : '#ffffff'
+                e.currentTarget.style.borderColor = isCurrentMonth ? '#e2e8f0' : '#c7d2fe'
+              }}
+            >
+              Hoje
+            </button>
+
+            <div className="ad-cal-btn-nav">
+              <button 
+                type="button"
+                onClick={() => setViewDate(new Date(year, month - 1, 1))} 
+                title="Mês anterior"
+                style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', borderRadius: 7, transition: 'all 0.15s ease' }} 
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} 
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', width: 130, textAlign: 'center', userSelect: 'none', letterSpacing: '-0.01em' }}>
+                {MESES[month]} {year}
+              </div>
+              <button 
+                type="button"
+                onClick={() => setViewDate(new Date(year, month + 1, 1))} 
+                title="Próximo mês"
+                style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', borderRadius: 7, transition: 'all 0.15s ease' }} 
+                onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} 
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <ChevronRight size={16} />
+              </button>
             </div>
-            <button onClick={() => setViewDate(new Date(year, month + 1, 1))} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', borderRadius: 6 }} onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}><ChevronRight size={16} /></button>
           </div>
 
           {/* Toggle Mês/Semana/Dia */}
-          <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: 10, padding: 4 }}>
+          <div className="ad-cal-view-toggle">
             {[
               { id: 'mes', label: 'Mês', icon: Grid },
               { id: 'semana', label: 'Semana', icon: List },
               { id: 'dia', label: 'Dia', icon: Clock }
-            ].map(v => (
-               <button 
-                 key={v.id} 
-                 onClick={() => setViewMode(v.id as any)}
-                 style={{ 
-                   display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', 
-                   borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                   background: viewMode === v.id ? '#ffffff' : 'transparent',
-                   color: viewMode === v.id ? '#1e293b' : '#64748b',
-                   boxShadow: viewMode === v.id ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
-                   transition: 'all 0.2s'
-                 }}
-               >
-                 <v.icon size={14} /> <span className="ad-hide-mobile">{v.label}</span>
-               </button>
-            ))}
+            ].map(v => {
+              const isActive = viewMode === v.id
+              return (
+                <button 
+                  type="button"
+                  key={v.id} 
+                  onClick={() => setViewMode(v.id as any)}
+                  style={{ 
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '0 10px', height: 32,
+                    borderRadius: 8, border: 'none', fontSize: 12, fontWeight: isActive ? 700 : 600, cursor: 'pointer',
+                    background: isActive ? '#ffffff' : 'transparent',
+                    color: isActive ? '#4f46e5' : '#64748b',
+                    boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = '#1e293b' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = '#64748b' }}
+                >
+                  <v.icon size={13} /> <span className="ad-hide-mobile">{v.label}</span>
+                </button>
+              )
+            })}
           </div>
 
-          <button style={{ height: 40, padding: '0 16px', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, fontWeight: 600, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}>
-            <Download size={16} style={{ color: '#64748b' }} /> Exportar
+          <button 
+            type="button"
+            onClick={handleExportEvents}
+            title="Exportar eventos deste mês (CSV)"
+            className="ad-cal-btn-export"
+          >
+            <Download size={14} style={{ color: '#64748b' }} /> <span>Exportar</span>
           </button>
           
         </div>
@@ -928,38 +1285,180 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
             )}
           </div>
 
-          <div className="calendar-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Sparkles size={18} style={{ color: '#ec4899' }} /> Aniversariantes
+          <div 
+            className="calendar-card" 
+            style={{ 
+              padding: 0, 
+              overflow: 'hidden', 
+              display: 'flex', 
+              flexDirection: 'column',
+              borderRadius: 24,
+              boxShadow: '0 10px 30px -5px rgba(236, 72, 153, 0.08), 0 4px 16px rgba(0, 0, 0, 0.03)',
+              border: '1px solid rgba(244, 114, 182, 0.25)'
+            }}
+          >
+            {/* Cabeçalho com Gradiente Ultra Moderno */}
+            <div 
+              style={{ 
+                background: 'linear-gradient(135deg, #ec4899 0%, #d946ef 45%, #6366f1 100%)',
+                padding: '18px 20px',
+                position: 'relative',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                color: '#ffffff',
+                boxShadow: '0 4px 20px rgba(236, 72, 153, 0.2)'
+              }}
+            >
+              {/* Círculos de brilho decorativos de fundo */}
+              <div 
+                style={{ 
+                  position: 'absolute', 
+                  top: -24, 
+                  right: -24, 
+                  width: 90, 
+                  height: 90, 
+                  borderRadius: '50%', 
+                  background: 'radial-gradient(circle, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 70%)', 
+                  pointerEvents: 'none' 
+                }} 
+              />
+              <div 
+                style={{ 
+                  position: 'absolute', 
+                  bottom: -20, 
+                  left: 20, 
+                  width: 70, 
+                  height: 70, 
+                  borderRadius: '50%', 
+                  background: 'radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 70%)', 
+                  pointerEvents: 'none' 
+                }} 
+              />
+
+              {/* Título com ícone e badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', zIndex: 1 }}>
+                <div 
+                  style={{ 
+                    width: 36, 
+                    height: 36, 
+                    borderRadius: 12, 
+                    background: 'rgba(255, 255, 255, 0.2)', 
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255, 255, 255, 0.35)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                    flexShrink: 0
+                  }}
+                >
+                  <Sparkles size={18} color="#ffffff" />
+                </div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: '#ffffff', letterSpacing: '-0.01em', fontFamily: 'Outfit, sans-serif', lineHeight: 1.2 }}>
+                    Aniversariantes
+                  </div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255, 255, 255, 0.9)', marginTop: 2 }}>
+                    {aniversariantes.length} {aniversariantes.length === 1 ? 'comemoração' : 'comemorações'}
+                  </div>
+                </div>
               </div>
-              <div style={{ background: '#fdf2f8', color: '#db2777', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 10 }}>{MESES[month]}</div>
+
+              {/* Tag com Mês em Glassmorphism */}
+              <div 
+                style={{ 
+                  background: 'rgba(255, 255, 255, 0.22)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  color: '#ffffff',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: '4px 12px',
+                  borderRadius: 20,
+                  border: '1px solid rgba(255, 255, 255, 0.35)',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                  textTransform: 'capitalize',
+                  letterSpacing: '0.02em',
+                  position: 'relative',
+                  zIndex: 1
+                }}
+              >
+                {MESES[month]}
+              </div>
             </div>
             
-            <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-              {loadingNivers ? (
-                 <div style={{ textAlign: 'center', padding: '20px', fontSize: 12, color: '#94a3b8' }}>Buscando...</div>
-              ) : aniversariantes.length === 0 ? (
-                 <div style={{ textAlign: 'center', padding: '20px', fontSize: 13, color: '#94a3b8' }}>Ninguém faz aniversário este mês.</div>
-              ) : (
-                aniversariantes.map((p, idx) => {
-                  const isHoje = p.dia == hoje.getDate() && month === hoje.getMonth();
-                  return (
-                  <div key={p.id || idx} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: p.foto ? `url(${p.foto}) center/cover` : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#1e293b', border: '1px solid #e2e8f0', flexShrink: 0 }}>
-                      {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
+            {/* Conteúdo da Lista */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <div className="custom-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+                {loadingNivers ? (
+                   <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 12, color: '#94a3b8' }}>Buscando aniversariantes...</div>
+                ) : aniversariantes.length === 0 ? (
+                   <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 13, color: '#94a3b8' }}>Ninguém faz aniversário este mês.</div>
+                ) : (
+                  aniversariantes.map((p, idx) => {
+                    const isHoje = p.dia == hoje.getDate() && month === hoje.getMonth();
+                    const subtitulo = p.tipo === 'Aluno' 
+                      ? resolveTurmaNomeAluno(p) 
+                      : (p.cargo || p.funcao || 'Colaborador');
+
+                    return (
+                    <div key={p.id || idx} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <div style={{ 
+                        width: 36, 
+                        height: 36, 
+                        borderRadius: '50%', 
+                        background: p.foto ? `url(${p.foto}) center/cover` : (isHoje ? 'linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)' : '#f1f5f9'), 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        fontSize: 12, 
+                        fontWeight: 800, 
+                        color: isHoje && !p.foto ? '#ffffff' : '#1e293b', 
+                        border: isHoje ? '2px solid #ec4899' : '1px solid #e2e8f0', 
+                        flexShrink: 0,
+                        boxShadow: isHoje ? '0 4px 10px rgba(236, 72, 153, 0.25)' : 'none'
+                      }}>
+                        {!p.foto && p.nome.split(' ').map((n:any)=>n[0]).join('').slice(0,2).toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {p.nome}
+                        </div>
+                        <div 
+                          title={subtitulo}
+                          style={{ 
+                            fontSize: 11, 
+                            color: isHoje ? '#db2777' : '#64748b', 
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}
+                        >
+                          {subtitulo}
+                        </div>
+                      </div>
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        background: isHoje ? 'linear-gradient(135deg, #ec4899 0%, #d946ef 100%)' : '#f1f5f9', 
+                        borderRadius: 10, 
+                        padding: '4px 8px', 
+                        color: isHoje ? 'white' : '#64748b', 
+                        minWidth: 36,
+                        boxShadow: isHoje ? '0 4px 10px rgba(236, 72, 153, 0.25)' : 'none'
+                      }}>
+                        <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', marginBottom: -2 }}>Dia</span>
+                        <span style={{ fontSize: 14, fontWeight: 900, lineHeight: 1 }}>{p.dia}</span>
+                      </div>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{p.tipo}</div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: isHoje ? '#ec4899' : '#f1f5f9', borderRadius: 10, padding: '4px 8px', color: isHoje ? 'white' : '#64748b', minWidth: 36 }}>
-                      <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', marginBottom: -2 }}>Dia</span>
-                      <span style={{ fontSize: 14, fontWeight: 900, lineHeight: 1 }}>{p.dia}</span>
-                    </div>
-                  </div>
-                )})
-              )}
+                  )})
+                )}
+              </div>
             </div>
           </div>
           

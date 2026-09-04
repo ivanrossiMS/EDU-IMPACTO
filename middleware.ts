@@ -90,11 +90,12 @@ export async function middleware(request: NextRequest) {
           response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) => {
             const sessionOptions = { ...options };
-            // SEGURANÇA: 7 dias (604800s) — padrão da indústria.
-            // Antes estava 315360000s = 10 anos, um risco grave se o token for vazado.
+            // Preserva sessão longa para apps nativos ou usuários com keepConnected ativo
+            const keepConnected = request.cookies.get('edu_keep_connected')?.value === '1';
+            const maxAge = keepConnected ? 315360000 : 2592000; // 1 ano ou 30 dias
             const expires = new Date();
-            expires.setDate(expires.getDate() + 7);
-            sessionOptions.maxAge = 604800;
+            expires.setSeconds(expires.getSeconds() + maxAge);
+            sessionOptions.maxAge = maxAge;
             sessionOptions.expires = expires;
             response.cookies.set(name, value, sessionOptions)
           })
@@ -103,13 +104,19 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // PERFORMANCE: Usa getSession() no middleware — lê o JWT do cookie localmente,
-  // sem chamada de rede ao Supabase Auth (~500ms economizados por request).
-  // SEGURANÇA: O middleware só decide redirecionamento (login vs protegido).
-  // A validação real via getUser() com verificação de rede ocorre em TODAS as
-  // route handlers protegidas via requireAuth() — essa é a fonte de verdade.
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
+  // PERFORMANCE & RESILIÊNCIA: Timeout de 4s para evitar que chamadas de rede travadas
+  // no Edge congelem a abertura do app mobile.
+  let user = null
+  try {
+    const sessionPromise = supabase.auth.getSession()
+    const timeoutPromise = new Promise<{ data: { session: any } }>(res =>
+      setTimeout(() => res({ data: { session: null } }), 4000)
+    )
+    const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise])
+    user = session?.user ?? null
+  } catch (err) {
+    console.warn('[Middleware Auth Warning]', err)
+  }
 
 
   // ── Sem sessão → redireciona para login ──────────────────────────────────

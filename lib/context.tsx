@@ -175,12 +175,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrate() {
       try {
-        const savedTheme = await loadSettingAsync<Theme>('edu-theme', 'light')
-        const savedSidebarTheme = await loadSettingAsync<Theme>('edu-sidebar-theme', 'dark')
-        const savedModules = await loadSettingAsync<Record<string, boolean>>('edu-active-modules', DEFAULT_MODULES)
-        const savedUnit = await loadSettingAsync<string>('edu-active-unit', 'Unidade Centro')
-        const savedPerfil = await loadSettingAsync<string>('edu-current-perfil', 'Diretor Geral')
-        const savedUser = await loadSettingAsync<CurrentUser | null>('edu-current-user', null)
+        const [savedTheme, savedSidebarTheme, savedModules, savedUnit, savedPerfil, savedUser] = await Promise.all([
+          loadSettingAsync<Theme>('edu-theme', 'light'),
+          loadSettingAsync<Theme>('edu-sidebar-theme', 'dark'),
+          loadSettingAsync<Record<string, boolean>>('edu-active-modules', DEFAULT_MODULES),
+          loadSettingAsync<string>('edu-active-unit', 'Unidade Centro'),
+          loadSettingAsync<string>('edu-current-perfil', 'Diretor Geral'),
+          loadSettingAsync<CurrentUser | null>('edu-current-user', null),
+        ])
 
         if (!isMounted) return
 
@@ -192,8 +194,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (savedUser) {
           setCurrentUserPerfilState(savedPerfil || savedUser.perfil || '')
           try {
-            const isolatedPhoto = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.id}`, null)
-            const extraData = await loadSettingAsync<any>(`edu-profile-extra-${savedUser.id}`, null)
+            const [isolatedPhoto, extraData] = await Promise.all([
+              loadSettingAsync<string | null>(`edu-user-photo-${savedUser.id}`, null),
+              loadSettingAsync<any>(`edu-profile-extra-${savedUser.id}`, null),
+            ])
             if (isolatedPhoto) savedUser.foto = isolatedPhoto
             else if (extraData && extraData.foto) savedUser.foto = extraData.foto
           } catch (e) {}

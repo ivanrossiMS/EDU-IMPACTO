@@ -166,10 +166,46 @@ export default function DashboardPage() {
   const eventosExibidos = eventosAgenda.filter((e: any) => e.data === selectedDateStr);
 
   const kpiCards = [
-    { label: 'Total de Alunos', value: formatNumber(totalAlunos), icon: <Users size={18} />, color: '#3b82f6', bgIcon: 'rgba(59, 130, 246, 0.1)', sub: 'Matriculados ativos', path: PATHS.blue },
-    { label: 'Taxa de Ocupação', value: fmtPct(taxaOcupacao), icon: <GraduationCap size={18} />, color: '#8b5cf6', bgIcon: 'rgba(139, 92, 246, 0.1)', sub: 'Capacidade física', path: PATHS.purple },
-    { label: 'Novas Matrículas', value: formatNumber(novasMatriculas), icon: <UserPlus size={18} />, color: '#10b981', bgIcon: 'rgba(16, 185, 129, 0.1)', sub: 'Este mês', path: PATHS.green },
-    { label: 'Ocorrências', value: formatNumber(ocorrencias.length), icon: <AlertTriangle size={18} />, color: '#f59e0b', bgIcon: 'hsl(var(--bg-surface))beb', sub: 'Registradas', path: PATHS.orange },
+    { 
+      label: 'Total de Alunos', 
+      value: formatNumber(totalAlunos), 
+      icon: <Users size={20} strokeWidth={2.2} />, 
+      color: '#2563eb', 
+      bgIcon: 'rgba(37, 99, 235, 0.12)', 
+      sub: 'Matriculados ativos', 
+      path: PATHS.blue,
+      gradient: 'linear-gradient(90deg, #1d4ed8 0%, #3b82f6 50%, #06b6d4 100%)'
+    },
+    { 
+      label: 'Taxa de Ocupação', 
+      value: fmtPct(taxaOcupacao), 
+      icon: <GraduationCap size={20} strokeWidth={2.2} />, 
+      color: '#7c3aed', 
+      bgIcon: 'rgba(124, 58, 237, 0.12)', 
+      sub: 'Capacidade física', 
+      path: PATHS.purple,
+      gradient: 'linear-gradient(90deg, #6d28d9 0%, #8b5cf6 50%, #c084fc 100%)'
+    },
+    { 
+      label: 'Novas Matrículas', 
+      value: formatNumber(novasMatriculas), 
+      icon: <UserPlus size={20} strokeWidth={2.2} />, 
+      color: '#059669', 
+      bgIcon: 'rgba(5, 150, 105, 0.12)', 
+      sub: 'Este mês', 
+      path: PATHS.green,
+      gradient: 'linear-gradient(90deg, #047857 0%, #10b981 50%, #34d399 100%)'
+    },
+    { 
+      label: 'Ocorrências', 
+      value: formatNumber(ocorrencias.length), 
+      icon: <AlertTriangle size={20} strokeWidth={2.2} />, 
+      color: '#ea580c', 
+      bgIcon: 'rgba(234, 88, 12, 0.12)', 
+      sub: 'Registradas', 
+      path: PATHS.orange,
+      gradient: 'linear-gradient(90deg, #c2410c 0%, #f97316 50%, #fbbf24 100%)'
+    },
   ]
 
   const aniversariantes = useMemo(() => {
@@ -212,12 +248,22 @@ export default function DashboardPage() {
               borderRadius: '24px',
               position: 'relative',
               overflow: 'hidden',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.02)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
               border: '1px solid hsl(var(--border-subtle))',
               display: 'flex', flexDirection: 'column',
               minHeight: '160px'
             }}
           >
+            {/* Top Accent Gradient Bar */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 4,
+              background: kpi.gradient,
+            }} />
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
               <div>
                 <span style={{ fontSize: '13px', fontWeight: 800, color: kpi.color, display: 'block', marginBottom: '8px' }}>
@@ -232,11 +278,12 @@ export default function DashboardPage() {
               </div>
               <div style={{ 
                 width: 48, height: 48, 
-                background: `linear-gradient(135deg, ${kpi.bgIcon}, hsl(var(--bg-surface))fff)`,
+                background: kpi.bgIcon,
                 borderRadius: '16px', 
+                border: `1px solid ${kpi.color}25`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', 
                 color: kpi.color,
-                boxShadow: `0 8px 16px ${kpi.color}15, inset 0 2px 4px rgba(255,255,255,0.8)`
+                boxShadow: `0 8px 16px ${kpi.color}15`
               }}>
                 {kpi.icon}
               </div>
@@ -251,125 +298,273 @@ export default function DashboardPage() {
       <div className="dashboard-main-grid">
 
         {/* ── Coluna 1: Pedido de Livros ──────────────────────────── */}
-        <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: 'rgba(59, 130, 246, 0.1)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <BookMarked size={16} color="#3b82f6" />
+        <div style={{ 
+          background: 'hsl(var(--bg-surface))', 
+          borderRadius: '24px', 
+          overflow: 'hidden', 
+          boxShadow: '0 4px 20px rgba(0,0,0,0.03)', 
+          border: '1px solid hsl(var(--border-subtle))', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          height: '100%' 
+        }}>
+          {/* Header Ultra Moderno com Gradiente */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 45%, #06b6d4 100%)', 
+            padding: '16px 22px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            position: 'relative', 
+            overflow: 'hidden',
+            borderBottom: '1px solid rgba(255,255,255,0.15)'
+          }}>
+            {/* Efeito sutil de luz glass reflexiva */}
+            <div style={{ 
+              position: 'absolute', 
+              top: '-40px', 
+              right: '-20px', 
+              width: 120, 
+              height: 120, 
+              borderRadius: '50%', 
+              background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
+              pointerEvents: 'none' 
+            }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
+              <div style={{ 
+                width: 36, 
+                height: 36, 
+                background: 'rgba(255,255,255,0.2)', 
+                backdropFilter: 'blur(8px)', 
+                WebkitBackdropFilter: 'blur(8px)',
+                borderRadius: '10px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                color: '#ffffff'
+              }}>
+                <BookMarked size={18} strokeWidth={2.4} />
               </div>
-              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Pedido de Livros/Apostilas</span>
+              <div>
+                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+                  Pedido de Livros/Apostilas
+                </span>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Controle de materiais</div>
+              </div>
             </div>
-            <Link href="/administrativo/pedidos-livros" style={{ fontSize: '12px', color: '#6366f1', textDecoration: 'none', fontWeight: 800 }}>Ver todos</Link>
+
+            <Link 
+              href="/administrativo/pedidos-livros" 
+              style={{ 
+                fontSize: '12px', 
+                color: '#ffffff', 
+                textDecoration: 'none', 
+                fontWeight: 800,
+                background: 'rgba(255,255,255,0.2)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                padding: '6px 14px',
+                borderRadius: '14px',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                position: 'relative',
+                zIndex: 1,
+                display: 'inline-flex',
+                alignItems: 'center'
+              }}
+            >
+              Ver todos
+            </Link>
           </div>
 
-          {loadOrders ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
-              <Loader2 className="animate-spin" size={32} color="#3b82f6" />
-            </div>
-          ) : (
-            <>
-          <div className="dashboard-books-grid">
-            <div style={{ background: 'hsl(var(--bg-elevated))', padding: '16px', borderRadius: '16px' }}>
-              <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.totalOrders}</div>
-            </div>
-            <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '16px', borderRadius: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Pendentes</div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.pendenteCount}</div>
-            </div>
-            <div style={{ background: 'hsl(var(--bg-surface))beb', padding: '16px', borderRadius: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Pedido Feito</div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#f59e0b', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.preparadoCount}</div>
-            </div>
-            <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '16px', borderRadius: '16px' }}>
-              <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Entregues</div>
-              <div style={{ fontSize: '24px', fontWeight: 900, color: '#10b981', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.entregueCount}</div>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 800, color: 'hsl(var(--text-secondary))', marginBottom: 8 }}>
-              <span>Taxa de Entrega</span>
-              <span style={{ color: '#10b981' }}>{ordersSummary.totalOrders > 0 ? ((ordersSummary.entregueCount / ordersSummary.totalOrders) * 100).toFixed(0) : 0}%</span>
-            </div>
-            <div style={{ width: '100%', height: 6, background: 'hsl(var(--bg-hover))', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
-              <div style={{ width: `${ordersSummary.totalOrders > 0 ? (ordersSummary.entregueCount / ordersSummary.totalOrders) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
-            </div>
-          </div>
-
-          <div style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-secondary))', marginBottom: 12 }}>Recentes</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {ordersSummary.recentOrders.length === 0 ? (
-              <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '10px 0', fontWeight: 600 }}>Nenhum material registrado.</div>
+          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+            {loadOrders ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                <Loader2 className="animate-spin" size={32} color="#3b82f6" />
+              </div>
             ) : (
-              ordersSummary.recentOrders.slice(0, 3).map((o: any) => {
-                const IconComponent = o.material.toLowerCase().includes('livro') ? BookMarked : Users;
-                const iconColor = o.entregue ? '#10b981' : (o.feito ? '#f59e0b' : '#3b82f6');
-                const iconBg = o.entregue ? '#ecfdf5' : (o.feito ? 'hsl(var(--bg-surface))beb' : '#eff6ff');
+              <>
+            <div className="dashboard-books-grid">
+              <div style={{ background: 'hsl(var(--bg-elevated))', padding: '16px', borderRadius: '16px' }}>
+                <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.totalOrders}</div>
+              </div>
+              <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '16px', borderRadius: '16px' }}>
+                <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Pendentes</div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.pendenteCount}</div>
+              </div>
+              <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '16px', borderRadius: '16px' }}>
+                <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Pedido Feito</div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#f59e0b', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.preparadoCount}</div>
+              </div>
+              <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '16px', borderRadius: '16px' }}>
+                <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Entregues</div>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#10b981', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.entregueCount}</div>
+              </div>
+            </div>
 
-                return (
-                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0px', background: 'transparent' }}>
-                    <div style={{ width: 44, height: 44, borderRadius: '16px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: iconColor }}>
-                      <IconComponent size={20} strokeWidth={2} />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 14, paddingTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
-                        <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 800, color: 'hsl(var(--text-secondary))', marginBottom: 8 }}>
+                <span>Taxa de Entrega</span>
+                <span style={{ color: '#10b981' }}>{ordersSummary.totalOrders > 0 ? ((ordersSummary.entregueCount / ordersSummary.totalOrders) * 100).toFixed(0) : 0}%</span>
+              </div>
+              <div style={{ width: '100%', height: 6, background: 'hsl(var(--bg-hover))', borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
+                <div style={{ width: `${ordersSummary.totalOrders > 0 ? (ordersSummary.entregueCount / ordersSummary.totalOrders) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
+              </div>
+            </div>
+
+            <div style={{ fontSize: '13px', fontWeight: 800, color: 'hsl(var(--text-secondary))', marginBottom: 12 }}>Recentes</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {ordersSummary.recentOrders.length === 0 ? (
+                <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '10px 0', fontWeight: 600 }}>Nenhum material registrado.</div>
+              ) : (
+                ordersSummary.recentOrders.slice(0, 3).map((o: any) => {
+                  const IconComponent = o.material.toLowerCase().includes('livro') ? BookMarked : Users;
+                  const iconColor = o.entregue ? '#10b981' : (o.feito ? '#f59e0b' : '#3b82f6');
+                  const iconBg = o.entregue ? '#ecfdf5' : (o.feito ? '#fef3c7' : '#eff6ff');
+
+                  return (
+                    <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0px', background: 'transparent' }}>
+                      <div style={{ width: 44, height: 44, borderRadius: '16px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: iconColor }}>
+                        <IconComponent size={20} strokeWidth={2} />
                       </div>
-                      <div style={{ marginLeft: 12, flexShrink: 0 }}>
-                        {!o.feito && !o.entregue && (
-                          <span style={{ fontSize: '9px', fontWeight: 900, color: '#ef4444', textTransform: 'uppercase' }}>Novo</span>
-                        )}
-                        {o.feito && !o.entregue && (
-                          <span style={{ fontSize: '9px', fontWeight: 900, color: '#f59e0b', textTransform: 'uppercase' }}>Pedido Feito</span>
-                        )}
-                        {o.entregue && (
-                          <span style={{ fontSize: '9px', fontWeight: 900, color: '#10b981', textTransform: 'uppercase' }}>Entregue</span>
-                        )}
+                      <div style={{ flex: 1, minWidth: 0, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 14, paddingTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.aluno}</div>
+                          <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{o.turma} • {o.material}</div>
+                        </div>
+                        <div style={{ marginLeft: 12, flexShrink: 0 }}>
+                          {!o.feito && !o.entregue && (
+                            <span style={{ fontSize: '9px', fontWeight: 900, color: '#ef4444', textTransform: 'uppercase' }}>Novo</span>
+                          )}
+                          {o.feito && !o.entregue && (
+                            <span style={{ fontSize: '9px', fontWeight: 900, color: '#f59e0b', textTransform: 'uppercase' }}>Pedido Feito</span>
+                          )}
+                          {o.entregue && (
+                            <span style={{ fontSize: '9px', fontWeight: 900, color: '#10b981', textTransform: 'uppercase' }}>Entregue</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              })
+                  )
+                })
+              )}
+            </div>
+              </>
             )}
           </div>
-            </>
-          )}
         </div>
 
         {/* ── Coluna Central: Tarefas e Agenda ──────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* Tarefas */}
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: 'rgba(16, 185, 129, 0.1)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ClipboardCheck size={16} color="#10b981" strokeWidth={2.5} />
-              </div>
-              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Tarefas</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '10px', fontWeight: 800, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase' }}>Minhas</span>
-                <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '32px', height: '18px' }}>
-                  <input type="checkbox" checked={apenasMinhasTarefas} onChange={e => setApenasMinhasTarefas(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
-                  <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: apenasMinhasTarefas ? '#10b981' : 'hsl(var(--border-subtle))', transition: '.4s', borderRadius: '18px' }}>
-                    <span style={{ position: 'absolute', content: '""', height: '14px', width: '14px', left: apenasMinhasTarefas ? '16px' : '2px', bottom: '2px', background: 'white', transition: '.4s', borderRadius: '50%', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}></span>
-                  </span>
-                </label>
-              </div>
-              <Link href="/tarefas" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
-            </div>
-          </div>
+          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))' }}>
+            {/* Header Ultra Moderno com Gradiente */}
+            <div style={{ 
+              background: 'linear-gradient(135deg, #065f46 0%, #059669 45%, #14b8a6 100%)', 
+              padding: '16px 22px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              position: 'relative', 
+              overflow: 'hidden',
+              borderBottom: '1px solid rgba(255,255,255,0.15)'
+            }}>
+              {/* Efeito sutil de luz glass reflexiva */}
+              <div style={{ 
+                position: 'absolute', 
+                top: '-40px', 
+                right: '-20px', 
+                width: 120, 
+                height: 120, 
+                borderRadius: '50%', 
+                background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
+                pointerEvents: 'none' 
+              }} />
 
-          {loadContext ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
-              <Loader2 className="animate-spin" size={32} color="#10b981" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
+                <div style={{ 
+                  width: 36, 
+                  height: 36, 
+                  background: 'rgba(255,255,255,0.2)', 
+                  backdropFilter: 'blur(8px)', 
+                  WebkitBackdropFilter: 'blur(8px)',
+                  borderRadius: '10px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  color: '#ffffff'
+                }}>
+                  <ClipboardCheck size={18} strokeWidth={2.4} />
+                </div>
+                <div>
+                  <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+                    Tarefas
+                  </span>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Atividades e lembretes</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, position: 'relative', zIndex: 1 }}>
+                {/* Glass Minhas Switch Pill */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  background: 'rgba(255, 255, 255, 0.18)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.28)',
+                  padding: '5px 12px',
+                  borderRadius: '20px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+                }}>
+                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#ffffff', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Minhas</span>
+                  <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '30px', height: '16px', margin: 0 }}>
+                    <input type="checkbox" checked={apenasMinhasTarefas} onChange={e => setApenasMinhasTarefas(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
+                    <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: apenasMinhasTarefas ? '#10b981' : 'rgba(255,255,255,0.3)', transition: '.3s', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.4)' }}>
+                      <span style={{ position: 'absolute', content: '""', height: '12px', width: '12px', left: apenasMinhasTarefas ? '15px' : '2px', bottom: '1px', background: 'white', transition: '.3s', borderRadius: '50%', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></span>
+                    </span>
+                  </label>
+                </div>
+
+                {/* Glass Ver todas Link */}
+                <Link 
+                  href="/tarefas" 
+                  style={{ 
+                    fontSize: '12px', 
+                    color: '#ffffff', 
+                    textDecoration: 'none', 
+                    fontWeight: 800,
+                    background: 'rgba(255, 255, 255, 0.18)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255, 255, 255, 0.28)',
+                    padding: '6px 14px',
+                    borderRadius: '14px',
+                    transition: 'all 0.2s',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+                  }}
+                >
+                  Ver todas
+                </Link>
+              </div>
             </div>
-          ) : (
-            <>
-          <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
+
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+              {loadContext ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                  <Loader2 className="animate-spin" size={32} color="#10b981" />
+                </div>
+              ) : (
+                <>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
             <div 
               onClick={() => setFiltroTarefas('todas')}
               style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'todas' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'todas' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
@@ -424,26 +619,91 @@ export default function DashboardPage() {
           </div>
             </>
           )}
-        </div>
-
-        {/* ── Coluna 3: Agenda ──────────────────────────── */}
-        <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', overflow: 'hidden', border: '1px solid hsl(var(--border-subtle))' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: 'rgba(139, 92, 246, 0.1)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <CalendarIcon size={16} color="#8b5cf6" strokeWidth={2.5} />
-              </div>
-              <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Agenda</span>
             </div>
-            <Link href="/calendario" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todos</Link>
           </div>
 
-          {loadContext ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
-              <Loader2 className="animate-spin" size={32} color="#8b5cf6" />
+        {/* ── Coluna 3: Agenda ──────────────────────────── */}
+        <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', border: '1px solid hsl(var(--border-subtle))' }}>
+          {/* Header Ultra Moderno com Gradiente */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #4c1d95 0%, #7c3aed 45%, #a855f7 100%)', 
+            padding: '16px 22px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between', 
+            position: 'relative', 
+            overflow: 'hidden',
+            borderBottom: '1px solid rgba(255,255,255,0.15)'
+          }}>
+            {/* Efeito sutil de luz glass reflexiva */}
+            <div style={{ 
+              position: 'absolute', 
+              top: '-40px', 
+              right: '-20px', 
+              width: 120, 
+              height: 120, 
+              borderRadius: '50%', 
+              background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
+              pointerEvents: 'none' 
+            }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
+              <div style={{ 
+                width: 36, 
+                height: 36, 
+                background: 'rgba(255,255,255,0.2)', 
+                backdropFilter: 'blur(8px)', 
+                WebkitBackdropFilter: 'blur(8px)',
+                borderRadius: '10px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
+                border: '1px solid rgba(255,255,255,0.25)',
+                color: '#ffffff'
+              }}>
+                <CalendarIcon size={18} strokeWidth={2.4} />
+              </div>
+              <div>
+                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+                  Agenda
+                </span>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Eventos escolares</div>
+              </div>
             </div>
-          ) : (
-            <>
+
+            <Link 
+              href="/calendario" 
+              style={{ 
+                fontSize: '12px', 
+                color: '#ffffff', 
+                textDecoration: 'none', 
+                fontWeight: 800,
+                background: 'rgba(255, 255, 255, 0.18)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255, 255, 255, 0.28)',
+                padding: '6px 14px',
+                borderRadius: '14px',
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                position: 'relative',
+                zIndex: 1,
+                display: 'inline-flex',
+                alignItems: 'center'
+              }}
+            >
+              Ver todos
+            </Link>
+          </div>
+
+          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+            {loadContext ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                <Loader2 className="animate-spin" size={32} color="#8b5cf6" />
+              </div>
+            ) : (
+              <>
           {/* Week View */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))', overflowX: 'auto', gap: 12 }} className="no-scrollbar">
             {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
@@ -505,6 +765,7 @@ export default function DashboardPage() {
           </div>
             </>
           )}
+          </div>
         </div>
         {/* Fim da Coluna Central */}
         </div>
@@ -513,30 +774,86 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           
           {/* Aniversariantes */}
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 32, height: 32, background: 'rgba(236, 72, 153, 0.1)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
-                  <Cake size={16} strokeWidth={2.5} />
+          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column' }}>
+            {/* Header Ultra Moderno com Gradiente */}
+            <div style={{ 
+              background: 'linear-gradient(135deg, #9d174d 0%, #ec4899 45%, #f43f5e 100%)', 
+              padding: '16px 22px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              position: 'relative', 
+              overflow: 'hidden',
+              borderBottom: '1px solid rgba(255,255,255,0.15)'
+            }}>
+              {/* Efeito sutil de luz glass reflexiva */}
+              <div style={{ 
+                position: 'absolute', 
+                top: '-40px', 
+                right: '-20px', 
+                width: 120, 
+                height: 120, 
+                borderRadius: '50%', 
+                background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
+                pointerEvents: 'none' 
+              }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
+                <div style={{ 
+                  width: 36, 
+                  height: 36, 
+                  background: 'rgba(255,255,255,0.2)', 
+                  backdropFilter: 'blur(8px)', 
+                  WebkitBackdropFilter: 'blur(8px)',
+                  borderRadius: '10px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  color: '#ffffff'
+                }}>
+                  <Cake size={18} strokeWidth={2.4} />
                 </div>
-                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>
-                  Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
-                </span>
+                <div>
+                  <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+                    Aniversariantes de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
+                  </span>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Comemorações do mês</div>
+                </div>
               </div>
+
               <button 
                 onClick={() => setModalAnivOpen(true)} 
-                style={{ fontSize: '12px', color: '#3b82f6', fontWeight: 800, textDecoration: 'none', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                style={{ 
+                  fontSize: '12px', 
+                  color: '#ffffff', 
+                  textDecoration: 'none', 
+                  fontWeight: 800,
+                  background: 'rgba(255, 255, 255, 0.18)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.28)',
+                  padding: '6px 14px',
+                  borderRadius: '14px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                  position: 'relative',
+                  zIndex: 1
+                }}
               >
                 Ver todos
               </button>
             </div>
 
-            {loadAniv ? (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
-                <Loader2 className="animate-spin" size={32} color="#ec4899" />
-              </div>
-            ) : (
-              <>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+              {loadAniv ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                  <Loader2 className="animate-spin" size={32} color="#ec4899" />
+                </div>
+              ) : (
+                <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {aniversariantes.length === 0 ? (
                 <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhum neste mês.</div>
@@ -571,26 +888,89 @@ export default function DashboardPage() {
             </div>
               </>
             )}
+            </div>
           </div>
 
           {/* Ocorrências Recentes */}
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 32, height: 32, background: 'hsl(var(--bg-surface))beb', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
-                  <AlertTriangle size={16} strokeWidth={2.5} />
+          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column' }}>
+            {/* Header Ultra Moderno com Gradiente */}
+            <div style={{ 
+              background: 'linear-gradient(135deg, #9a3412 0%, #ea580c 45%, #f59e0b 100%)', 
+              padding: '16px 22px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              position: 'relative', 
+              overflow: 'hidden',
+              borderBottom: '1px solid rgba(255,255,255,0.15)'
+            }}>
+              {/* Efeito sutil de luz glass reflexiva */}
+              <div style={{ 
+                position: 'absolute', 
+                top: '-40px', 
+                right: '-20px', 
+                width: 120, 
+                height: 120, 
+                borderRadius: '50%', 
+                background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', 
+                pointerEvents: 'none' 
+              }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
+                <div style={{ 
+                  width: 36, 
+                  height: 36, 
+                  background: 'rgba(255,255,255,0.2)', 
+                  backdropFilter: 'blur(8px)', 
+                  WebkitBackdropFilter: 'blur(8px)',
+                  borderRadius: '10px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 1px rgba(255,255,255,0.3)',
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  color: '#ffffff'
+                }}>
+                  <AlertTriangle size={18} strokeWidth={2.4} />
                 </div>
-                <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: 'hsl(var(--text-primary))' }}>Ocorrências Recentes</span>
+                <div>
+                  <span style={{ fontWeight: 900, fontSize: '15px', fontFamily: 'Outfit, sans-serif', color: '#ffffff', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.12)' }}>
+                    Ocorrências Recentes
+                  </span>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>Registros disciplinares</div>
+                </div>
               </div>
-              <Link href="/academico/ocorrencias" style={{ fontSize: '12px', color: '#3b82f6', textDecoration: 'none', fontWeight: 800 }}>Ver todas</Link>
+
+              <Link 
+                href="/academico/ocorrencias" 
+                style={{ 
+                  fontSize: '12px', 
+                  color: '#ffffff', 
+                  textDecoration: 'none', 
+                  fontWeight: 800,
+                  background: 'rgba(255, 255, 255, 0.18)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                  border: '1px solid rgba(255, 255, 255, 0.28)',
+                  padding: '6px 14px',
+                  borderRadius: '14px',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                  position: 'relative',
+                  zIndex: 1
+                }}
+              >
+                Ver todas
+              </Link>
             </div>
 
-            {loadOcorr ? (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
-                <Loader2 className="animate-spin" size={32} color="#f59e0b" />
-              </div>
-            ) : (
-              <>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+              {loadOcorr ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
+                  <Loader2 className="animate-spin" size={32} color="#f59e0b" />
+                </div>
+              ) : (
+                <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {ocorrencias.length === 0 ? (
                 <div style={{ fontSize: '13px', color: 'hsl(var(--text-muted))', textAlign: 'center', padding: '16px 0', fontWeight: 600 }}>Nenhuma registrada.</div>
@@ -599,7 +979,7 @@ export default function DashboardPage() {
                   const isGrave = oc.gravidade === 'grave';
                   const isMedia = oc.gravidade === 'media';
                   const color = isGrave ? '#ef4444' : isMedia ? '#f59e0b' : '#3b82f6';
-                  const bg = isGrave ? '#fef2f2' : isMedia ? 'hsl(var(--bg-surface))beb' : '#eff6ff';
+                  const bg = isGrave ? 'rgba(239, 68, 68, 0.08)' : isMedia ? 'rgba(245, 158, 11, 0.08)' : 'rgba(59, 130, 246, 0.08)';
                   
                   // Extract date
                   let dataStr = oc.dataRegistro || oc.data_registro || oc.created_at || '';
@@ -636,6 +1016,7 @@ export default function DashboardPage() {
             </div>
               </>
             )}
+            </div>
           </div>
 
         </div>
@@ -643,7 +1024,16 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
-      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', flexWrap: 'wrap', gap: 24 }}>
+      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', flexWrap: 'wrap', gap: 24, position: 'relative', overflow: 'hidden' }}>
+        {/* Top Accent Bar */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 4,
+          background: 'linear-gradient(90deg, #6d28d9 0%, #8b5cf6 50%, #3b82f6 100%)'
+        }} />
         {loadUsuarios ? (
           <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 0' }}>
             <Loader2 className="animate-spin" size={32} color="#6d28d9" />
@@ -690,33 +1080,36 @@ export default function DashboardPage() {
         
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {/* Card Colaboradores */}
-          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #7c3aed, #a855f7)' }} />
             <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} color="#8b5cf6" /> Colaboradores</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
               <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#4c1d95' }}>{statsUsuarios.colab}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
             </div>
             <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#8b5cf6' }} />
             </div>
           </div>
           {/* Card Alunos */}
-          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #2563eb, #60a5fa)' }} />
             <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} color="#3b82f6" /> Alunos</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
               <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#1d4ed8' }}>{statsUsuarios.alunos}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
             </div>
             <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#3b82f6' }} />
             </div>
           </div>
           {/* Card Responsáveis */}
-          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid #f1f5f9', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)' }}>
+          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #059669, #34d399)' }} />
             <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color="#10b981" /> Responsáveis</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
               <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#047857' }}>{statsUsuarios.resps}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: '#cbd5e1', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
             </div>
             <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
@@ -751,19 +1144,20 @@ export default function DashboardPage() {
               }}
             >
               {/* Header */}
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(to right, #fdf2f8, hsl(var(--bg-surface)))' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 16, background: '#fbcfe8', color: '#db2777', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, #9d174d 0%, #db2777 45%, #f43f5e 100%)', position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: '-50px', right: '-20px', width: 150, height: 150, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.22) 0%, transparent 70%)', pointerEvents: 'none' }} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative', zIndex: 1 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.35)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.1)' }}>
                     <Cake size={24} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 20, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Aniversariantes do Mês</h2>
-                    <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: '4px 0 0 0', fontWeight: 600 }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>Aniversariantes do Mês</h2>
+                    <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', margin: '4px 0 0 0', fontWeight: 600 }}>
                       Mês de {new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).charAt(0).toUpperCase() + new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(hoje).slice(1)}
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setModalAnivOpen(false)} style={{ width: 36, height: 36, borderRadius: '50%', background: 'hsl(var(--bg-hover))', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-secondary))', cursor: 'pointer', transition: 'all 0.2s' }}>
+                <button onClick={() => setModalAnivOpen(false)} style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', cursor: 'pointer', transition: 'all 0.2s', position: 'relative', zIndex: 1 }}>
                   <X size={18} />
                 </button>
               </div>
