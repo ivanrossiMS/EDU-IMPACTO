@@ -943,10 +943,21 @@ export default function ValoresPage() {
   }
 
   const handleOpenWhatsApp = () => {
+    try {
+      navigator.clipboard.writeText(activeMessage).catch(() => {})
+    } catch {}
+
     const cleanPhone = telefone.replace(/\D/g, '')
     const encoded = encodeURIComponent(activeMessage)
-    const url = cleanPhone ? `https://wa.me/55${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`
+    let url = ''
+    if (cleanPhone) {
+      const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`
+      url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encoded}`
+    } else {
+      url = `https://api.whatsapp.com/send?text=${encoded}`
+    }
     window.open(url, '_blank')
+    showToast('Abrindo WhatsApp... 🚀')
   }
 
   const handlePrint = () => {

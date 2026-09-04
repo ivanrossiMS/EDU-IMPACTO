@@ -1912,7 +1912,8 @@ export default function FrequenciaPage() {
     const phone = aluno.responsavel_telefone || aluno.telefone || ''
     if (phone) {
       const cleanPhone = phone.replace(/\D/g, '')
-      window.open(`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank')
+      const fullPhone = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`
+      window.open(`https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(msg)}`, '_blank')
     } else {
       const confirmCopy = window.confirm(`Nenhum telefone cadastrado para o aluno ${aluno.nome}.\n\nDeseja copiar a mensagem de notificação para a área de transferência?\n\n"${msg}"`)
       if (confirmCopy) {

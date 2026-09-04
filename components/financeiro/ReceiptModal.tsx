@@ -352,10 +352,19 @@ export function ReceiptModal({ parcelas: rawParcelas, aluno, turmaUnidade, onClo
 
   const shareWhatsApp = () => {
     const txt = `*${nomeEscola}*\nOlá, seu recibo nº ${rNum} no valor de R$ ${fmt(totalPago)} pago em ${dtPagto} já está disponível.\n\nAcesse o link abaixo para visualizar e baixar o seu PDF autêntico:\n\n🔗 ${validationUrl}`
+    try {
+      navigator.clipboard.writeText(txt).catch(() => {})
+    } catch {}
     const telRaw = aluno.telResponsavelFinanceiro || (aluno as any).celular || ''
     const tel = telRaw.replace(/\D/g, '')
-    // Preenche phone se tiver celular, senão só text
-    const url = tel ? `https://wa.me/55${tel}?text=${encodeURIComponent(txt)}` : `https://wa.me/?text=${encodeURIComponent(txt)}`
+    const encoded = encodeURIComponent(txt)
+    let url = ''
+    if (tel) {
+      const fullPhone = tel.startsWith('55') ? tel : `55${tel}`
+      url = `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encoded}`
+    } else {
+      url = `https://api.whatsapp.com/send?text=${encoded}`
+    }
     window.open(url, '_blank')
   }
 
