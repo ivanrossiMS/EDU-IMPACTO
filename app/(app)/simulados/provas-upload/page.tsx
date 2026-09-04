@@ -378,13 +378,13 @@ export default function UploadProvasGerenciamentoPage() {
     
     setLoading(true)
     try {
-      const payload = { ...prova }
+      const payload: any = { ...prova }
       delete payload.id
       delete payload.created_at
       delete payload.provas_upload_requisicoes
       delete payload.criado_por_nome
       delete payload.config_estudio
-      payload.eh_adaptada = true
+      delete payload.eh_adaptada
       payload.titulo = `${prova.titulo || 'Prova'} ADAPTADO`
       payload.updated_at = new Date().toISOString()
       
@@ -429,7 +429,7 @@ export default function UploadProvasGerenciamentoPage() {
       }
 
       const existingQs = Array.isArray(payload.questoes_json) ? payload.questoes_json : []
-      if (existingQs.length > 0) {
+      if (existingQs.length > 0 || prova.config_estudio) {
         const mappedQs = existingQs.map((q: any) => {
           const newReqId = (q.id_requisicao && idMap[q.id_requisicao]) 
             ? idMap[q.id_requisicao] 
@@ -449,16 +449,34 @@ export default function UploadProvasGerenciamentoPage() {
           }))
         }
 
-        await (supabase as any)
+        const updatePayload: any = {
+          questoes_json: mappedQs,
+          questoes_count: mappedQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
+          config_estudio: newConfig,
+          updated_at: new Date().toISOString()
+        }
+
+        const { error: updError } = await (supabase as any)
           .from('provas_upload')
-          .update({
-            questoes_json: mappedQs,
-            questoes_count: mappedQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
-            config_estudio: newConfig,
-            eh_adaptada: true
-          })
+          .update(updatePayload)
           .eq('id', newProva.id)
+
+        if (updError && updError.message?.includes('config_estudio')) {
+          delete updatePayload.config_estudio
+          await (supabase as any)
+            .from('provas_upload')
+            .update(updatePayload)
+            .eq('id', newProva.id)
+        }
       }
+
+      // Tentativa não-bloqueante de atualizar flag eh_adaptada caso a coluna exista no banco
+      (supabase as any)
+        .from('provas_upload')
+        .update({ eh_adaptada: true })
+        .eq('id', newProva.id)
+        .then(() => {})
+        .catch(() => {})
       
       await loadData()
     } catch (e: any) {
