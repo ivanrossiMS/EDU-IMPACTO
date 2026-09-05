@@ -102,7 +102,7 @@ interface ExtendedDeclaracaoData extends DeclaracaoIrpfData {
   }>
 }
 
-const ANOS_DISPONIVEIS = ['2026', '2025', '2024', '2023', '2022']
+const ANOS_DISPONIVEIS = ['2026', '2025', '2024', '2023', '2022', '2021']
 
 function formatCPF(cpf?: string | null): string {
   if (!cpf) return ''
@@ -145,6 +145,8 @@ export default function DeclaracaoIrpfAdminPage() {
   const [copiedCode, setCopiedCode] = useState(false)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
+  const anoDropdownRef = useRef<HTMLDivElement>(null)
+  const [anoDropdownOpen, setAnoDropdownOpen] = useState(false)
 
   // ── Helper: Mapa de ID/Código de Turma -> Nome Formatado ────────────────────
   const turmaMap = useMemo(() => {
@@ -198,15 +200,30 @@ export default function DeclaracaoIrpfAdminPage() {
     return () => clearTimeout(handler)
   }, [searchTerm])
 
-  // ── Fechar dropdown ao clicar fora ─────────────────────────────────────────
+  // ── Fechar dropdowns ao clicar fora ou pressionar Escape ──────────────────
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setSearchDropdownOpen(false)
       }
+      if (anoDropdownRef.current && !anoDropdownRef.current.contains(e.target as Node)) {
+        setAnoDropdownOpen(false)
+      }
     }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSearchDropdownOpen(false)
+        setAnoDropdownOpen(false)
+      }
+    }
+
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [])
 
   // ── Carregar Alunos e Responsáveis para o Autocomplete (Mínimo 3 Caracteres) ───
@@ -658,44 +675,332 @@ export default function DeclaracaoIrpfAdminPage() {
             </button>
           </div>
 
-          {/* Seletor de Ano Calendário */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
-              Ano-Base:
-            </span>
-            <div
+          {/* Seletor de Ano Calendário - Lista Dropdown Ultra Moderna */}
+          <div ref={anoDropdownRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setAnoDropdownOpen((prev) => !prev)}
+              aria-expanded={anoDropdownOpen}
+              aria-haspopup="listbox"
               style={{
                 display: 'flex',
-                background: '#f1f5f9',
-                padding: 3,
-                borderRadius: 12,
-                gap: 3,
+                alignItems: 'center',
+                gap: 10,
+                padding: '6px 14px 6px 8px',
+                borderRadius: 14,
+                border: anoDropdownOpen ? '1.5px solid #6366f1' : '1.5px solid #e2e8f0',
+                background: anoDropdownOpen
+                  ? '#ffffff'
+                  : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+                boxShadow: anoDropdownOpen
+                  ? '0 0 0 3px rgba(99, 102, 241, 0.15), 0 4px 12px rgba(99, 102, 241, 0.08)'
+                  : '0 1px 3px rgba(0, 0, 0, 0.04)',
+                cursor: 'pointer',
+                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                outline: 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (!anoDropdownOpen) {
+                  e.currentTarget.style.borderColor = '#cbd5e1'
+                  e.currentTarget.style.boxShadow = '0 3px 8px rgba(0, 0, 0, 0.06)'
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!anoDropdownOpen) {
+                  e.currentTarget.style.borderColor = '#e2e8f0'
+                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.04)'
+                }
               }}
             >
-              {ANOS_DISPONIVEIS.map((ano) => {
-                const isSelected = selectedAno === ano
-                return (
-                  <button
-                    key={ano}
-                    onClick={() => setSelectedAno(ano)}
+              {/* Ícone com gradiente elegante */}
+              <div
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 6px rgba(79, 70, 229, 0.28)',
+                  flexShrink: 0,
+                }}
+              >
+                <Calendar size={15} strokeWidth={2.4} />
+              </div>
+
+              {/* Informações do Ano */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 800,
+                    color: '#64748b',
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.6,
+                    lineHeight: 1.1,
+                  }}
+                >
+                  Ano-Base
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span
                     style={{
-                      padding: '6px 12px',
-                      borderRadius: 9,
-                      border: 'none',
-                      background: isSelected ? '#ffffff' : 'transparent',
-                      color: isSelected ? '#4f46e5' : '#64748b',
-                      fontSize: 12.5,
-                      fontWeight: isSelected ? 900 : 600,
-                      cursor: 'pointer',
-                      boxShadow: isSelected ? '0 2px 5px rgba(0,0,0,0.06)' : 'none',
-                      transition: 'all 0.15s ease',
+                      fontSize: 14,
+                      fontWeight: 900,
+                      color: '#0f172a',
+                      lineHeight: 1.2,
                     }}
                   >
-                    {ano}
-                  </button>
-                )
-              })}
-            </div>
+                    {selectedAno}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: '#4f46e5',
+                      background: '#eef2ff',
+                      padding: '1px 6px',
+                      borderRadius: 6,
+                      border: '1px solid #e0e7ff',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    IRPF {Number(selectedAno) + 1}
+                  </span>
+                </div>
+              </div>
+
+              {/* Seta Chevron com animação suave */}
+              <ChevronDown
+                size={16}
+                style={{
+                  color: anoDropdownOpen ? '#4f46e5' : '#64748b',
+                  transform: anoDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s',
+                  marginLeft: 4,
+                  flexShrink: 0,
+                }}
+              />
+            </button>
+
+            {/* Menu Suspenso Lista de Anos */}
+            <AnimatePresence>
+              {anoDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.96 }}
+                  transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  role="listbox"
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 8px)',
+                    right: 0,
+                    width: 280,
+                    background: 'rgba(255, 255, 255, 0.98)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    borderRadius: 18,
+                    border: '1.5px solid #e2e8f0',
+                    boxShadow: '0 20px 35px -4px rgba(15, 23, 42, 0.14), 0 8px 16px -4px rgba(15, 23, 42, 0.06)',
+                    zIndex: 60,
+                    overflow: 'hidden',
+                    padding: 8,
+                  }}
+                >
+                  {/* Cabeçalho da Lista */}
+                  <div
+                    style={{
+                      padding: '6px 10px 8px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      borderBottom: '1px solid #f1f5f9',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Sparkles size={13} color="#4f46e5" />
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 800,
+                          color: '#475569',
+                          textTransform: 'uppercase',
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        Ano-Base da Declaração
+                      </span>
+                    </div>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: '#4f46e5',
+                        background: '#eef2ff',
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                      }}
+                    >
+                      Exercício
+                    </span>
+                  </div>
+
+                  {/* Lista com scroll suave se necessário */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 260, overflowY: 'auto' }}>
+                    {ANOS_DISPONIVEIS.map((ano) => {
+                      const isSelected = selectedAno === ano
+                      const exercicioAno = Number(ano) + 1
+                      const isLatest = ano === ANOS_DISPONIVEIS[0]
+
+                      return (
+                        <button
+                          key={ano}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={() => {
+                            setSelectedAno(ano)
+                            setAnoDropdownOpen(false)
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 10px',
+                            borderRadius: 12,
+                            border: isSelected ? '1px solid #c7d2fe' : '1px solid transparent',
+                            background: isSelected
+                              ? 'linear-gradient(135deg, rgba(238, 242, 255, 0.95) 0%, rgba(245, 243, 255, 0.95) 100%)'
+                              : 'transparent',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'all 0.15s ease',
+                            width: '100%',
+                            boxSizing: 'border-box',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) {
+                              e.currentTarget.style.background = '#f8fafc'
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) {
+                              e.currentTarget.style.background = 'transparent'
+                            }
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 9,
+                                background: isSelected
+                                  ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'
+                                  : '#f1f5f9',
+                                color: isSelected ? '#ffffff' : '#64748b',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 12,
+                                fontWeight: 800,
+                                transition: 'all 0.15s ease',
+                                flexShrink: 0,
+                                boxShadow: isSelected ? '0 2px 6px rgba(79, 70, 229, 0.25)' : 'none',
+                              }}
+                            >
+                              <Calendar size={15} />
+                            </div>
+
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span
+                                  style={{
+                                    fontSize: 13.5,
+                                    fontWeight: 800,
+                                    color: isSelected ? '#3730a3' : '#0f172a',
+                                  }}
+                                >
+                                  Ano-Base {ano}
+                                </span>
+                                {isLatest && (
+                                  <span
+                                    style={{
+                                      fontSize: 9.5,
+                                      fontWeight: 800,
+                                      color: '#059669',
+                                      background: '#ecfdf5',
+                                      padding: '1px 6px',
+                                      borderRadius: 6,
+                                      border: '1px solid #d1fae5',
+                                    }}
+                                  >
+                                    Atual
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: isSelected ? '#4f46e5' : '#64748b',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                Declaração IRPF {exercicioAno}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isSelected && (
+                            <div
+                              style={{
+                                width: 22,
+                                height: 22,
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                                color: '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                boxShadow: '0 2px 6px rgba(79, 70, 229, 0.35)',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <Check size={12} strokeWidth={3} />
+                            </div>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Rodapé explicativo */}
+                  <div
+                    style={{
+                      borderTop: '1px solid #f1f5f9',
+                      marginTop: 6,
+                      paddingTop: 7,
+                      paddingBottom: 2,
+                      paddingLeft: 8,
+                      paddingRight: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      color: '#94a3b8',
+                      fontSize: 10.5,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <Info size={12} color="#94a3b8" />
+                    <span>Conforme normas da Receita Federal</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
 

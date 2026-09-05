@@ -8,8 +8,9 @@ import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBa
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
-import { useState, useEffect, useRef, useMemo, Suspense } from 'react'
+import { useState, useEffect, useRef, useMemo, Suspense, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
@@ -106,6 +107,7 @@ const getAnexoType = (anexoStr: any) => {
 function ColaboradorComunicadosContent() {
   const { currentUser } = useApp()
   const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
   const { turmas = [] } = useData()
   const [showComposer, setShowComposer] = useState(false)
       const [destinatario, setDestinatario] = useState<any>(null) // Legacy
@@ -326,13 +328,33 @@ function ColaboradorComunicadosContent() {
         ciencias: {},
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado'
       }
+      // 1) Exibe imediatamente na lista (atualização otimista)
       setComunicadosLocally?.((prev: any) => [newCom, ...prev])
       
+      // 2) Persiste no servidor e substitui o ID temporário pelo ID real do banco
       fetch('/api/comunicados', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCom)
-      }).catch(err => console.error("Error creating comunicado:", err));
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const saved = await res.json().catch(() => null)
+          if (saved && saved.id && saved.id !== newCom.id) {
+            // Substitui a entrada otimista pelo dado real retornado pela API
+            setComunicadosLocally?.((prev: any) =>
+              prev.map((c: any) => (c.id === newCom.id ? { ...c, ...saved } : c))
+            )
+          }
+        })
+        .catch((err) => {
+          console.error('Erro ao criar comunicado:', err)
+          // Rollback: remove a entrada otimista se a API falhou
+          setComunicadosLocally?.((prev: any) =>
+            prev.filter((c: any) => c.id !== newCom.id)
+          )
+          adAlert('Não foi possível enviar o comunicado. Tente novamente.', 'Erro')
+        })
       
       // Auto-register form dispatches if it contains forms
       if (!asRascunho) {

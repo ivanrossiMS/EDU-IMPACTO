@@ -476,7 +476,10 @@ export default function ADCalendarioPage() {
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}`)
+        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}&_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        })
         if (!req.ok) throw new Error('Falha ao buscar aniversariantes')
         const todos = await req.json()
         if (isCancelled) return

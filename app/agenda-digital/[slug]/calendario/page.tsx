@@ -259,10 +259,15 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     return keys
   }, [aluno?.turma, aluno?.turma_nome, turmaDoAluno, turmas])
 
+  // Limpar cache de aniversariantes se o aluno ou sua turma mudarem
+  useEffect(() => {
+    niversCacheRef.current = {}
+  }, [aluno?.id, aluno?.turma])
+
   useEffect(() => {
     const mesView = month + 1
     
-    // Se já temos os aniversariantes deste mês em cache, exibimos instantaneamente (0ms)
+    // Se já temos os aniversariantes deste mês em cache para este aluno, exibimos instantaneamente (0ms)
     if (niversCacheRef.current[mesView]) {
       setAniversariantes(niversCacheRef.current[mesView])
       setLoadingNivers(false)
@@ -273,7 +278,11 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}`)
+        const turmaQueryParam = aluno?.turma ? `&turma=${encodeURIComponent(String(aluno.turma))}` : ''
+        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}${turmaQueryParam}&_t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        })
         if (!req.ok) throw new Error('Falha ao buscar aniversariantes')
         const todos = await req.json()
         if (isCancelled) return
@@ -294,7 +303,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
             const pNomeBase = pNome.split('-')[0].trim()
 
             // 1. Match direto por ID da turma
-            if (pId && targetTurmaKeys.has(pId)) return true
+            if (pId && (targetTurmaKeys.has(pId) || (aluno?.turma && pId === String(aluno.turma).trim().toLowerCase()))) return true
             // 2. Match direto por nome da turma
             if (pNome && targetTurmaKeys.has(pNome)) return true
             // 3. Match por nome base (ex: '4º ano a')
@@ -311,6 +320,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                 if (targetTurmaKeys.has(pObjBase)) return true
               }
             }
+
+            // 5. Se foi retornado pela API já filtrada por turma do aluno
+            if (aluno?.turma && pId === String(aluno.turma).trim().toLowerCase()) return true
 
             return false
           }
@@ -342,7 +354,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
 
     fetchNivers()
     return () => { isCancelled = true }
-  }, [month, targetTurmaKeys, turmas])
+  }, [month, targetTurmaKeys, turmas, aluno?.turma, aluno?.id])
 
   useEffect(() => {
     if (!aluno?.id || eventosFiltrados.length === 0) return;

@@ -167,15 +167,21 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const comunicadosLoading = comunicadosQuery.isLoading
 
   const applyFlatUpdater = (oldData: any, updater: any, limit = 5) => {
-    if (!oldData || !oldData.pages) return oldData;
+    // Se o cache ainda não foi inicializado (oldData nulo), criamos a estrutura
+    // vazia para que o updater seja aplicado normalmente (fix: atualização otimista
+    // não aparecia quando o comunicado era enviado antes do primeiro fetch terminar)
+    const safeOldData = (!oldData || !oldData.pages)
+      ? { pages: [[]], pageParams: [0] }
+      : oldData;
+
     if (typeof updater === 'function') {
-      const flatArray = oldData.pages.flat();
+      const flatArray = safeOldData.pages.flat();
       const newFlatArray = updater(flatArray);
       const newPages = [];
       for(let i = 0; i < newFlatArray.length; i += limit) {
         newPages.push(newFlatArray.slice(i, i + limit));
       }
-      return { ...oldData, pages: newPages.length ? newPages : [[]] };
+      return { ...safeOldData, pages: newPages.length ? newPages : [[]] };
     }
     return updater;
   }
