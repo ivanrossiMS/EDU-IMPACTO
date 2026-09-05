@@ -12,6 +12,7 @@ import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Hea
 import { createPortal } from 'react-dom'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { TurmaDropdown } from '../components/TurmaDropdown'
+import { SelecionarGruposModal } from '@/components/agenda/SelecionarGruposModal'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -338,15 +339,49 @@ export default function ADCalendarioPage() {
         return true
       }
       
-      return targets.some((tc: string) => {
-        const tcl = tc.toLowerCase()
+      // Administrador / Diretor / Coordenador Master visualiza todos os eventos de turmas e grupos
+      const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']
+      const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']
+      const perfilStr = effectiveUser?.perfil || ''
+      const cargoStr = effectiveUser?.cargo || ''
+      const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || 
+                       cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase()) || 
+                       effectiveUser?.perfil === 'administrador' || 
+                       effectiveUser?.perfil === 'admin'
+      if (isMaster) return true
+
+      // Turmas onde o colaborador atua
+      const matchTurma = targets.some((tc: string) => {
+        const tcl = tc.toLowerCase().trim()
         return activeTurmas.some(at => 
-          tcl.includes(at.nome.toLowerCase()) || 
-          at.nome.toLowerCase().includes(tcl)
+          tcl.includes(at.nome.toLowerCase().trim()) || 
+          at.nome.toLowerCase().trim().includes(tcl)
         )
       })
+      if (matchTurma) return true
+
+      // Grupos da Equipe Escolar onde o colaborador é membro
+      const userStaffGroups = (chatGroups || []).filter((g: any) => {
+        let colabs = g.colaboradoresIds
+        if (typeof colabs === 'string') {
+          try { colabs = JSON.parse(colabs) } catch(e) { colabs = [] }
+        }
+        if (!Array.isArray(colabs)) colabs = []
+        return colabs.some((id: any) => String(id) === String(effectiveUser?.id))
+      })
+
+      const matchStaffGroup = targets.some((tc: string) => {
+        const tcl = tc.toLowerCase().trim()
+        return userStaffGroups.some((g: any) => {
+          const gName = (g.nome || '').toLowerCase().trim()
+          return gName === tcl || tcl.includes(gName) || gName.includes(tcl) || String(g.id) === tc
+        })
+      })
+      if (matchStaffGroup) return true
+
+      return false
     })
-  }, [eventosAgenda, filtroTipo, activeTurmas])
+  }, [eventosAgenda, filtroTipo, activeTurmas, chatGroups, effectiveUser, selectedAno])
 
 
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
@@ -1107,58 +1142,40 @@ export default function ADCalendarioPage() {
         document.body
       )}
 
+      {/* 🎯 Modal de Seleção de Grupos (Equipe Escolar e Turmas) */}
+      <SelecionarGruposModal
+        isOpen={showSelectionModal.open && showSelectionModal.type === 'turmas'}
+        onClose={() => setShowSelectionModal(prev => ({ ...prev, open: false }))}
+        selectedGrupos={visibilidade.turmasSel}
+        onToggleGrupo={(t) => setVisibilidade(prev => ({
+          ...prev,
+          turmasSel: prev.turmasSel.includes(t) ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t]
+        }))}
+        onChangeSelected={(selected) => setVisibilidade(prev => ({ ...prev, turmasSel: selected }))}
+        turmas={turmas}
+        grupos={chatGroups}
+        anosLetivos={anosLetivos}
+        initialAno={modalAnoLetivo || (selectedAno !== 'todos' ? selectedAno : '2026')}
+      />
+
+      {/* 👤 Modal de Seleção de Usuário Único */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
-          {showSelectionModal.open && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'none' }}>
-            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 460, padding: 32, boxShadow: '0 40px 80px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>{showSelectionModal.type === 'turmas' ? '🎯 Selecionar Grupos' : '👤 Selecionar Usuário'}</h3>
-                <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
-              </div>
-              
-              <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-                {showSelectionModal.type === 'turmas' && (
-                  <select 
-                    className="form-select" 
-                    style={{ height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0', minWidth: 160 }} 
-                    value={modalAnoLetivo} 
-                    onChange={(e) => setModalAnoLetivo(e.target.value)}
-                  >
-                    <option value="">Todos os Anos Letivos</option>
-                    {anosLetivos.map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                )}
-                <div style={{ position: 'relative', flex: 1 }}>
+          {showSelectionModal.open && showSelectionModal.type === 'usuario' && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'none' }}>
+              <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 460, padding: 32, boxShadow: '0 40px 80px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>👤 Selecionar Usuário</h3>
+                  <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
+                </div>
+                
+                <div style={{ position: 'relative', marginBottom: 20 }}>
                   <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                   <input autoFocus className="form-input" style={{ width: '100%', paddingLeft: 42, height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }} placeholder="O que você está procurando?..." value={searchTermSelection} onChange={e => setSearchTermSelection(e.target.value)} />
                 </div>
-              </div>
 
-              <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
-                {showSelectionModal.type === 'turmas' ? (
-                  turmas
-                    .filter((t: any) => modalAnoLetivo === '' || (t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')) === modalAnoLetivo)
-                    .map((t: any) => t.nome)
-                    .filter((t: any) => t.toLowerCase().includes(searchTermSelection.toLowerCase()))
-                    .map((t: any) => {
-                    const isSelected = visibilidade.turmasSel.includes(t)
-                    return (
-                      <motion.button 
-                        whileTap={{ scale: 0.98 }}
-                        key={t} 
-                        onClick={() => setVisibilidade(prev => ({ ...prev, turmasSel: isSelected ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t] }))} 
-                        style={{ width: '100%', padding: '14px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
-                      >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, background: isSelected ? '#3b82f6' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {isSelected && <Check size={14} color="#fff" strokeWidth={4} />}
-                        </div>
-                        <span style={{ fontSize: 14, fontWeight: isSelected ? 800 : 600, color: isSelected ? '#1e40af' : '#475569' }}>{t}</span>
-                      </motion.button>
-                    )
-                  })
-                ) : (
-                  usuariosAtivos.filter((u: any) => (u.nome || '').toLowerCase().includes(searchTermSelection.toLowerCase())).map((u: any) => {
+                <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
+                  {usuariosAtivos.filter((u: any) => (u.nome || '').toLowerCase().includes(searchTermSelection.toLowerCase())).map((u: any) => {
                     const isSelected = visibilidade.usuario === u.nome
                     return (
                       <motion.button 
@@ -1172,13 +1189,12 @@ export default function ADCalendarioPage() {
                         {isSelected && <Check size={18} color="#3b82f6" strokeWidth={3} />}
                       </motion.button>
                     )
-                  })
-                )}
-              </div>
-              <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 50, borderRadius: 16, fontWeight: 900, background: '#1e293b', border: 'none', color: '#fff' }} onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}>Finalizar Seleção</button>
+                  })}
+                </div>
+                <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 50, borderRadius: 16, fontWeight: 900, background: '#1e293b', border: 'none', color: '#fff' }} onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}>Finalizar Seleção</button>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          )}
         </AnimatePresence>,
         document.body
       )}

@@ -7,6 +7,7 @@ import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar as CalendarIcon, Trash2, Clock, MapPin } from 'lucide-react'
+import { SelecionarGruposModal } from '@/components/agenda/SelecionarGruposModal'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   const [mounted, setMounted] = useState(false);
@@ -140,7 +141,7 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> = {
 // Caches removidos: utilizando API otimizada de aniversariantes
 
 export default function CalendarioPage() {
-  const { eventosAgenda = [], setEventosAgenda, setLocalEventosAgenda } = useData()
+  const { eventosAgenda = [], setEventosAgenda, setLocalEventosAgenda, turmas = [], cfgCalendarioLetivo = [] } = useData()
 
   useAgendaRealtime({
     table: 'eventos_agenda',
@@ -170,8 +171,18 @@ export default function CalendarioPage() {
     }
   });
 
-  const [gruposManuais = []] = useSupabaseArray<{nome: string}>('agenda/grupos')
-  const turmasNomes = gruposManuais.map(t => t.nome)
+  const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
+  const anosLetivos = useMemo(() => {
+    const anos = new Set<string>();
+    (cfgCalendarioLetivo || []).forEach((c: any) => c.ano && anos.add(String(c.ano)));
+    (turmas || []).forEach((t: any) => {
+      if (t.ano) anos.add(String(t.ano));
+      if (t.ano_letivo) anos.add(String(t.ano_letivo));
+    });
+    return Array.from(anos).sort().reverse();
+  }, [turmas, cfgCalendarioLetivo])
+
+  const turmasNomes = gruposManuais.map((t: any) => t.nome)
   const [sysUsers] = useLocalStorage<SysUser[]>('edu-sys-users', [])
   const usuariosAtivos = sysUsers.filter(u => u.status === 'ativo')
 
@@ -949,13 +960,30 @@ export default function CalendarioPage() {
         </ClientPortal>
       )}
 
+      {/* 🎯 Modal de Seleção de Grupos (Equipe Escolar e Turmas) */}
+      <SelecionarGruposModal
+        isOpen={showSelectionModal.open && showSelectionModal.type === 'turmas'}
+        onClose={() => setShowSelectionModal(prev => ({ ...prev, open: false }))}
+        selectedGrupos={visibilidade.turmasSel}
+        onToggleGrupo={(t) => setVisibilidade(prev => ({
+          ...prev,
+          turmasSel: prev.turmasSel.includes(t) ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t]
+        }))}
+        onChangeSelected={(selected) => setVisibilidade(prev => ({ ...prev, turmasSel: selected }))}
+        turmas={turmas}
+        grupos={gruposManuais}
+        anosLetivos={anosLetivos}
+        initialAno={anosLetivos[0] || '2026'}
+      />
+
+      {/* 👤 Modal de Seleção de Usuário Único */}
       <AnimatePresence>
-        {showSelectionModal.open && (
+        {showSelectionModal.open && showSelectionModal.type === 'usuario' && (
           <ClientPortal>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'none' }}>
             <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 460, padding: 32, boxShadow: '0 40px 80px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>{showSelectionModal.type === 'turmas' ? '🎯 Selecionar Grupos' : '👤 Selecionar Usuário'}</h3>
+                <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>👤 Selecionar Usuário</h3>
                 <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
               </div>
               
@@ -965,40 +993,21 @@ export default function CalendarioPage() {
               </div>
 
               <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
-                {showSelectionModal.type === 'turmas' ? (
-                  turmasNomes.filter(t => t.toLowerCase().includes(searchTermSelection.toLowerCase())).map(t => {
-                    const isSelected = visibilidade.turmasSel.includes(t)
-                    return (
-                      <motion.button 
-                        whileTap={{ scale: 0.98 }}
-                        key={t} 
-                        onClick={() => setVisibilidade(prev => ({ ...prev, turmasSel: isSelected ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t] }))} 
-                        style={{ width: '100%', padding: '14px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
-                      >
-                        <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, background: isSelected ? '#3b82f6' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {isSelected && <Check size={14} color="#fff" strokeWidth={4} />}
-                        </div>
-                        <span style={{ fontSize: 14, fontWeight: isSelected ? 800 : 600, color: isSelected ? '#1e40af' : '#475569' }}>{t}</span>
-                      </motion.button>
-                    )
-                  })
-                ) : (
-                  usuariosAtivos.filter(u => u.nome.toLowerCase().includes(searchTermSelection.toLowerCase())).map(u => {
-                    const isSelected = visibilidade.usuario === u.nome
-                    return (
-                      <motion.button 
-                        whileTap={{ scale: 0.98 }}
-                        key={u.id} 
-                        onClick={() => { setVisibilidade(prev => ({ ...prev, usuario: u.nome })); setShowSelectionModal({ ...showSelectionModal, open: false }) }} 
-                        style={{ width: '100%', padding: '12px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 16, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
-                      >
-                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: isSelected ? '#3b82f6' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: isSelected ? '#fff' : '#6366f1' }}>{u.nome.slice(0, 2).toUpperCase()}</div>
-                        <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 800, color: isSelected ? '#1e40af' : '#1e293b' }}>{u.nome}</div><div style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>{u.cargo}</div></div>
-                        {isSelected && <Check size={18} color="#3b82f6" strokeWidth={3} />}
-                      </motion.button>
-                    )
-                  })
-                )}
+                {usuariosAtivos.filter(u => u.nome.toLowerCase().includes(searchTermSelection.toLowerCase())).map(u => {
+                  const isSelected = visibilidade.usuario === u.nome
+                  return (
+                    <motion.button 
+                      whileTap={{ scale: 0.98 }}
+                      key={u.id} 
+                      onClick={() => { setVisibilidade(prev => ({ ...prev, usuario: u.nome })); setShowSelectionModal({ ...showSelectionModal, open: false }) }} 
+                      style={{ width: '100%', padding: '12px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 16, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
+                    >
+                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: isSelected ? '#3b82f6' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: isSelected ? '#fff' : '#6366f1' }}>{u.nome.slice(0, 2).toUpperCase()}</div>
+                      <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 800, color: isSelected ? '#1e40af' : '#1e293b' }}>{u.nome}</div><div style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>{u.cargo}</div></div>
+                      {isSelected && <Check size={18} color="#3b82f6" strokeWidth={3} />}
+                    </motion.button>
+                  )
+                })}
               </div>
               <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 50, borderRadius: 16, fontWeight: 900, background: '#1e293b', border: 'none', color: '#fff' }} onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}>Finalizar Seleção</button>
             </motion.div>

@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, ChevronDown, Plus, X, Save, Filter, Users, Globe, UserCheck, Search, Edit2, Sparkles, Check, Calendar, Trash, PieChart, Clock, Activity, FileText, GraduationCap, MapPin, Info, Bus, Sun, Download, List, Grid, ArrowRight, ArrowDown, Upload } from 'lucide-react'
 import { createPortal } from 'react-dom'
 import { TurmaDropdown } from '@/app/agenda-digital/colaborador/components/TurmaDropdown'
+import { SelecionarGruposModal } from '@/components/agenda/SelecionarGruposModal'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -144,6 +145,7 @@ const BLANK_EVENTO: Omit<EventoAgenda, 'id' | 'createdAt'> & { dataFim?: string 
 export default function CalendarioPage() {
   const { eventosAgenda = [], setEventosAgenda, cfgCalendarioLetivo = [] } = useData()
   const [turmas = []] = useSupabaseArray<any>('turmas')
+  const [gruposManuais = []] = useSupabaseArray<any>('agenda/grupos')
   const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios')
   const usuariosAtivos = sysUsers || []
 
@@ -199,9 +201,19 @@ export default function CalendarioPage() {
       .sort()
   }, [turmas, turmasNomes, filtroAnoLetivoPrincipal])
 
+  const equipeGruposNomes = useMemo(() => {
+    return (gruposManuais || [])
+      .filter((g: any) => g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1)
+      .map((g: any) => String(g.nome).trim())
+      .filter(Boolean)
+      .sort((a: string, b: string) => a.localeCompare(b, 'pt-BR'))
+  }, [gruposManuais])
+
   const turmaDropdownOptions = useMemo(() => {
-    return turmasFiltroBar.map(t => ({ id: t, nome: t }));
-  }, [turmasFiltroBar]);
+    const equipeOpts = equipeGruposNomes.map((g: string) => ({ id: g, nome: `${g} (Equipe)` }));
+    const turmasOpts = turmasFiltroBar.map(t => ({ id: t, nome: t }));
+    return [...equipeOpts, ...turmasOpts];
+  }, [equipeGruposNomes, turmasFiltroBar]);
 
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
@@ -1564,67 +1576,43 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
         document.body
       )}
 
+      {/* 🎯 Modal de Seleção de Grupos (Equipe Escolar e Turmas) */}
+      <SelecionarGruposModal
+        isOpen={showSelectionModal.open && showSelectionModal.type === 'turmas'}
+        onClose={() => setShowSelectionModal(prev => ({ ...prev, open: false }))}
+        selectedGrupos={visibilidade.turmasSel}
+        onToggleGrupo={(t) => setVisibilidade(prev => ({
+          ...prev,
+          turmasSel: prev.turmasSel.includes(t) ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t]
+        }))}
+        onChangeSelected={(selected) => setVisibilidade(prev => ({ ...prev, turmasSel: selected }))}
+        turmas={turmas}
+        grupos={gruposManuais}
+        anosLetivos={anosLetivos}
+        initialAno={selectedAno || (anosLetivos[0] || '2026')}
+      />
+
+      {/* 👤 Modal de Seleção de Usuário Único */}
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
-          {showSelectionModal.open && (
+          {showSelectionModal.open && showSelectionModal.type === 'usuario' && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(12px)' }}>
               <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }} style={{ background: '#fff', borderRadius: 32, width: '100%', maxWidth: 460, padding: 32, boxShadow: '0 40px 80px rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>{showSelectionModal.type === 'turmas' ? '🎯 Selecionar Grupos' : '👤 Selecionar Usuário'}</h3>
-                <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
-              </div>
-
-              {showSelectionModal.type === 'turmas' && (
-                <div style={{ marginBottom: 20 }}>
-                  <label style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 8, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>1. Selecione o Ano Letivo</label>
-                  <select 
-                    className="form-input" 
-                    style={{ width: '100%', height: 48, borderRadius: 14, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }}
-                    value={selectedAno}
-                    onChange={e => setSelectedAno(e.target.value)}
-                  >
-                    <option value="">Selecione o Ano Letivo...</option>
-                    {anosLetivos.map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1e293b' }}>👤 Selecionar Usuário</h3>
+                  <button onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })} style={{ border: 'none', background: '#f1f5f9', padding: 8, borderRadius: '50%', cursor: 'pointer', color: '#64748b' }}><X size={18} /></button>
                 </div>
-              )}
-              
-              <div style={{ position: 'relative', marginBottom: 20 }}>
-                <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                <input autoFocus className="form-input" style={{ paddingLeft: 42, height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }} placeholder="O que você está procurando?..." value={searchTermSelection} onChange={e => setSearchTermSelection(e.target.value)} disabled={showSelectionModal.type === 'turmas' && !selectedAno} />
-              </div>
 
-              <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
-                {showSelectionModal.type === 'turmas' ? (
-                  !selectedAno ? (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
-                      <Calendar size={32} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-                      <p style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Selecione um ano letivo acima para ver as turmas</p>
-                    </div>
-                  ) : (
-                    turmasFiltradas.filter(t => t.toLowerCase().includes(searchTermSelection.toLowerCase())).map(t => {
-                      const isSelected = visibilidade.turmasSel.includes(t)
-                      return (
-                        <motion.button 
-                          whileTap={{ scale: 0.98 }}
-                          key={t} 
-                          onClick={() => setVisibilidade(prev => ({ ...prev, turmasSel: isSelected ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t] }))} 
-                          style={{ width: '100%', padding: '14px 16px', textAlign: 'left', background: isSelected ? '#eff6ff' : 'transparent', border: 'none', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}
-                        >
-                          <div style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, background: isSelected ? '#3b82f6' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            {isSelected && <Check size={14} color="#fff" strokeWidth={4} />}
-                          </div>
-                          <span style={{ fontSize: 14, fontWeight: isSelected ? 800 : 600, color: isSelected ? '#1e40af' : '#475569' }}>{t}</span>
-                        </motion.button>
-                      )
-                    })
-                  )
-                ) : (() => {
-                  const term = searchTermSelection.toLowerCase();
-                  return usuariosAtivos.filter(u => 
-                    (u.nome || '').toLowerCase().includes(term) || 
-                    (u.cargo || '').toLowerCase().includes(term) || 
-                    (u.email || '').toLowerCase().includes(term)
+                <div style={{ position: 'relative', marginBottom: 20 }}>
+                  <Search size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input autoFocus className="form-input" style={{ paddingLeft: 42, height: 50, borderRadius: 16, fontSize: 14, fontWeight: 600, background: '#f8fafc', border: '1.5px solid #e2e8f0' }} placeholder="O que você está procurando?..." value={searchTermSelection} onChange={e => setSearchTermSelection(e.target.value)} />
+                </div>
+
+                <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, paddingRight: 4 }}>
+                  {usuariosAtivos.filter(u => 
+                    (u.nome || '').toLowerCase().includes(searchTermSelection.toLowerCase()) || 
+                    (u.cargo || '').toLowerCase().includes(searchTermSelection.toLowerCase()) || 
+                    (u.email || '').toLowerCase().includes(searchTermSelection.toLowerCase())
                   ).map(u => {
                     const isSelected = visibilidade.usuario === u.nome
                     return (
@@ -1639,13 +1627,12 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
                         {isSelected && <Check size={18} color="#3b82f6" strokeWidth={3} />}
                       </motion.button>
                     )
-                  })
-                })()}
-              </div>
-              <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 50, borderRadius: 16, fontWeight: 900, background: '#1e293b', border: 'none', color: '#fff' }} onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}>Finalizar Seleção</button>
+                  })}
+                </div>
+                <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 50, borderRadius: 16, fontWeight: 900, background: '#1e293b', border: 'none', color: '#fff' }} onClick={() => setShowSelectionModal({ ...showSelectionModal, open: false })}>Finalizar Seleção</button>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
+          )}
         </AnimatePresence>,
         document.body
       )}
