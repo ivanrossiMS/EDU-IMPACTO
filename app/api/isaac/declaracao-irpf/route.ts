@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { isaacRequest, formatIsaacAmount, getEffectiveAmount, IsaacInstallment } from '@/lib/isaac'
+import { getOrFetchYearCache } from '@/lib/isaacCache'
 import { valorPorExtenso } from '@/lib/numeroPorExtenso'
 
 export const dynamic = 'force-dynamic'
@@ -108,7 +109,12 @@ function formatDateBr(dateStr?: string | null): string {
 }
 
 /**
- * Verifica com precisão cirúrgica se uma parcela do Isaac pertence ao aluno alvo
+ * Verifica com rigor absoluto se uma parcela do Isaac pertence ao aluno alvo.
+ * Regras:
+ * 1. Se ambos têm ID/matrícula (external_id), a igualdade do ID é soberana e definitiva.
+ *    Se o ID for diferente, rejeita IMEDIATAMENTE (nunca cai no fallback de nome).
+ * 2. Se o registro do Isaac não tiver external_id, exige nome completo idêntico
+ *    ou primeiro nome E último sobrenome perfeitamente coincidentes.
  */
 function isInstallmentForStudent(
   item: IsaacInstallment,
@@ -123,38 +129,41 @@ function isInstallmentForStudent(
 
   const itemExtId = String(item.student.external_id || '').trim()
   const itemName = normalizeString(item.student.name)
+  const targetId = target.id ? String(target.id).trim() : null
+  const targetMatricula = target.matricula ? String(target.matricula).trim() : null
+  const validRefs = new Set(
+    [targetId, targetMatricula, ...(target.allRefs || [])].filter(Boolean).map((r) => String(r).trim())
+  )
 
-  // 1. Match por external_id / matricula / id
-  if (itemExtId) {
-    if (target.id && itemExtId === String(target.id).trim()) return true
-    if (target.matricula && itemExtId === String(target.matricula).trim()) return true
-    if (target.allRefs && target.allRefs.includes(itemExtId)) return true
+  // 1. Match por external_id / matrícula / id: É SOBERANO
+  if (itemExtId && validRefs.size > 0) {
+    return validRefs.has(itemExtId)
   }
 
-  // 2. Match por Nome do Aluno
+  // 2. Fallback de nome: executado SOMENTE se o item do Isaac não tiver external_id
   if (itemName && target.nome) {
     const targetNorm = normalizeString(target.nome)
 
     // Nomes idênticos
     if (itemName === targetNorm) return true
 
-    // Um contém o outro exatamente
+    // Se o item contém o nome alvo completo ou vice-versa
     if (itemName.includes(targetNorm) || targetNorm.includes(itemName)) return true
 
-    // Comparação por partes significativas do nome
-    const itemWords = itemName.split(/\s+/).filter((w) => w.length > 2)
-    const targetWords = targetNorm.split(/\s+/).filter((w) => w.length > 2)
+    // Comparação estrita: primeiro nome E último sobrenome devem ser idênticos
+    const itemWords = itemName.split(/\s+/).filter((w) => w.length > 1)
+    const targetWords = targetNorm.split(/\s+/).filter((w) => w.length > 1)
 
-    // Se o primeiro nome for diferente, NÃO é o mesmo aluno (ex: "Alana" vs "Enzo")
-    if (itemWords[0] && targetWords[0] && itemWords[0] !== targetWords[0]) {
-      return false
-    }
+    if (itemWords.length >= 2 && targetWords.length >= 2) {
+      const firstMatch = itemWords[0] === targetWords[0]
+      const lastMatch = itemWords[itemWords.length - 1] === targetWords[targetWords.length - 1]
 
-    // Se compartilham primeiro nome + pelo menos outro sobrenome
-    if (itemWords[0] === targetWords[0]) {
-      const commonWords = itemWords.filter((w) => targetWords.includes(w))
-      if (commonWords.length >= 2) return true
-      if (itemWords.length === 1 || targetWords.length === 1) return true
+      if (firstMatch && lastMatch) {
+        const commonWords = itemWords.filter((w) => targetWords.includes(w))
+        if (commonWords.length >= Math.min(itemWords.length, targetWords.length) - 1) {
+          return true
+        }
+      }
     }
   }
 
@@ -328,61 +337,53 @@ export async function GET(request: Request) {
     }
   }
 
-  const guardianExternalId = dbResponsavel ? String(dbResponsavel.id) : responsavelIdParam || null
-  const guardianCpfClean = dbResponsavel?.cpf ? cleanDigits(dbResponsavel.cpf) : cleanDigits(responsavelCpfParam)
+  const guardianExternalId = dbResponsavel ? String(dbResponsavel.id).trim() : responsavelIdParam ? String(responsavelIdParam).trim() : null
 
-  // ── 3. Buscar todas as parcelas no Isaac para o ano ────────────────────────
-  let rawItems: IsaacInstallment[] = []
+  // Descobre todos os IDs de responsáveis legais vinculados ao aluno
+  const validFamilyGuardianIds = new Set<string>()
+  if (guardianExternalId) validFamilyGuardianIds.add(guardianExternalId)
+  for (const r of responsaveisDisponiveis) {
+    if (r.id) validFamilyGuardianIds.add(String(r.id).trim())
+  }
+
+  // ── 3. Buscar todas as parcelas no Isaac para o ano (via cache em memória) ──
+  let allInstallments: IsaacInstallment[] = []
 
   try {
-    const firstPage = await isaacRequest<any>(
-      `/consolidated-installments?page=1&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
-    )
-    const totalItems: number = firstPage?.pagination?.total ?? 0
-    const firstItems: IsaacInstallment[] = firstPage?.data?.items ?? []
-    const totalPages = Math.ceil(totalItems / PER_PAGE)
-
-    rawItems = [...firstItems]
-
-    if (totalPages > 1) {
-      const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2)
-      for (let i = 0; i < remainingPages.length; i += MAX_PARALLEL) {
-        const batch = remainingPages.slice(i, i + MAX_PARALLEL)
-        const results = await Promise.allSettled(
-          batch.map((page) =>
-            isaacRequest<any>(
-              `/consolidated-installments?page=${page}&per_page=${PER_PAGE}&reference_year=${ano}&include_active_receivables=true`
-            )
-          )
-        )
-
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            const items: IsaacInstallment[] = result.value?.data?.items ?? []
-            rawItems.push(...items)
-          }
-        }
-      }
-    }
+    const yearEntry = await getOrFetchYearCache(ano)
+    allInstallments = yearEntry.items
   } catch (err: any) {
-    console.error('[Isaac API Error]:', err)
+    console.error('[Isaac API Error in IRPF]:', err)
   }
 
-  // Deduplicação estrita por ID único da parcela
-  const uniqueMap = new Map<string, IsaacInstallment>()
-  for (const it of rawItems) {
-    if (it.id && !uniqueMap.has(it.id)) uniqueMap.set(it.id, it)
-  }
-  const allInstallments = Array.from(uniqueMap.values())
+  // Tenta resolver o CPF do responsável:
+  // 1. Do banco Supabase (coluna cpf ou dados.cpf)
+  // 2. Do parâmetro responsavelCpfParam
+  // 3. Do próprio contrato do Isaac onde o guardian.external_id bate com o responsável
+  let resolvedGuardianCpf =
+    dbResponsavel?.cpf ||
+    dbResponsavel?.dados?.cpf ||
+    (responsavelCpfParam ? cleanDigits(responsavelCpfParam) : null)
 
-  // Filtrar parcelas que pertencem a este responsável (se conhecido)
+  if (!resolvedGuardianCpf && guardianExternalId) {
+    const itemWithTax = allInstallments.find(
+      (it) => String(it.guardian?.external_id).trim() === guardianExternalId && it.guardian?.tax_id
+    )
+    if (itemWithTax?.guardian?.tax_id) {
+      resolvedGuardianCpf = cleanDigits(itemWithTax.guardian.tax_id)
+    }
+  }
+
+  const guardianCpfClean = resolvedGuardianCpf ? cleanDigits(resolvedGuardianCpf) : null
+
+  // Filtrar parcelas que pertencem a este responsável ou à família
   const guardianInstallments = allInstallments.filter((item) => {
-    if (guardianExternalId && item.guardian?.external_id) {
-      if (String(item.guardian.external_id).trim() === guardianExternalId) return true
-    }
-    if (guardianCpfClean && item.guardian?.tax_id) {
-      if (cleanDigits(item.guardian.tax_id) === guardianCpfClean) return true
-    }
+    const itemGuardianExt = String(item.guardian?.external_id || '').trim()
+    const itemGuardianTax = cleanDigits(item.guardian?.tax_id)
+
+    if (guardianExternalId && itemGuardianExt === guardianExternalId) return true
+    if (guardianCpfClean && itemGuardianTax === guardianCpfClean) return true
+    if (validFamilyGuardianIds.size > 0 && validFamilyGuardianIds.has(itemGuardianExt)) return true
     return false
   })
 
@@ -465,25 +466,26 @@ export async function GET(request: Request) {
     const isTuition = desc.includes('mensalidade') || item.type === 'TUITION'
     if (!isTuition) return false
 
-    // 4. Se tivermos filtro de responsável, deve bater com o responsável
-    if (guardianExternalId || guardianCpfClean) {
-      let matchGuardian = false
-      if (guardianExternalId && item.guardian?.external_id) {
-        if (String(item.guardian.external_id).trim() === guardianExternalId) matchGuardian = true
-      }
-      if (guardianCpfClean && item.guardian?.tax_id) {
-        if (cleanDigits(item.guardian.tax_id) === guardianCpfClean) matchGuardian = true
-      }
-      // Se não bateu o responsável, só aceita se bater estritamente o aluno
-      if (!matchGuardian && !isInstallmentForStudent(item, targetMatcher)) {
-        return false
-      }
-    }
+    // 4. REGRA DE OURO 1: DEVE PERTENCER ESTRITAMENTE AO ALUNO SELECIONADO!
+    // NUNCA incluir parcelas de outros alunos ou irmãos.
+    if (!isInstallmentForStudent(item, targetMatcher)) return false
 
-    // 5. REGRA DE OURO: DEVE PERTENCER ESTRITAMENTE AO ALUNO SELECIONADO!
-    // NUNCA incluir parcelas de irmãos/outros dependentes.
-    const isForStudent = isInstallmentForStudent(item, targetMatcher)
-    if (!isForStudent) return false
+    // 5. REGRA DE OURO 2: VÍNCULO DO RESPONSÁVEL
+    // Se temos um responsável selecionado ou co-responsáveis da família,
+    // a parcela DEVE pertencer a um responsável válido daquela família.
+    if (guardianExternalId || guardianCpfClean || validFamilyGuardianIds.size > 0) {
+      const itemGuardianExt = String(item.guardian?.external_id || '').trim()
+      const itemGuardianTax = cleanDigits(item.guardian?.tax_id)
+
+      let matchGuardian = false
+      if (guardianExternalId && itemGuardianExt === guardianExternalId) matchGuardian = true
+      if (guardianCpfClean && itemGuardianTax === guardianCpfClean) matchGuardian = true
+      if (!matchGuardian && validFamilyGuardianIds.size > 0 && itemGuardianExt && validFamilyGuardianIds.has(itemGuardianExt)) {
+        matchGuardian = true
+      }
+
+      if (!matchGuardian) return false
+    }
 
     return true
   })
@@ -636,14 +638,20 @@ export async function GET(request: Request) {
       }
 
   // ── 8. Informações do Responsável e Aluno ──────────────────────────────────
-  const guardianSample = mensalidadesPagas[0]?.guardian || guardianInstallments[0]?.guardian || allInstallments[0]?.guardian
+  const matchedGuardianForResp = allInstallments.find(
+    (it) =>
+      (guardianExternalId && String(it.guardian?.external_id).trim() === guardianExternalId) ||
+      (guardianCpfClean && cleanDigits(it.guardian?.tax_id) === guardianCpfClean)
+  )?.guardian
+
+  const guardianSample = mensalidadesPagas[0]?.guardian || matchedGuardianForResp || guardianInstallments[0]?.guardian
   const studentSample = mensalidadesPagas[0]?.student
 
   const responsavelInfo = {
-    nome: dbResponsavel?.nome || guardianSample?.name || 'Responsável Financeiro',
-    cpf: formatCPF(dbResponsavel?.cpf || dbResponsavel?.dados?.cpf || guardianSample?.tax_id),
-    email: dbResponsavel?.email || '',
-    telefone: dbResponsavel?.telefone || '',
+    nome: dbResponsavel?.nome || matchedGuardianForResp?.name || guardianSample?.name || 'Responsável Financeiro',
+    cpf: formatCPF(resolvedGuardianCpf || dbResponsavel?.cpf || dbResponsavel?.dados?.cpf || matchedGuardianForResp?.tax_id || guardianSample?.tax_id),
+    email: dbResponsavel?.email || (matchedGuardianForResp as any)?.email || '',
+    telefone: dbResponsavel?.telefone || (matchedGuardianForResp as any)?.phone || '',
   }
 
   const alunoInfo = {

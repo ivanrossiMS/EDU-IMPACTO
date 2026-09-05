@@ -15,6 +15,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabaseServer'
 import { isaacRequest, formatIsaacAmount, getEffectiveAmount } from '@/lib/isaac'
+import { updateInstallmentInCache, invalidateIsaacYearCache } from '@/lib/isaacCache'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,6 +79,13 @@ export async function POST(request: Request) {
     const paidValue = installmentData?.paid_value || body.data?.paid_value || 0
 
     console.log(`[Isaac Webhook] Parcela ${installmentId}: Status=${status} | Aluno=${studentName} (${studentExternalId})`)
+
+    // Atualiza o cache do Isaac em tempo real
+    if (installmentData && installmentData.id) {
+      updateInstallmentInCache(installmentData)
+    } else {
+      invalidateIsaacYearCache()
+    }
 
     // 3. Registrar o evento em system_logs para auditoria da secretaria/financeiro
     try {

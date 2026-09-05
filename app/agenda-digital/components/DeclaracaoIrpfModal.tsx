@@ -20,10 +20,7 @@ import {
   ArrowRight,
   Eye,
   FileCheck2,
-  Plus,
-  UserPlus,
-  User,
-  UserCheck
+  ChevronDown
 } from 'lucide-react'
 import { DeclaracaoIrpfDocument, DeclaracaoIrpfData } from './DeclaracaoIrpfDocument'
 import { generateDeclaracaoHtml } from './declaracaoHtmlGenerator'
@@ -34,6 +31,14 @@ interface StudentOption {
   id?: string
   nome: string
   turma?: string
+  matricula?: string
+}
+
+function getStudentInitials(name: string): string {
+  if (!name) return 'AL'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 interface DeclaracaoIrpfModalProps {
@@ -46,6 +51,13 @@ interface DeclaracaoIrpfModalProps {
 
 const ANOS_IRPF = ['2026', '2025', '2024', '2023']
 
+const YEAR_METADATA: Record<string, { exercicio: string; label: string; tag?: string }> = {
+  '2026': { exercicio: '2027', label: 'Ano Letivo Vigente', tag: 'Atual' },
+  '2025': { exercicio: '2026', label: 'Ano Letivo Anterior' },
+  '2024': { exercicio: '2025', label: 'Histórico Escolar' },
+  '2023': { exercicio: '2024', label: 'Histórico Escolar' },
+}
+
 export function DeclaracaoIrpfModal({
   isOpen,
   onClose,
@@ -54,35 +66,32 @@ export function DeclaracaoIrpfModal({
   responsavelId,
 }: DeclaracaoIrpfModalProps) {
   const [mounted, setMounted] = useState(false)
-  const [customStudents, setCustomStudents] = useState<StudentOption[]>([])
-  const [isAddingStudent, setIsAddingStudent] = useState(false)
-  const [newStudentName, setNewStudentName] = useState('')
-  const [newStudentTurma, setNewStudentTurma] = useState('')
-
-  // Lista unificada de alunos (props + adicionados dinamicamente)
+  const [responsibleStudents, setResponsibleStudents] = useState<StudentOption[]>([])
+  const [loadingResponsibleStudents, setLoadingResponsibleStudents] = useState(false)
+  // Lista unificada de alunos (props + responsáveis vinculados)
   const allStudents = useMemo(() => {
     const list: StudentOption[] = []
     const seen = new Set<string>()
 
-    for (const a of alunos || []) {
-      if (a?.nome && !seen.has(a.nome.trim().toLowerCase())) {
-        seen.add(a.nome.trim().toLowerCase())
+    const addIfNew = (a: StudentOption) => {
+      if (!a?.nome) return
+      const key = a.nome.trim().toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
         list.push(a)
       }
     }
 
-    for (const a of customStudents) {
-      if (a?.nome && !seen.has(a.nome.trim().toLowerCase())) {
-        seen.add(a.nome.trim().toLowerCase())
-        list.push(a)
-      }
-    }
+    for (const a of alunos || []) addIfNew(a)
+    for (const a of responsibleStudents) addIfNew(a)
 
     return list
-  }, [alunos, customStudents])
+  }, [alunos, responsibleStudents])
 
   const [selectedAluno, setSelectedAluno] = useState<StudentOption | null>(allStudents[0] || null)
   const [selectedAno, setSelectedAno] = useState<string>(currentAno)
+  const [isYearOpen, setIsYearOpen] = useState(false)
+  const yearSelectRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [docData, setDocData] = useState<DeclaracaoIrpfData | null>(null)
@@ -90,6 +99,23 @@ export function DeclaracaoIrpfModal({
   const [savingPdf, setSavingPdf] = useState(false)
 
   const printAreaRef = useRef<HTMLDivElement>(null)
+
+  // Fecha o seletor em lista de ano ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (yearSelectRef.current && !yearSelectRef.current.contains(event.target as Node)) {
+        setIsYearOpen(false)
+      }
+    }
+    if (isYearOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('touchstart', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
+  }, [isYearOpen])
 
   useEffect(() => {
     setMounted(true)
@@ -102,27 +128,55 @@ export function DeclaracaoIrpfModal({
     }
   }, [allStudents, selectedAluno])
 
-  // Handler para adicionar novo aluno manualmente
-  const handleAddCustomStudent = (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    const trimmed = newStudentName.trim()
-    if (!trimmed) {
-      toast.error('Informe o nome do aluno.')
-      return
+  // Busca automática de todos os alunos vinculados a este responsável financeiro
+  useEffect(() => {
+    if (!isOpen) return
+
+    let isCancelled = false
+    const loadLinkedStudents = async () => {
+      setLoadingResponsibleStudents(true)
+      try {
+        const query = responsavelId
+          ? `responsavel_id=${encodeURIComponent(responsavelId)}`
+          : selectedAluno?.id
+          ? `aluno_id=${encodeURIComponent(selectedAluno.id)}&mode=co_students`
+          : ''
+
+        if (!query) return
+
+        const res = await fetch(`/api/aluno-responsavel?${query}`)
+        if (!res.ok) return
+        const json = await res.json()
+        if (json?.alunos && Array.isArray(json.alunos) && !isCancelled) {
+          setResponsibleStudents((prev) => {
+            const map = new Map<string, StudentOption>()
+            for (const s of prev) map.set(s.nome.trim().toLowerCase(), s)
+            for (const a of json.alunos) {
+              const key = a.nome.trim().toLowerCase()
+              if (!map.has(key)) {
+                map.set(key, {
+                  id: a.id ? String(a.id) : undefined,
+                  nome: a.nome,
+                  turma: a.turma || 'Ensino Regular',
+                  matricula: a.matricula,
+                })
+              }
+            }
+            return Array.from(map.values())
+          })
+        }
+      } catch (err) {
+        console.warn('[DeclaracaoIrpfModal] Falha ao carregar alunos vinculados:', err)
+      } finally {
+        if (!isCancelled) setLoadingResponsibleStudents(false)
+      }
     }
 
-    const newStudent: StudentOption = {
-      nome: trimmed,
-      turma: newStudentTurma.trim() || 'Ensino Regular',
+    loadLinkedStudents()
+    return () => {
+      isCancelled = true
     }
-
-    setCustomStudents((prev) => [...prev, newStudent])
-    setSelectedAluno(newStudent)
-    setNewStudentName('')
-    setNewStudentTurma('')
-    setIsAddingStudent(false)
-    toast.success(`Aluno "${trimmed}" adicionado com sucesso!`)
-  }
+  }, [isOpen, responsavelId, selectedAluno?.id])
 
   // Buscar dados da declaração
   const fetchDeclaracao = useCallback(async () => {
@@ -146,6 +200,26 @@ export function DeclaracaoIrpfModal({
       }
 
       setDocData(json)
+
+      // Atualiza a lista de dependentes disponíveis a partir da resposta do Isaac
+      if (json?.alunosDisponiveis && Array.isArray(json.alunosDisponiveis)) {
+        setResponsibleStudents((prev) => {
+          const map = new Map<string, StudentOption>()
+          for (const s of prev) map.set(s.nome.trim().toLowerCase(), s)
+          for (const a of json.alunosDisponiveis) {
+            const key = a.nome.trim().toLowerCase()
+            if (!map.has(key)) {
+              map.set(key, {
+                id: a.id ? String(a.id) : undefined,
+                nome: a.nome,
+                turma: a.turma || 'Ensino Regular',
+                matricula: a.matricula,
+              })
+            }
+          }
+          return Array.from(map.values())
+        })
+      }
     } catch (err: any) {
       setError(err.message)
       setDocData(null)
@@ -473,169 +547,46 @@ export function DeclaracaoIrpfModal({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {/* Seleção de Aluno */}
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: '#475569',
-                        textTransform: 'uppercase',
-                        letterSpacing: 0.5,
-                      }}
-                    >
-                      1. Selecione o Aluno / Beneficiário:
-                    </label>
-                    {allStudents.length > 0 && !isAddingStudent && (
-                      <button
-                        type="button"
-                        onClick={() => setIsAddingStudent(true)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          background: 'none',
-                          border: 'none',
-                          color: '#4f46e5',
-                          fontSize: 12,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          padding: '2px 6px',
-                          borderRadius: 6,
-                        }}
-                      >
-                        <Plus size={14} />
-                        <span>Adicionar outro</span>
-                      </button>
-                    )}
-                  </div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: '#475569',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.5,
+                      marginBottom: 8,
+                    }}
+                  >
+                    1. Selecione o Aluno / Beneficiário:
+                  </label>
 
-                  {/* Formulário para Adicionar Aluno (quando a lista estiver vazia ou usuário desejar adicionar) */}
-                  {(allStudents.length === 0 || isAddingStudent) && (
+                  {loadingResponsibleStudents && allStudents.length === 0 ? (
                     <div
                       style={{
-                        background: '#f8fafc',
-                        border: '1.5px dashed #818cf8',
-                        borderRadius: 16,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
                         padding: '14px 16px',
-                        marginBottom: allStudents.length > 0 ? 12 : 0,
+                        borderRadius: 14,
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        color: '#64748b',
+                        fontSize: 13,
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                        <UserPlus size={18} color="#4f46e5" />
-                        <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>
-                          {allStudents.length === 0 ? 'Informe o Nome do Aluno' : 'Adicionar Outro Aluno'}
-                        </span>
-                      </div>
-
-                      <form onSubmit={handleAddCustomStudent} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div>
-                          <input
-                            type="text"
-                            value={newStudentName}
-                            onChange={(e) => setNewStudentName(e.target.value)}
-                            placeholder="Nome completo do aluno (ex: João Silva Santos)"
-                            autoFocus
-                            style={{
-                              width: '100%',
-                              padding: '10px 14px',
-                              borderRadius: 12,
-                              border: '1.5px solid #cbd5e1',
-                              fontSize: 13.5,
-                              color: '#0f172a',
-                              background: '#ffffff',
-                              outline: 'none',
-                              boxSizing: 'border-box',
-                            }}
-                          />
-                        </div>
-
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <input
-                            type="text"
-                            value={newStudentTurma}
-                            onChange={(e) => setNewStudentTurma(e.target.value)}
-                            placeholder="Turma / Série (opcional, ex: 3º Ano EM)"
-                            style={{
-                              flex: 1,
-                              padding: '9px 12px',
-                              borderRadius: 12,
-                              border: '1.5px solid #cbd5e1',
-                              fontSize: 12.5,
-                              color: '#0f172a',
-                              background: '#ffffff',
-                              outline: 'none',
-                              boxSizing: 'border-box',
-                            }}
-                          />
-
-                          <button
-                            type="submit"
-                            disabled={!newStudentName.trim()}
-                            style={{
-                              padding: '9px 16px',
-                              borderRadius: 12,
-                              border: 'none',
-                              background: newStudentName.trim()
-                                ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)'
-                                : '#cbd5e1',
-                              color: '#ffffff',
-                              fontSize: 12.5,
-                              fontWeight: 800,
-                              cursor: newStudentName.trim() ? 'pointer' : 'not-allowed',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            <UserCheck size={14} />
-                            <span>Confirmar Aluno</span>
-                          </button>
-
-                          {isAddingStudent && allStudents.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsAddingStudent(false)
-                                setNewStudentName('')
-                                setNewStudentTurma('')
-                              }}
-                              style={{
-                                padding: '9px 12px',
-                                borderRadius: 12,
-                                border: '1.5px solid #e2e8f0',
-                                background: '#ffffff',
-                                color: '#64748b',
-                                fontSize: 12.5,
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              Cancelar
-                            </button>
-                          )}
-                        </div>
-                      </form>
+                      <RefreshCw size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>Carregando alunos vinculados...</span>
                     </div>
-                  )}
-
-                  {/* Lista de Alunos Disponíveis */}
-                  {allStudents.length > 0 && (
+                  ) : allStudents.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {allStudents.map((al) => {
                         const isSelected = selectedAluno?.nome === al.nome
-                        const initials = al.nome
-                          .split(' ')
-                          .filter(Boolean)
-                          .slice(0, 2)
-                          .map((n) => n[0])
-                          .join('')
-                          .toUpperCase()
+                        const initials = getStudentInitials(al.nome)
 
                         return (
                           <div
-                            key={al.nome}
+                            key={al.id || al.nome}
                             onClick={() => setSelectedAluno(al)}
                             style={{
                               padding: '12px 16px',
@@ -678,7 +629,7 @@ export function DeclaracaoIrpfModal({
                                 {al.nome}
                               </div>
                               <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 1 }}>
-                                {al.turma || 'Aluno Colégio Impacto'}
+                                {al.turma || 'Aluno Colégio Impacto'} {al.matricula ? `• Matrícula: ${al.matricula}` : ''}
                               </div>
                             </div>
                             {isSelected && <CheckCircle2 size={20} color="#4f46e5" style={{ flexShrink: 0 }} />}
@@ -686,11 +637,24 @@ export function DeclaracaoIrpfModal({
                         )
                       })}
                     </div>
+                  ) : (
+                    <div
+                      style={{
+                        padding: '14px 16px',
+                        borderRadius: 14,
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        fontSize: 13,
+                        color: '#64748b',
+                      }}
+                    >
+                      Nenhum aluno vinculado encontrado para este responsável financeiro.
+                    </div>
                   )}
                 </div>
 
-                {/* Seleção do Ano Letivo */}
-                <div>
+                {/* Seleção do Ano-Calendário em Lista Ultra Moderna */}
+                <div ref={yearSelectRef} style={{ position: 'relative' }}>
                   <label
                     style={{
                       display: 'block',
@@ -705,29 +669,227 @@ export function DeclaracaoIrpfModal({
                     2. Selecione o Ano-Calendário:
                   </label>
 
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {ANOS_IRPF.map((ano) => (
-                      <button
-                        key={ano}
-                        onClick={() => setSelectedAno(ano)}
+                  {/* Trigger da Lista Ultra Moderna */}
+                  <div
+                    onClick={() => setIsYearOpen((prev) => !prev)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setIsYearOpen((prev) => !prev)
+                      }
+                    }}
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: 16,
+                      border: isYearOpen ? '2px solid #4f46e5' : '1.5px solid #e2e8f0',
+                      background: '#ffffff',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: isYearOpen
+                        ? '0 6px 20px rgba(79, 70, 229, 0.15)'
+                        : '0 2px 6px rgba(0, 0, 0, 0.03)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      <div
                         style={{
-                          flex: 1,
-                          padding: '10px 0',
+                          width: 40,
+                          height: 40,
                           borderRadius: 12,
-                          border: selectedAno === ano ? '2px solid #4f46e5' : '1.5px solid #e2e8f0',
-                          background: selectedAno === ano ? '#4f46e5' : '#ffffff',
-                          color: selectedAno === ano ? '#ffffff' : '#334155',
-                          fontSize: 13.5,
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          boxShadow: selectedAno === ano ? '0 4px 12px rgba(79, 70, 229, 0.25)' : 'none',
-                          transition: 'all 0.15s ease',
+                          background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
+                          color: '#4338ca',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
                         }}
                       >
-                        {ano}
-                      </button>
-                    ))}
+                        <Calendar size={19} strokeWidth={2.3} />
+                      </div>
+
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>
+                            Ano-Calendário {selectedAno}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: '#4f46e5',
+                              background: '#eef2ff',
+                              border: '1px solid #c7d2fe',
+                              padding: '2px 8px',
+                              borderRadius: 8,
+                            }}
+                          >
+                            Exercício {YEAR_METADATA[selectedAno]?.exercicio || Number(selectedAno) + 1}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                          {YEAR_METADATA[selectedAno]?.label || 'Declaração para IRPF'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 10,
+                        background: isYearOpen ? '#f5f3ff' : '#f8fafc',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        transition: 'background 0.2s',
+                      }}
+                    >
+                      <ChevronDown
+                        size={18}
+                        color={isYearOpen ? '#4f46e5' : '#64748b'}
+                        style={{
+                          transform: isYearOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                        }}
+                      />
+                    </div>
                   </div>
+
+                  {/* Menu Suspenso da Lista Ultra Moderna */}
+                  <AnimatePresence>
+                    {isYearOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                        transition={{ duration: 0.18, ease: 'easeOut' }}
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          right: 0,
+                          marginTop: 8,
+                          background: '#ffffff',
+                          border: '1.5px solid #e2e8f0',
+                          borderRadius: 16,
+                          padding: 6,
+                          boxShadow: '0 12px 30px -6px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05)',
+                          zIndex: 50,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4,
+                        }}
+                      >
+                        {ANOS_IRPF.map((ano) => {
+                          const isSelected = selectedAno === ano
+                          const meta = YEAR_METADATA[ano] || {
+                            exercicio: String(Number(ano) + 1),
+                            label: 'Declaração para IRPF',
+                          }
+
+                          return (
+                            <div
+                              key={ano}
+                              onClick={() => {
+                                setSelectedAno(ano)
+                                setIsYearOpen(false)
+                              }}
+                              style={{
+                                padding: '10px 14px',
+                                borderRadius: 12,
+                                border: isSelected ? '1.5px solid #c7d2fe' : '1.5px solid transparent',
+                                background: isSelected ? '#f5f3ff' : '#ffffff',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 10,
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) e.currentTarget.style.background = '#f8fafc'
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) e.currentTarget.style.background = '#ffffff'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div
+                                  style={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: 10,
+                                    background: isSelected ? '#4f46e5' : '#f1f5f9',
+                                    color: isSelected ? '#ffffff' : '#475569',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  {ano.slice(-2)}
+                                </div>
+
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span
+                                      style={{
+                                        fontSize: 13.5,
+                                        fontWeight: 800,
+                                        color: isSelected ? '#4338ca' : '#0f172a',
+                                      }}
+                                    >
+                                      Ano-Calendário {ano}
+                                    </span>
+                                    {meta.tag && (
+                                      <span
+                                        style={{
+                                          fontSize: 10,
+                                          fontWeight: 800,
+                                          color: '#059669',
+                                          background: '#ecfdf5',
+                                          border: '1px solid #a7f3d0',
+                                          padding: '1px 6px',
+                                          borderRadius: 6,
+                                          textTransform: 'uppercase',
+                                        }}
+                                      >
+                                        {meta.tag}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                                    Exercício IRPF {meta.exercicio} • {meta.label}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {isSelected ? (
+                                <CheckCircle2 size={18} color="#4f46e5" />
+                              ) : (
+                                <div
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: '50%',
+                                    background: '#e2e8f0',
+                                  }}
+                                />
+                              )}
+                            </div>
+                          )
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Card de Resumo e Pré-visualização dos Dados Calculados */}

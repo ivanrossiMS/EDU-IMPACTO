@@ -2665,7 +2665,7 @@ export default function ADInnerLayout({
 
         {/* Page Content Area */}
         <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
-          <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole }}>
+          <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole, meusAlunos }}>
               {children}
           </SelectedStudentProvider>
         </div>

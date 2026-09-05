@@ -18,6 +18,89 @@ export async function GET(request: Request) {
     const alunoId = url.searchParams.get('aluno_id')
     const alunoIdsStr = url.searchParams.get('aluno_ids')
 
+    const responsavelId = url.searchParams.get('responsavel_id')
+    const mode = url.searchParams.get('mode')
+
+    // ── Se fornecido responsavel_id ou mode=co_students, retorna os alunos vinculados ao responsável financeiro ──
+    if (responsavelId || (alunoId && mode === 'co_students')) {
+      let targetRespIds: string[] = []
+      if (responsavelId) {
+        targetRespIds = [String(responsavelId).trim()]
+      } else if (alunoId) {
+        const { data: myLinks } = await supabase
+          .from('aluno_responsavel')
+          .select('responsavel_id, resp_financeiro')
+          .eq('aluno_id', alunoId)
+
+        if (myLinks && myLinks.length > 0) {
+          const fin = myLinks.find((l: any) => l.resp_financeiro)
+          if (fin?.responsavel_id) {
+            targetRespIds = [String(fin.responsavel_id).trim()]
+          } else {
+            targetRespIds = myLinks.map((l: any) => String(l.responsavel_id).trim()).filter(Boolean)
+          }
+        }
+      }
+
+      if (targetRespIds.length === 0) {
+        return NextResponse.json({ alunos: [] })
+      }
+
+      const { data: respLinks } = await supabase
+        .from('aluno_responsavel')
+        .select('aluno_id, parentesco, resp_financeiro')
+        .in('responsavel_id', targetRespIds)
+
+      if (!respLinks || respLinks.length === 0) {
+        return NextResponse.json({ alunos: [] })
+      }
+
+      const linkedStudentIds = Array.from(
+        new Set(respLinks.map((l: any) => String(l.aluno_id).trim()).filter(Boolean))
+      )
+
+      const { data: studentsData } = await supabase
+        .from('alunos')
+        .select('id, nome, matricula, turma, status, foto, dados')
+        .or(`id.in.(${linkedStudentIds.join(',')}),matricula.in.(${linkedStudentIds.join(',')})`)
+
+      const turmaIds = [...new Set((studentsData || []).map((s: any) => s.turma).filter(Boolean))]
+      const turmasMap: Record<string, string> = {}
+      if (turmaIds.length > 0) {
+        const { data: turmasData } = await supabase
+          .from('turmas')
+          .select('id, codigo, nome')
+          .in('id', turmaIds)
+
+        if (turmasData) {
+          turmasData.forEach((t: any) => {
+            if (t.id) turmasMap[String(t.id)] = t.nome
+            if (t.codigo) turmasMap[String(t.codigo)] = t.nome
+          })
+        }
+      }
+
+      const alunos = (studentsData || []).map((s: any) => {
+        const l = respLinks.find(
+          (link: any) =>
+            String(link.aluno_id).trim() === String(s.id).trim() ||
+            String(link.aluno_id).trim() === String(s.matricula).trim()
+        )
+        return {
+          id: String(s.id),
+          nome: s.nome,
+          matricula: s.matricula || s.id,
+          turma: turmasMap[String(s.turma)] || s.turma || 'Ensino Regular',
+          status: s.status,
+          foto: s.foto || s.dados?.foto || null,
+          parentesco: l?.parentesco || 'Dependente',
+          isFinanceiro: Boolean(l?.resp_financeiro),
+        }
+      })
+
+      return NextResponse.json({ alunos })
+    }
+
     let alunoIds: string[] = []
     if (alunoIdsStr) {
       alunoIds = alunoIdsStr.split(',').filter(Boolean)
@@ -26,7 +109,7 @@ export async function GET(request: Request) {
     }
 
     if (alunoIds.length === 0) {
-      return NextResponse.json({ error: 'aluno_id ou aluno_ids é obrigatório' }, { status: 400 })
+      return NextResponse.json({ error: 'aluno_id, aluno_ids ou responsavel_id é obrigatório' }, { status: 400 })
     }
 
     // Build all possible refs for these students (id, matricula, codigo podem diferir)

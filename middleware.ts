@@ -108,12 +108,12 @@ export async function middleware(request: NextRequest) {
   // no Edge congelem a abertura do app mobile.
   let user = null
   try {
-    const sessionPromise = supabase.auth.getSession()
-    const timeoutPromise = new Promise<{ data: { session: any } }>(res =>
-      setTimeout(() => res({ data: { session: null } }), 4000)
+    const userPromise = supabase.auth.getUser()
+    const timeoutPromise = new Promise<{ data: { user: any } }>(res =>
+      setTimeout(() => res({ data: { user: null } }), 4000)
     )
-    const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise])
-    user = session?.user ?? null
+    const { data } = await Promise.race([userPromise, timeoutPromise])
+    user = data?.user ?? null
   } catch (err) {
     console.warn('[Middleware Auth Warning]', err)
   }

@@ -96,17 +96,20 @@ export async function isaacRequest<T = any>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
   body?: Record<string, any>
 ): Promise<T> {
-  if (!ISAAC_API_KEY) {
+  const apiKey = process.env.ISAAC_API_KEY || ISAAC_API_KEY
+  const apiUrl = process.env.ISAAC_API_URL || ISAAC_API_URL || 'https://api.olaisaac.io/v2'
+
+  if (!apiKey) {
     throw new Error('ISAAC_API_KEY não configurada no ambiente do servidor.')
   }
 
-  const url = `${ISAAC_API_URL}${endpoint}`
+  const url = `${apiUrl}${endpoint}`
 
   const options: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': ISAAC_API_KEY,
+      'x-api-key': apiKey,
     },
     // Sem cache — dados financeiros devem ser sempre frescos
     cache: 'no-store',

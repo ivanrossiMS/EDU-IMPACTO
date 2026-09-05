@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Wallet,
@@ -532,7 +533,12 @@ function MobileInvoiceCard({
 
 export default function ADFinanceiroPage() {
   const { adConfig } = useAgendaDigital()
-  const { aluno: currentStudent } = useSelectedStudent()
+  const { aluno: currentStudent, meusAlunos } = useSelectedStudent()
+  const params = useParams() as { slug?: string }
+  const studentRef = currentStudent?.id ? String(currentStudent.id) : (params?.slug || '')
+
+  const cacheByYearRef = useRef<Record<string, IsaacData>>({})
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const [data, setData] = useState<IsaacData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -543,6 +549,8 @@ export default function ADFinanceiroPage() {
   const [selectedAno, setSelectedAno] = useState<AnoFilter>('2026')
   const [selectedStudentFilter, setSelectedStudentFilter] = useState<string>('todos')
   const [irpfModalOpen, setIrpfModalOpen] = useState(false)
+  const [isYearDropdownOpen, setIsYearDropdownOpen] = useState(false)
+  const yearDropdownRef = useRef<HTMLDivElement>(null)
 
   const [pixModal, setPixModal] = useState<{
     isOpen: boolean
@@ -563,13 +571,34 @@ export default function ADFinanceiroPage() {
   })
 
   // ── Fetch Dados ────────────────────────────────────────────────────────────
-  const fetchFinanceiro = useCallback(async (ano: AnoFilter) => {
+  const fetchFinanceiro = useCallback(async (ano: AnoFilter, force = false) => {
+    // 1. Se já está no cache local do browser e não forçou refresh, exibe imediatamente (0ms)
+    const cached = cacheByYearRef.current[ano]
+    if (!force && cached) {
+      setData(cached)
+      setLoading(false)
+      setError(null)
+      setNotFound(false)
+      return
+    }
+
+    // Cancela requisição anterior em voo para evitar sobreposição
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setLoading(true)
     setError(null)
     setNotFound(false)
 
     try {
-      const res = await fetch(`/api/isaac/parcelas?ano=${ano}`)
+      const alunoQuery = studentRef ? `&alunoId=${encodeURIComponent(studentRef)}` : ''
+      const forceQuery = force ? '&refresh=true' : ''
+      const res = await fetch(`/api/isaac/parcelas?ano=${ano}${alunoQuery}${forceQuery}`, {
+        signal: controller.signal,
+      })
       const json = await res.json()
 
       if (res.status === 404 && json.notFound) {
@@ -582,17 +611,44 @@ export default function ADFinanceiroPage() {
         throw new Error(json.error || 'Não foi possível carregar as informações financeiras.')
       }
 
+      cacheByYearRef.current[ano] = json
       setData(json)
     } catch (err: any) {
-      setError(err.message)
+      if (err.name !== 'AbortError') {
+        setError(err.message)
+      }
     } finally {
-      setLoading(false)
+      if (abortControllerRef.current === controller) {
+        setLoading(false)
+      }
     }
-  }, [])
+  }, [studentRef])
 
   useEffect(() => {
     fetchFinanceiro(selectedAno)
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [fetchFinanceiro, selectedAno])
+
+  // Fecha dropdown do ano ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (yearDropdownRef.current && !yearDropdownRef.current.contains(event.target as Node)) {
+        setIsYearDropdownOpen(false)
+      }
+    }
+    if (isYearDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('touchstart', handleClickOutside)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('touchstart', handleClickOutside)
+    }
+  }, [isYearDropdownOpen])
 
   // Lista única de alunos para filtro rápido quando houver mais de 1 filho
   const uniqueStudents = useMemo(() => {
@@ -605,21 +661,38 @@ export default function ADFinanceiroPage() {
   const alunosOptions = useMemo(() => {
     const map = new Map<string, { id?: string; nome: string; turma?: string }>()
 
-    // 1. Inclui o aluno ativo na sessão se disponível
-    if (currentStudent?.nome) {
-      map.set(currentStudent.nome, {
-        id: currentStudent.id ? String(currentStudent.id) : undefined,
-        nome: currentStudent.nome,
-        turma: currentStudent.turma_nome || currentStudent.turma || '',
-      })
+    // 1. Inclui todos os alunos vinculados ao responsável (da sessão/família)
+    if (meusAlunos && Array.isArray(meusAlunos)) {
+      for (const a of meusAlunos) {
+        if (!a?.nome) continue
+        const key = a.nome.trim().toLowerCase()
+        map.set(key, {
+          id: a.id ? String(a.id) : undefined,
+          nome: a.nome,
+          turma: a.turma_nome || a.turmaNome || a.turma || '',
+        })
+      }
     }
 
-    // 2. Inclui os alunos retornados pelas faturas do Isaac
+    // 2. Inclui o aluno ativo na sessão se disponível
+    if (currentStudent?.nome) {
+      const key = currentStudent.nome.trim().toLowerCase()
+      if (!map.has(key)) {
+        map.set(key, {
+          id: currentStudent.id ? String(currentStudent.id) : undefined,
+          nome: currentStudent.nome,
+          turma: currentStudent.turma_nome || currentStudent.turma || '',
+        })
+      }
+    }
+
+    // 3. Inclui os alunos retornados pelas faturas do Isaac
     if (data?.parcelas) {
       for (const p of data.parcelas) {
         if (!p.aluno) continue
-        if (!map.has(p.aluno)) {
-          map.set(p.aluno, {
+        const key = p.aluno.trim().toLowerCase()
+        if (!map.has(key)) {
+          map.set(key, {
             id: p.alunoId,
             nome: p.aluno,
             turma: p.descricao?.split('-')?.[1]?.trim() || '',
@@ -629,7 +702,7 @@ export default function ADFinanceiroPage() {
     }
 
     return Array.from(map.values())
-  }, [data, currentStudent])
+  }, [data, currentStudent, meusAlunos])
 
   // ── Filtro de Faturas ──────────────────────────────────────────────────────
   const filteredList = useMemo(() => {
@@ -699,7 +772,7 @@ export default function ADFinanceiroPage() {
     )
   }
 
-  const ANOS: AnoFilter[] = ['2024', '2025', '2026']
+  const ANOS: AnoFilter[] = ['2026', '2025', '2024']
 
   return (
     <div
@@ -837,39 +910,194 @@ export default function ADFinanceiroPage() {
               </span>
             </motion.button>
 
-            <div
-              style={{
-                display: 'flex',
-                background: '#f1f5f9',
-                padding: 3,
-                borderRadius: 12,
-                border: '1px solid #e2e8f0',
-              }}
-            >
-              {ANOS.map((ano) => (
-                <button
-                  key={ano}
-                  onClick={() => setSelectedAno(ano)}
+            {/* Seletor de Ano em Lista Ultra Moderna */}
+            <div ref={yearDropdownRef} style={{ position: 'relative' }}>
+              <div
+                onClick={() => setIsYearDropdownOpen((prev) => !prev)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setIsYearDropdownOpen((prev) => !prev)
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px',
+                  borderRadius: 12,
+                  border: isYearDropdownOpen ? '1.5px solid #4f46e5' : '1.5px solid #e2e8f0',
+                  background: '#ffffff',
+                  cursor: 'pointer',
+                  boxShadow: isYearDropdownOpen
+                    ? '0 4px 14px rgba(79, 70, 229, 0.15)'
+                    : '0 1px 3px rgba(0, 0, 0, 0.04)',
+                  transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                  userSelect: 'none',
+                }}
+              >
+                <div
                   style={{
-                    padding: '6px 13px',
-                    borderRadius: 9,
-                    border: 'none',
-                    background: selectedAno === ano ? '#ffffff' : 'transparent',
-                    color: selectedAno === ano ? '#4f46e5' : '#64748b',
-                    fontWeight: 800,
-                    fontSize: 12.5,
-                    cursor: 'pointer',
-                    boxShadow: selectedAno === ano ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
-                    transition: 'all 0.15s ease',
+                    width: 26,
+                    height: 26,
+                    borderRadius: 8,
+                    background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
+                    color: '#4338ca',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
-                  {ano}
-                </button>
-              ))}
+                  <CalendarDays size={14} strokeWidth={2.3} />
+                </div>
+
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                  Ano {selectedAno}
+                </span>
+
+                {selectedAno === '2026' && (
+                  <span
+                    style={{
+                      fontSize: 9.5,
+                      fontWeight: 800,
+                      color: '#059669',
+                      background: '#ecfdf5',
+                      border: '1px solid #a7f3d0',
+                      padding: '1px 6px',
+                      borderRadius: 6,
+                    }}
+                  >
+                    Vigente
+                  </span>
+                )}
+
+                <ChevronDown
+                  size={14}
+                  color={isYearDropdownOpen ? '#4f46e5' : '#64748b'}
+                  style={{
+                    transform: isYearDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  }}
+                />
+              </div>
+
+              {/* Menu Suspenso da Lista Ultra Moderna */}
+              <AnimatePresence>
+                {isYearDropdownOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      right: 0,
+                      marginTop: 6,
+                      minWidth: 195,
+                      background: '#ffffff',
+                      border: '1.5px solid #e2e8f0',
+                      borderRadius: 14,
+                      padding: 6,
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 4px 10px rgba(0, 0, 0, 0.04)',
+                      zIndex: 60,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 4,
+                    }}
+                  >
+                    {ANOS.map((ano) => {
+                      const isSelected = selectedAno === ano
+                      const isCurrent = ano === '2026'
+
+                      return (
+                        <div
+                          key={ano}
+                          onClick={() => {
+                            setSelectedAno(ano)
+                            setIsYearDropdownOpen(false)
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: 10,
+                            border: isSelected ? '1.5px solid #c7d2fe' : '1.5px solid transparent',
+                            background: isSelected ? '#f5f3ff' : '#ffffff',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                            transition: 'all 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = '#f8fafc'
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) e.currentTarget.style.background = '#ffffff'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 8,
+                                background: isSelected ? '#4f46e5' : '#f1f5f9',
+                                color: isSelected ? '#ffffff' : '#475569',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 11,
+                                fontWeight: 800,
+                              }}
+                            >
+                              {ano.slice(-2)}
+                            </div>
+
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    color: isSelected ? '#4338ca' : '#0f172a',
+                                  }}
+                                >
+                                  Ano Letivo {ano}
+                                </span>
+                                {isCurrent && (
+                                  <span
+                                    style={{
+                                      fontSize: 9.5,
+                                      fontWeight: 800,
+                                      color: '#059669',
+                                      background: '#ecfdf5',
+                                      border: '1px solid #a7f3d0',
+                                      padding: '1px 5px',
+                                      borderRadius: 5,
+                                    }}
+                                  >
+                                    Vigente
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {isSelected && <CheckCircle2 size={16} color="#4f46e5" />}
+                        </div>
+                      )
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <button
-              onClick={() => fetchFinanceiro(selectedAno)}
+              onClick={() => fetchFinanceiro(selectedAno, true)}
               disabled={loading}
               title="Atualizar dados em tempo real"
               style={{
