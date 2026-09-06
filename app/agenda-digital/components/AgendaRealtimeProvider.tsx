@@ -48,6 +48,123 @@ declare global {
   }
 }
 
+/**
+ * Mapeia o tipo de push para a rota correta da agenda.
+ * Usado no deep link ao clicar na notificação.
+ */
+function typeToRoute(type?: string): string {
+  if (!type) return ''
+  const map: Record<string, string> = {
+    comunicados: 'comunicados',
+    comunicado:  'comunicados',
+    momentos:    'momentos',
+    momento:     'momentos',
+    calendario:  'calendario',
+    evento:      'calendario',
+    eventos:     'calendario',
+    frequencia:  'frequencia',
+    ocorrencias: 'ocorrencias',
+    ocorrencia:  'ocorrencias',
+    notas:       'notas',
+    nota:        'notas',
+    cobrancas:   'financeiro',
+    cobranca:    'financeiro',
+    saida:       'portaria',
+  }
+  return map[type.toLowerCase()] || type
+}
+
+/**
+ * Resolve a rota de destino ao clicar em qualquer notificação push (Nativo ou Web).
+ * Garante que:
+ * 1. Pushes institucionais (colaborador) abram diretamente em /agenda-digital/colaborador/{seção}?id=...
+ * 2. Pushes familiares abram em /agenda-digital/{alunoId}/{seção}?id=...
+ * 3. Qualquer query param (ex: id=...) seja preservado no redirecionamento.
+ */
+function resolveNotificationRoute(data: any, event?: any, alunoIdFallback?: string | null): string | null {
+  if (!data && !event) return null
+
+  // 1. Tentar obter URL completa ou caminho direto fornecido no payload
+  const rawUrl =
+    data?.target_url ||
+    data?.targetUrl ||
+    data?.url ||
+    data?.full_url ||
+    event?.notification?.launchURL ||
+    event?.result?.url ||
+    ''
+
+  let parsedPath = ''
+  if (rawUrl && typeof rawUrl === 'string') {
+    try {
+      if (rawUrl.startsWith('/')) {
+        parsedPath = rawUrl
+      } else {
+        const u = new URL(rawUrl)
+        parsedPath = u.pathname + u.search + u.hash
+      }
+    } catch {
+      parsedPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`
+    }
+  }
+
+  const itemId = data?.item_id || data?.id
+
+  // 2. Verificar se o push é de acesso institucional / colaborador
+  const isColab =
+    data?.isColab === true ||
+    data?.is_colab === true ||
+    data?.perfil === 'colaborador' ||
+    parsedPath.includes('/colaborador/')
+
+  if (isColab) {
+    let route = parsedPath
+    if (!route || !route.includes('/colaborador/')) {
+      const section = data?.rota || typeToRoute(data?.type || data?.tipo) || 'comunicados'
+      route = `/agenda-digital/colaborador/${section}`
+    }
+    if (itemId && !route.includes('id=')) {
+      route += (route.includes('?') ? '&' : '?') + `id=${itemId}`
+    }
+    return route
+  }
+
+  // 3. Se temos uma rota específica já construída para o aluno (ex: /agenda-digital/123/comunicados)
+  if (
+    parsedPath &&
+    !parsedPath.startsWith('/agenda-digital/comunicados') &&
+    !parsedPath.startsWith('/agenda-digital/momentos') &&
+    !parsedPath.startsWith('/agenda-digital/calendario')
+  ) {
+    let route = parsedPath
+    if (itemId && !route.includes('id=')) {
+      route += (route.includes('?') ? '&' : '?') + `id=${itemId}`
+    }
+    return route
+  }
+
+  // 4. Caso padrão familiar: usar o aluno_id do payload ou o aluno atualmente ativo
+  const section = data?.rota || typeToRoute(data?.type || data?.tipo)
+  if (section) {
+    const slug = data?.aluno_id || alunoIdFallback
+    let route = slug ? `/agenda-digital/${slug}/${section}` : `/agenda-digital?redirect=${section}`
+    if (itemId && !route.includes('id=')) {
+      route += (route.includes('?') ? '&' : '?') + `id=${itemId}`
+    }
+    return route
+  }
+
+  if (parsedPath) {
+    let route = parsedPath
+    if (itemId && !route.includes('id=')) {
+      route += (route.includes('?') ? '&' : '?') + `id=${itemId}`
+    }
+    return route
+  }
+
+  return null
+}
+
 export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -127,24 +244,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 const data = event?.notification?.additionalData || {}
                 console.log('[OneSignal] Notificação nativa clicada:', data)
                 
-                if (data?.rota || data?.type) {
-                  const slug = data.aluno_id || alunoIdRef.current
-                  let route = ''
-
-                  if (slug) {
-                    route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
-                  } else {
-                    route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
-                  }
-                  
-                  if (data?.item_id) {
-                    route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
-                  }
-
-                  if (route) {
-                    console.log(`[OneSignal] Deep link nativo → ${route}`)
-                    router.push(route)
-                  }
+                const route = resolveNotificationRoute(data, event, alunoIdRef.current)
+                if (route) {
+                  console.log(`[OneSignal] Deep link nativo → ${route}`)
+                  router.push(route)
                 }
               })
 
@@ -212,24 +315,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                     const data = event?.notification?.additionalData || {}
                     console.log('[OneSignal] Notificação web clicada:', data)
 
-                    if (data?.rota || data?.type) {
-                      const slug = data.aluno_id || alunoIdRef.current
-                      let route = ''
-
-                      if (slug) {
-                        route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
-                      } else {
-                        route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
-                      }
-                      
-                      if (data?.item_id) {
-                        route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
-                      }
-
-                      if (route) {
-                        console.log(`[OneSignal] Deep link web → ${route}`)
-                        router.push(route)
-                      }
+                    const route = resolveNotificationRoute(data, event, alunoIdRef.current)
+                    if (route) {
+                      console.log(`[OneSignal] Deep link web → ${route}`)
+                      router.push(route)
                     }
                   })
                 }
@@ -601,7 +690,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               title: merged.titulo,
               createdAt: merged.created_at || new Date().toISOString(),
               read: false,
-              link: isFamily && alunoId ? `/agenda-digital/${alunoId}/comunicados` : `/agenda-digital/colaborador/comunicados`,
+              link: isFamily && alunoId ? `/agenda-digital/${alunoId}/comunicados?id=${merged.id}` : `/agenda-digital/colaborador/comunicados?id=${merged.id}`,
             })
 
             // toast in-app removido para evitar duplicidade com as notificações push
@@ -640,7 +729,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             title: row.titulo || 'Novo Evento',
             createdAt: row.created_at || new Date().toISOString(),
             read: false,
-            link: `/agenda-digital/${alunoId}/calendario`,
+            link: isFamily && alunoId ? `/agenda-digital/${alunoId}/calendario?id=${row.id}` : `/agenda-digital/colaborador/calendario?id=${row.id}`,
           })
           // toast in-app removido
         }
@@ -768,7 +857,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             title: merged.titulo || 'Novo Momento',
             createdAt: merged.created_at || new Date().toISOString(),
             read: false,
-            link: `/agenda-digital/${alunoId}/momentos`,
+            link: isFamily && alunoId ? `/agenda-digital/${alunoId}/momentos?id=${merged.id}` : `/agenda-digital/colaborador/momentos?id=${merged.id}`,
           })
           // toast in-app removido
         }
@@ -796,22 +885,4 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       {children}
     </>
   )
-}
-
-/**
- * Mapeia o tipo de push para a rota correta da agenda.
- * Usado no deep link ao clicar na notificação.
- */
-function typeToRoute(type: string): string {
-  const map: Record<string, string> = {
-    comunicados: 'comunicados',
-    momentos:    'momentos',
-    calendario:  'calendario',
-    frequencia:  'frequencia',
-    ocorrencias: 'ocorrencias',
-    notas:       'notas',
-    cobrancas:   'financeiro',
-    saida:       'portaria', // ← deep link de saída/portaria
-  }
-  return map[type] || ''
 }

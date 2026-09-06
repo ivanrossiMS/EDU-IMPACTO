@@ -265,6 +265,7 @@ export async function sendAgendaPushNotification({
 
     // Construir URL segura com URLSearchParams (evita duplicar parâmetro 'id=')
     const fullUrl = _buildTargetUrl(targetUrl, itemId)
+    const targetPathWithId = fullUrl.replace(/^https?:\/\/[^\/]+/, '')
 
     const pushResponse = await sendPushNotification({
       title: finalTitle,
@@ -274,6 +275,9 @@ export async function sendAgendaPushNotification({
       data: {
         type,
         item_id: itemId,
+        target_url: targetPathWithId,
+        full_url: fullUrl,
+        url: fullUrl,
         ...metadata,
       },
       sendAfter,
