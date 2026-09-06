@@ -122,22 +122,67 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   // Auto-open comunicado if queryId is present (only once)
   const hasAutoOpened = useRef(false)
   useEffect(() => {
-    if (queryId && comunicados.length > 0 && !hasAutoOpened.current) {
-      const target = comunicados.find((c: any) => String(c.id) === String(queryId))
-      if (target) {
-        setSelectedComunicado(target)
-        hasAutoOpened.current = true
-        
-        // Remove query param from URL so it doesn't trigger again on refresh
-        try {
-          const urlParams = new URLSearchParams(window.location.search);
-          urlParams.delete('id');
-          const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
-          router.replace(newUrl, { scroll: false })
-        } catch(e) {}
-      }
+    if (!queryId || hasAutoOpened.current) return;
+
+    const target = comunicados.find((c: any) => String(c.id) === String(queryId))
+    if (target) {
+      setSelectedComunicado(target)
+      hasAutoOpened.current = true
+      
+      // Remove query param from URL so it doesn't trigger again on refresh
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete('id');
+        const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
+        router.replace(newUrl, { scroll: false })
+      } catch(e) {}
+      return;
     }
-  }, [queryId, comunicados, router])
+
+    if (!loading) {
+      const slugParam = resolvedParams?.slug ? `&aluno_id=${encodeURIComponent(resolvedParams.slug)}` : '';
+      fetch(`/api/comunicados?id=${encodeURIComponent(queryId)}${slugParam}`)
+        .then(res => res.json())
+        .then(data => {
+          const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
+          if (item && (item.id || item.titulo)) {
+            setSelectedComunicado(item);
+            hasAutoOpened.current = true;
+            try {
+              const urlParams = new URLSearchParams(window.location.search);
+              urlParams.delete('id');
+              const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
+              router.replace(newUrl, { scroll: false });
+            } catch(e) {}
+          }
+        })
+        .catch(err => console.error("Error auto-opening single comunicado in slug page:", err));
+    }
+  }, [queryId, comunicados, loading, router, resolvedParams?.slug])
+
+  useEffect(() => {
+    const handleOpenCustom = (e: any) => {
+      const comId = e.detail?.id;
+      if (!comId) return;
+      const target = comunicados.find((c: any) => String(c.id) === String(comId));
+      if (target) {
+        setSelectedComunicado(target);
+      } else {
+        const slugParam = resolvedParams?.slug ? `&aluno_id=${encodeURIComponent(resolvedParams.slug)}` : '';
+        fetch(`/api/comunicados?id=${encodeURIComponent(comId)}${slugParam}`)
+          .then(res => res.json())
+          .then(data => {
+            const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
+            if (item && (item.id || item.titulo)) {
+              setSelectedComunicado(item);
+            }
+          })
+          .catch(console.error);
+      }
+    };
+    window.addEventListener('ad:open-comunicado', handleOpenCustom);
+    return () => window.removeEventListener('ad:open-comunicado', handleOpenCustom);
+  }, [comunicados, resolvedParams?.slug]);
   
   useEffect(() => {
     const handleUpdate = () => {

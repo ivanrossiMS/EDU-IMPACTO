@@ -17,7 +17,7 @@
  * - Usuário não autenticado não recebe dados sensíveis
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import Script from 'next/script'
 import { useRouter, useParams } from 'next/navigation'
@@ -86,6 +86,62 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     alunoIdRef.current = alunoId
   }, [alunoId])
 
+  const [meusAlunos, setMeusAlunos] = useState<any[]>([])
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    try {
+      const cached = localStorage.getItem(`edu-meus-alunos-${currentUser.id}`)
+      if (cached) {
+        setMeusAlunos(JSON.parse(cached))
+      }
+    } catch(e) {}
+
+    fetch('/api/agenda/meus-alunos', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (Array.isArray(data)) {
+          setMeusAlunos(data)
+          try {
+            localStorage.setItem(`edu-meus-alunos-${currentUser.id}`, JSON.stringify(data))
+          } catch(e) {}
+        }
+      })
+      .catch(() => {})
+  }, [currentUser?.id])
+
+  const isStaffUser = Boolean(
+    currentUser?.perfil &&
+    !['Família', 'Responsável', 'Aluno'].includes(currentUser.perfil) &&
+    !['Responsável', 'Aluno'].includes(currentUser?.cargo || '')
+  )
+
+  const hasFamilyAccess = isFamily || meusAlunos.length > 0 || !!currentUser?.responsavel_id || currentUser?.cargo === 'Aluno'
+  const hasDualAccess = isStaffUser && hasFamilyAccess
+
+  const myCandidateStaffIds = useMemo(() => {
+    const ids = new Set<string>()
+    if (currentUser?.id) ids.add(String(currentUser.id).replace(/^f_?/, '').trim().toLowerCase())
+    if ((currentUser as any)?.uid_legacy) ids.add(String((currentUser as any).uid_legacy).replace(/^f_?/, '').trim().toLowerCase())
+    if ((currentUser as any)?.id_legado) ids.add(String((currentUser as any).id_legado).replace(/^f_?/, '').trim().toLowerCase())
+    return Array.from(ids)
+  }, [currentUser])
+
+  const myStaffGroupNames = useMemo(() => {
+    if (!agendaCtx?.chatGroups || !Array.isArray(agendaCtx.chatGroups)) return []
+    return agendaCtx.chatGroups.filter((g: any) => {
+      let colabs = g.colaboradoresIds
+      if (typeof colabs === 'string') {
+        try { colabs = JSON.parse(colabs) } catch { colabs = [] }
+      }
+      if (!Array.isArray(colabs)) colabs = []
+      return colabs.some((cid: any) => {
+        const clean = String(cid).replace(/^f_?/, '').trim().toLowerCase()
+        return myCandidateStaffIds.includes(clean)
+      })
+    }).map((g: any) => String(g.nome || '').trim().toLowerCase())
+  }, [agendaCtx?.chatGroups, myCandidateStaffIds])
+
   // ── OneSignal Initialization ──────────────────────────────────────────────
   // 1. Inicializa o SDK (apenas uma vez)
   useEffect(() => {
@@ -127,22 +183,43 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 const data = event?.notification?.additionalData || {}
                 console.log('[OneSignal] Notificação nativa clicada:', data)
                 
+                const directUrl = data.targetUrl || data.url
+                if (directUrl) {
+                  const finalUrl = data.item_id && !directUrl.includes('id=')
+                    ? `${directUrl}${directUrl.includes('?') ? '&' : '?'}id=${data.item_id}`
+                    : directUrl
+                  console.log(`[OneSignal] Deep link nativo direto → ${finalUrl}`)
+                  if ((data?.type === 'comunicados' || data?.rota === 'comunicados') && data?.item_id) {
+                    window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: data.item_id } }))
+                  }
+                  router.push(finalUrl)
+                  return
+                }
+
                 if (data?.rota || data?.type) {
-                  const slug = data.aluno_id || alunoIdRef.current
+                  const isColab = data.perfil_destino === 'colaborador' || data.isColab
                   let route = ''
 
-                  if (slug) {
-                    route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                  if (isColab) {
+                    route = `/agenda-digital/colaborador/${data.rota || typeToRoute(data.type)}`
                   } else {
-                    route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
+                    const slug = data.aluno_id || alunoIdRef.current
+                    if (slug) {
+                      route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                    } else {
+                      route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
+                    }
                   }
                   
-                  if (data?.item_id) {
+                  if (data?.item_id && !route.includes('id=')) {
                     route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
                   }
 
                   if (route) {
                     console.log(`[OneSignal] Deep link nativo → ${route}`)
+                    if ((data?.type === 'comunicados' || data?.rota === 'comunicados') && data?.item_id) {
+                      window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: data.item_id } }))
+                    }
                     router.push(route)
                   }
                 }
@@ -212,22 +289,43 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                     const data = event?.notification?.additionalData || {}
                     console.log('[OneSignal] Notificação web clicada:', data)
 
+                    const directUrl = data.targetUrl || data.url
+                    if (directUrl) {
+                      const finalUrl = data.item_id && !directUrl.includes('id=')
+                        ? `${directUrl}${directUrl.includes('?') ? '&' : '?'}id=${data.item_id}`
+                        : directUrl
+                      console.log(`[OneSignal] Deep link web direto → ${finalUrl}`)
+                      if ((data?.type === 'comunicados' || data?.rota === 'comunicados') && data?.item_id) {
+                        window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: data.item_id } }))
+                      }
+                      router.push(finalUrl)
+                      return
+                    }
+
                     if (data?.rota || data?.type) {
-                      const slug = data.aluno_id || alunoIdRef.current
+                      const isColab = data.perfil_destino === 'colaborador' || data.isColab
                       let route = ''
 
-                      if (slug) {
-                        route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                      if (isColab) {
+                        route = `/agenda-digital/colaborador/${data.rota || typeToRoute(data.type)}`
                       } else {
-                        route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
+                        const slug = data.aluno_id || alunoIdRef.current
+                        if (slug) {
+                          route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                        } else {
+                          route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
+                        }
                       }
                       
-                      if (data?.item_id) {
+                      if (data?.item_id && !route.includes('id=')) {
                         route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
                       }
 
                       if (route) {
                         console.log(`[OneSignal] Deep link web → ${route}`)
+                        if ((data?.type === 'comunicados' || data?.rota === 'comunicados') && data?.item_id) {
+                          window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: data.item_id } }))
+                        }
                         router.push(route)
                       }
                     }
@@ -374,7 +472,96 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, responsavelId, alunoId, turmaNome])
 
-  // ── Supabase Realtime (In-App Toasts) ────────────────────────────────────
+  interface EventMatchResult {
+    isTarget: boolean
+    profileTarget: 'colaborador' | 'familia' | null
+    targetAlunoId?: string
+    targetAlunoNome?: string
+  }
+
+  const handleOpenItem = useCallback((type: 'comunicado' | 'momento' | 'calendario' | 'frequencia' | 'ocorrencia' | 'nota', id: string, match: EventMatchResult) => {
+    let targetUrl = ''
+    
+    if (match.profileTarget === 'colaborador') {
+      if (type === 'comunicado') {
+        targetUrl = `/agenda-digital/colaborador/comunicados?id=${id}`
+      } else if (type === 'momento') {
+        targetUrl = `/agenda-digital/colaborador/momentos`
+      } else if (type === 'calendario') {
+        targetUrl = `/agenda-digital/colaborador/calendario`
+      } else {
+        targetUrl = `/agenda-digital/colaborador/comunicados`
+      }
+    } else {
+      const targetSlug = match.targetAlunoId || alunoId || (meusAlunos[0]?.id)
+      if (targetSlug) {
+        if (type === 'comunicado') {
+          targetUrl = `/agenda-digital/${targetSlug}/comunicados?id=${id}`
+        } else if (type === 'momento') {
+          targetUrl = `/agenda-digital/${targetSlug}/momentos`
+        } else if (type === 'calendario') {
+          targetUrl = `/agenda-digital/${targetSlug}/calendario`
+        } else if (type === 'frequencia') {
+          targetUrl = `/agenda-digital/${targetSlug}/frequencia`
+        } else if (type === 'ocorrencia') {
+          targetUrl = `/agenda-digital/${targetSlug}/ocorrencias`
+        } else if (type === 'nota') {
+          targetUrl = `/agenda-digital/${targetSlug}/notas`
+        }
+      } else {
+        targetUrl = `/agenda-digital?redirect=${type === 'comunicado' ? 'comunicados' : type}&id=${id}`
+      }
+    }
+
+    if (type === 'comunicado') {
+      window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id } }))
+    }
+    if (targetUrl) {
+      router.push(targetUrl)
+    }
+  }, [router, alunoId, meusAlunos])
+
+  const showInAppToast = useCallback((params: {
+    type: 'comunicado' | 'momento' | 'calendario' | 'frequencia' | 'ocorrencia' | 'nota'
+    id: string
+    title: string
+    conteudo?: string
+    autor?: string
+    match: EventMatchResult
+  }) => {
+    const { type, id, title, conteudo, autor, match } = params
+
+    let profileBadge = ''
+    if (hasDualAccess) {
+      if (match.profileTarget === 'colaborador') {
+        profileBadge = '🏛️ Institucional'
+      } else if (match.targetAlunoNome) {
+        profileBadge = `🎒 Aluno: ${match.targetAlunoNome.split(' ')[0]}`
+      }
+    }
+
+    let iconNode = <Megaphone size={18} className="text-indigo-600" />
+    if (type === 'momento') iconNode = <ImageIcon size={18} className="text-emerald-600" />
+    if (type === 'calendario') iconNode = <Calendar size={18} className="text-amber-600" />
+
+    const preview = conteudo 
+      ? (conteudo.replace(/<[^>]*>?/gm, '').slice(0, 75) + (conteudo.length > 75 ? '...' : ''))
+      : autor ? `Por ${autor}` : 'Clique para visualizar'
+
+    const toastMessage = profileBadge ? `${profileBadge} • ${title}` : title
+
+    toast(toastMessage, {
+      description: preview,
+      icon: iconNode,
+      duration: 8000,
+      action: {
+        label: 'Abrir',
+        onClick: () => handleOpenItem(type, id, match),
+      },
+    })
+  }, [hasDualAccess, handleOpenItem])
+
+  // ── Supabase Realtime (In-App Toasts & Live Sync) ─────────────────────────
   useEffect(() => {
     if (!currentUser?.id) return
 
@@ -389,127 +576,131 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       return [String(val)]
     }
 
-    /**
-     * Verifica se um evento Supabase é destinado ao usuário atual.
-     * Lógica por perfil:
-     * - Admin: recebe tudo
-     * - Família/Aluno: filtra por turma ou aluno_id
-     * - Colaborador: filtra por turmas que ministra aula
-     */
-    const isTargetingAluno = (dados: any): boolean => {
-      if (!dados) return false
-
+    const evaluateEventTarget = (dados: any): EventMatchResult => {
+      if (!dados) return { isTarget: false, profileTarget: null }
 
       const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses)
       const alvoTurmasIds = ensureStringArray(dados.turmasIds || dados.targetClassesIds)
-      const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents)
+      const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents || dados.targetAlunos)
       const alvoGrupos = ensureStringArray(dados.grupos || dados.targetGroups)
+      const alvoFuncs = ensureStringArray(dados.funcionariosIds || dados.colaboradoresIds)
       const destino = String(dados.destino || '').toLowerCase().trim()
+      const isTodos = destino === 'todos' || alvoTurmas.some(t => {
+        const tl = t.toLowerCase().trim()
+        return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
+      })
 
-      // Admin recebe tudo
-      if (currentUser?.perfil === 'Administrador') return true
-
-      // Família/Aluno: filtra por turma ou aluno específico
-      if (alunoId) {
-        const alunoStr = String(alunoId)
-
-        // Todos/Escola toda
-        if (
-          destino === 'todos' ||
-          alvoTurmas.some(t => {
-            const tl = t.toLowerCase().trim()
-            return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
-          })
-        ) return true
-
-        // Turma específica
-        const tNomeStr = turmaNome ? String(turmaNome).toLowerCase() : ''
-        const rTurmaStr = rawTurma ? String(rawTurma).toLowerCase() : ''
-
-        if (tNomeStr || rTurmaStr) {
-          if (alvoTurmas.some(t => {
-            const tl = t.toLowerCase().trim()
-            return (tNomeStr && (tl === tNomeStr || tl.includes(tNomeStr) || tNomeStr.includes(tl))) ||
-              (rTurmaStr && (tl === rTurmaStr || tl.includes(rTurmaStr) || rTurmaStr.includes(tl)))
-          })) return true
-
-          if (alvoTurmasIds.some(t => {
-            const tl = t.toLowerCase().trim()
-            return (rTurmaStr && (tl === rTurmaStr || tl.includes(rTurmaStr) || rTurmaStr.includes(tl)))
-          })) return true
-        }
-
-        // Aluno específico (suporta prefixos legados)
-        if (
-          alvoAlunos.includes(alunoStr) ||
-          alvoAlunos.includes(`a_${alunoStr}`) ||
-          alvoAlunos.includes(`_ALU${alunoStr}`)
-        ) return true
-
-        // Grupos customizados (Deixamos passar para que o backend verifique no refetch)
-        if (alvoGrupos.length > 0) return true
-
-        return false
-      }
-
-      // Colaborador: filtra por turmas que ministra
-      if (currentUser?.perfil === 'Colaborador') {
-        if (
-          destino === 'todos' ||
-          alvoTurmas.some(t => {
-            const tl = t.toLowerCase().trim()
-            return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
-          })
-        ) return true
-
-        const userGroups = agendaCtx?.chatGroups || []
-        const userTurmas = turmasArray.filter(t =>
-          userGroups.some((g: any) => {
-            let colabs = g.colaboradoresIds
-            if (typeof colabs === 'string') {
-              try { colabs = JSON.parse(colabs) } catch { colabs = [] }
-            }
-            if (!Array.isArray(colabs)) colabs = []
-            return (
-              colabs.some((id: any) => String(id) === String(currentUser.id)) &&
-              (String(g.id) === `sync-${t.id}` ||
-                String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
-            )
-          })
-        )
-
-        return userTurmas.some(t => {
-          const tNome = String(t.nome || '').toLowerCase()
-          const tId = String(t.id).toLowerCase()
-          const tCod = String(t.codigo || '').toLowerCase()
-
-          return (
-            alvoTurmas.some(alvo => {
-              const al = alvo.toLowerCase().trim()
-              return al === tNome || al.includes(tNome) || tNome.includes(al) || al === tId || al === tCod
-            }) ||
-            alvoTurmasIds.some(alvo => {
-              const al = alvo.toLowerCase().trim()
-              return al === tId || al === tCod
+      // 1. Staff match
+      let matchesStaff = false
+      if (isStaffUser) {
+        if (currentUser?.perfil === 'Administrador' || currentUser?.cargo === 'Administrador Master') {
+          matchesStaff = true
+        } else if (alvoFuncs.some(fid => {
+          const clean = String(fid).replace(/^f_?/, '').trim().toLowerCase()
+          return myCandidateStaffIds.includes(clean)
+        })) {
+          matchesStaff = true
+        } else if (alvoGrupos.some(g => {
+          const cleanG = String(g).trim().toLowerCase()
+          return myStaffGroupNames.some(mg => mg === cleanG || mg.includes(cleanG) || cleanG.includes(mg))
+        })) {
+          matchesStaff = true
+        } else if (alvoTurmas.length > 0 || alvoTurmasIds.length > 0) {
+          const userGroups = agendaCtx?.chatGroups || []
+          const isTeacherTurma = turmasArray.some(t => {
+            const tNome = String(t.nome || '').toLowerCase().trim()
+            const tId = String(t.id).toLowerCase().trim()
+            const tCod = String(t.codigo || '').toLowerCase().trim()
+            const belongs = userGroups.some((g: any) => {
+              let colabs = g.colaboradoresIds
+              if (typeof colabs === 'string') {
+                try { colabs = JSON.parse(colabs) } catch { colabs = [] }
+              }
+              if (!Array.isArray(colabs)) colabs = []
+              return colabs.some((cid: any) => myCandidateStaffIds.includes(String(cid).replace(/^f_?/, '').trim().toLowerCase())) &&
+                (String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === tNome)
             })
-          )
-        })
+            if (!belongs) return false
+            return alvoTurmas.some(al => {
+              const alClean = al.toLowerCase().trim()
+              return alClean === tNome || alClean.includes(tNome) || tNome.includes(alClean) || alClean === tId || alClean === tCod
+            }) || alvoTurmasIds.some(al => al.toLowerCase().trim() === tId || al.toLowerCase().trim() === tCod)
+          })
+          if (isTeacherTurma) matchesStaff = true
+        } else if (isTodos) {
+          matchesStaff = true
+        }
       }
 
-      return false
+      // 2. Family match
+      let matchingStudent: any = null
+      const studentsToCheck: any[] = [...meusAlunos]
+      if (alunoObj && !studentsToCheck.some(s => String(s.id) === String(alunoObj.id))) {
+        studentsToCheck.push(alunoObj)
+      }
+      if (alunoId && !studentsToCheck.some(s => String(s.id) === String(alunoId))) {
+        studentsToCheck.push({ id: alunoId, nome: 'Aluno', turma: rawTurma, turmaNome })
+      }
+
+      for (const s of studentsToCheck) {
+        const sId = String(s.id)
+        const sTurmaNome = String(s.turmaNome || s.turma || '').toLowerCase().trim()
+        const sTurmaId = String(s.turma || '').toLowerCase().trim()
+
+        if (alvoAlunos.some(aid => {
+          const clean = String(aid).replace(/^a_?/, '').replace(/^_ALU/, '').trim()
+          return clean === sId
+        })) {
+          matchingStudent = s
+          break
+        }
+        if (sTurmaNome && (
+          alvoTurmas.some(t => {
+            const tl = t.toLowerCase().trim()
+            return tl === sTurmaNome || tl.includes(sTurmaNome) || sTurmaNome.includes(tl)
+          }) ||
+          alvoTurmasIds.some(t => t.toLowerCase().trim() === sTurmaId)
+        )) {
+          matchingStudent = s
+          break
+        }
+      }
+
+      if (isTodos && !matchingStudent && studentsToCheck.length > 0) {
+        matchingStudent = studentsToCheck[0]
+      }
+
+      let profileTarget: 'colaborador' | 'familia' | null = null
+      if (matchesStaff && !matchingStudent) {
+        profileTarget = 'colaborador'
+      } else if (!matchesStaff && matchingStudent) {
+        profileTarget = 'familia'
+      } else if (matchesStaff && matchingStudent) {
+        if (typeof window !== 'undefined' && window.location.pathname.includes('/colaborador/')) {
+          profileTarget = 'colaborador'
+        } else {
+          profileTarget = isStaffUser && !isFamily ? 'colaborador' : 'familia'
+        }
+      }
+
+      const isTarget = matchesStaff || !!matchingStudent || isTodos
+      return {
+        isTarget,
+        profileTarget,
+        targetAlunoId: matchingStudent?.id,
+        targetAlunoNome: matchingStudent?.nome
+      }
     }
 
-    
-    let isMounted = true;
-    const channels: any[] = [];
+    let isMounted = true
+    const channels: any[] = []
 
     const createBinding = (table: string, filter: any, handler: (payload: any) => void) => {
-      // Nome determinístico sem Date.now() — evita acúmulo de canais fantasmas ao re-montar
       const cName = `agenda-rt-${table}-${identifier}`
       const c = supabase.channel(cName)
       c.on('postgres_changes', filter, handler)
         .subscribe((status: string) => {
-          if (!isMounted) return;
+          if (!isMounted) return
           if (status === 'SUBSCRIBED') {
             console.log(`✅ [Realtime] Conectado ao canal ${table}`)
           } else if (status === 'CHANNEL_ERROR') {
@@ -526,49 +717,55 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const row = eventType === 'DELETE' ? old : newRow
       const merged = { ...row, ...(row.dados || {}) }
 
-      const isTarget = isTargetingAluno(merged)
+      const match = evaluateEventTarget(merged)
       
       const alvoTurmas = ensureStringArray(merged.turmas || merged.targetClasses)
       const alvoTurmasIds = ensureStringArray(merged.turmasIds || merged.targetClassesIds)
       const alvoGrupos = ensureStringArray(merged.grupos || merged.targetGroups)
       const alvoAlunos = ensureStringArray(merged.alunosIds || merged.targetAlunos)
+      const alvoFuncs = ensureStringArray(merged.funcionariosIds || merged.colaboradoresIds)
       const destino = String(merged.destino || '').toLowerCase().trim()
       
-      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || destino === 'todos'
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
 
-      // Sempre avisa a página para recarregar se houver qualquer alvo (o backend fará a filtragem 100% segura)
-      if (eventType === 'DELETE' || isTarget || hasAnyTarget || !isFamily) {
+      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamily) {
         window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
       }
 
-      // Mas só mostra o Toast in-app se tivermos certeza absoluta que o aluno é o alvo
-      if (eventType === 'DELETE' || isTarget || !isFamily) {
-        if (
-          eventType === 'INSERT' &&
-          (merged.status === 'enviado' || merged.dados?.status === 'enviado')
-        ) {
-          const isMe =
-            (merged.autorId && String(merged.autorId) === String(currentUser?.id)) ||
-            (merged.autor && currentUser?.nome &&
-              String(merged.autor).trim().toLowerCase() === String(currentUser.nome).trim().toLowerCase())
+      if (eventType === 'INSERT' && (merged.status === 'enviado' || merged.dados?.status === 'enviado')) {
+        const isMe =
+          (merged.autorId && (myCandidateStaffIds.includes(String(merged.autorId).toLowerCase()) || String(merged.autorId) === String(currentUser?.id))) ||
+          (merged.autor && currentUser?.nome &&
+            String(merged.autor).trim().toLowerCase() === String(currentUser.nome).trim().toLowerCase())
 
-          if (!isMe) {
-            window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-            addNotification({
-              id: merged.id,
-              type: 'comunicado',
-              title: merged.titulo,
-              createdAt: merged.created_at || new Date().toISOString(),
-              read: false,
-              link: `/agenda-digital/${alunoId}/comunicados`,
-            })
+        if (!isMe && match.isTarget) {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          
+          const drawerLink = match.profileTarget === 'colaborador'
+            ? `/agenda-digital/colaborador/comunicados?id=${merged.id}`
+            : `/agenda-digital/${match.targetAlunoId || alunoId || (meusAlunos[0]?.id)}/comunicados?id=${merged.id}`
 
-            // toast in-app removido para evitar duplicidade com as notificações push
-          }
+          addNotification({
+            id: merged.id,
+            type: 'comunicado',
+            title: (hasDualAccess && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (merged.titulo || 'Novo Comunicado'),
+            createdAt: merged.created_at || new Date().toISOString(),
+            read: false,
+            link: drawerLink,
+          })
+
+          showInAppToast({
+            type: 'comunicado',
+            id: merged.id,
+            title: merged.titulo || 'Novo Comunicado',
+            conteudo: merged.conteudo,
+            autor: merged.autor,
+            match,
+          })
         }
       }
-    });
+    })
 
     // ── CALENDÁRIO ───────────────────────────────────────────────────────
     createBinding('eventos_agenda', { event: '*', schema: 'public', table: 'eventos_agenda' }, payload => {
@@ -576,127 +773,47 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const row = eventType === 'DELETE' ? old : newRow
 
       const merged = { ...row, ...(row.dados || {}), turmas: row.turmas }
-      const isTarget = isTargetingAluno(merged)
+      const match = evaluateEventTarget(merged)
       
       const alvoTurmas = Array.isArray(merged.turmas) ? merged.turmas : [merged.turmas].filter(Boolean)
       const alvoTurmasIds = Array.isArray(merged.turmasIds) ? merged.turmasIds : [merged.turmasIds].filter(Boolean)
       const alvoGrupos = Array.isArray(merged.grupos) ? merged.grupos : [merged.grupos].filter(Boolean)
       const alvoAlunos = Array.isArray(merged.alunosIds) ? merged.alunosIds : [merged.alunosIds].filter(Boolean)
+      const alvoFuncs = Array.isArray(merged.funcionariosIds) ? merged.funcionariosIds : [merged.funcionariosIds].filter(Boolean)
       const destino = String(merged.destino || '').toLowerCase().trim()
       
-      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || destino === 'todos'
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
 
-      if (eventType === 'DELETE' || isTarget || hasAnyTarget || !isFamily) {
+      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamily) {
         window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'calendario'] })
       }
 
-      if (eventType === 'DELETE' || isTarget || !isFamily) {
-        if (eventType === 'INSERT') {
-          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          addNotification({
-            id: row.id,
-            type: 'evento',
-            title: row.titulo || 'Novo Evento',
-            createdAt: row.created_at || new Date().toISOString(),
-            read: false,
-            link: `/agenda-digital/${alunoId}/calendario`,
-          })
-          // toast in-app removido
-        }
+      if (eventType === 'INSERT' && match.isTarget) {
+        window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        
+        const drawerLink = match.profileTarget === 'colaborador'
+          ? `/agenda-digital/colaborador/calendario`
+          : `/agenda-digital/${match.targetAlunoId || alunoId || (meusAlunos[0]?.id)}/calendario`
+
+        addNotification({
+          id: row.id,
+          type: 'evento',
+          title: (hasDualAccess && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (row.titulo || 'Novo Evento'),
+          createdAt: row.created_at || new Date().toISOString(),
+          read: false,
+          link: drawerLink,
+        })
+
+        showInAppToast({
+          type: 'calendario',
+          id: row.id,
+          title: row.titulo || 'Novo Evento',
+          conteudo: row.descricao || row.local || '',
+          match,
+        })
       }
-    });
-
-    // ── OCORRÊNCIAS ──────────────────────────────────────────────────────
-    createBinding('ocorrencias', { event: '*', schema: 'public', table: 'ocorrencias' }, payload => {
-      const { eventType, old, new: newRow } = payload
-      const row = eventType === 'DELETE' ? old : newRow
-
-      const isForAluno =
-        eventType === 'DELETE' ||
-        String(row.aluno_id) === String(alunoId) ||
-        String(row.dados?.aluno_id) === String(alunoId) ||
-        String(row.dados?.alunoId) === String(alunoId) ||
-        !isFamily
-
-      if (isForAluno) {
-        window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }))
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'ocorrencias'] })
-
-        if (eventType === 'INSERT') {
-          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          addNotification({
-            id: row.id,
-            type: 'ocorrencia',
-            title: `Nova ocorrência: ${row.tipo || row.dados?.tipo || 'Aviso'}`,
-            createdAt: row.created_at || new Date().toISOString(),
-            read: false,
-            link: `/agenda-digital/${alunoId}/ocorrencias`,
-          })
-          // toast in-app removido
-        }
-      }
-    });
-
-    // ── BOLETINS (NOTAS) ─────────────────────────────────────────────────
-    createBinding('boletins', { event: '*', schema: 'public', table: 'boletins' }, payload => {
-      const { eventType, old, new: newRow } = payload
-      const row = eventType === 'DELETE' ? old : newRow
-      const alunoStr = String(alunoId)
-      const alunoSemZero = alunoStr.replace(/^0+/, '')
-
-      if (
-        eventType === 'DELETE' ||
-        String(row.aluno_id) === alunoStr ||
-        String(row.aluno_id) === alunoSemZero ||
-        !isFamily
-      ) {
-        window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }))
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'boletins'] })
-
-        if (eventType === 'INSERT') {
-          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          addNotification({
-            id: row.id,
-            type: 'nota',
-            title: 'Boletim de notas atualizado',
-            createdAt: row.created_at || new Date().toISOString(),
-            read: false,
-            link: `/agenda-digital/${alunoId}/notas`,
-          })
-          // toast in-app removido
-        }
-      }
-    });
-
-    // ── FREQUÊNCIAS ──────────────────────────────────────────────────────
-    createBinding('frequencias', { event: '*', schema: 'public', table: 'frequencias' }, payload => {
-      const { eventType, old, new: newRow } = payload
-      const row = eventType === 'DELETE' ? old : newRow
-
-      if (
-        eventType === 'DELETE' ||
-        String(row.aluno_id) === String(alunoId) ||
-        String(row.dados?.aluno_id) === String(alunoId) ||
-        !isFamily
-      ) {
-        window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'frequencias'] })
-
-        if (eventType === 'INSERT') {
-          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          addNotification({
-            id: row.id,
-            type: 'frequencia',
-            title: 'Nova falta registrada',
-            createdAt: row.created_at || new Date().toISOString(),
-            read: false,
-            link: `/agenda-digital/${alunoId}/frequencia`,
-          })
-          // toast in-app removido
-        }
-      }
-    });
+    })
 
     // ── MOMENTOS ─────────────────────────────────────────────────────────
     createBinding('momentos', { event: '*', schema: 'public', table: 'momentos' }, payload => {
@@ -704,45 +821,197 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const row = eventType === 'DELETE' ? old : newRow
       const merged = { ...row, ...(row.dados || {}) }
 
-      const isTarget = isTargetingAluno(merged)
+      const match = evaluateEventTarget(merged)
       
       const alvoTurmas = ensureStringArray(merged.turmas || merged.targetClasses)
       const alvoTurmasIds = ensureStringArray(merged.turmasIds || merged.targetClassesIds)
       const alvoGrupos = ensureStringArray(merged.grupos || merged.targetGroups)
       const alvoAlunos = ensureStringArray(merged.alunosIds || merged.targetAlunos)
+      const alvoFuncs = ensureStringArray(merged.funcionariosIds || merged.colaboradoresIds)
       const destino = String(merged.destino || '').toLowerCase().trim()
       
-      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || destino === 'todos'
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
 
-      if (eventType === 'DELETE' || isTarget || hasAnyTarget || !isFamily) {
+      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamily) {
         window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
       }
 
-      if (eventType === 'DELETE' || isTarget || !isFamily) {
+      if (eventType === 'INSERT' && match.isTarget) {
+        window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        
+        const drawerLink = match.profileTarget === 'colaborador'
+          ? `/agenda-digital/colaborador/momentos`
+          : `/agenda-digital/${match.targetAlunoId || alunoId || (meusAlunos[0]?.id)}/momentos`
+
+        addNotification({
+          id: merged.id,
+          type: 'momento',
+          title: (hasDualAccess && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (merged.titulo || 'Novo Momento'),
+          createdAt: merged.created_at || new Date().toISOString(),
+          read: false,
+          link: drawerLink,
+        })
+
+        showInAppToast({
+          type: 'momento',
+          id: merged.id,
+          title: merged.titulo || 'Novo Momento',
+          conteudo: merged.legenda || merged.descricao || '',
+          match,
+        })
+      }
+    })
+
+    // ── OCORRÊNCIAS ──────────────────────────────────────────────────────
+    createBinding('ocorrencias', { event: '*', schema: 'public', table: 'ocorrencias' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+      const rowAlunoId = String(row.aluno_id || row.dados?.aluno_id || row.dados?.alunoId || '')
+
+      const matchingStudent = meusAlunos.find(s => String(s.id) === rowAlunoId) || (alunoId === rowAlunoId ? alunoObj : null)
+      const isForAluno = eventType === 'DELETE' || !!matchingStudent || rowAlunoId === String(alunoId) || !isFamily
+
+      if (isForAluno) {
+        window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'ocorrencias'] })
+
         if (eventType === 'INSERT') {
           window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          const targetSlug = matchingStudent?.id || alunoId || (meusAlunos[0]?.id)
+          const match: EventMatchResult = {
+            isTarget: true,
+            profileTarget: 'familia',
+            targetAlunoId: targetSlug,
+            targetAlunoNome: matchingStudent?.nome
+          }
+
           addNotification({
-            id: merged.id,
-            type: 'momento',
-            title: merged.titulo || 'Novo Momento',
-            createdAt: merged.created_at || new Date().toISOString(),
+            id: row.id,
+            type: 'ocorrencia',
+            title: `Nova ocorrência: ${row.tipo || row.dados?.tipo || 'Aviso'}`,
+            createdAt: row.created_at || new Date().toISOString(),
             read: false,
-            link: `/agenda-digital/${alunoId}/momentos`,
+            link: `/agenda-digital/${targetSlug}/ocorrencias`,
           })
-          // toast in-app removido
+
+          showInAppToast({
+            type: 'ocorrencia',
+            id: row.id,
+            title: `Nova ocorrência: ${row.tipo || row.dados?.tipo || 'Aviso'}`,
+            conteudo: row.descricao || row.motivo || '',
+            match,
+          })
         }
       }
-    });
+    })
+
+    // ── BOLETINS (NOTAS) ─────────────────────────────────────────────────
+    createBinding('boletins', { event: '*', schema: 'public', table: 'boletins' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+      const rowAlunoId = String(row.aluno_id || '')
+      const rowAlunoSemZero = rowAlunoId.replace(/^0+/, '')
+
+      const matchingStudent = meusAlunos.find(s => String(s.id) === rowAlunoId || String(s.id).replace(/^0+/, '') === rowAlunoSemZero) || (alunoId === rowAlunoId ? alunoObj : null)
+      const isForAluno = eventType === 'DELETE' || !!matchingStudent || rowAlunoId === String(alunoId) || !isFamily
+
+      if (isForAluno) {
+        window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'boletins'] })
+
+        if (eventType === 'INSERT') {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          const targetSlug = matchingStudent?.id || alunoId || (meusAlunos[0]?.id)
+          const match: EventMatchResult = {
+            isTarget: true,
+            profileTarget: 'familia',
+            targetAlunoId: targetSlug,
+            targetAlunoNome: matchingStudent?.nome
+          }
+
+          addNotification({
+            id: row.id,
+            type: 'nota',
+            title: 'Boletim de notas atualizado',
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${targetSlug}/notas`,
+          })
+
+          showInAppToast({
+            type: 'nota',
+            id: row.id,
+            title: 'Boletim de notas atualizado',
+            conteudo: 'Novas avaliações foram publicadas no boletim.',
+            match,
+          })
+        }
+      }
+    })
+
+    // ── FREQUÊNCIAS ──────────────────────────────────────────────────────
+    createBinding('frequencias', { event: '*', schema: 'public', table: 'frequencias' }, payload => {
+      const { eventType, old, new: newRow } = payload
+      const row = eventType === 'DELETE' ? old : newRow
+      const rowAlunoId = String(row.aluno_id || row.dados?.aluno_id || '')
+
+      const matchingStudent = meusAlunos.find(s => String(s.id) === rowAlunoId) || (alunoId === rowAlunoId ? alunoObj : null)
+      const isForAluno = eventType === 'DELETE' || !!matchingStudent || rowAlunoId === String(alunoId) || !isFamily
+
+      if (isForAluno) {
+        window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'frequencias'] })
+
+        if (eventType === 'INSERT') {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+          const targetSlug = matchingStudent?.id || alunoId || (meusAlunos[0]?.id)
+          const match: EventMatchResult = {
+            isTarget: true,
+            profileTarget: 'familia',
+            targetAlunoId: targetSlug,
+            targetAlunoNome: matchingStudent?.nome
+          }
+
+          addNotification({
+            id: row.id,
+            type: 'frequencia',
+            title: 'Nova falta registrada',
+            createdAt: row.created_at || new Date().toISOString(),
+            read: false,
+            link: `/agenda-digital/${targetSlug}/frequencia`,
+          })
+
+          showInAppToast({
+            type: 'frequencia',
+            id: row.id,
+            title: 'Nova falta registrada',
+            conteudo: 'Registro de frequência atualizado.',
+            match,
+          })
+        }
+      }
+    })
 
     return () => {
-      isMounted = false;
+      isMounted = false
       channels.forEach(c => supabase.removeChannel(c))
       console.log(`🔌 [Realtime] Canais desconectados.`)
-
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alunoId, currentUser?.id, currentUser?.perfil, turmaNome, typeof rawTurma === 'object' ? JSON.stringify(rawTurma) : String(rawTurma)])
+  }, [
+    alunoId,
+    currentUser?.id,
+    currentUser?.perfil,
+    turmaNome,
+    typeof rawTurma === 'object' ? JSON.stringify(rawTurma) : String(rawTurma),
+    meusAlunos,
+    myCandidateStaffIds,
+    myStaffGroupNames,
+    isStaffUser,
+    hasDualAccess,
+    handleOpenItem,
+    showInAppToast
+  ])
 
   return (
     <>

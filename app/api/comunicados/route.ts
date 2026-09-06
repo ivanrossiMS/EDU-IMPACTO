@@ -199,45 +199,98 @@ export async function GET(request: Request) {
     }
     query = query.or(conditions.join(','));
   } else if (!isAdmin && !isFamilyOrStudent) {
-    // Colaborador sem aluno_id: garante que comunicados direcionados diretamente a ele apareçam.
+    // Colaborador sem aluno_id: garante que comunicados direcionados diretamente a ele ou ao seu grupo apareçam.
+    const candidateUserIds = new Set<string>([String(user.id)])
+    if (user.user_metadata?.uid_legacy) candidateUserIds.add(String(user.user_metadata.uid_legacy))
+    if (user.user_metadata?.id) candidateUserIds.add(String(user.user_metadata.id))
+
+    const userEmail = (user.email || user.user_metadata?.email || '').trim().toLowerCase()
+    let sysUserQuery = supabaseServer.from('system_users').select('id, email, nome')
+    if (userEmail) {
+      sysUserQuery = sysUserQuery.or(`id.eq."${user.id}",email.ilike."${userEmail}"`)
+    } else {
+      sysUserQuery = sysUserQuery.eq('id', user.id)
+    }
+    const { data: sysUsers } = await sysUserQuery.limit(5)
+    if (sysUsers && sysUsers.length > 0) {
+      sysUsers.forEach((su: any) => {
+        if (su.id) candidateUserIds.add(String(su.id))
+      })
+    }
+
     const colaboradorConditions = [
-      `destino.eq.todos`,
-      `dados->"funcionariosIds".cs.["${user.id}"]`,
-      `dados->"colaboradoresIds".cs.["${user.id}"]`,
-      `dados->>autorId.eq.${user.id}`
+      `destino.eq.todos`
     ];
-    
-    // Identificar turmas e grupos que o colaborador leciona para injetar no filtro
-    const { data: myGroups } = await supabase.from('agenda_grupos')
-      .select('id, dados')
-      .contains('dados->colaboradoresIds', `["${user.id}"]`);
-      
-    if (myGroups && myGroups.length > 0) {
-      const isGlobal = myGroups.some(g => (g.dados?.isGlobalAccess === true || g.dados?.isGlobalAccess === 'true' || g.dados?.isGlobalAccess === 1) && (!g.dados?.ano && !g.dados?.anoLetivo));
-      if (isGlobal) {
-         colaboradorConditions.push(`id.not.is.null`); // Vê tudo (acesso global total)
-      } else {
-         myGroups.forEach(g => {
-           if (g.dados?.nome) colaboradorConditions.push(`dados->grupos.cs.["${g.dados.nome}"]`);
-         });
-         
-         const syncIds = myGroups.filter(g => String(g.dados?.syncId || '').startsWith('sync-') || String(g.id).startsWith('sync-')).map(g => String(g.dados?.syncId || g.id).replace('sync-', ''));
-         const names = myGroups.map(g => String(g.dados?.nome || '').trim().toLowerCase());
-         
-         if (syncIds.length > 0 || names.length > 0) {
-            const { data: myTurmas } = await supabase.from('turmas').select('id, nome');
-            if (myTurmas) {
-               myTurmas.forEach(t => {
-                 if (syncIds.includes(String(t.id)) || names.includes(String(t.nome).trim().toLowerCase())) {
-                   colaboradorConditions.push(`dados->turmas.cs.["${t.nome}"]`);
-                 }
-               });
+
+    candidateUserIds.forEach(cId => {
+      colaboradorConditions.push(`dados->"funcionariosIds".cs.["${cId}"]`)
+      colaboradorConditions.push(`dados->"colaboradoresIds".cs.["${cId}"]`)
+      colaboradorConditions.push(`dados->"funcionariosIds".cs.["f_${cId}"]`)
+      colaboradorConditions.push(`dados->"colaboradoresIds".cs.["f_${cId}"]`)
+      colaboradorConditions.push(`dados->>autorId.eq.${cId}`)
+    })
+
+    // Buscar grupos da agenda e resolver membros em memória para robustez total
+    const { data: allGroups } = await supabaseServer.from('agenda_grupos').select('id, dados')
+    const matchedGroupNames = new Set<string>()
+    const matchedTurmaSyncIds = new Set<string>()
+    let hasGlobalStaffAccess = false
+
+    if (allGroups && allGroups.length > 0) {
+      allGroups.forEach((g: any) => {
+        const gDados = g.dados || {}
+        let colabs = gDados.colaboradoresIds || g.colaboradoresIds || []
+        if (typeof colabs === 'string') {
+          try { colabs = JSON.parse(colabs) } catch { colabs = [] }
+        }
+        if (!Array.isArray(colabs)) colabs = []
+
+        const isMember = colabs.some((cId: any) => {
+          const cleanCId = String(cId).replace(/^f_?/, '').trim().toLowerCase()
+          return Array.from(candidateUserIds).some(uid => {
+            const cleanUid = String(uid).replace(/^f_?/, '').trim().toLowerCase()
+            return cleanCId === cleanUid || (userEmail && cleanCId === userEmail)
+          })
+        })
+
+        const isGlobal = (gDados.isGlobalAccess === true || gDados.isGlobalAccess === 'true' || gDados.isGlobalAccess === 1) && (!gDados.ano && !gDados.anoLetivo)
+        if (isMember) {
+          if (isGlobal) {
+            hasGlobalStaffAccess = true
+          }
+          const gNome = gDados.nome || g.nome
+          if (gNome) matchedGroupNames.add(gNome)
+          
+          const syncId = String(gDados.syncId || g.syncId || g.id || '')
+          if (syncId.startsWith('sync-')) {
+            matchedTurmaSyncIds.add(syncId.replace('sync-', ''))
+          }
+        }
+      })
+    }
+
+    if (hasGlobalStaffAccess) {
+      colaboradorConditions.push(`id.not.is.null`)
+    } else {
+      matchedGroupNames.forEach(gNome => {
+        colaboradorConditions.push(`dados->grupos.cs.["${gNome}"]`)
+      })
+
+      if (matchedTurmaSyncIds.size > 0 || matchedGroupNames.size > 0) {
+        const { data: myTurmas } = await supabaseServer.from('turmas').select('id, nome')
+        if (myTurmas) {
+          myTurmas.forEach((t: any) => {
+            const tId = String(t.id)
+            const tNomeLower = String(t.nome || '').trim().toLowerCase()
+            if (matchedTurmaSyncIds.has(tId) || Array.from(matchedGroupNames).some(gn => gn.trim().toLowerCase() === tNomeLower)) {
+              colaboradorConditions.push(`dados->turmas.cs.["${t.nome}"]`)
             }
-         }
+          })
+        }
       }
     }
-    
-    query = query.or(colaboradorConditions.join(','));
+
+    query = query.or(colaboradorConditions.join(','))
   }
   
   if (idParam) {
@@ -403,7 +456,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, count: 0 })
       }
       
-      const rows = body.map(c => buildRow(c))
+      const builtRows = body.map(c => buildRow(c))
+      const rows = await Promise.all(builtRows.map(async r => await enrichGruposRecipients(r)))
       const { error: upsertError } = await supabase.from('comunicados').upsert(rows)
       if (upsertError) {
         console.error("==> UPSERT ERROR:", upsertError);
@@ -426,8 +480,8 @@ export async function POST(request: Request) {
                   title: `📢 Comunicado: ${row.titulo}`,
                   message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
                   targetUserIds: student.responsaveis_ids,
-                  targetUrl: '/agenda-digital/comunicados',
-                  metadata: { aluno_id: student.aluno_id }
+                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar' }
                 }).catch(err => console.error("Push Error:", err))
               );
             }
@@ -441,7 +495,8 @@ export async function POST(request: Request) {
                 title: `📢 Comunicado: ${row.titulo}`,
                 message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
                 targetUserIds: directColaboradores,
-                targetUrl: '/agenda-digital/comunicados'
+                targetUrl: '/agenda-digital/colaborador/comunicados',
+                metadata: { perfil_destino: 'colaborador' }
               }).catch(err => console.error("Push Error Colab:", err))
             );
           }
@@ -451,7 +506,8 @@ export async function POST(request: Request) {
       
       return NextResponse.json({ ok: true, count: rows.length })
     }
-    const row = buildRow(body)
+    const builtRow = buildRow(body)
+    const row = await enrichGruposRecipients(builtRow)
     const { data, error } = await supabase.from('comunicados').upsert(row).select().single()
     if (error) {
       console.error("UPSERT SINGLE ERROR:", error);
@@ -522,8 +578,8 @@ export async function POST(request: Request) {
                 title: `📢 Comunicado: ${data.titulo}`,
                 message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
                 targetUserIds: student.responsaveis_ids,
-                targetUrl: '/agenda-digital/comunicados',
-                metadata: { aluno_id: student.aluno_id }
+                targetUrl: `/agenda-digital/${student.aluno_id}/comunicados`,
+                metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar' }
               }).catch(err => console.error("Push Error:", err))
             );
           }
@@ -537,7 +593,8 @@ export async function POST(request: Request) {
               title: `📢 Comunicado: ${data.titulo}`,
               message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
               targetUserIds: directColaboradores,
-              targetUrl: '/agenda-digital/comunicados'
+              targetUrl: '/agenda-digital/colaborador/comunicados',
+              metadata: { perfil_destino: 'colaborador' }
             }).catch(err => console.error("Push Error Colab:", err))
           );
         }
@@ -672,6 +729,65 @@ export async function DELETE(request: Request) {
 
 // Removed deprecated config export
 
+async function enrichGruposRecipients(row: any) {
+  if (!row.dados?.grupos || !Array.isArray(row.dados.grupos) || row.dados.grupos.length === 0) {
+    return row;
+  }
+  try {
+    const { data: allGrupos } = await supabaseServer.from('agenda_grupos').select('id, dados');
+    if (!allGrupos || allGrupos.length === 0) return row;
+
+    const grupoNames = row.dados.grupos.map((g: string) => String(g).trim().toLowerCase());
+    const extraColabs = new Set<string>();
+    const extraAlunos = new Set<string>();
+
+    allGrupos.forEach((g: any) => {
+      const gDados = g.dados || {};
+      const gNome = String(gDados.nome || g.nome || '').trim().toLowerCase();
+      const gId = String(g.id || '').trim().toLowerCase();
+      if (grupoNames.includes(gNome) || grupoNames.includes(gId) || grupoNames.includes(`g_${gId}`)) {
+        let cIds = gDados.colaboradoresIds || g.colaboradoresIds || [];
+        if (typeof cIds === 'string') {
+          try { cIds = JSON.parse(cIds); } catch { cIds = []; }
+        }
+        if (Array.isArray(cIds)) {
+          cIds.forEach((id: any) => {
+            const clean = String(id).replace(/^f_?/, '').trim();
+            if (clean) extraColabs.add(clean);
+          });
+        }
+
+        let aIds = gDados.alunosIds || g.alunosIds || [];
+        if (typeof aIds === 'string') {
+          try { aIds = JSON.parse(aIds); } catch { aIds = []; }
+        }
+        if (Array.isArray(aIds)) {
+          aIds.forEach((id: any) => {
+            const clean = String(id).replace(/^(a_|_ALU)/, '').trim();
+            if (clean) extraAlunos.add(clean);
+          });
+        }
+      }
+    });
+
+    if (extraColabs.size > 0) {
+      const existingFuncs = new Set(row.dados.funcionariosIds || []);
+      extraColabs.forEach(id => existingFuncs.add(id));
+      row.dados.funcionariosIds = Array.from(existingFuncs);
+      row.dados.colaboradoresIds = Array.from(existingFuncs);
+    }
+
+    if (extraAlunos.size > 0) {
+      const existingAlunos = new Set(row.dados.alunosIds || []);
+      extraAlunos.forEach(id => existingAlunos.add(id));
+      row.dados.alunosIds = Array.from(existingAlunos);
+    }
+  } catch (err) {
+    console.warn('[EnrichGruposRecipients] Erro ao enriquecer destinatários:', err);
+  }
+  return row;
+}
+
 function buildRow(c: any) {
   const source = { ...c, ...(c.dados || {}) }
   delete source.dados
@@ -683,20 +799,24 @@ function buildRow(c: any) {
     prioridade: rest.prioridade || 'normal',
     turmas: Array.isArray(rest.turmas) ? rest.turmas : [],
     turmasIds: Array.isArray(rest.turmasIds) ? rest.turmasIds : [],
+    grupos: Array.isArray(rest.grupos) ? rest.grupos : [],
     alunosIds: Array.isArray(rest.alunosIds) ? rest.alunosIds : [],
+    funcionariosIds: Array.isArray(rest.funcionariosIds) ? rest.funcionariosIds : [],
+    colaboradoresIds: Array.isArray(rest.colaboradoresIds) ? rest.colaboradoresIds : (Array.isArray(rest.funcionariosIds) ? rest.funcionariosIds : []),
     leituras: (rest.leituras && typeof rest.leituras === 'object' && !Array.isArray(rest.leituras)) ? rest.leituras : {},
     ciencias: (rest.ciencias && typeof rest.ciencias === 'object' && !Array.isArray(rest.ciencias)) ? rest.ciencias : {},
     anexos: Array.isArray(rest.anexos) ? rest.anexos : [],
     exigeCiencia: Boolean(rest.exigeCiencia),
     permiteResposta: Boolean(rest.permiteResposta),
   }
+  const hasTargets = dados.turmas.length > 0 || dados.alunosIds.length > 0 || dados.grupos.length > 0 || dados.funcionariosIds.length > 0
   const merged = {
     id: id || `COM-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
     titulo: titulo || '', 
     texto: conteudo || texto || '', 
     autor: autor || '',
     data: dataEnvio || data || new Date().toISOString(),
-    destino: destino || ((dados.turmas.length > 0 || dados.alunosIds.length > 0) ? 'selecionados' : 'todos'), 
+    destino: destino || (hasTargets ? 'selecionados' : 'todos'), 
     fixado: Boolean(fixado),
     dados: {
       ...dados,

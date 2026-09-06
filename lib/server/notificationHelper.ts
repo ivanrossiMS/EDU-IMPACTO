@@ -345,29 +345,32 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         // 1. Resolver grupos na tabela agenda_grupos
         const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, dados')
         if (!gruposError && allGrupos) {
-          const matchedGrupos = allGrupos.filter(g => {
-            const gId = String(g.id).toLowerCase()
-            const gNome = String(g.dados?.nome || '').toLowerCase()
+          const matchedGrupos = allGrupos.filter((g: any) => {
+            const gId = String(g.id || '').toLowerCase()
+            const gNome = String(g.dados?.nome || g.nome || '').toLowerCase()
             return allGroupTerms.some(term => {
               const tl = term.toLowerCase().trim()
-              return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
+              return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome) || tl === `g_${gId}`
             })
           })
           
           let grupoAlunosIds: string[] = []
-          matchedGrupos.forEach(g => {
-            const list = g.dados?.alunosIds || [];
+          matchedGrupos.forEach((g: any) => {
+            const list = g.dados?.alunosIds || g.alunosIds || [];
             list.forEach((aId: string) => {
               const cleanId = aId.replace(/^(a_|_ALU)/, '')
               if (cleanId) grupoAlunosIds.push(cleanId)
             })
 
-            let colabs = g.dados?.colaboradoresIds || [];
+            let colabs = g.dados?.colaboradoresIds || g.colaboradoresIds || [];
             if (typeof colabs === 'string') {
               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
             }
             if (Array.isArray(colabs)) {
-              colabs.forEach((c: any) => colaboradoresIds.push(String(c)));
+              colabs.forEach((c: any) => {
+                const clean = String(c).replace(/^f_?/, '').trim()
+                if (clean) colaboradoresIds.push(clean)
+              });
             }
           })
 
@@ -514,9 +517,37 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       }))
     }
 
+    // Mapear colaboradoresIds para incluir IDs de system_users e Auth UUIDs
+    const finalColabIds = new Set<string>()
+    colaboradoresIds.forEach(id => {
+      const clean = String(id).replace(/^f_?/, '').trim()
+      if (clean) finalColabIds.add(clean)
+    })
+
+    if (finalColabIds.size > 0) {
+      try {
+        const { data: sysColabs } = await supabase
+          .from('system_users')
+          .select('id, email, dados')
+          .limit(1000)
+
+        if (sysColabs && sysColabs.length > 0) {
+          sysColabs.forEach((su: any) => {
+            const suId = String(su.id)
+            const suEmail = (su.email || '').toLowerCase().trim()
+            if (finalColabIds.has(suId) || (suEmail && finalColabIds.has(suEmail))) {
+              finalColabIds.add(suId)
+            }
+          })
+        }
+      } catch (colabErr) {
+        console.warn('[NotifHelper] Aviso ao expandir colaboradores via system_users:', colabErr)
+      }
+    }
+
     return {
       students: studentsResult,
-      directColaboradores: Array.from(new Set(colaboradoresIds))
+      directColaboradores: Array.from(finalColabIds)
     }
   } catch (err: any) {
     console.error('[NotifHelper] Erro em getStudentTargetsForComunicados:', err.message)

@@ -159,7 +159,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
       title: '📅 Novo Evento!',
       message: `Novo evento no calendário: ${row.titulo}. Confira os detalhes!`,
       targetUserIds: studentTargetArray,
-      targetUrl: '/agenda-digital/calendario'
+      targetUrl: '/agenda-digital/calendario',
+      metadata: { perfil_destino: 'familia' }
     }).catch(err => console.error('Evento Push Error:', err));
 
     // Lembrete Agendado em Lote
@@ -171,6 +172,7 @@ async function dispatchPushNotifications(supabase: any, row: any) {
         message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
         targetUserIds: studentTargetArray,
         targetUrl: '/agenda-digital/calendario',
+        metadata: { perfil_destino: 'familia' },
         sendAfter: sendAfterStr
       }).catch(err => console.error('Evento Reminder Error:', err));
     }
@@ -184,7 +186,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
       title: '📅 Novo Evento!',
       message: `O evento "${row.titulo}" foi adicionado à sua agenda.`,
       targetUserIds: directColaboradores,
-      targetUrl: '/agenda-digital/calendario'
+      targetUrl: '/agenda-digital/colaborador/calendario',
+      metadata: { perfil_destino: 'colaborador' }
     }).catch(err => console.error('Evento Push Error:', err))
 
     if (shouldSendReminder && sendAfterStr) {
@@ -194,7 +197,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
         title: '⏰ Lembrete: Amanhã!',
         message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
         targetUserIds: directColaboradores,
-        targetUrl: '/agenda-digital/calendario',
+        targetUrl: '/agenda-digital/colaborador/calendario',
+        metadata: { perfil_destino: 'colaborador' },
         sendAfter: sendAfterStr
       }).catch(err => console.error('Evento Reminder Error:', err))
     }

@@ -262,8 +262,8 @@ export async function POST(request: Request) {
                   title: '📸 Novo Momento Publicado!',
                   message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
                   targetUserIds: student.responsaveis_ids,
-                  targetUrl: '/agenda-digital/momentos',
-                  metadata: { aluno_id: student.aluno_id }
+                  targetUrl: `/agenda-digital/${student.aluno_id}/momentos`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia' }
                 }).catch(err => console.error('Momento Push Error:', err))
               )
             }
@@ -277,7 +277,8 @@ export async function POST(request: Request) {
                 title: '📸 Novo Momento Publicado!',
                 message: `Um novo conteúdo foi compartilhado. Confira!`,
                 targetUserIds: directColaboradores,
-                targetUrl: '/agenda-digital/momentos'
+                targetUrl: '/agenda-digital/colaborador/momentos',
+                metadata: { perfil_destino: 'colaborador' }
               }).catch(err => console.error('Momento Push Error Colab:', err))
             )
           }
@@ -314,8 +315,8 @@ export async function POST(request: Request) {
                 title: '📸 Novo Momento Publicado!',
                 message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
                 targetUserIds: student.responsaveis_ids,
-                targetUrl: '/agenda-digital/momentos',
-                metadata: { aluno_id: student.aluno_id }
+                targetUrl: `/agenda-digital/${student.aluno_id}/momentos`,
+                metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia' }
               }).catch(err => console.error('Momento Push Error:', err))
             )
           }
@@ -329,7 +330,8 @@ export async function POST(request: Request) {
               title: '📸 Novo Momento Publicado!',
               message: `Um novo conteúdo foi compartilhado. Confira!`,
               targetUserIds: directColaboradores,
-              targetUrl: '/agenda-digital/momentos'
+              targetUrl: '/agenda-digital/colaborador/momentos',
+              metadata: { perfil_destino: 'colaborador' }
             }).catch(err => console.error('Momento Push Error Colab:', err))
           )
         }

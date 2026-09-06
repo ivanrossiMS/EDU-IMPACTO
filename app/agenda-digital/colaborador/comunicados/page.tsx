@@ -9,7 +9,7 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
 import { useState, useEffect, useRef, useMemo, Suspense, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -161,24 +161,38 @@ function ColaboradorComunicadosContent() {
   const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
 
-  const effectiveColabId = useMemo(() => {
+  const candidateColabIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (effectiveUser?.id) ids.add(String(effectiveUser.id).replace(/^f_?/, '').trim().toLowerCase());
+    if ((effectiveUser as any)?.uid_legacy) ids.add(String((effectiveUser as any).uid_legacy).replace(/^f_?/, '').trim().toLowerCase());
+    if (currentUser?.id) ids.add(String(currentUser.id).replace(/^f_?/, '').trim().toLowerCase());
+    if ((currentUser as any)?.uid_legacy) ids.add(String((currentUser as any).uid_legacy).replace(/^f_?/, '').trim().toLowerCase());
+    
     const colab = (colaboradores || []).find((c: any) => 
-      c.email && effectiveUser?.email && String(c.email).toLowerCase() === String(effectiveUser.email).toLowerCase()
+      (c.email && effectiveUser?.email && String(c.email).toLowerCase() === String(effectiveUser.email).toLowerCase()) ||
+      (c.email && currentUser?.email && String(c.email).toLowerCase() === String(currentUser.email).toLowerCase()) ||
+      (c.id && effectiveUser?.id && String(c.id).toLowerCase() === String(effectiveUser.id).toLowerCase())
     );
-    return colab?.id || effectiveUser?.id;
-  }, [colaboradores, effectiveUser]);
+    if (colab?.id) ids.add(String(colab.id).replace(/^f_?/, '').trim().toLowerCase());
+    if (colab?.uid_legacy) ids.add(String(colab.uid_legacy).replace(/^f_?/, '').trim().toLowerCase());
+    return Array.from(ids);
+  }, [colaboradores, effectiveUser, currentUser]);
+
+  const effectiveColabId = useMemo(() => {
+    return candidateColabIds[0] || effectiveUser?.id;
+  }, [candidateColabIds, effectiveUser]);
 
   const userGroups = useMemo(() => {
-    if (!effectiveColabId) return [];
+    if (candidateColabIds.length === 0) return [];
     return (chatGroups || []).filter((g: any) => {
       let colabs = g.colaboradoresIds;
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
       }
       if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
+      return colabs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()));
     });
-  }, [chatGroups, effectiveColabId]);
+  }, [chatGroups, candidateColabIds]);
 
   const turmaOptions = useMemo(() => {
     if (!effectiveUser?.id) return [];
@@ -240,14 +254,14 @@ function ColaboradorComunicadosContent() {
         try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
       }
       if (!Array.isArray(colabs)) colabs = [];
-      if (colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim())) {
+      if (colabs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()))) {
         const syncId = String(g.syncId || g.id).replace('sync-', '');
         allowedTurmasIds.push(syncId);
       }
     });
 
     return turmas.filter((t: any) => allowedTurmasIds.includes(String(t.id)));
-  }, [turmas, userGroups, effectiveUser])
+  }, [turmas, userGroups, effectiveUser, candidateColabIds])
   
   const { comunicados, setComunicados, setComunicadosLocally, isDataLoading, hasNextPageComunicados, fetchNextPageComunicados } = useAgendaDigital()
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
@@ -271,6 +285,47 @@ function ColaboradorComunicadosContent() {
       return
     }
 
+    const grupoDest = selectedDest.filter(d => d.type === 'grupo');
+    const extraFuncsFromGroups: string[] = [];
+    const extraAlunosFromGroups: string[] = [];
+
+    if (grupoDest.length > 0 && Array.isArray(chatGroups)) {
+      grupoDest.forEach(gd => {
+        const matched = chatGroups.find((g: any) => 
+          String(g.id) === String(gd.id) || 
+          String(g.nome).trim().toLowerCase() === String(gd.name).trim().toLowerCase()
+        );
+        if (matched) {
+          let colabs = matched.colaboradoresIds;
+          if (typeof colabs === 'string') {
+            try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+          }
+          if (Array.isArray(colabs)) {
+            colabs.forEach((cid: any) => {
+              const clean = String(cid).replace(/^f_?/, '').trim();
+              if (clean && !extraFuncsFromGroups.includes(clean)) extraFuncsFromGroups.push(clean);
+            });
+          }
+          let stus = matched.alunosIds;
+          if (typeof stus === 'string') {
+            try { stus = JSON.parse(stus); } catch(e) { stus = []; }
+          }
+          if (Array.isArray(stus)) {
+            stus.forEach((aid: any) => {
+              const clean = String(aid).replace(/^a_?/, '').trim();
+              if (clean && !extraAlunosFromGroups.includes(clean)) extraAlunosFromGroups.push(clean);
+            });
+          }
+        }
+      });
+    }
+
+    const directFuncs = selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, ''));
+    const allResolvedFuncs = Array.from(new Set([...directFuncs, ...extraFuncsFromGroups]));
+
+    const directAlunos = selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, ''));
+    const allResolvedAlunos = Array.from(new Set([...directAlunos, ...extraAlunosFromGroups]));
+
     if (editComId) {
       const updatedCom = {
         titulo: newTitulo,
@@ -284,9 +339,9 @@ function ColaboradorComunicadosContent() {
         dataAgendamento: dataAgendamento || null,
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
+        alunosIds: allResolvedAlunos,
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
+        funcionariosIds: allResolvedFuncs,
         destino: 'selecionados'
       };
       
@@ -312,9 +367,9 @@ function ColaboradorComunicadosContent() {
         autorId: effectiveUser?.id || '',
         autorFoto: effectiveUser?.foto || null,
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
+        alunosIds: allResolvedAlunos,
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
+        funcionariosIds: allResolvedFuncs,
         destino: 'selecionados',
         prioridade: 'normal',
         fixado: false,
@@ -460,6 +515,70 @@ function ColaboradorComunicadosContent() {
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [limit, setLimit] = useState(6)
+
+  const router = useRouter()
+  const queryId = searchParams?.get('id')
+
+  // Auto-open comunicado if queryId is present in URL or via custom event
+  const hasAutoOpened = useRef(false)
+  useEffect(() => {
+    if (!queryId || hasAutoOpened.current) return;
+
+    const target = (comunicados || []).find((c: any) => String(c.id) === String(queryId));
+    if (target) {
+      setSelectedComunicado(target);
+      hasAutoOpened.current = true;
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete('id');
+        const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
+        router.replace(newUrl, { scroll: false });
+      } catch(e) {}
+      return;
+    }
+
+    if (!isDataLoading) {
+      fetch(`/api/comunicados?id=${encodeURIComponent(queryId)}`)
+        .then(res => res.json())
+        .then(data => {
+          const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
+          if (item && (item.id || item.titulo)) {
+            setSelectedComunicado(item);
+            hasAutoOpened.current = true;
+            try {
+              const urlParams = new URLSearchParams(window.location.search);
+              urlParams.delete('id');
+              const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
+              router.replace(newUrl, { scroll: false });
+            } catch(e) {}
+          }
+        })
+        .catch(err => console.error("Error auto-opening single comunicado:", err));
+    }
+  }, [queryId, comunicados, isDataLoading, router]);
+
+  useEffect(() => {
+    const handleOpenCustom = (e: any) => {
+      const comId = e.detail?.id;
+      if (!comId) return;
+      const target = (comunicados || []).find((c: any) => String(c.id) === String(comId));
+      if (target) {
+        setSelectedComunicado(target);
+      } else {
+        fetch(`/api/comunicados?id=${encodeURIComponent(comId)}`)
+          .then(res => res.json())
+          .then(data => {
+            const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
+            if (item && (item.id || item.titulo)) {
+              setSelectedComunicado(item);
+            }
+          })
+          .catch(console.error);
+      }
+    };
+    window.addEventListener('ad:open-comunicado', handleOpenCustom);
+    return () => window.removeEventListener('ad:open-comunicado', handleOpenCustom);
+  }, [comunicados]);
 
   if (!effectiveUser) return null;
 
@@ -841,8 +960,8 @@ function ColaboradorComunicadosContent() {
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
         {(() => {
-          const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin']; 
-          const cargosAdmin = ['Administrador Master', 'Diretor Geral']; 
+          const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora']; 
+          const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora']; 
           const perfilStr = effectiveUser?.perfil || ''; 
           const cargoStr = effectiveUser?.cargo || ''; 
           const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
@@ -853,7 +972,7 @@ function ColaboradorComunicadosContent() {
               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
             }
             if (!Array.isArray(colabs)) colabs = [];
-            return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
+            return colabs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()));
           }).map((g: any) => g.nome);
 
           // Deduplicar por id — previne "Encountered two children with the same key"
@@ -877,11 +996,17 @@ function ColaboradorComunicadosContent() {
             const targetGrupos = c.grupos || (c.dados?.grupos) || [];
             const targetTurmas = c.turmas || (c.dados?.turmas) || [];
             
-            const inFuncs = targetFuncs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
-            const inGrupos = targetGrupos.some((g: string) => myGroups.some((m: string) => String(m).toLowerCase().trim() === String(g).toLowerCase().trim()));
+            const inFuncs = targetFuncs.some((id: any) => candidateColabIds.includes(String(id).replace(/^f_?/, '').trim().toLowerCase()));
+            const inGrupos = targetGrupos.some((g: string) => {
+              const gClean = String(g).toLowerCase().trim();
+              return myGroups.some((m: string) => {
+                const mClean = String(m).toLowerCase().trim();
+                return mClean === gClean || mClean.includes(gClean) || gClean.includes(mClean);
+              });
+            });
             const inTurmas = targetTurmas.some((t: string) => myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === String(t).toLowerCase().trim()));
             
-            if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas) {
+            if (!isAuthor && !isTodos && !inFuncs && !inGrupos && !inTurmas && !isMaster) {
               return false;
             }
             if (!searchTerm) return true;

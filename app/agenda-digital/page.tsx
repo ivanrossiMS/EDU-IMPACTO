@@ -27,8 +27,15 @@ function AgendaDigitalIndexContent() {
     if (!currentUserPerfil || !currentUser) return;
 
     const isAdmin = ADMIN_PERFIS.includes(currentUserPerfil)
+    const perfilDestino = searchParams.get('perfil_destino')
     const redirect = searchParams.get('redirect') || 'comunicados'
     const paramStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
+    
+    // Se o destino for colaborador explicitamente
+    if (perfilDestino === 'colaborador') {
+      router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+      return;
+    }
     
     if (isAdmin) {
       if (currentUserPerfil === 'Diretor Geral' || currentUser?.cargo === 'Administrador Master') {
@@ -36,37 +43,45 @@ function AgendaDigitalIndexContent() {
       } else {
         router.replace(searchParams.get('redirect') ? `/agenda-digital/admin/${searchParams.get('redirect')}` : '/agenda-digital/admin')
       }
-    } else {
-      const fetchSecureStudents = async () => {
-        try {
-          // Fast path para alunos que já tem o ID na sessão
-          if (currentUser?.cargo === 'Aluno') {
-             const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id;
-             if (directAlunoId) {
-               router.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`);
-               return;
-             }
-          }
+      return;
+    }
 
-          // Slow path seguro via API do backend (checa user_id ou vínculos)
-          const url = `/api/agenda/meus-alunos`;
-          const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length === 1 && data[0].id) {
-              router.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
+    const fetchSecureStudents = async () => {
+      try {
+        // Fast path para alunos que já tem o ID na sessão
+        if (currentUser?.cargo === 'Aluno') {
+           const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id;
+           if (directAlunoId) {
+             router.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`);
+             return;
+           }
+        }
+
+        // Slow path seguro via API do backend (checa user_id ou vínculos)
+        const url = `/api/agenda/meus-alunos`;
+        const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length === 1 && data[0].id) {
+            router.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
+            return;
+          }
+          if (Array.isArray(data) && data.length === 0) {
+            const isStaff = !['Família', 'Responsável', 'Aluno'].includes(currentUserPerfil) && !['Responsável', 'Aluno'].includes(currentUser?.cargo || '');
+            if (isStaff) {
+              router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
               return;
             }
           }
-          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
-        } catch (e) {
-          console.error('Erro ao buscar alunos:', e);
-          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
         }
-      };
+        router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
+      } catch (e) {
+        console.error('Erro ao buscar alunos:', e);
+        router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
+      }
+    };
 
-      fetchSecureStudents();
-    }
+    fetchSecureStudents();
   }, [currentUserPerfil, currentUser, router, searchParams])
 
   return (
