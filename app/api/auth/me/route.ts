@@ -36,11 +36,44 @@ export async function GET(request: Request) {
 
   // Fetch the latest profile data from system_users to ensure it is always up to date
   const supabaseAdmin = getAdminClient();
-  const { data: dbUser } = await supabaseAdmin
+  let { data: dbUser } = await supabaseAdmin
     .from('system_users')
     .select('*')
     .eq('id', user.id)
     .maybeSingle();
+
+  if (!dbUser && user.email) {
+    const { data: dbUserByEmail } = await supabaseAdmin
+      .from('system_users')
+      .select('*')
+      .eq('email', user.email.toLowerCase().trim())
+      .limit(1)
+      .maybeSingle();
+    if (dbUserByEmail) dbUser = dbUserByEmail;
+  }
+
+  // Cross-check responsaveis to ensure dual role and responsavel_id are always resolved
+  let responsavel_id = dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '';
+  let colaborador_id = dbUser?.id || user.user_metadata?.colaborador_id || '';
+  let hasDualRole = !!user.user_metadata?.hasDualRole;
+
+  if (user.email) {
+    const { data: respRow } = await supabaseAdmin
+      .from('responsaveis')
+      .select('id')
+      .eq('email', user.email.toLowerCase().trim())
+      .limit(1)
+      .maybeSingle();
+
+    if (respRow?.id) {
+      responsavel_id = String(respRow.id);
+      if (dbUser) hasDualRole = true;
+    }
+  }
+
+  if (responsavel_id && colaborador_id) {
+    hasDualRole = true;
+  }
 
   // Combine top-level auth data (id, email) with user_metadata and database fields
   const userData = {
@@ -51,7 +84,9 @@ export async function GET(request: Request) {
     perfil: dbUser?.perfil || user.user_metadata?.perfil,
     cargo: dbUser?.cargo || user.user_metadata?.cargo,
     status: dbUser?.status || 'ativo',
-    responsavel_id: dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '',
+    responsavel_id,
+    colaborador_id,
+    hasDualRole,
     aluno_id: dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
   };
 

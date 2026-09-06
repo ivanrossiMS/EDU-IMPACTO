@@ -152,6 +152,7 @@ async function dispatchPushNotifications(supabase: any, row: any) {
   const studentTargetArray = Array.from(allStudentTargetIds);
 
   if (studentTargetArray.length > 0) {
+    const studentUrl = `/agenda-digital/calendario?id=${row.id}&data=${row.data || ''}`;
     // Notificação Imediata em Lote
     await sendAgendaPushNotification({
       type: 'calendario',
@@ -159,7 +160,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
       title: '📅 Novo Evento!',
       message: `Novo evento no calendário: ${row.titulo}. Confira os detalhes!`,
       targetUserIds: studentTargetArray,
-      targetUrl: '/agenda-digital/calendario'
+      targetUrl: studentUrl,
+      metadata: { access: 'familiar' }
     }).catch(err => console.error('Evento Push Error:', err));
 
     // Lembrete Agendado em Lote
@@ -170,7 +172,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
         title: '⏰ Lembrete: Amanhã!',
         message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
         targetUserIds: studentTargetArray,
-        targetUrl: '/agenda-digital/calendario',
+        targetUrl: studentUrl,
+        metadata: { access: 'familiar' },
         sendAfter: sendAfterStr
       }).catch(err => console.error('Evento Reminder Error:', err));
     }
@@ -178,14 +181,16 @@ async function dispatchPushNotifications(supabase: any, row: any) {
 
   // 2. Dispatch for direct colaboradores / untargeted responsaveis
   if (directColaboradores && directColaboradores.length > 0) {
+    const colabUrl = `/agenda-digital/colaborador/calendario?id=${row.id}&data=${row.data || ''}`;
     await sendAgendaPushNotification({
       type: 'calendario',
       itemId: String(row.id),
       title: '📅 Novo Evento!',
       message: `O evento "${row.titulo}" foi adicionado à sua agenda.`,
       targetUserIds: directColaboradores,
-      targetUrl: '/agenda-digital/calendario'
-    }).catch(err => console.error('Evento Push Error:', err))
+      targetUrl: colabUrl,
+      metadata: { access: 'institucional' }
+    }).catch(err => console.error('Evento Push Error Colab:', err))
 
     if (shouldSendReminder && sendAfterStr) {
       await sendAgendaPushNotification({
@@ -194,7 +199,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
         title: '⏰ Lembrete: Amanhã!',
         message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
         targetUserIds: directColaboradores,
-        targetUrl: '/agenda-digital/calendario',
+        targetUrl: colabUrl,
+        metadata: { access: 'institucional' },
         sendAfter: sendAfterStr
       }).catch(err => console.error('Evento Reminder Error:', err))
     }

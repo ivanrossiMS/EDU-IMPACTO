@@ -214,6 +214,7 @@ export async function POST(request: NextRequest) {
 
     let dbRecordExists = false
     let responsavel_id = ''
+    let colaborador_id = ''
     let aluno_id = ''
 
     // 1. Check system_users
@@ -229,6 +230,7 @@ export async function POST(request: NextRequest) {
 
       if (dbSystemUser) {
         dbRecordExists = true
+        colaborador_id = String(dbSystemUser.id)
         if (dbSystemUser.status === 'inativo') {
           const supabaseSignOut = createServerClient(
             process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -257,15 +259,29 @@ export async function POST(request: NextRequest) {
           .select('id')
           .eq('email', resolvedEmail)
           .limit(1)
-        if (respFound && respFound.length > 0) hasDualRole = true
+        if (respFound && respFound.length > 0) {
+          hasDualRole = true
+          responsavel_id = String(respFound[0].id)
+        }
       }
     } else if (userType === 'responsavel' && responsavelRecord) {
       dbRecordExists = true
-      responsavel_id = responsavelRecord.id
+      responsavel_id = String(responsavelRecord.id)
       nome   = responsavelRecord.nome || nome
       cargo  = 'Responsável'
       perfil = 'Família'
       // As permissões financeiro/pedagógico já foram checadas na linha 129
+
+      // Verifica se o responsável também é colaborador
+      const { data: sysFound } = await supabaseAdmin
+        .from('system_users')
+        .select('id')
+        .eq('email', resolvedEmail)
+        .limit(1)
+      if (sysFound && sysFound.length > 0) {
+        hasDualRole = true
+        colaborador_id = String(sysFound[0].id)
+      }
     } else if (userType === 'aluno' && alunoRecord) {
       dbRecordExists = true
       aluno_id = alunoRecord.id
@@ -295,8 +311,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Persist enriched metadata if changed
-    const userMetadataUpdate: any = { nome, cargo, perfil }
+    const userMetadataUpdate: any = { nome, cargo, perfil, hasDualRole }
     if (responsavel_id) userMetadataUpdate.responsavel_id = responsavel_id
+    if (colaborador_id) userMetadataUpdate.colaborador_id = colaborador_id
     if (aluno_id) userMetadataUpdate.aluno_id = aluno_id
 
     if (user) {
@@ -315,6 +332,8 @@ export async function POST(request: NextRequest) {
     const enrichedUser = {
       ...user,
       hasDualRole,
+      responsavel_id,
+      colaborador_id,
       user_metadata: { ...user?.user_metadata, ...userMetadataUpdate }
     }
 

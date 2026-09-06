@@ -8,7 +8,7 @@ import { getAlunoTurmaCursando, getAlunoTodasTurmasEGrupos, getAlunoNomesTurmasE
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
-import React, { use, useState, useEffect, useMemo } from 'react'
+import React, { use, useState, useEffect, useMemo, useRef } from 'react'
 import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
@@ -61,10 +61,32 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const espelharRespId = searchParams?.get('espelhar_responsavel');
   const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
   const isMirroring = !!(espelharRespId || espelharAluno);
+  const queryId = searchParams?.get('id');
+  const hasAutoScrolled = useRef(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   
   const endpoint = resolvedParams?.slug ? `/api/agenda/momentos?aluno_id=${resolvedParams.slug}` : null
   const { data: fetchMomentosData, isLoading: loading, refetch, hasNextPage, fetchNextPage } = useQueryMomentos(endpoint, 20)
   const fetchMomentos = fetchMomentosData?.pages?.flat() || []
+
+  useEffect(() => {
+    if (queryId && fetchMomentos && fetchMomentos.length > 0 && !hasAutoScrolled.current) {
+      const exists = fetchMomentos.some((m: any) => String(m.id) === String(queryId))
+      if (exists) {
+        hasAutoScrolled.current = true
+        setHighlightedId(String(queryId))
+        setTimeout(() => {
+          const el = document.getElementById(`momento-${queryId}`)
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 300)
+        setTimeout(() => {
+          setHighlightedId(null)
+        }, 3500)
+      }
+    }
+  }, [queryId, fetchMomentos])
   
   const [grupos = []] = useSupabaseArray<any>('agenda/grupos');
   const dataCtx = useData();
@@ -644,9 +666,15 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
               return (
                 <div 
                   key={m.id} 
+                  id={`momento-${m.id}`}
                   className="polaroid-card"
                   style={{ 
-                    transform: `rotate(${initialRotation}deg)`
+                    transform: `rotate(${initialRotation}deg)`,
+                    ...(highlightedId === String(m.id) ? {
+                      outline: '3px solid #6366f1',
+                      boxShadow: '0 0 25px rgba(99, 102, 241, 0.45)',
+                      transition: 'all 0.3s ease'
+                    } : {})
                   }}
                 >
                   {/* Header Simplificado para caber no formato polaroid */}

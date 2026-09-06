@@ -38,6 +38,74 @@ async function fetchInChunks<T>(
   return results
 }
 
+/**
+ * Expande uma lista de IDs de responsáveis e colaboradores cruzando
+ * dados com as tabelas `responsaveis` e `system_users`.
+ * Retorna os IDs adicionais encontrados (system_users.id, system_users.auth_id, responsavel_id)
+ * garantindo que um usuário com duplo papel receba em qualquer identidade.
+ */
+async function expandDualRoleIds(supabase: any, rawIds: string[]): Promise<string[]> {
+  if (!rawIds || rawIds.length === 0) return []
+  const cleanRawIds = Array.from(new Set(rawIds.map(String).filter(Boolean)))
+  if (cleanRawIds.length === 0) return []
+
+  const extraIds = new Set<string>()
+
+  try {
+    // 1. Buscar emails de responsaveis cujos IDs estão em cleanRawIds
+    const responsaveisRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email', 'id', cleanRawIds)
+    const emailsSet = new Set<string>()
+    responsaveisRows.forEach(r => {
+      const em = (r.email || '').toLowerCase().trim()
+      if (em) emailsSet.add(em)
+    })
+
+    // 2. Buscar system_users
+    const { data: sysUsers } = await supabase
+      .from('system_users')
+      .select('id, auth_id, email, dados')
+      .limit(5000)
+
+    if (sysUsers && sysUsers.length > 0) {
+      sysUsers.forEach((u: any) => {
+        const uId = String(u.id)
+        const uAuthId = u.auth_id ? String(u.auth_id) : ''
+        const uEmail = (u.email || '').toLowerCase().trim()
+        const rId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
+        const aId = String(u.dados?.aluno_id || u.dados?.alunoId || '').trim()
+
+        const matchesRawId = cleanRawIds.includes(uId) || (uAuthId && cleanRawIds.includes(uAuthId))
+        const matchesResponsavel = (rId && cleanRawIds.includes(rId)) || (aId && cleanRawIds.includes(aId))
+        const matchesEmail = !!(uEmail && emailsSet.has(uEmail))
+
+        if (matchesRawId || matchesResponsavel || matchesEmail) {
+          extraIds.add(uId)
+          if (uAuthId) extraIds.add(uAuthId)
+          if (rId) extraIds.add(rId)
+        }
+      })
+
+      // 3. Se algum ID pertence a system_users, encontrar o respectivo responsavel_id pelo email
+      const matchedColabs = sysUsers.filter((u: any) => 
+        cleanRawIds.includes(String(u.id)) || (u.auth_id && cleanRawIds.includes(String(u.auth_id)))
+      )
+      const colabEmails = matchedColabs.map((c: any) => (c.email || '').toLowerCase().trim()).filter(Boolean)
+      if (colabEmails.length > 0) {
+        const { data: respByColabEmail } = await supabase
+          .from('responsaveis')
+          .select('id')
+          .in('email', colabEmails)
+        respByColabEmail?.forEach((r: any) => {
+          if (r.id) extraIds.add(String(r.id))
+        })
+      }
+    }
+  } catch (err: any) {
+    console.warn('[NotifHelper] Erro ao expandir IDs de duplo papel:', err.message)
+  }
+
+  return Array.from(extraIds)
+}
 
 interface TargetParams {
   /** Nomes ou IDs das turmas destinatárias */
@@ -106,6 +174,25 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
 
       // Inclui colaboradores diretos (Set garante que não há duplicatas)
       colaboradoresIds.forEach(id => { if (id) idsSet.add(id) })
+
+      // 'Todos' inclui toda a comunidade escolar (responsáveis + colaboradores ativos)
+      try {
+        const { data: allSys } = await supabase
+          .from('system_users')
+          .select('id, auth_id')
+          .limit(5000)
+
+        allSys?.forEach((s: any) => {
+          if (s.id) idsSet.add(String(s.id))
+          if (s.auth_id) idsSet.add(String(s.auth_id))
+        })
+      } catch (err: any) {
+        console.warn('[NotifHelper] Erro ao buscar colaboradores para destino todos:', err.message)
+      }
+
+      // Expandir IDs para usuários de duplo papel
+      const expanded = await expandDualRoleIds(supabase, Array.from(idsSet))
+      expanded.forEach(id => idsSet.add(id))
 
       const ids = Array.from(idsSet)
       console.log(`[NotifHelper] 'Todos' selecionado. Retornando ${ids.length} destinatários.`)
@@ -246,29 +333,13 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     // se inscrevem no OneSignal usando o alias 'aluno_id'.
     finalAlunosIds.forEach(id => allResponsavelIds.add(String(id)))
 
-    // ── Mapear IDs de responsáveis/alunos para system_users.id ───────────
+    // ── Mapear IDs de responsáveis/alunos para system_users.id e auth_id ───
     // Garante que se o usuário logou com seu ID de system_user (Auth UUID), 
     // a notificação o encontre mesmo se o destino foi especificado como responsavel_id
     const rawIds = Array.from(allResponsavelIds)
     if (rawIds.length > 0) {
-      try {
-        const { data: sysUsers } = await supabase
-          .from('system_users')
-          .select('id, dados, email')
-          .limit(5000)
-
-        if (sysUsers && sysUsers.length > 0) {
-          sysUsers.forEach((u: any) => {
-            const rId = u.dados?.responsavel_id || u.dados?.responsavelId
-            const aId = u.dados?.aluno_id || u.dados?.alunoId
-            if ((rId && rawIds.includes(String(rId))) || (aId && rawIds.includes(String(aId)))) {
-              allResponsavelIds.add(String(u.id))
-            }
-          })
-        }
-      } catch (sysErr) {
-        console.warn('[NotifHelper] Aviso ao expandir IDs via system_users:', sysErr)
-      }
+      const expanded = await expandDualRoleIds(supabase, rawIds)
+      expanded.forEach(id => allResponsavelIds.add(id))
     }
 
     const result = Array.from(allResponsavelIds)
@@ -285,10 +356,14 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
  * Resolve os IDs de colaboradores para push direto.
  * Útil quando a notificação é endereçada diretamente a colaboradores,
  * sem necessidade de passar pelos responsáveis de alunos.
+ * Expande também para auth_id e responsavel_id caso possua duplo papel.
  */
 export async function getColaboradorIds(colaboradoresIds: string[]): Promise<string[]> {
   if (!colaboradoresIds || colaboradoresIds.length === 0) return []
-  return colaboradoresIds.map(String).filter(Boolean)
+  const supabase = supabaseServer
+  const clean = colaboradoresIds.map(String).filter(Boolean)
+  const expanded = await expandDualRoleIds(supabase, clean)
+  return Array.from(new Set([...clean, ...expanded]))
 }
 
 /**
@@ -329,6 +404,17 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       const { data, error } = await supabase.from('alunos').select('id, nome').limit(5000)
       if (!error && data) {
         alunosToProcess = data.map((d: any) => ({ id: String(d.id), nome: d.nome || '' }))
+      }
+
+      // Em comunicado para 'todos', incluir todos os colaboradores ativos
+      try {
+        const { data: allSys } = await supabase.from('system_users').select('id, auth_id').limit(5000)
+        allSys?.forEach((s: any) => {
+          if (s.id) colaboradoresIds.push(String(s.id))
+          if (s.auth_id) colaboradoresIds.push(String(s.auth_id))
+        })
+      } catch (sysErr: any) {
+        console.warn('[NotifHelper] Erro ao buscar colaboradores em todos comunicados:', sysErr.message)
       }
     } else {
       let targetAlunosSet = new Map<string, string>() // id -> nome
@@ -475,7 +561,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         })
       }
 
-      // Mapear responsáveis e alunos para system_users (Auth UUIDs para o OneSignal)
+      // Mapear responsáveis e alunos para system_users (Auth UUIDs e IDs adicionais para o OneSignal)
       const allRawIds = new Set<string>()
       mapResponsaveis.forEach(set => set.forEach(id => allRawIds.add(id)))
       const rawIdsArray = Array.from(allRawIds)
@@ -484,20 +570,41 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         try {
           const { data: sysUsers } = await supabase
             .from('system_users')
-            .select('id, dados, email')
+            .select('id, auth_id, email, dados')
             .limit(5000)
+
+          const responsaveisRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email', 'id', rawIdsArray)
+          const respEmailMap = new Map<string, string>()
+          responsaveisRows.forEach((r: any) => {
+            if (r.id && r.email) respEmailMap.set(String(r.id), String(r.email).toLowerCase().trim())
+          })
 
           if (sysUsers && sysUsers.length > 0) {
             sysUsers.forEach((u: any) => {
+              const uId = String(u.id)
+              const uAuthId = u.auth_id ? String(u.auth_id) : ''
+              const uEmail = (u.email || '').toLowerCase().trim()
               const rId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
               const aId = String(u.dados?.aluno_id || u.dados?.alunoId || '').trim()
-              
+
               mapResponsaveis.forEach((set, alunoIdKey) => {
-                if (
-                  (rId && set.has(rId)) ||
-                  (aId && (alunoIdKey === aId || alunoIdKey.replace(/^0+/, '') === aId.replace(/^0+/, '')))
-                ) {
-                  set.add(String(u.id))
+                const matchesResponsavelId = (rId && set.has(rId))
+                const matchesAlunoId = (aId && (alunoIdKey === aId || alunoIdKey.replace(/^0+/, '') === aId.replace(/^0+/, '')))
+                let matchesEmail = false
+                if (uEmail) {
+                  for (const idInSet of set) {
+                    const emailOfId = respEmailMap.get(idInSet)
+                    if (emailOfId && emailOfId === uEmail) {
+                      matchesEmail = true
+                      break
+                    }
+                  }
+                }
+
+                if (matchesResponsavelId || matchesAlunoId || matchesEmail) {
+                  set.add(uId)
+                  if (uAuthId) set.add(uAuthId)
+                  if (rId) set.add(rId)
                 }
               })
             })
@@ -514,9 +621,12 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       }))
     }
 
+    const expandedColabs = await expandDualRoleIds(supabase, colaboradoresIds)
+    const finalColabs = Array.from(new Set([...colaboradoresIds, ...expandedColabs]))
+
     return {
       students: studentsResult,
-      directColaboradores: Array.from(new Set(colaboradoresIds))
+      directColaboradores: finalColabs
     }
   } catch (err: any) {
     console.error('[NotifHelper] Erro em getStudentTargetsForComunicados:', err.message)
@@ -549,6 +659,43 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
       .maybeSingle();
       
     if (!error && data) return true;
+
+    // Se não encontrou diretamente, pode ser um colaborador com duplo papel logado com auth_id / system_user id
+    // Busca se existe um system_user com este ID/auth_id
+    const { data: sysUser } = await supabase
+      .from('system_users')
+      .select('id, auth_id, email, dados')
+      .or(`id.eq."${cleanAuthId}",auth_id.eq."${cleanAuthId}"`)
+      .maybeSingle();
+
+    if (sysUser) {
+      const respId = sysUser.dados?.responsavel_id || sysUser.dados?.responsavelId;
+      if (respId) {
+        const { data: respRel } = await supabase
+          .from('aluno_responsavel')
+          .select('id')
+          .eq('aluno_id', cleanAlunoId)
+          .eq('responsavel_id', String(respId))
+          .maybeSingle();
+        if (respRel) return true;
+      }
+      if (sysUser.email) {
+        const { data: respByEmail } = await supabase
+          .from('responsaveis')
+          .select('id')
+          .ilike('email', sysUser.email.trim())
+          .maybeSingle();
+        if (respByEmail) {
+          const { data: respRel } = await supabase
+            .from('aluno_responsavel')
+            .select('id')
+            .eq('aluno_id', cleanAlunoId)
+            .eq('responsavel_id', String(respByEmail.id))
+            .maybeSingle();
+          if (respRel) return true;
+        }
+      }
+    }
     
     return false;
   } catch (err) {

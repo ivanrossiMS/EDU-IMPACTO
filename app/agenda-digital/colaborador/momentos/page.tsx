@@ -5,7 +5,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { PrivacyScreen } from '@capacitor-community/privacy-screen';
 
@@ -61,6 +61,28 @@ export default function ADMomentosPage() {
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const espelharPerfil = searchParams?.get('espelhar_perfil')
   const isMirroring = !!espelharColabId
+  const queryId = searchParams?.get('id')
+  const hasAutoScrolled = useRef(false)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (queryId && momentosFeed && momentosFeed.length > 0 && !hasAutoScrolled.current) {
+      const exists = momentosFeed.some((m: any) => String(m.id) === String(queryId))
+      if (exists) {
+        hasAutoScrolled.current = true
+        setHighlightedId(String(queryId))
+        setTimeout(() => {
+          const el = document.getElementById(`momento-${queryId}`)
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 300)
+        setTimeout(() => {
+          setHighlightedId(null)
+        }, 3500)
+      }
+    }
+  }, [queryId, momentosFeed])
   const effectiveUser = useMemo(() => {
     if (espelharColabId) {
       return {
@@ -651,9 +673,15 @@ export default function ADMomentosPage() {
               return (
                 <div 
                   key={m.id} 
+                  id={`momento-${m.id}`}
                   className="polaroid-card"
                   style={{ 
-                    transform: `rotate(${initialRotation}deg)`
+                    transform: `rotate(${initialRotation}deg)`,
+                    ...(highlightedId === String(m.id) ? {
+                      outline: '3px solid #6366f1',
+                      boxShadow: '0 0 25px rgba(99, 102, 241, 0.45)',
+                      transition: 'all 0.3s ease'
+                    } : {})
                   }}
                 >
                   {/* Header Simplificado para caber no formato polaroid */}
