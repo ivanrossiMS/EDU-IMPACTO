@@ -71,19 +71,44 @@ async function attemptSend(
     }
 
     if (response.ok) {
-      const recipientCount = parsedBody.recipients ?? parsedBody.num_recipients ?? 0
-      const notificationId = parsedBody.id || 'N/A'
+      const notificationId = typeof parsedBody.id === 'string' ? parsedBody.id.trim() : ''
+      const hasValidId = notificationId.length > 0
 
-      if (recipientCount === 0) {
+      // Checar se a API retornou erro explícito de ausência total de inscritos
+      let allUnsubscribed = false
+      if (parsedBody.errors) {
+        const errorList = Array.isArray(parsedBody.errors)
+          ? parsedBody.errors
+          : (typeof parsedBody.errors === 'string' ? [parsedBody.errors] : [])
+        allUnsubscribed = errorList.some((e: any) =>
+          typeof e === 'string' && e.toLowerCase().includes('not subscribed')
+        )
+      }
+
+      // No OneSignal v1 API com include_aliases, a contagem de destinatários é assíncrona
+      // e o campo 'recipients' não vem na resposta HTTP síncrona.
+      // Se 'id' for um UUID válido e não houver erro de falta de inscritos,
+      // a notificação foi aceita e enfileirada com sucesso pelo OneSignal.
+      let recipientCount = parsedBody.recipients ?? parsedBody.num_recipients
+      if (recipientCount === undefined) {
+        recipientCount = (hasValidId && !allUnsubscribed) ? 1 : 0
+      }
+
+      if (recipientCount === 0 || !hasValidId) {
         console.warn(`⚠️ [PushService] OneSignal aceitou a requisição (200 OK), porém 0 destinatários inscritos (Recipients: 0).`, {
-          id: notificationId,
+          id: notificationId || 'N/A',
           targetCount: payload.include_aliases?.external_id?.length || payload.include_external_user_ids?.length || 0,
           errors: parsedBody.errors || null,
         })
       } else {
-        console.log(`✅ [PushService] Push entregue com sucesso! ID: ${notificationId} | Destinatários ativos: ${recipientCount}`)
+        console.log(`✅ [PushService] Push aceito pelo OneSignal com sucesso! ID: ${notificationId} | Destinatários ativos: ${recipientCount}`)
       }
-      return { success: true, data: parsedBody, statusCode: response.status, recipients: recipientCount }
+      return {
+        success: hasValidId && recipientCount > 0,
+        data: parsedBody,
+        statusCode: response.status,
+        recipients: recipientCount,
+      }
     }
 
     // Erro de negócio (400) — sem retry
@@ -141,18 +166,26 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return { success: true, mock: true }
   }
 
-  if (!params.targetUserIds || params.targetUserIds.length === 0) {
-    console.log('[PushService] Nenhum destinatário informado. Push ignorado.')
+  const uniqueTargetUserIds = Array.from(
+    new Set(
+      (params.targetUserIds || [])
+        .filter(id => id && typeof id === 'string' && id.trim().length > 0)
+        .map(id => id.trim())
+    )
+  )
+
+  if (uniqueTargetUserIds.length === 0) {
+    console.log('[PushService] Nenhum destinatário válido informado. Push ignorado.')
     return { success: true, skipped: true }
   }
 
   // Limitar a 2000 destinatários por chamada (limite do OneSignal)
   const maxChunkSize = 2000
-  if (params.targetUserIds.length > maxChunkSize) {
-    console.warn(`⚠️ [PushService] ${params.targetUserIds.length} destinatários excedem o limite. Enviando em lotes sequenciais...`)
+  if (uniqueTargetUserIds.length > maxChunkSize) {
+    console.warn(`⚠️ [PushService] ${uniqueTargetUserIds.length} destinatários excedem o limite. Enviando em lotes sequenciais...`)
     const chunks: string[][] = []
-    for (let i = 0; i < params.targetUserIds.length; i += maxChunkSize) {
-      chunks.push(params.targetUserIds.slice(i, i + maxChunkSize))
+    for (let i = 0; i < uniqueTargetUserIds.length; i += maxChunkSize) {
+      chunks.push(uniqueTargetUserIds.slice(i, i + maxChunkSize))
     }
 
     const results: PushResult[] = []
@@ -188,29 +221,34 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
   const aliasPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
-      external_id: params.targetUserIds,
-      responsavel_id: params.targetUserIds,
-      aluno_id: params.targetUserIds,
-      colaborador_id: params.targetUserIds,
-      system_user_id: params.targetUserIds,
+      external_id: uniqueTargetUserIds,
+      responsavel_id: uniqueTargetUserIds,
+      aluno_id: uniqueTargetUserIds,
+      colaborador_id: uniqueTargetUserIds,
+      system_user_id: uniqueTargetUserIds,
     },
     target_channel: 'push',
   }
 
-  console.log(`🔔 [PushService] Tentativa 1 (User Model Aliases) para ${params.targetUserIds.length} usuário(s)...`)
+  console.log(`🔔 [PushService] Tentativa 1 (User Model Aliases) para ${uniqueTargetUserIds.length} usuário(s)...`)
   const resultAlias = await attemptSend(aliasPayload, ONESIGNAL_REST_API_KEY)
 
-  // Se entregou com sucesso para 1+ dispositivos, finalizar
-  if (resultAlias.success && (resultAlias.recipients ?? 0) > 0) {
+  // Se entregou com sucesso para 1+ dispositivos via Aliases, finalizar imediatamente!
+  // NUNCA executar o fallback legacy se a Tentativa 1 já gerou um ID de notificação válido no OneSignal.
+  const aliasSucceeded = resultAlias.success &&
+    Boolean(resultAlias.data?.id && typeof resultAlias.data.id === 'string' && resultAlias.data.id.trim() !== '') &&
+    (resultAlias.recipients ?? 0) > 0
+
+  if (aliasSucceeded) {
     return resultAlias
   }
 
   // ── Tentativa 2 (Fallback): Legacy include_external_user_ids (OneSignal v1) ──
-  // Caso dispositivos antigos estejam inscritos sob o formato legacy external_id
-  console.warn(`⚠️ [PushService] Tentativa 1 retornou 0 inscritos. Executando Fallback (Legacy external_id)...`)
+  // Executado EXCLUSIVAMENTE quando a Tentativa 1 falhou em encontrar qualquer inscrito ativo
+  console.warn(`⚠️ [PushService] Tentativa 1 retornou 0 inscritos ou falhou. Executando Fallback Legacy (include_external_user_ids)...`)
   const legacyPayload: Record<string, any> = {
     ...commonFields,
-    include_external_user_ids: params.targetUserIds,
+    include_external_user_ids: uniqueTargetUserIds,
   }
 
   const resultLegacy = await attemptSend(legacyPayload, ONESIGNAL_REST_API_KEY)

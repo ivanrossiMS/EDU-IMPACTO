@@ -158,8 +158,14 @@ export async function sendAgendaPushNotification({
       return { success: true, skipped: true, reason: 'no_targets' }
     }
 
-    // Filtrar IDs vazios/inválidos
-    const cleanTargetIds = targetUserIds.filter(id => id && typeof id === 'string' && id.trim().length > 0)
+    // Filtrar IDs vazios/inválidos e eliminar duplicatas
+    const cleanTargetIds = Array.from(
+      new Set(
+        targetUserIds
+          .filter(id => id && typeof id === 'string' && id.trim().length > 0)
+          .map(id => id.trim())
+      )
+    )
     if (cleanTargetIds.length === 0) {
       console.log(`${logPrefix} Todos os IDs eram inválidos. Push ignorado.`)
       return { success: true, skipped: true, reason: 'invalid_target_ids' }
