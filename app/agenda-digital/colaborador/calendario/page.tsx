@@ -189,10 +189,6 @@ export default function ADCalendarioPage() {
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const espelharPerfil = searchParams?.get('espelhar_perfil')
   const isMirroring = !!espelharColabId
-  const queryId = searchParams?.get('id')
-  const queryData = searchParams?.get('data')
-  const hasAutoScrolled = useRef(false)
-  const [highlightedId, setHighlightedId] = useState<string | null>(null)
   const effectiveUser = useMemo(() => {
     if (espelharColabId) {
       return {
@@ -295,33 +291,6 @@ export default function ADCalendarioPage() {
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
   const [selectedDay, setSelectedDay] = useState<string | null>(todayStr())
-
-  useEffect(() => {
-    if ((queryId || queryData) && eventosAgenda && eventosAgenda.length > 0 && !hasAutoScrolled.current) {
-      let target = queryId ? (eventosAgenda as any[]).find((e: any) => String(e.id) === String(queryId)) : null
-      const targetDate = target?.data || queryData
-      if (targetDate) {
-        hasAutoScrolled.current = true
-        setSelectedDay(targetDate)
-        const parts = String(targetDate).split('-')
-        const y = parseInt(parts[0], 10)
-        const m = parseInt(parts[1], 10) - 1
-        if (!isNaN(y) && !isNaN(m)) {
-          setViewDate(new Date(y, m, 1))
-        }
-        if (target?.id || queryId) {
-          const finalId = String(target?.id || queryId)
-          setHighlightedId(finalId)
-          setTimeout(() => {
-            const el = document.getElementById(`evento-${finalId}`)
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }, 350)
-          setTimeout(() => setHighlightedId(null), 3500)
-        }
-      }
-    }
-  }, [queryId, queryData, eventosAgenda])
-
   const [filtroTipo, setFiltroTipo] = useState<TipoEvento | 'todos'>('todos')
   const [showModal, setShowModal] = useState(false)
   const [showSelectionModal, setShowSelectionModal] = useState<{ open: boolean, type: 'turmas' | 'usuario' }>({ open: false, type: 'turmas' })
@@ -863,7 +832,6 @@ export default function ADCalendarioPage() {
                         return (
                           <div
                             key={ev.id}
-                            id={`evento-${ev.id}`}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
@@ -872,14 +840,7 @@ export default function ADCalendarioPage() {
                               borderBottom: idx < eventsList.length - 1 ? '1px solid #f8fafc' : 'none',
                               position: 'relative',
                               zIndex: 2,
-                              flexWrap: 'wrap',
-                              ...(highlightedId === String(ev.id) ? {
-                                outline: '2px solid #6366f1',
-                                borderRadius: 12,
-                                padding: 8,
-                                background: 'rgba(99, 102, 241, 0.08)',
-                                transition: 'all 0.3s ease'
-                              } : {})
+                              flexWrap: 'wrap'
                             }}
                           >
                             {/* Vertical Line Node Circle */}

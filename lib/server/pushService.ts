@@ -183,13 +183,13 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ttl: 86400,
   }
 
-  // Mapeia external_id, responsavel_id, aluno_id e colaborador_id para encontrar inscritos por qualquer ID
+  // ── Tentativa 1: OneSignal User Model Aliases (Web SDK v16 & Capacitor v5+) ──
+  // Mapeia external_id, responsavel_id e aluno_id para encontrar inscritos por qualquer ID
   const aliasPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
       external_id: params.targetUserIds,
       responsavel_id: params.targetUserIds,
-      colaborador_id: params.targetUserIds,
       aluno_id: params.targetUserIds,
     },
     target_channel: 'push',

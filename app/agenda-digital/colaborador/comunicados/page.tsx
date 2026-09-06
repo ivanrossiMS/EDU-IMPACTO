@@ -9,7 +9,7 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
 import { useState, useEffect, useRef, useMemo, Suspense, useCallback } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -107,9 +107,6 @@ const getAnexoType = (anexoStr: any) => {
 function ColaboradorComunicadosContent() {
   const { currentUser } = useApp()
   const searchParams = useSearchParams()
-  const router = useRouter()
-  const queryId = searchParams?.get('id')
-  const hasAutoOpened = useRef(false)
   const queryClient = useQueryClient()
   const { turmas = [] } = useData()
   const [showComposer, setShowComposer] = useState(false)
@@ -461,25 +458,6 @@ function ColaboradorComunicadosContent() {
 
   const [comunicadoToDelete, setComunicadoToDelete] = useState<string | null>(null)
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
-
-  // Auto-open comunicado if queryId is present (only once)
-  useEffect(() => {
-    if (queryId && comunicados && comunicados.length > 0 && !hasAutoOpened.current) {
-      const target = comunicados.find((c: any) => String(c.id) === String(queryId))
-      if (target) {
-        setSelectedComunicado(target)
-        hasAutoOpened.current = true
-
-        try {
-          const urlParams = new URLSearchParams(window.location.search);
-          urlParams.delete('id');
-          const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
-          router.replace(newUrl, { scroll: false })
-        } catch(e) {}
-      }
-    }
-  }, [queryId, comunicados, router])
-
   const [searchTerm, setSearchTerm] = useState('')
   const [limit, setLimit] = useState(6)
 

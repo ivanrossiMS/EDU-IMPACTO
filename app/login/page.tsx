@@ -231,14 +231,6 @@ export default function LoginPage() {
               setStep('login')
               return
             }
-            const meData = await meRes.json().catch(() => ({}))
-            if (meData?.user) {
-              storedUser.responsavel_id = meData.user.responsavel_id || storedUser.responsavel_id || ''
-              storedUser.colaborador_id = meData.user.colaborador_id || storedUser.colaborador_id || ''
-              storedUser.hasDualRole = !!meData.user.hasDualRole || !!storedUser.hasDualRole || !!storedUser.responsavel_id
-              saveSetting('edu-current-user', storedUser)
-              setCurrentUser(storedUser)
-            }
           } catch (err) {
             console.warn('[Login] Erro ao validar sessão no servidor, forçando formulário de login:', err)
             await removeSettingAsync('edu-current-user')
@@ -362,9 +354,7 @@ export default function LoginPage() {
         perfil: perfilReal,
         foto: meta.foto || undefined,
         aluno_id: meta.aluno_id || '',
-        responsavel_id: authData.user?.responsavel_id || meta.responsavel_id || '',
-        colaborador_id: authData.user?.colaborador_id || meta.colaborador_id || '',
-        hasDualRole: !!authData.user?.hasDualRole || !!meta.hasDualRole || !!authData.user?.responsavel_id || !!meta.responsavel_id
+        responsavel_id: meta.responsavel_id || ''
       }
       setCurrentUser(userObj)
       

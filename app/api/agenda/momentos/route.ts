@@ -209,47 +209,6 @@ export async function GET(request: Request) {
   }
 }
 
-async function dispatchMomentoPush(row: any) {
-  try {
-    const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados);
-    const pushPromises: Promise<any>[] = [];
-
-    for (const student of students) {
-      if (student.responsaveis_ids.length > 0) {
-        pushPromises.push(
-          sendAgendaPushNotification({
-            type: 'momentos',
-            itemId: String(row.id),
-            title: '📸 Novo Momento Publicado!',
-            message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
-            targetUserIds: student.responsaveis_ids,
-            targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
-            metadata: { access: 'familiar', aluno_id: student.aluno_id }
-          }).catch(err => console.error('Momento Push Error Student:', err))
-        );
-      }
-    }
-
-    if (directColaboradores && directColaboradores.length > 0) {
-      pushPromises.push(
-        sendAgendaPushNotification({
-          type: 'momentos',
-          itemId: String(row.id),
-          title: '📸 Novo Momento Publicado!',
-          message: `Um novo conteúdo foi compartilhado. Confira!`,
-          targetUserIds: directColaboradores,
-          targetUrl: `/agenda-digital/colaborador/momentos?id=${row.id}`,
-          metadata: { access: 'institucional' }
-        }).catch(err => console.error('Momento Push Error Colab:', err))
-      );
-    }
-
-    await Promise.allSettled(pushPromises);
-  } catch (err: any) {
-    console.error('[dispatchMomentoPush] Erro geral:', err.message);
-  }
-}
-
 export async function POST(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
@@ -290,9 +249,40 @@ export async function POST(request: Request) {
 
       // Disparar Push APENAS para novos
       after(async () => {
+        const allPushPromises: Promise<any>[] = [];
         for (const row of newRows) {
-          await dispatchMomentoPush(row);
+          const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
+          
+          for (const student of students) {
+            if (student.responsaveis_ids.length > 0) {
+              allPushPromises.push(
+                sendAgendaPushNotification({
+                  type: 'momentos',
+                  itemId: String(row.id),
+                  title: '📸 Novo Momento Publicado!',
+                  message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
+                  targetUserIds: student.responsaveis_ids,
+                  targetUrl: '/agenda-digital/momentos',
+                  metadata: { aluno_id: student.aluno_id }
+                }).catch(err => console.error('Momento Push Error:', err))
+              )
+            }
+          }
+
+          if (directColaboradores && directColaboradores.length > 0) {
+            allPushPromises.push(
+              sendAgendaPushNotification({
+                type: 'momentos',
+                itemId: String(row.id),
+                title: '📸 Novo Momento Publicado!',
+                message: `Um novo conteúdo foi compartilhado. Confira!`,
+                targetUserIds: directColaboradores,
+                targetUrl: '/agenda-digital/momentos'
+              }).catch(err => console.error('Momento Push Error Colab:', err))
+            )
+          }
         }
+        await Promise.allSettled(allPushPromises);
       });
 
       return NextResponse.json({ ok: true, count: rows.length })
@@ -312,7 +302,38 @@ export async function POST(request: Request) {
 
     if (isNew) {
       after(async () => {
-        await dispatchMomentoPush(data);
+        const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+        const pushPromises = [];
+        
+        for (const student of students) {
+          if (student.responsaveis_ids.length > 0) {
+            pushPromises.push(
+              sendAgendaPushNotification({
+                type: 'momentos',
+                itemId: String(data.id),
+                title: '📸 Novo Momento Publicado!',
+                message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
+                targetUserIds: student.responsaveis_ids,
+                targetUrl: '/agenda-digital/momentos',
+                metadata: { aluno_id: student.aluno_id }
+              }).catch(err => console.error('Momento Push Error:', err))
+            )
+          }
+        }
+
+        if (directColaboradores && directColaboradores.length > 0) {
+          pushPromises.push(
+            sendAgendaPushNotification({
+              type: 'momentos',
+              itemId: String(data.id),
+              title: '📸 Novo Momento Publicado!',
+              message: `Um novo conteúdo foi compartilhado. Confira!`,
+              targetUserIds: directColaboradores,
+              targetUrl: '/agenda-digital/momentos'
+            }).catch(err => console.error('Momento Push Error Colab:', err))
+          )
+        }
+        await Promise.allSettled(pushPromises);
       });
     }
 

@@ -32,7 +32,6 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 import { PushPermissionBanner } from '@/components/agenda/PushPermissionBanner'
-import { resolveNotificationRoute } from '@/components/providers/GlobalPushNotificationManager'
 
 interface RealtimeProviderProps {
   children?: React.ReactNode
@@ -127,13 +126,25 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               OneSignalNative.Notifications.addEventListener('click', (event: any) => {
                 const data = event?.notification?.additionalData || {}
                 console.log('[OneSignal] Notificação nativa clicada:', data)
-                const route = resolveNotificationRoute({
-                  ...data,
-                  aluno_id: data?.aluno_id || alunoIdRef.current,
-                })
-                if (route) {
-                  console.log(`[OneSignal] Deep link nativo → ${route}`)
-                  router.push(route)
+                
+                if (data?.rota || data?.type) {
+                  const slug = data.aluno_id || alunoIdRef.current
+                  let route = ''
+
+                  if (slug) {
+                    route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                  } else {
+                    route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
+                  }
+                  
+                  if (data?.item_id) {
+                    route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
+                  }
+
+                  if (route) {
+                    console.log(`[OneSignal] Deep link nativo → ${route}`)
+                    router.push(route)
+                  }
                 }
               })
 
@@ -200,13 +211,25 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                   OneSignal.Notifications.addEventListener('click', (event: any) => {
                     const data = event?.notification?.additionalData || {}
                     console.log('[OneSignal] Notificação web clicada:', data)
-                    const route = resolveNotificationRoute({
-                      ...data,
-                      aluno_id: data?.aluno_id || alunoIdRef.current,
-                    })
-                    if (route) {
-                      console.log(`[OneSignal] Deep link web → ${route}`)
-                      router.push(route)
+
+                    if (data?.rota || data?.type) {
+                      const slug = data.aluno_id || alunoIdRef.current
+                      let route = ''
+
+                      if (slug) {
+                        route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                      } else {
+                        route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
+                      }
+                      
+                      if (data?.item_id) {
+                        route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
+                      }
+
+                      if (route) {
+                        console.log(`[OneSignal] Deep link web → ${route}`)
+                        router.push(route)
+                      }
                     }
                   })
                 }
@@ -287,29 +310,25 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 await OS.login(userId)
                 window.__OS_USER_ID__ = userId
                 console.log(`✅ [OneSignal] Usuário identificado: ${userId}`)
+                
+                // Add aliases for responsavel_id and aluno_id to allow backend to target them
+                if (OS.User && typeof OS.User.addAlias === 'function') {
+                  try {
+                    if (currentUser.responsavel_id) {
+                      const p = OS.User.addAlias('responsavel_id', String(currentUser.responsavel_id));
+                      if (p && p.catch) p.catch(() => {});
+                    }
+                    if (currentUser.aluno_id) {
+                      const p = OS.User.addAlias('aluno_id', String(currentUser.aluno_id));
+                      if (p && p.catch) p.catch(() => {});
+                    }
+                  } catch (e) {
+                    // ignore
+                  }
+                }
               }
             } catch (loginErr: any) {
               console.warn('[OneSignal] Erro no login (pode ser normal):', loginErr?.message)
-            }
-          }
-
-          // Add aliases for responsavel_id, colaborador_id, aluno_id, email to allow backend to target them
-          if (OS.User && typeof OS.User.addAlias === 'function') {
-            try {
-              if (currentUser.responsavel_id) {
-                OS.User.addAlias('responsavel_id', String(currentUser.responsavel_id))?.catch?.(() => {})
-              }
-              if (currentUser.colaborador_id) {
-                OS.User.addAlias('colaborador_id', String(currentUser.colaborador_id))?.catch?.(() => {})
-              }
-              if (currentUser.aluno_id) {
-                OS.User.addAlias('aluno_id', String(currentUser.aluno_id))?.catch?.(() => {})
-              }
-              if (currentUser.email) {
-                OS.User.addAlias('email', String(currentUser.email).toLowerCase().trim())?.catch?.(() => {})
-              }
-            } catch (e) {
-              // ignore
             }
           }
           
@@ -318,10 +337,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             const tags: Record<string, string> = {
               perfil: currentUser.perfil || '',
               cargo: currentUser.cargo || '',
-              has_dual_role: currentUser.hasDualRole ? 'true' : 'false',
             }
-            if (currentUser.responsavel_id) tags['responsavel_id'] = String(currentUser.responsavel_id)
-            if (currentUser.colaborador_id) tags['colaborador_id'] = String(currentUser.colaborador_id)
             if (alunoId) tags['aluno_id'] = alunoId
             if (turmaNome) tags['turma'] = String(turmaNome)
             if (alunoObj?.id) tags['aluno_db_id'] = String(alunoObj.id)
@@ -356,7 +372,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     gerenciarUsuarioPush()
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.responsavel_id, currentUser?.colaborador_id, currentUser?.hasDualRole, responsavelId, alunoId, turmaNome])
+  }, [currentUser?.id, responsavelId, alunoId, turmaNome])
 
   // ── Supabase Realtime (In-App Toasts) ────────────────────────────────────
   useEffect(() => {
@@ -391,65 +407,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const destino = String(dados.destino || '').toLowerCase().trim()
 
       // Admin recebe tudo
-      if (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'admin') return true
+      if (currentUser?.perfil === 'Administrador') return true
 
-      // 1. Verificação Institucional / Colaborador
-      const isColaborador = currentUser?.colaborador_id ||
-        (currentUser?.perfil && !['Família', 'Responsável', 'Aluno'].includes(currentUser.perfil)) ||
-        (currentUser?.cargo && !['Responsável', 'Aluno'].includes(currentUser.cargo))
-
-      const alvoColabs = ensureStringArray(dados.colaboradoresIds || dados.funcionariosIds)
-
-      if (isColaborador) {
-        if (destino === 'interno' || destino === 'funcionarios') {
-          if (alvoColabs.length === 0) return true
-          const myColabIds = [String(currentUser.id), String(currentUser.colaborador_id || '')].filter(Boolean)
-          if (alvoColabs.some(id => myColabIds.includes(String(id)))) return true
-        }
-
-        const myColabIds = [String(currentUser.id), String(currentUser.colaborador_id || '')].filter(Boolean)
-        if (alvoColabs.some(id => myColabIds.includes(String(id)))) return true
-
-        const userGroups = agendaCtx?.chatGroups || []
-        const userTurmas = turmasArray.filter(t =>
-          userGroups.some((g: any) => {
-            let colabs = g.colaboradoresIds
-            if (typeof colabs === 'string') {
-              try { colabs = JSON.parse(colabs) } catch { colabs = [] }
-            }
-            if (!Array.isArray(colabs)) colabs = []
-            return (
-              colabs.some((id: any) => myColabIds.includes(String(id))) &&
-              (String(g.id) === `sync-${t.id}` ||
-                String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
-            )
-          })
-        )
-
-        const matchesColabTurma = userTurmas.some(t => {
-          const tNome = String(t.nome || '').toLowerCase()
-          const tId = String(t.id).toLowerCase()
-          const tCod = String(t.codigo || '').toLowerCase()
-
-          return (
-            alvoTurmas.some(alvo => {
-              const al = alvo.toLowerCase().trim()
-              return al === tNome || al.includes(tNome) || tNome.includes(al) || al === tId || al === tCod
-            }) ||
-            alvoTurmasIds.some(alvo => {
-              const al = alvo.toLowerCase().trim()
-              return al === tId || al === tCod
-            })
-          )
-        })
-
-        if (matchesColabTurma) return true
-      }
-
-      // 2. Verificação Familiar / Aluno
-      const targetAlunoId = alunoId || (currentUser?.hasDualRole ? currentUser?.aluno_id : null)
-      if (targetAlunoId || alunoObj) {
-        const alunoStr = String(targetAlunoId || alunoObj?.id || '')
+      // Família/Aluno: filtra por turma ou aluno específico
+      if (alunoId) {
+        const alunoStr = String(alunoId)
 
         // Todos/Escola toda
         if (
@@ -486,6 +448,52 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
         // Grupos customizados (Deixamos passar para que o backend verifique no refetch)
         if (alvoGrupos.length > 0) return true
+
+        return false
+      }
+
+      // Colaborador: filtra por turmas que ministra
+      if (currentUser?.perfil === 'Colaborador') {
+        if (
+          destino === 'todos' ||
+          alvoTurmas.some(t => {
+            const tl = t.toLowerCase().trim()
+            return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
+          })
+        ) return true
+
+        const userGroups = agendaCtx?.chatGroups || []
+        const userTurmas = turmasArray.filter(t =>
+          userGroups.some((g: any) => {
+            let colabs = g.colaboradoresIds
+            if (typeof colabs === 'string') {
+              try { colabs = JSON.parse(colabs) } catch { colabs = [] }
+            }
+            if (!Array.isArray(colabs)) colabs = []
+            return (
+              colabs.some((id: any) => String(id) === String(currentUser.id)) &&
+              (String(g.id) === `sync-${t.id}` ||
+                String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+            )
+          })
+        )
+
+        return userTurmas.some(t => {
+          const tNome = String(t.nome || '').toLowerCase()
+          const tId = String(t.id).toLowerCase()
+          const tCod = String(t.codigo || '').toLowerCase()
+
+          return (
+            alvoTurmas.some(alvo => {
+              const al = alvo.toLowerCase().trim()
+              return al === tNome || al.includes(tNome) || tNome.includes(al) || al === tId || al === tCod
+            }) ||
+            alvoTurmasIds.some(alvo => {
+              const al = alvo.toLowerCase().trim()
+              return al === tId || al === tCod
+            })
+          )
+        })
       }
 
       return false
@@ -547,16 +555,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
           if (!isMe) {
             window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-            const notifLink = alunoId
-              ? `/agenda-digital/${alunoId}/comunicados?id=${merged.id}`
-              : `/agenda-digital/colaborador/comunicados?id=${merged.id}`
             addNotification({
               id: merged.id,
               type: 'comunicado',
               title: merged.titulo,
               createdAt: merged.created_at || new Date().toISOString(),
               read: false,
-              link: notifLink,
+              link: `/agenda-digital/${alunoId}/comunicados`,
             })
 
             // toast in-app removido para evitar duplicidade com as notificações push
@@ -589,16 +594,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (eventType === 'DELETE' || isTarget || !isFamily) {
         if (eventType === 'INSERT') {
           window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          const notifLink = alunoId
-            ? `/agenda-digital/${alunoId}/calendario?id=${row.id}`
-            : `/agenda-digital/colaborador/calendario?id=${row.id}`
           addNotification({
             id: row.id,
             type: 'evento',
             title: row.titulo || 'Novo Evento',
             createdAt: row.created_at || new Date().toISOString(),
             read: false,
-            link: notifLink,
+            link: `/agenda-digital/${alunoId}/calendario`,
           })
           // toast in-app removido
         }
@@ -720,16 +722,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (eventType === 'DELETE' || isTarget || !isFamily) {
         if (eventType === 'INSERT') {
           window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          const notifLink = alunoId
-            ? `/agenda-digital/${alunoId}/momentos?id=${merged.id}`
-            : `/agenda-digital/colaborador/momentos?id=${merged.id}`
           addNotification({
             id: merged.id,
             type: 'momento',
             title: merged.titulo || 'Novo Momento',
             createdAt: merged.created_at || new Date().toISOString(),
             read: false,
-            link: notifLink,
+            link: `/agenda-digital/${alunoId}/momentos`,
           })
           // toast in-app removido
         }
