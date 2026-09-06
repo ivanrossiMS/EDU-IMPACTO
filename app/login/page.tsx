@@ -354,7 +354,11 @@ export default function LoginPage() {
         perfil: perfilReal,
         foto: meta.foto || undefined,
         aluno_id: meta.aluno_id || '',
-        responsavel_id: meta.responsavel_id || ''
+        responsavel_id: meta.responsavel_id || '',
+        colaborador_id: meta.colaborador_id || meta.system_user_id || '',
+        system_user_id: meta.system_user_id || meta.colaborador_id || '',
+        hasDualRole: Boolean(meta.hasDualRole || authData.user?.hasDualRole || meta.responsavel_id),
+        user_metadata: meta
       }
       setCurrentUser(userObj)
       

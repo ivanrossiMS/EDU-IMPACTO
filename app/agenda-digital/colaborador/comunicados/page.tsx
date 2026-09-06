@@ -153,13 +153,18 @@ function ColaboradorComunicadosContent() {
   
   const [isClient, setIsClient] = useState(false)
   const [isSimulatedLoading, setIsSimulatedLoading] = useState(false)
+  const [hasSettled, setHasSettled] = useState(false)
   
   useEffect(() => {
     setIsClient(true)
+    const timer = setTimeout(() => {
+      setHasSettled(true)
+    }, 600)
+    return () => clearTimeout(timer)
   }, [])
   
-  const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [alunos, , { loading: alunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
+  const [colaboradores, , { loading: colabLoading }] = useSupabaseArray<any>('configuracoes/usuarios')
 
   const candidateColabIds = useMemo(() => {
     const ids = new Set<string>();
@@ -263,7 +268,7 @@ function ColaboradorComunicadosContent() {
     return turmas.filter((t: any) => allowedTurmasIds.includes(String(t.id)));
   }, [turmas, userGroups, effectiveUser, candidateColabIds])
   
-  const { comunicados, setComunicados, setComunicadosLocally, isDataLoading, hasNextPageComunicados, fetchNextPageComunicados } = useAgendaDigital()
+  const { comunicados, setComunicados, setComunicadosLocally, isDataLoading, comunicadosLoading, chatGroupsLoading, hasNextPageComunicados, fetchNextPageComunicados } = useAgendaDigital()
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
 
   const handleEnviar = (data: any, asRascunho = false) => {
@@ -959,6 +964,7 @@ function ColaboradorComunicadosContent() {
 
 
       <div className="ad-feed-list" style={{ display: 'flex', flexDirection: 'column' }}>
+        <AnimatePresence mode="wait">
         {(() => {
           const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora']; 
           const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora']; 
@@ -1022,22 +1028,62 @@ function ColaboradorComunicadosContent() {
           });
           
           const paginatedComunicados = filteredComunicados;
-          if ((isDataLoading && filteredComunicados.length === 0) || !effectiveUser) {
-            return <ComunicadoSkeleton count={3} />
+          
+          const isFeedLoading = 
+            !hasSettled ||
+            !effectiveUser ||
+            isDataLoading ||
+            !!comunicadosLoading ||
+            !!colabLoading ||
+            !!chatGroupsLoading ||
+            isSimulatedLoading;
+
+          if ((isFeedLoading && filteredComunicados.length === 0) || !effectiveUser) {
+            return (
+              <motion.div
+                key="feed-skeleton-loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.25 }}
+                style={{ width: '100%' }}
+              >
+                <ComunicadoSkeleton 
+                  count={3} 
+                  title="Carregando comunicados institucionais..." 
+                  subtitle="Sincronizando avisos e circulares em tempo real" 
+                />
+              </motion.div>
+            );
           }
           
           if (paginatedComunicados.length === 0) {
             return (
-          <EmptyStateCard 
-            title="Nenhum comunicado"
-            description="Você está em dia com as comunicações pedagógicas e avisos gerais."
-            icon={<Bell size={48} style={{ opacity: 0.2 }} />}
-          />
+              <motion.div
+                key="feed-empty-state"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+                style={{ width: '100%' }}
+              >
+                <EmptyStateCard 
+                  title={searchTerm ? "Nenhum resultado encontrado" : "Nenhum comunicado"}
+                  description={searchTerm ? "Nenhum comunicado corresponde à sua busca." : "Você está em dia com as comunicações pedagógicas e avisos gerais."}
+                  icon={<Bell size={48} style={{ opacity: 0.2 }} />}
+                />
+              </motion.div>
             );
           }
           
           return (
-            <>
+            <motion.div
+              key="feed-loaded-content"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              style={{ width: '100%', display: 'flex', flexDirection: 'column' }}
+            >
               {paginatedComunicados.map((c: any, index: number) => {
                 const rawDate = c.dataEnvio || (c as any).data || (c as any).created_at || new Date().toISOString();
             let parsedDate = new Date();
@@ -1365,9 +1411,10 @@ function ColaboradorComunicadosContent() {
               </button>
             </div>
           )}
-            </>
+            </motion.div>
           )
         })()}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>

@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   const { data: dbUser } = await supabaseAdmin
     .from('system_users')
     .select('*')
-    .eq('id', user.id)
+    .or(`id.eq."${user.id}",auth_id.eq."${user.id}",email.eq."${user.email}"`)
     .maybeSingle();
 
   // Combine top-level auth data (id, email) with user_metadata and database fields
@@ -51,6 +51,9 @@ export async function GET(request: Request) {
     perfil: dbUser?.perfil || user.user_metadata?.perfil,
     cargo: dbUser?.cargo || user.user_metadata?.cargo,
     status: dbUser?.status || 'ativo',
+    colaborador_id: dbUser?.id || user.user_metadata?.colaborador_id || '',
+    system_user_id: dbUser?.id || user.user_metadata?.system_user_id || '',
+    hasDualRole: Boolean(user.user_metadata?.hasDualRole || dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id),
     responsavel_id: dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '',
     aluno_id: dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
   };

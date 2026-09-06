@@ -107,6 +107,8 @@ interface ADContextState {
   adLoading: boolean
   setAdLoading: React.Dispatch<React.SetStateAction<boolean>>
   isDataLoading: boolean
+  comunicadosLoading?: boolean
+  chatGroupsLoading?: boolean
   fetchNextPageComunicados?: () => void
   hasNextPageComunicados?: boolean
   fetchNextPageMomentos?: () => void
@@ -140,6 +142,8 @@ const AgendaDigitalContext = createContext<ADContextState>({
   adLoading: false,
   setAdLoading: () => {},
   isDataLoading: false,
+  comunicadosLoading: false,
+  chatGroupsLoading: false,
   fetchNextPageComunicados: () => {},
   hasNextPageComunicados: false,
   fetchNextPageMomentos: () => {},
@@ -164,7 +168,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
 
   const comunicadosQuery = useQueryComunicados('/api/comunicados', 5, { enabled: !isFamilyFetch })
   const comunicados = comunicadosQuery.data?.pages?.flat() || []
-  const comunicadosLoading = comunicadosQuery.isLoading
+  const comunicadosLoading = comunicadosQuery.isLoading || comunicadosQuery.isFetching
 
   const applyFlatUpdater = (oldData: any, updater: any, limit = 5) => {
     // Se o cache ainda não foi inicializado (oldData nulo), criamos a estrutura
@@ -202,7 +206,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   
   const momentosQuery = useQueryMomentos('/api/agenda/momentos', 20, { enabled: !isFamilyFetch })
   const momentosFeed = momentosQuery.data?.pages?.flat() || []
-  const momentosLoading = momentosQuery.isLoading
+  const momentosLoading = momentosQuery.isLoading || momentosQuery.isFetching
 
   const setLocalMomentosFeed = useCallback((updater: any) => {
     queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (oldData: any) => applyFlatUpdater(oldData, updater, 20))
@@ -244,7 +248,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
 
   const [adLoading, setAdLoading] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
-  const isDataLoading = comunicadosLoading || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
+  const isDataLoading = comunicadosLoading || comunicadosQuery.isFetching || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
   const [bannerUrl, setBannerUrlState] = useState<string | null>(null)
   const [adConfig, setAdConfig] = useState<ADConfig>({
     permissoes: { chat: false, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
@@ -374,6 +378,8 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
       adLoading,
       setAdLoading,
       isDataLoading,
+      comunicadosLoading,
+      chatGroupsLoading,
       fetchNextPageComunicados: comunicadosQuery.fetchNextPage,
       hasNextPageComunicados: comunicadosQuery.hasNextPage,
       fetchNextPageMomentos: momentosQuery.fetchNextPage,

@@ -125,6 +125,14 @@ export function AgendaNotificationCenter() {
                       key={notif.id}
                       onClick={() => {
                         markAsRead(notif.id);
+                        if (notif.type === 'comunicado' && notif.link) {
+                          const comId = notif.link.includes('id=')
+                            ? notif.link.split('id=')[1]?.split('&')[0]
+                            : notif.id;
+                          if (comId) {
+                            window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: comId } }));
+                          }
+                        }
                         router.push(notif.link);
                         setIsOpen(false);
                       }}

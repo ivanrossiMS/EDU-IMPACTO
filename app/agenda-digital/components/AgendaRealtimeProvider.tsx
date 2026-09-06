@@ -110,10 +110,34 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       .catch(() => {})
   }, [currentUser?.id])
 
+  const [extraStaffIds, setExtraStaffIds] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!currentUser?.id) return
+    const known = currentUser?.colaborador_id || currentUser?.system_user_id || currentUser?.user_metadata?.colaborador_id || (currentUser as any)?.colaboradorId
+    if (known) {
+      setExtraStaffIds([String(known).replace(/^f_?/, '').trim().toLowerCase()])
+      return
+    }
+
+    // Busca da sessão do Supabase Auth caso o localStorage não tenha hidratado com colaborador_id
+    supabase.auth.getUser().then((res: any) => {
+      const meta = res?.data?.user?.user_metadata
+      const cId = meta?.colaborador_id || meta?.system_user_id || meta?.colaboradorId
+      if (cId) {
+        setExtraStaffIds([String(cId).replace(/^f_?/, '').trim().toLowerCase()])
+      }
+    }).catch(() => {})
+  }, [currentUser?.id, currentUser?.colaborador_id, currentUser?.system_user_id])
+
   const isStaffUser = Boolean(
-    currentUser?.perfil &&
-    !['Família', 'Responsável', 'Aluno'].includes(currentUser.perfil) &&
-    !['Responsável', 'Aluno'].includes(currentUser?.cargo || '')
+    currentUser?.colaborador_id ||
+    currentUser?.system_user_id ||
+    currentUser?.user_metadata?.colaborador_id ||
+    extraStaffIds.length > 0 ||
+    (currentUser?.perfil &&
+      !['Família', 'Responsável', 'Aluno'].includes(currentUser.perfil) &&
+      !['Responsável', 'Aluno'].includes(currentUser?.cargo || ''))
   )
 
   const hasFamilyAccess = isFamily || meusAlunos.length > 0 || !!currentUser?.responsavel_id || currentUser?.cargo === 'Aluno'
@@ -124,22 +148,34 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     if (currentUser?.id) ids.add(String(currentUser.id).replace(/^f_?/, '').trim().toLowerCase())
     if ((currentUser as any)?.uid_legacy) ids.add(String((currentUser as any).uid_legacy).replace(/^f_?/, '').trim().toLowerCase())
     if ((currentUser as any)?.id_legado) ids.add(String((currentUser as any).id_legado).replace(/^f_?/, '').trim().toLowerCase())
+    if (currentUser?.colaborador_id) ids.add(String(currentUser.colaborador_id).replace(/^f_?/, '').trim().toLowerCase())
+    if (currentUser?.system_user_id) ids.add(String(currentUser.system_user_id).replace(/^f_?/, '').trim().toLowerCase())
+    if (currentUser?.user_metadata?.colaborador_id) ids.add(String(currentUser.user_metadata.colaborador_id).replace(/^f_?/, '').trim().toLowerCase())
+    if (currentUser?.user_metadata?.system_user_id) ids.add(String(currentUser.user_metadata.system_user_id).replace(/^f_?/, '').trim().toLowerCase())
+    if (currentUser?.email) ids.add(String(currentUser.email).trim().toLowerCase())
+    extraStaffIds.forEach(id => ids.add(String(id).replace(/^f_?/, '').trim().toLowerCase()))
     return Array.from(ids)
-  }, [currentUser])
+  }, [currentUser, extraStaffIds])
 
-  const myStaffGroupNames = useMemo(() => {
+  const myStaffGroupNamesAndIds = useMemo(() => {
     if (!agendaCtx?.chatGroups || !Array.isArray(agendaCtx.chatGroups)) return []
-    return agendaCtx.chatGroups.filter((g: any) => {
+    const results: string[] = []
+    agendaCtx.chatGroups.forEach((g: any) => {
       let colabs = g.colaboradoresIds
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs) } catch { colabs = [] }
       }
       if (!Array.isArray(colabs)) colabs = []
-      return colabs.some((cid: any) => {
+      const belongs = colabs.some((cid: any) => {
         const clean = String(cid).replace(/^f_?/, '').trim().toLowerCase()
         return myCandidateStaffIds.includes(clean)
       })
-    }).map((g: any) => String(g.nome || '').trim().toLowerCase())
+      if (belongs) {
+        if (g.nome) results.push(String(g.nome).trim().toLowerCase())
+        if (g.id) results.push(String(g.id).trim().toLowerCase())
+      }
+    })
+    return results
   }, [agendaCtx?.chatGroups, myCandidateStaffIds])
 
   // ── OneSignal Initialization ──────────────────────────────────────────────
@@ -409,7 +445,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 window.__OS_USER_ID__ = userId
                 console.log(`✅ [OneSignal] Usuário identificado: ${userId}`)
                 
-                // Add aliases for responsavel_id and aluno_id to allow backend to target them
+                // Add aliases for responsavel_id, aluno_id, colaborador_id and system_user_id to allow backend to target them
                 if (OS.User && typeof OS.User.addAlias === 'function') {
                   try {
                     if (currentUser.responsavel_id) {
@@ -419,6 +455,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                     if (currentUser.aluno_id) {
                       const p = OS.User.addAlias('aluno_id', String(currentUser.aluno_id));
                       if (p && p.catch) p.catch(() => {});
+                    }
+                    const colabId = currentUser.colaborador_id || currentUser.system_user_id || currentUser.user_metadata?.colaborador_id || currentUser.user_metadata?.system_user_id || extraStaffIds[0];
+                    if (colabId) {
+                      const p1 = OS.User.addAlias('colaborador_id', String(colabId));
+                      if (p1 && p1.catch) p1.catch(() => {});
+                      const p2 = OS.User.addAlias('system_user_id', String(colabId));
+                      if (p2 && p2.catch) p2.catch(() => {});
                     }
                   } catch (e) {
                     // ignore
@@ -439,6 +482,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             if (alunoId) tags['aluno_id'] = alunoId
             if (turmaNome) tags['turma'] = String(turmaNome)
             if (alunoObj?.id) tags['aluno_db_id'] = String(alunoObj.id)
+            if (currentUser.responsavel_id) tags['responsavel_id'] = String(currentUser.responsavel_id)
+            const staffIdTag = currentUser.colaborador_id || currentUser.system_user_id || currentUser.user_metadata?.colaborador_id || extraStaffIds[0]
+            if (staffIdTag) tags['colaborador_id'] = String(staffIdTag)
+            if (hasDualAccess) tags['has_dual_role'] = 'true'
 
             if (OS.User && typeof OS.User.addTags === 'function') {
               await OS.User.addTags(tags)
@@ -602,7 +649,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           matchesStaff = true
         } else if (alvoGrupos.some(g => {
           const cleanG = String(g).trim().toLowerCase()
-          return myStaffGroupNames.some(mg => mg === cleanG || mg.includes(cleanG) || cleanG.includes(mg))
+          return myStaffGroupNamesAndIds.some(mg => mg === cleanG || mg.includes(cleanG) || cleanG.includes(mg))
         })) {
           matchesStaff = true
         } else if (alvoTurmas.length > 0 || alvoTurmasIds.length > 0) {
@@ -676,7 +723,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       } else if (!matchesStaff && matchingStudent) {
         profileTarget = 'familia'
       } else if (matchesStaff && matchingStudent) {
-        if (typeof window !== 'undefined' && window.location.pathname.includes('/colaborador/')) {
+        // Se o evento foi direcionado expressamente a grupos da equipe escolar ou a colaboradores, preferir 'colaborador'
+        const hasSpecificStaffTarget = alvoGrupos.some(g => myStaffGroupNamesAndIds.includes(String(g).trim().toLowerCase())) ||
+          alvoFuncs.some(f => myCandidateStaffIds.includes(String(f).replace(/^f_?/, '').trim().toLowerCase()))
+
+        if (hasSpecificStaffTarget) {
+          profileTarget = 'colaborador'
+        } else if (typeof window !== 'undefined' && window.location.pathname.includes('/colaborador/')) {
           profileTarget = 'colaborador'
         } else {
           profileTarget = isStaffUser && !isFamily ? 'colaborador' : 'familia'
@@ -1006,7 +1059,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     typeof rawTurma === 'object' ? JSON.stringify(rawTurma) : String(rawTurma),
     meusAlunos,
     myCandidateStaffIds,
-    myStaffGroupNames,
+    myStaffGroupNamesAndIds,
     isStaffUser,
     hasDualAccess,
     handleOpenItem,

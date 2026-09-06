@@ -191,6 +191,8 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
       external_id: params.targetUserIds,
       responsavel_id: params.targetUserIds,
       aluno_id: params.targetUserIds,
+      colaborador_id: params.targetUserIds,
+      system_user_id: params.targetUserIds,
     },
     target_channel: 'push',
   }

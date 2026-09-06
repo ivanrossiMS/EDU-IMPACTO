@@ -218,14 +218,15 @@ export async function POST(request: NextRequest) {
 
     // 1. Check system_users
     let hasDualRole = false
+    let dbSystemUser: any = null
     if (userType === 'system_user') {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
         .select('id, nome, email, cargo, perfil, status')
-        .eq('email', resolvedEmail)
+        .or(`email.eq."${resolvedEmail}",auth_id.eq."${user?.id}"`)
         .limit(1)
 
-      const dbSystemUser = dbSystemUserRows?.[0]
+      dbSystemUser = dbSystemUserRows?.[0]
 
       if (dbSystemUser) {
         dbRecordExists = true
@@ -257,7 +258,10 @@ export async function POST(request: NextRequest) {
           .select('id')
           .eq('email', resolvedEmail)
           .limit(1)
-        if (respFound && respFound.length > 0) hasDualRole = true
+        if (respFound && respFound.length > 0) {
+          hasDualRole = true
+          if (!responsavel_id) responsavel_id = respFound[0].id
+        }
       }
     } else if (userType === 'responsavel' && responsavelRecord) {
       dbRecordExists = true
@@ -298,6 +302,11 @@ export async function POST(request: NextRequest) {
     const userMetadataUpdate: any = { nome, cargo, perfil }
     if (responsavel_id) userMetadataUpdate.responsavel_id = responsavel_id
     if (aluno_id) userMetadataUpdate.aluno_id = aluno_id
+    if (dbSystemUser?.id) {
+      userMetadataUpdate.colaborador_id = dbSystemUser.id
+      userMetadataUpdate.system_user_id = dbSystemUser.id
+    }
+    if (hasDualRole) userMetadataUpdate.hasDualRole = true
 
     if (user) {
       const currentMeta = user.user_metadata || {}

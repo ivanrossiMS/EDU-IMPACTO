@@ -67,7 +67,7 @@ export async function requireProfile(allowedProfiles: string[]) {
   const { data: dbUser } = await supabaseAdmin
     .from('system_users')
     .select('perfil, status')
-    .eq('id', queryId)
+    .or(`id.eq."${queryId}",auth_id.eq."${user.id}",email.eq."${user.email || ''}"`)
     .maybeSingle()
 
   const perfil = dbUser?.perfil || user.user_metadata?.perfil

@@ -66,6 +66,10 @@ export interface CurrentUser {
   foto?: string
   aluno_id?: string
   responsavel_id?: string
+  colaborador_id?: string
+  system_user_id?: string
+  hasDualRole?: boolean
+  user_metadata?: Record<string, any>
 }
 
 interface AppState {

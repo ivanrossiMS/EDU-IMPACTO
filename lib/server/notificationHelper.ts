@@ -254,15 +254,28 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       try {
         const { data: sysUsers } = await supabase
           .from('system_users')
-          .select('id, dados, email')
+          .select('id, auth_id, dados, email')
           .limit(5000)
 
         if (sysUsers && sysUsers.length > 0) {
           sysUsers.forEach((u: any) => {
+            const uId = String(u.id)
+            const suAuthId = u.auth_id ? String(u.auth_id) : ''
+            const suEmail = (u.email || '').toLowerCase().trim()
             const rId = u.dados?.responsavel_id || u.dados?.responsavelId
             const aId = u.dados?.aluno_id || u.dados?.alunoId
-            if ((rId && rawIds.includes(String(rId))) || (aId && rawIds.includes(String(aId)))) {
-              allResponsavelIds.add(String(u.id))
+
+            const matches = 
+              rawIds.includes(uId) ||
+              (suAuthId && rawIds.includes(suAuthId)) ||
+              (suEmail && rawIds.includes(suEmail)) ||
+              (rId && rawIds.includes(String(rId))) ||
+              (aId && rawIds.includes(String(aId)))
+
+            if (matches) {
+              allResponsavelIds.add(uId)
+              if (suAuthId) allResponsavelIds.add(suAuthId)
+              if (u.dados?.auth_id) allResponsavelIds.add(String(u.dados.auth_id))
             }
           })
         }
@@ -283,12 +296,51 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
 
 /**
  * Resolve os IDs de colaboradores para push direto.
- * Útil quando a notificação é endereçada diretamente a colaboradores,
- * sem necessidade de passar pelos responsáveis de alunos.
+ * Mapeia tanto system_users.id quanto auth_id (Auth UUID) para entrega OneSignal.
  */
 export async function getColaboradorIds(colaboradoresIds: string[]): Promise<string[]> {
   if (!colaboradoresIds || colaboradoresIds.length === 0) return []
-  return colaboradoresIds.map(String).filter(Boolean)
+  const finalIds = new Set<string>()
+  colaboradoresIds.forEach(id => {
+    const clean = String(id).replace(/^f_?/, '').trim()
+    if (clean) finalIds.add(clean)
+  })
+
+  try {
+    const supabase = supabaseServer
+    const { data: sysColabs } = await supabase
+      .from('system_users')
+      .select('id, auth_id, email, dados')
+      .limit(2000)
+
+    if (sysColabs && sysColabs.length > 0) {
+      sysColabs.forEach((su: any) => {
+        const suId = String(su.id)
+        const suAuthId = su.auth_id ? String(su.auth_id) : ''
+        const suEmail = (su.email || '').toLowerCase().trim()
+        const dadosAuthId = su.dados?.auth_id ? String(su.dados.auth_id) : ''
+        const dadosColabId = su.dados?.colaborador_id ? String(su.dados.colaborador_id) : ''
+
+        const matches = 
+          finalIds.has(suId) || 
+          (suAuthId && finalIds.has(suAuthId)) || 
+          (suEmail && finalIds.has(suEmail)) ||
+          (dadosAuthId && finalIds.has(dadosAuthId)) ||
+          (dadosColabId && finalIds.has(dadosColabId))
+
+        if (matches) {
+          finalIds.add(suId)
+          if (suAuthId) finalIds.add(suAuthId)
+          if (dadosAuthId) finalIds.add(dadosAuthId)
+          if (dadosColabId) finalIds.add(dadosColabId)
+        }
+      })
+    }
+  } catch (e) {
+    console.warn('[NotifHelper] Erro ao expandir getColaboradorIds:', e)
+  }
+
+  return Array.from(finalIds)
 }
 
 /**
@@ -487,7 +539,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         try {
           const { data: sysUsers } = await supabase
             .from('system_users')
-            .select('id, dados, email')
+            .select('id, auth_id, dados, email')
             .limit(5000)
 
           if (sysUsers && sysUsers.length > 0) {
@@ -501,6 +553,8 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
                   (aId && (alunoIdKey === aId || alunoIdKey.replace(/^0+/, '') === aId.replace(/^0+/, '')))
                 ) {
                   set.add(String(u.id))
+                  if (u.auth_id) set.add(String(u.auth_id))
+                  if (u.dados?.auth_id) set.add(String(u.dados.auth_id))
                 }
               })
             })
@@ -517,7 +571,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       }))
     }
 
-    // Mapear colaboradoresIds para incluir IDs de system_users e Auth UUIDs
+    // Mapear colaboradoresIds para incluir IDs de system_users e Auth UUIDs (OneSignal external_id)
     const finalColabIds = new Set<string>()
     colaboradoresIds.forEach(id => {
       const clean = String(id).replace(/^f_?/, '').trim()
@@ -528,15 +582,29 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       try {
         const { data: sysColabs } = await supabase
           .from('system_users')
-          .select('id, email, dados')
-          .limit(1000)
+          .select('id, auth_id, email, dados')
+          .limit(2000)
 
         if (sysColabs && sysColabs.length > 0) {
           sysColabs.forEach((su: any) => {
             const suId = String(su.id)
+            const suAuthId = su.auth_id ? String(su.auth_id) : ''
             const suEmail = (su.email || '').toLowerCase().trim()
-            if (finalColabIds.has(suId) || (suEmail && finalColabIds.has(suEmail))) {
+            const dadosAuthId = su.dados?.auth_id ? String(su.dados.auth_id) : ''
+            const dadosColabId = su.dados?.colaborador_id ? String(su.dados.colaborador_id) : ''
+
+            const matches = 
+              finalColabIds.has(suId) || 
+              (suAuthId && finalColabIds.has(suAuthId)) || 
+              (suEmail && finalColabIds.has(suEmail)) ||
+              (dadosAuthId && finalColabIds.has(dadosAuthId)) ||
+              (dadosColabId && finalColabIds.has(dadosColabId))
+
+            if (matches) {
               finalColabIds.add(suId)
+              if (suAuthId) finalColabIds.add(suAuthId)
+              if (dadosAuthId) finalColabIds.add(dadosAuthId)
+              if (dadosColabId) finalColabIds.add(dadosColabId)
             }
           })
         }

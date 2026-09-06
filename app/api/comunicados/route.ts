@@ -480,8 +480,8 @@ export async function POST(request: Request) {
                   title: `📢 Comunicado: ${row.titulo}`,
                   message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
                   targetUserIds: student.responsaveis_ids,
-                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar' }
+                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
                 }).catch(err => console.error("Push Error:", err))
               );
             }
@@ -495,8 +495,8 @@ export async function POST(request: Request) {
                 title: `📢 Comunicado: ${row.titulo}`,
                 message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
                 targetUserIds: directColaboradores,
-                targetUrl: '/agenda-digital/colaborador/comunicados',
-                metadata: { perfil_destino: 'colaborador' }
+                targetUrl: `/agenda-digital/colaborador/comunicados?id=${row.id}`,
+                metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'comunicados' }
               }).catch(err => console.error("Push Error Colab:", err))
             );
           }
@@ -578,8 +578,8 @@ export async function POST(request: Request) {
                 title: `📢 Comunicado: ${data.titulo}`,
                 message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
                 targetUserIds: student.responsaveis_ids,
-                targetUrl: `/agenda-digital/${student.aluno_id}/comunicados`,
-                metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar' }
+                targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
+                metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
               }).catch(err => console.error("Push Error:", err))
             );
           }
@@ -593,8 +593,8 @@ export async function POST(request: Request) {
               title: `📢 Comunicado: ${data.titulo}`,
               message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
               targetUserIds: directColaboradores,
-              targetUrl: '/agenda-digital/colaborador/comunicados',
-              metadata: { perfil_destino: 'colaborador' }
+              targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
+              metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'comunicados' }
             }).catch(err => console.error("Push Error Colab:", err))
           );
         }

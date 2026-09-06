@@ -11,8 +11,9 @@ export function useQueryComunicados(
   options?: { enabled?: boolean }
 ) {
   const { currentUser } = useApp()
+  const isEnabled = (options?.enabled !== false) && !!currentUser && !!fetchUrl
   const query = useInfiniteQuery({
-    queryKey: ['agenda', 'comunicados', fetchUrl],
+    queryKey: ['agenda', 'comunicados', fetchUrl, currentUser?.id || 'anon'],
     initialPageParam: 0,
     queryFn: async ({ pageParam = 0 }) => {
       if (!currentUser || !fetchUrl) return [] 
@@ -32,7 +33,7 @@ export function useQueryComunicados(
     gcTime: 1000 * 60 * 10, // 10 min na memória
     refetchOnWindowFocus: false, 
     refetchOnMount: false,
-    enabled: options?.enabled !== undefined ? options.enabled : (!!currentUser && !!fetchUrl)
+    enabled: isEnabled
   })
 
   return query
@@ -45,8 +46,9 @@ export function useQueryMomentos(
   options?: { enabled?: boolean }
 ) {
   const { currentUser } = useApp()
+  const isEnabled = (options?.enabled !== false) && !!currentUser && !!fetchUrl
   const query = useInfiniteQuery({
-    queryKey: ['agenda', 'momentos', fetchUrl],
+    queryKey: ['agenda', 'momentos', fetchUrl, currentUser?.id || 'anon'],
     initialPageParam: 0,
     queryFn: async ({ pageParam = 0 }) => {
       if (!currentUser || !fetchUrl) return [] 
@@ -66,7 +68,7 @@ export function useQueryMomentos(
     gcTime: 1000 * 60 * 10,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    enabled: options?.enabled !== undefined ? options.enabled : (!!currentUser && !!fetchUrl)
+    enabled: isEnabled
   })
 
   return query

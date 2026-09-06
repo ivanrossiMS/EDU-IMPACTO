@@ -42,7 +42,7 @@ async function fetchLoggedUserAccessStartDate(user: any, strictMomentos: boolean
     const { data: dbUser } = await adminClient
       .from('system_users')
       .select('perfil, cargo, created_at, dados')
-      .eq('id', userId)
+      .or(`id.eq."${userId}",auth_id.eq."${userId}",email.eq."${email}"`)
       .maybeSingle()
 
     const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''
