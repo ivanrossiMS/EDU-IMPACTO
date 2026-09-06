@@ -36,11 +36,37 @@ export async function GET(request: Request) {
 
   // Fetch the latest profile data from system_users to ensure it is always up to date
   const supabaseAdmin = getAdminClient();
+  const searchOrs = [`id.eq."${user.id}"`, `dados->>auth_id.eq."${user.id}"`];
+  if (user.email) searchOrs.push(`email.eq."${user.email}"`);
+
   const { data: dbUser } = await supabaseAdmin
     .from('system_users')
     .select('*')
-    .eq('id', user.id)
+    .or(searchOrs.join(','))
+    .limit(1)
     .maybeSingle();
+
+  let resolvedResponsavelId = dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '';
+  let hasDualRole = false;
+
+  if (!resolvedResponsavelId && user.email) {
+    const { data: respFound } = await supabaseAdmin
+      .from('responsaveis')
+      .select('id')
+      .ilike('email', user.email)
+      .limit(1);
+    if (respFound && respFound.length > 0) {
+      resolvedResponsavelId = String(respFound[0].id);
+      hasDualRole = true;
+      // Atualiza system_users.dados em background para persistência
+      if (dbUser && !dbUser.dados?.responsavel_id) {
+        const updatedDados = { ...(dbUser.dados || {}), responsavel_id: resolvedResponsavelId };
+        Promise.resolve(supabaseAdmin.from('system_users').update({ dados: updatedDados }).eq('id', dbUser.id)).catch(() => {});
+      }
+    }
+  } else if (resolvedResponsavelId) {
+    hasDualRole = true;
+  }
 
   // Combine top-level auth data (id, email) with user_metadata and database fields
   const userData = {
@@ -51,8 +77,9 @@ export async function GET(request: Request) {
     perfil: dbUser?.perfil || user.user_metadata?.perfil,
     cargo: dbUser?.cargo || user.user_metadata?.cargo,
     status: dbUser?.status || 'ativo',
-    responsavel_id: dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '',
+    responsavel_id: resolvedResponsavelId,
     aluno_id: dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
+    hasDualRole: hasDualRole || !!resolvedResponsavelId,
   };
 
   return NextResponse.json({ user: userData, ip }, {

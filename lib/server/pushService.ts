@@ -71,17 +71,19 @@ async function attemptSend(
     }
 
     if (response.ok) {
-      const recipientCount = parsedBody.recipients ?? parsedBody.num_recipients ?? 0
-      const notificationId = parsedBody.id || 'N/A'
+      const notificationId = parsedBody.id || ''
+      const allUnsubscribed = Array.isArray(parsedBody.errors) && parsedBody.errors.includes('All included players are not subscribed')
+      const hasSubscribers = notificationId.length > 0 && !allUnsubscribed
+      const recipientCount = parsedBody.recipients ?? parsedBody.num_recipients ?? (hasSubscribers ? 1 : 0)
 
-      if (recipientCount === 0) {
+      if (!hasSubscribers) {
         console.warn(`⚠️ [PushService] OneSignal aceitou a requisição (200 OK), porém 0 destinatários inscritos (Recipients: 0).`, {
-          id: notificationId,
+          id: notificationId || 'N/A',
           targetCount: payload.include_aliases?.external_id?.length || payload.include_external_user_ids?.length || 0,
           errors: parsedBody.errors || null,
         })
       } else {
-        console.log(`✅ [PushService] Push entregue com sucesso! ID: ${notificationId} | Destinatários ativos: ${recipientCount}`)
+        console.log(`✅ [PushService] Push aceito pelo OneSignal com sucesso! ID: ${notificationId} | Subscritos: ${recipientCount}`)
       }
       return { success: true, data: parsedBody, statusCode: response.status, recipients: recipientCount }
     }
@@ -191,6 +193,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
       external_id: params.targetUserIds,
       responsavel_id: params.targetUserIds,
       aluno_id: params.targetUserIds,
+      system_user_id: params.targetUserIds,
     },
     target_channel: 'push',
   }

@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
     if (userType === 'system_user') {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
-        .select('id, nome, email, cargo, perfil, status')
+        .select('id, nome, email, cargo, perfil, status, dados')
         .eq('email', resolvedEmail)
         .limit(1)
 
@@ -251,13 +251,33 @@ export async function POST(request: NextRequest) {
         cargo  = dbSystemUser.cargo  || cargo
         perfil = dbSystemUser.perfil || perfil
         
-        // Verifica papel duplo para colaboradores rapidamente
-        const { data: respFound } = await supabaseAdmin
-          .from('responsaveis')
-          .select('id')
-          .eq('email', resolvedEmail)
-          .limit(1)
-        if (respFound && respFound.length > 0) hasDualRole = true
+        // Verifica papel duplo para colaboradores (acesso institucional + familiar)
+        let respIdFound = dbSystemUser.dados?.responsavel_id || ''
+        if (!respIdFound) {
+          const { data: respFound } = await supabaseAdmin
+            .from('responsaveis')
+            .select('id')
+            .ilike('email', resolvedEmail)
+            .limit(1)
+          if (respFound && respFound.length > 0) {
+            respIdFound = String(respFound[0].id)
+          }
+        }
+        if (respIdFound) {
+          hasDualRole = true
+          responsavel_id = String(respIdFound)
+        }
+        // Sincroniza em system_users.dados para persistência de longo prazo
+        const needsRespSync = respIdFound && !dbSystemUser.dados?.responsavel_id
+        const needsAuthSync = user?.id && dbSystemUser.dados?.auth_id !== user.id
+        if (needsRespSync || needsAuthSync) {
+          const updatedDados = { 
+            ...(dbSystemUser.dados || {}), 
+            ...(respIdFound ? { responsavel_id: String(respIdFound) } : {}),
+            ...(user?.id ? { auth_id: user.id } : {})
+          }
+          Promise.resolve(supabaseAdmin.from('system_users').update({ dados: updatedDados }).eq('id', dbSystemUser.id)).catch(() => {})
+        }
       }
     } else if (userType === 'responsavel' && responsavelRecord) {
       dbRecordExists = true
@@ -315,7 +335,14 @@ export async function POST(request: NextRequest) {
     const enrichedUser = {
       ...user,
       hasDualRole,
-      user_metadata: { ...user?.user_metadata, ...userMetadataUpdate }
+      responsavel_id: responsavel_id || user?.user_metadata?.responsavel_id || '',
+      aluno_id: aluno_id || user?.user_metadata?.aluno_id || '',
+      user_metadata: { 
+        ...user?.user_metadata, 
+        ...userMetadataUpdate,
+        ...(responsavel_id ? { responsavel_id } : {}),
+        ...(aluno_id ? { aluno_id } : {})
+      }
     }
 
     try {

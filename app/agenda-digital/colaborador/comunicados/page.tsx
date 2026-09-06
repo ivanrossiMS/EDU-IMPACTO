@@ -169,16 +169,17 @@ function ColaboradorComunicadosContent() {
   }, [colaboradores, effectiveUser]);
 
   const userGroups = useMemo(() => {
-    if (!effectiveColabId) return [];
+    if (!effectiveColabId && !effectiveUser?.id) return [];
+    const myIds = [effectiveColabId, effectiveUser?.id, (effectiveUser as any)?.system_user_id].filter(Boolean).map(id => String(id).replace(/^f_?/, '').trim());
     return (chatGroups || []).filter((g: any) => {
-      let colabs = g.colaboradoresIds;
+      let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds;
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
       }
       if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
+      return colabs.some((id: any) => myIds.includes(String(id).replace(/^f_?/, '').trim()));
     });
-  }, [chatGroups, effectiveColabId]);
+  }, [chatGroups, effectiveColabId, effectiveUser]);
 
   const turmaOptions = useMemo(() => {
     if (!effectiveUser?.id) return [];
@@ -284,8 +285,10 @@ function ColaboradorComunicadosContent() {
         dataAgendamento: dataAgendamento || null,
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
+        turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
+        gruposIds: selectedDest.filter(d => d.type === 'grupo').map(d => String(d.id).replace(/^g_?/, '')),
         funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
         destino: 'selecionados'
       };
@@ -312,8 +315,10 @@ function ColaboradorComunicadosContent() {
         autorId: effectiveUser?.id || '',
         autorFoto: effectiveUser?.foto || null,
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
+        turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
+        gruposIds: selectedDest.filter(d => d.type === 'grupo').map(d => String(d.id).replace(/^g_?/, '')),
         funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
         destino: 'selecionados',
         prioridade: 'normal',
@@ -847,14 +852,15 @@ function ColaboradorComunicadosContent() {
           const cargoStr = effectiveUser?.cargo || ''; 
           const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
           const myTurmaNames = feedTurmaOptions.map((t: any) => t.nome);
+          const myColabIds = [effectiveColabId, effectiveUser?.id, (effectiveUser as any)?.system_user_id].filter(Boolean).map(id => String(id).replace(/^f_?/, '').trim());
           const myGroups = (chatGroups || []).filter((g: any) => {
-            let colabs = g.colaboradoresIds;
+            let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds;
             if (typeof colabs === 'string') {
               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
             }
             if (!Array.isArray(colabs)) colabs = [];
-            return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
-          }).map((g: any) => g.nome);
+            return colabs.some((id: any) => myColabIds.includes(String(id).replace(/^f_?/, '').trim()));
+          }).map((g: any) => g.nome || g.dados?.nome).filter(Boolean);
 
           // Deduplicar por id — previne "Encountered two children with the same key"
           // causado pela atualização otimística (setComunicadosLocally) sobreposta ao
@@ -877,7 +883,7 @@ function ColaboradorComunicadosContent() {
             const targetGrupos = c.grupos || (c.dados?.grupos) || [];
             const targetTurmas = c.turmas || (c.dados?.turmas) || [];
             
-            const inFuncs = targetFuncs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
+            const inFuncs = targetFuncs.some((id: any) => myColabIds.includes(String(id).replace(/^f_?/, '').trim()));
             const inGrupos = targetGrupos.some((g: string) => myGroups.some((m: string) => String(m).toLowerCase().trim() === String(g).toLowerCase().trim()));
             const inTurmas = targetTurmas.some((t: string) => myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === String(t).toLowerCase().trim()));
             

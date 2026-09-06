@@ -131,6 +131,24 @@ function _buildTargetUrl(targetUrl: string, itemId: string): string {
 }
 
 /**
+ * Normaliza o título da notificação push para comunicados, garantindo
+ * que prefixos como "Comunicado escolar", "Comunicado institucional", "📢 Comunicado: xxx" ou variações
+ * sejam sempre formatados estritamente como 'Comunicado: "Título do comunicado"'.
+ */
+export function formatComunicadoPushTitle(rawTitle?: string): string {
+  if (!rawTitle) return 'Comunicado';
+  let clean = rawTitle.trim();
+  clean = clean.replace(/^[📢\s]+/, '');
+  clean = clean.replace(/^comunicado(\s+(institucional|interno|escolar))?(\s*[:\-\–]\s*|\s+)/i, '');
+  clean = clean.replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
+  const lower = clean.toLowerCase();
+  if (!clean || lower === 'institucional' || lower === 'interno' || lower === 'escolar' || lower === 'comunicado') {
+    return 'Comunicado';
+  }
+  return `Comunicado: "${clean}"`;
+}
+
+/**
  * Envia uma notificação push para os usuários da Agenda Digital.
  * Controla duplicidade por itemId + type via:
  *   1. Cache em memória (rápido, protege contra hot-reload e chamadas paralelas)
@@ -148,6 +166,7 @@ export async function sendAgendaPushNotification({
   metadata,
   sendAfter,
 }: SendAgendaPushParams): Promise<PushResult> {
+  const finalTitle = type === 'comunicados' ? formatComunicadoPushTitle(title) : title
   const dedupKey = metadata?.aluno_id ? `${itemId}_${metadata.aluno_id}` : itemId
   const logPrefix = `[Push Central][${type}][${itemId}]`
 
@@ -223,7 +242,7 @@ export async function sendAgendaPushNotification({
         user_id: senderUserId || null,
         type,
         item_id: dedupKey,
-        title,
+        title: finalTitle,
         message,
         target_url: targetUrl,
         target_count: cleanTargetIds.length,
@@ -248,7 +267,7 @@ export async function sendAgendaPushNotification({
     const fullUrl = _buildTargetUrl(targetUrl, itemId)
 
     const pushResponse = await sendPushNotification({
-      title,
+      title: finalTitle,
       body: message,
       targetUserIds: cleanTargetIds,
       url: fullUrl,

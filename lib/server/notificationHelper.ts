@@ -252,6 +252,18 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     const rawIds = Array.from(allResponsavelIds)
     if (rawIds.length > 0) {
       try {
+        // 1. Coletar e-mails dos responsáveis vinculados aos alvos
+        const numericRespIds = rawIds.filter(id => /^\d+$/.test(id))
+        const respEmailToIdMap = new Map<string, string>()
+        if (numericRespIds.length > 0) {
+          const respRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email', 'id', numericRespIds)
+          respRows.forEach((r: any) => {
+            if (r.email) {
+              respEmailToIdMap.set(String(r.email).toLowerCase().trim(), String(r.id))
+            }
+          })
+        }
+
         const { data: sysUsers } = await supabase
           .from('system_users')
           .select('id, dados, email')
@@ -259,10 +271,18 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
 
         if (sysUsers && sysUsers.length > 0) {
           sysUsers.forEach((u: any) => {
-            const rId = u.dados?.responsavel_id || u.dados?.responsavelId
-            const aId = u.dados?.aluno_id || u.dados?.alunoId
-            if ((rId && rawIds.includes(String(rId))) || (aId && rawIds.includes(String(aId)))) {
+            const rId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
+            const aId = String(u.dados?.aluno_id || u.dados?.alunoId || '').trim()
+            const uEmail = String(u.email || '').toLowerCase().trim()
+
+            const matchByDados = (rId && rawIds.includes(rId)) || (aId && rawIds.includes(aId))
+            const matchByEmail = uEmail && respEmailToIdMap.has(uEmail)
+
+            if (matchByDados || matchByEmail) {
               allResponsavelIds.add(String(u.id))
+              if (u.dados?.auth_id) {
+                allResponsavelIds.add(String(u.dados.auth_id))
+              }
             }
           })
         }
@@ -343,11 +363,11 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       // Adicionar turmas e grupos
       if (allGroupTerms.length > 0) {
         // 1. Resolver grupos na tabela agenda_grupos
-        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, dados')
+        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, nome, dados')
         if (!gruposError && allGrupos) {
           const matchedGrupos = allGrupos.filter(g => {
             const gId = String(g.id).toLowerCase()
-            const gNome = String(g.dados?.nome || '').toLowerCase()
+            const gNome = String((g as any).nome || g.dados?.nome || '').toLowerCase()
             return allGroupTerms.some(term => {
               const tl = term.toLowerCase().trim()
               return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
@@ -356,18 +376,34 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           
           let grupoAlunosIds: string[] = []
           matchedGrupos.forEach(g => {
-            const list = g.dados?.alunosIds || [];
+            const list = g.dados?.alunosIds || (g as any).alunosIds || [];
             list.forEach((aId: string) => {
               const cleanId = aId.replace(/^(a_|_ALU)/, '')
               if (cleanId) grupoAlunosIds.push(cleanId)
             })
 
-            let colabs = g.dados?.colaboradoresIds || [];
+            let colabs = g.dados?.colaboradoresIds || (g as any).colaboradoresIds || [];
             if (typeof colabs === 'string') {
               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
             }
             if (Array.isArray(colabs)) {
               colabs.forEach((c: any) => colaboradoresIds.push(String(c)));
+            }
+
+            let funcs = g.dados?.funcionariosIds || [];
+            if (typeof funcs === 'string') {
+              try { funcs = JSON.parse(funcs); } catch(e) { funcs = []; }
+            }
+            if (Array.isArray(funcs)) {
+              funcs.forEach((f: any) => colaboradoresIds.push(String(f)));
+            }
+
+            let equipes = g.dados?.equipesIds || [];
+            if (typeof equipes === 'string') {
+              try { equipes = JSON.parse(equipes); } catch(e) { equipes = []; }
+            }
+            if (Array.isArray(equipes)) {
+              equipes.forEach((eq: any) => colaboradoresIds.push(String(eq)));
             }
           })
 
@@ -482,6 +518,18 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
       if (rawIdsArray.length > 0) {
         try {
+          // 1. Coletar e-mails dos responsáveis vinculados aos alunos
+          const numericRespIds = rawIdsArray.filter(id => /^\d+$/.test(id))
+          const respEmailToIdMap = new Map<string, string>()
+          if (numericRespIds.length > 0) {
+            const respRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email', 'id', numericRespIds)
+            respRows.forEach((r: any) => {
+              if (r.email) {
+                respEmailToIdMap.set(String(r.email).toLowerCase().trim(), String(r.id))
+              }
+            })
+          }
+
           const { data: sysUsers } = await supabase
             .from('system_users')
             .select('id, dados, email')
@@ -491,13 +539,18 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             sysUsers.forEach((u: any) => {
               const rId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
               const aId = String(u.dados?.aluno_id || u.dados?.alunoId || '').trim()
+              const uEmail = String(u.email || '').toLowerCase().trim()
+              const mappedRespIdFromEmail = uEmail ? respEmailToIdMap.get(uEmail) : undefined
               
               mapResponsaveis.forEach((set, alunoIdKey) => {
-                if (
-                  (rId && set.has(rId)) ||
-                  (aId && (alunoIdKey === aId || alunoIdKey.replace(/^0+/, '') === aId.replace(/^0+/, '')))
-                ) {
+                const matchByDados = (rId && set.has(rId)) || (aId && (alunoIdKey === aId || alunoIdKey.replace(/^0+/, '') === aId.replace(/^0+/, '')))
+                const matchByEmail = mappedRespIdFromEmail && set.has(mappedRespIdFromEmail)
+
+                if (matchByDados || matchByEmail) {
                   set.add(String(u.id))
+                  if (u.dados?.auth_id) {
+                    set.add(String(u.dados.auth_id))
+                  }
                 }
               })
             })
@@ -514,9 +567,64 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       }))
     }
 
+    // ── Resolução Completa de Colaboradores (Duplo Papel & Mapeamento para Auth ID) ──
+    const resolvedDirectColaboradores = new Set<string>()
+    const rawCleanColabIds = Array.from(
+      new Set(
+        colaboradoresIds
+          .map(id => String(id).replace(/^(f_|_COLAB)/, '').trim())
+          .filter(Boolean)
+      )
+    )
+
+    if (rawCleanColabIds.length > 0 || isTodos) {
+      try {
+        const { data: allSysUsers, error: colabErr } = await supabase
+          .from('system_users')
+          .select('id, email, dados, status')
+          .limit(1000)
+
+        if (!colabErr && allSysUsers) {
+          const colabEmailsToFetch: string[] = []
+          
+          allSysUsers.forEach((u: any) => {
+            const uId = String(u.id || '').trim()
+            const uAuthId = String(u.dados?.auth_id || '').trim()
+            const uRespId = String(u.dados?.responsavel_id || '').trim()
+            const uEmail = String(u.email || '').toLowerCase().trim()
+            
+            const isMatch = isTodos 
+              ? (u.status !== 'inativo')
+              : (rawCleanColabIds.includes(uId) || (uAuthId && rawCleanColabIds.includes(uAuthId)))
+
+            if (isMatch) {
+              if (uId) resolvedDirectColaboradores.add(uId)
+              if (uAuthId) resolvedDirectColaboradores.add(uAuthId)
+              if (uRespId) resolvedDirectColaboradores.add(uRespId)
+              if (uEmail) colabEmailsToFetch.push(uEmail)
+            }
+          })
+
+          // Para os colaboradores encontrados, se tiverem e-mail, buscar vínculos em responsaveis
+          if (colabEmailsToFetch.length > 0) {
+            const respRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email', 'email', colabEmailsToFetch)
+            respRows.forEach((r: any) => {
+              if (r.id) resolvedDirectColaboradores.add(String(r.id))
+            })
+          }
+        }
+
+        // Também garantir que os IDs originais fornecidos estejam presentes
+        rawCleanColabIds.forEach(id => resolvedDirectColaboradores.add(id))
+      } catch (colabError) {
+        console.warn('[NotifHelper] Erro ao resolver directColaboradores:', colabError)
+        rawCleanColabIds.forEach(id => resolvedDirectColaboradores.add(id))
+      }
+    }
+
     return {
       students: studentsResult,
-      directColaboradores: Array.from(new Set(colaboradoresIds))
+      directColaboradores: Array.from(resolvedDirectColaboradores)
     }
   } catch (err: any) {
     console.error('[NotifHelper] Erro em getStudentTargetsForComunicados:', err.message)
@@ -540,15 +648,61 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
     // Se o próprio aluno estiver logado
     if (cleanAuthId === cleanAlunoId) return true;
     
-    // Verifica na tabela aluno_responsavel (pode ser authUserId ou o responsavel_id vindo do metadata)
+    // 1. Verifica direto na tabela aluno_responsavel (pode ser authUserId ou o responsavel_id vindo do metadata)
     const { data, error } = await supabase
       .from('aluno_responsavel')
-      .select('id')
+      .select('id, responsavel_id')
       .eq('aluno_id', cleanAlunoId)
       .or(`responsavel_id.eq."${cleanAuthId}",responsavel_id.eq."${authUserId}"`)
       .maybeSingle();
       
     if (!error && data) return true;
+
+    // 2. Se for um colaborador de system_users com acesso duplo, valida vínculo pelo e-mail ou dados
+    const { data: sysUser } = await supabase
+      .from('system_users')
+      .select('email, dados')
+      .or(`id.eq."${cleanAuthId}",id.eq."${authUserId}",dados->>auth_id.eq."${cleanAuthId}",dados->>auth_id.eq."${authUserId}"`)
+      .maybeSingle();
+
+    let userEmail = sysUser?.email;
+    let respIdInDados = sysUser?.dados?.responsavel_id || sysUser?.dados?.responsavelId;
+
+    if (!userEmail) {
+      const { data: authUser } = await supabase.auth.admin.getUserById(authUserId).catch(() => ({ data: { user: null } }));
+      if (authUser?.user) {
+        userEmail = authUser.user.email;
+        respIdInDados = respIdInDados || authUser.user.user_metadata?.responsavel_id;
+      }
+    }
+
+    if (respIdInDados) {
+      const { data: linkByDados } = await supabase
+        .from('aluno_responsavel')
+        .select('id')
+        .eq('aluno_id', cleanAlunoId)
+        .eq('responsavel_id', String(respIdInDados))
+        .maybeSingle();
+      if (linkByDados) return true;
+    }
+
+    if (userEmail) {
+      const { data: respByEmail } = await supabase
+        .from('responsaveis')
+        .select('id')
+        .ilike('email', userEmail);
+      
+      if (respByEmail && respByEmail.length > 0) {
+        const respIds = respByEmail.map((r: any) => String(r.id));
+        const { data: linkByEmail } = await supabase
+          .from('aluno_responsavel')
+          .select('id')
+          .eq('aluno_id', cleanAlunoId)
+          .in('responsavel_id', respIds)
+          .maybeSingle();
+        if (linkByEmail) return true;
+      }
+    }
     
     return false;
   } catch (err) {

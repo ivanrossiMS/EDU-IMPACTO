@@ -3,7 +3,7 @@ import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { requireAuth } from '@/lib/server/authGuard'
-import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
+import { sendAgendaPushNotification, formatComunicadoPushTitle } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
@@ -200,17 +200,36 @@ export async function GET(request: Request) {
     query = query.or(conditions.join(','));
   } else if (!isAdmin && !isFamilyOrStudent) {
     // Colaborador sem aluno_id: garante que comunicados direcionados diretamente a ele apareçam.
+    const userColaboradorIds = [user.id];
+    const { data: mySysUser } = await supabase
+      .from('system_users')
+      .select('id, email, dados')
+      .or(`id.eq."${user.id}",dados->>auth_id.eq."${user.id}",email.ilike."${user.email}"`)
+      .maybeSingle();
+
+    if (mySysUser) {
+      if (mySysUser.id && !userColaboradorIds.includes(mySysUser.id)) {
+        userColaboradorIds.push(mySysUser.id);
+      }
+      if (mySysUser.dados?.auth_id && !userColaboradorIds.includes(mySysUser.dados.auth_id)) {
+        userColaboradorIds.push(mySysUser.dados.auth_id);
+      }
+    }
+
     const colaboradorConditions = [
       `destino.eq.todos`,
-      `dados->"funcionariosIds".cs.["${user.id}"]`,
-      `dados->"colaboradoresIds".cs.["${user.id}"]`,
-      `dados->>autorId.eq.${user.id}`
+      ...userColaboradorIds.flatMap(uId => [
+        `dados->"funcionariosIds".cs.["${uId}"]`,
+        `dados->"colaboradoresIds".cs.["${uId}"]`,
+        `dados->>autorId.eq.${uId}`
+      ])
     ];
     
     // Identificar turmas e grupos que o colaborador leciona para injetar no filtro
+    const groupFilter = userColaboradorIds.map(uId => `dados->colaboradoresIds.cs.["${uId}"]`).join(',');
     const { data: myGroups } = await supabase.from('agenda_grupos')
       .select('id, dados')
-      .contains('dados->colaboradoresIds', `["${user.id}"]`);
+      .or(groupFilter);
       
     if (myGroups && myGroups.length > 0) {
       const isGlobal = myGroups.some(g => (g.dados?.isGlobalAccess === true || g.dados?.isGlobalAccess === 'true' || g.dados?.isGlobalAccess === 1) && (!g.dados?.ano && !g.dados?.anoLetivo));
@@ -423,7 +442,7 @@ export async function POST(request: Request) {
                 sendAgendaPushNotification({
                   type: 'comunicados',
                   itemId: String(row.id),
-                  title: `📢 Comunicado: ${row.titulo}`,
+                  title: formatComunicadoPushTitle(row.titulo),
                   message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: '/agenda-digital/comunicados',
@@ -438,7 +457,7 @@ export async function POST(request: Request) {
               sendAgendaPushNotification({
                 type: 'comunicados',
                 itemId: String(row.id),
-                title: `📢 Comunicado: ${row.titulo}`,
+                title: formatComunicadoPushTitle(row.titulo),
                 message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
                 targetUserIds: directColaboradores,
                 targetUrl: '/agenda-digital/comunicados'
@@ -519,7 +538,7 @@ export async function POST(request: Request) {
               sendAgendaPushNotification({
                 type: 'comunicados',
                 itemId: String(data.id),
-                title: `📢 Comunicado: ${data.titulo}`,
+                title: formatComunicadoPushTitle(data.titulo),
                 message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
                 targetUserIds: student.responsaveis_ids,
                 targetUrl: '/agenda-digital/comunicados',
@@ -534,7 +553,7 @@ export async function POST(request: Request) {
             sendAgendaPushNotification({
               type: 'comunicados',
               itemId: String(data.id),
-              title: `📢 Comunicado: ${data.titulo}`,
+              title: formatComunicadoPushTitle(data.titulo),
               message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
               targetUserIds: directColaboradores,
               targetUrl: '/agenda-digital/comunicados'
