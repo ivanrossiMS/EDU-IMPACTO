@@ -387,6 +387,9 @@ export default function ADMomentosPage() {
   
   const meusMomentos = React.useMemo(() => {
     return momentosFeed.filter(m => {
+      // Se queryId foi passado na URL (deep link direto), SEMPRE incluir o momento selecionado
+      if (queryId && String(m.id).trim() === String(queryId).trim()) return true
+
       const targetClasses = m.targetClasses || []
       const targetAlunos = m.alunosIds || []
       const targetFuncs = m.funcionariosIds || m.dados?.funcionariosIds || []

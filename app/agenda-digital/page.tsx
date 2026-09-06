@@ -26,47 +26,71 @@ function AgendaDigitalIndexContent() {
     // Prevent execution if user is not loaded
     if (!currentUserPerfil || !currentUser) return;
 
-    const isAdmin = ADMIN_PERFIS.includes(currentUserPerfil)
-    const redirect = searchParams.get('redirect') || 'comunicados'
+    const perfil = String(currentUserPerfil || currentUser?.perfil || '').toLowerCase().trim()
+    const cargo = String(currentUser?.cargo || '').toLowerCase().trim()
+    const isFamilyOrStudent =
+      perfil === 'família' ||
+      perfil === 'familia' ||
+      perfil === 'responsável' ||
+      perfil === 'responsavel' ||
+      perfil === 'aluno' ||
+      cargo === 'responsável' ||
+      cargo === 'responsavel' ||
+      cargo === 'aluno'
+
+    const redirect = searchParams.get('redirect')
     const paramStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
-    
-    if (isAdmin) {
+
+    // Se for colaborador ou administrador:
+    if (!isFamilyOrStudent) {
+      if (redirect) {
+        // Notificação ou deep link institucional direto: NUNCA parar em tela de seleção!
+        router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`)
+        return
+      }
+
+      const isAdmin = ADMIN_PERFIS.includes(currentUserPerfil)
       if (currentUserPerfil === 'Diretor Geral' || currentUser?.cargo === 'Administrador Master') {
         router.replace('/agenda-digital/selecionar-perfil-admin')
+      } else if (isAdmin) {
+        router.replace('/agenda-digital/admin')
       } else {
-        router.replace(searchParams.get('redirect') ? `/agenda-digital/admin/${searchParams.get('redirect')}` : '/agenda-digital/admin')
+        router.replace('/agenda-digital/colaborador/comunicados')
       }
-    } else {
-      const fetchSecureStudents = async () => {
-        try {
-          // Fast path para alunos que já tem o ID na sessão
-          if (currentUser?.cargo === 'Aluno') {
-             const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id;
-             if (directAlunoId) {
-               router.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`);
-               return;
-             }
-          }
-
-          // Slow path seguro via API do backend (checa user_id ou vínculos)
-          const url = `/api/agenda/meus-alunos`;
-          const res = await fetch(url, { credentials: 'include', cache: 'no-store' });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length === 1 && data[0].id) {
-              router.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
-              return;
-            }
-          }
-          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
-        } catch (e) {
-          console.error('Erro ao buscar alunos:', e);
-          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
-        }
-      };
-
-      fetchSecureStudents();
+      return
     }
+
+    // Se for família ou aluno:
+    const targetSection = redirect || 'comunicados'
+    const fetchSecureStudents = async () => {
+      try {
+        // Fast path para alunos que já tem o ID na sessão
+        if (currentUser?.cargo === 'Aluno') {
+          const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id
+          if (directAlunoId) {
+            router.replace(`/agenda-digital/${directAlunoId}/${targetSection}${paramStr}`)
+            return
+          }
+        }
+
+        // Slow path seguro via API do backend (checa user_id ou vínculos)
+        const url = `/api/agenda/meus-alunos`
+        const res = await fetch(url, { credentials: 'include', cache: 'no-store' })
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data) && data.length === 1 && data[0].id) {
+            router.replace(`/agenda-digital/${data[0].id}/${targetSection}${paramStr}`)
+            return
+          }
+        }
+        router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
+      } catch (e) {
+        console.error('Erro ao buscar alunos:', e)
+        router.replace(`/agenda-digital/selecionar-aluno${paramStr}`)
+      }
+    }
+
+    fetchSecureStudents()
   }, [currentUserPerfil, currentUser, router, searchParams])
 
   return (

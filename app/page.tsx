@@ -47,8 +47,30 @@ export default function Root() {
     // 3. No ambiente nativo do celular (Capacitor), o app é dedicado à Agenda Digital
     const isNative = Capacitor.isNativePlatform()
     if (isNative) {
-      import('@capacitor/app').then(async ({ App }) => {
+      const checkPending = () => {
+        if (typeof window === 'undefined') return false
+        const pending =
+          sessionStorage.getItem('pending_deep_link') ||
+          localStorage.getItem('pending_deep_link') ||
+          (window as any).__PENDING_DEEP_LINK__
+        if (pending) {
+          sessionStorage.removeItem('pending_deep_link')
+          localStorage.removeItem('pending_deep_link')
+          delete (window as any).__PENDING_DEEP_LINK__
+          console.log('[Root] Navegando imediatamente para deep link pendente:', pending)
+          window.location.replace(pending)
+          return true
+        }
+        return false
+      }
+
+      if (checkPending()) return
+
+      const executeDefaultNavigation = async () => {
+        if (checkPending()) return
+
         try {
+          const { App } = await import('@capacitor/app')
           const launch = await App.getLaunchUrl()
           if (launch?.url) {
             const parsed = extractAppPath(launch.url)
@@ -59,6 +81,8 @@ export default function Root() {
             }
           }
         } catch (e) {}
+
+        if (checkPending()) return
 
         if (isFamilyOrStudent) {
           if (cargo === 'Aluno' && currentUser.aluno_id) {
@@ -71,14 +95,10 @@ export default function Root() {
         } else {
           router.replace('/agenda-digital/colaborador/comunicados')
         }
-      }).catch(() => {
-        if (isFamilyOrStudent) {
-          router.replace('/agenda-digital/selecionar-aluno')
-        } else {
-          router.replace('/agenda-digital/colaborador/comunicados')
-        }
-      })
-      return
+      }
+
+      const coldStartTimer = setTimeout(executeDefaultNavigation, 250)
+      return () => clearTimeout(coldStartTimer)
     }
 
     // 4. No navegador desktop:

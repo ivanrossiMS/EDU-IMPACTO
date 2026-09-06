@@ -311,10 +311,25 @@ export default function ADCalendarioPage() {
 
   const getDateStr = (d: number) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 
+  // Limpeza de ID para deep link (suporta -reminder e -all-students)
+  const queryId = searchParams?.get('id')
+  const cleanQueryId = useMemo(() => {
+    if (!queryId) return null
+    return String(queryId)
+      .replace(/-all-students-reminder$/, '')
+      .replace(/-all-students$/, '')
+      .replace(/-reminder$/, '')
+      .trim()
+  }, [queryId])
+
   // Filter events targeted to this student's class
-  
   const eventosFiltrados = useMemo(() => {
     return (eventosAgenda || []).filter(e => {
+      // Se queryId foi passado na URL (deep link direto), SEMPRE incluir o evento selecionado
+      if (cleanQueryId && (String(e.id).trim() === cleanQueryId || String(e.id).trim() === String(queryId).trim())) {
+        return true
+      }
+
       if (filtroTipo !== 'todos' && e.tipo !== filtroTipo) return false
 
       const isParaMim = (e as any).visibilidadeUsuario && effectiveUser?.nome && String((e as any).visibilidadeUsuario).toLowerCase().trim() === String(effectiveUser.nome).toLowerCase().trim()
@@ -381,19 +396,20 @@ export default function ADCalendarioPage() {
 
       return false
     })
-  }, [eventosAgenda, filtroTipo, activeTurmas, chatGroups, effectiveUser, selectedAno])
-
+  }, [eventosAgenda, filtroTipo, activeTurmas, chatGroups, effectiveUser, selectedAno, cleanQueryId, queryId])
 
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
   const selectedEvents = selectedDay ? eventosPorDia(selectedDay) : []
 
   // Auto-foco e scroll no evento se queryId estiver presente (deep link direto)
-  const queryId = searchParams?.get('id')
   const hasScrolledToEvent = useRef(false)
   useEffect(() => {
-    if (!queryId || !eventosAgenda || eventosAgenda.length === 0 || hasScrolledToEvent.current) return
+    if (!cleanQueryId || !eventosAgenda || eventosAgenda.length === 0 || hasScrolledToEvent.current) return
 
-    const target = eventosAgenda.find((e: any) => String(e.id) === String(queryId))
+    const target = eventosAgenda.find((e: any) =>
+      String(e.id).trim() === cleanQueryId ||
+      String(e.id).trim() === String(queryId).trim()
+    )
     if (target && target.data) {
       const parts = target.data.split('-')
       if (parts.length === 3) {
@@ -402,10 +418,11 @@ export default function ADCalendarioPage() {
         setViewDate(new Date(evYear, evMonth, 1))
         setSelectedDay(target.data)
         setFiltroTipo('todos')
+        setSelectedTurmaId('all')
         hasScrolledToEvent.current = true
 
         setTimeout(() => {
-          const el = document.getElementById(`evento-${queryId}`)
+          const el = document.getElementById(`evento-${target.id}`) || document.getElementById(`evento-${queryId}`)
           if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' })
             el.style.transition = 'box-shadow 0.4s ease, transform 0.4s ease'
@@ -417,7 +434,7 @@ export default function ADCalendarioPage() {
         }, 400)
       }
     }
-  }, [queryId, eventosAgenda])
+  }, [cleanQueryId, queryId, eventosAgenda])
 
   const handleAdd = () => {
     if (!form.titulo.trim() || !form.data) return

@@ -23,6 +23,8 @@ export function GlobalPushNotificationHandler() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const { currentUser } = useApp()
+  const currentUserRef = useRef(currentUser)
+  currentUserRef.current = currentUser
   const isInitializedRef = useRef(false)
 
   // 1. Inicialização do OneSignal e Listeners Globais de Deep Link
@@ -106,7 +108,7 @@ export function GlobalPushNotificationHandler() {
                 const data = event?.notification?.additionalData || {}
                 console.log('📱 [GlobalPush] Notificação nativa clicada:', data)
 
-                const route = resolveNotificationRoute(data, event)
+                const route = resolveNotificationRoute(data, event, null, currentUserRef.current)
                 if (route) {
                   console.log(`📱 [GlobalPush] Navegando diretamente para: ${route}`)
                   sessionStorage.setItem('pending_deep_link', route)
@@ -165,7 +167,7 @@ export function GlobalPushNotificationHandler() {
               const data = event?.notification?.additionalData || {}
               console.log('🔔 [GlobalPush] Notificação web clicada:', data)
 
-              const route = resolveNotificationRoute(data, event)
+              const route = resolveNotificationRoute(data, event, null, currentUserRef.current)
               if (route) {
                 console.log(`🔔 [GlobalPush] Navegando web diretamente para: ${route}`)
                 sessionStorage.setItem('pending_deep_link', route)

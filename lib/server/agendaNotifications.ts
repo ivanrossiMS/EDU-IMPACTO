@@ -115,16 +115,21 @@ function _buildTargetUrl(targetUrl: string, itemId: string): string {
 
   if (!itemId) return base
 
+  const cleanId = String(itemId)
+    .replace(/-all-students-reminder$/, '')
+    .replace(/-all-students$/, '')
+    .replace(/-reminder$/, '')
+
   try {
     const parsed = new URL(base)
     if (!parsed.searchParams.has('id')) {
-      parsed.searchParams.set('id', itemId)
+      parsed.searchParams.set('id', cleanId)
     }
     return parsed.toString()
   } catch {
     // URL inválida — fallback manual (evita crash)
     if (!base.includes('id=')) {
-      return base + (base.includes('?') ? '&' : '?') + `id=${encodeURIComponent(itemId)}`
+      return base + (base.includes('?') ? '&' : '?') + `id=${encodeURIComponent(cleanId)}`
     }
     return base
   }
@@ -266,6 +271,10 @@ export async function sendAgendaPushNotification({
     // Construir URL segura com URLSearchParams (evita duplicar parâmetro 'id=')
     const fullUrl = _buildTargetUrl(targetUrl, itemId)
     const targetPathWithId = fullUrl.replace(/^https?:\/\/[^\/]+/, '')
+    const cleanItemId = String(itemId)
+      .replace(/-all-students-reminder$/, '')
+      .replace(/-all-students$/, '')
+      .replace(/-reminder$/, '')
 
     const pushResponse = await sendPushNotification({
       title: finalTitle,
@@ -274,7 +283,7 @@ export async function sendAgendaPushNotification({
       url: fullUrl,
       data: {
         type,
-        item_id: itemId,
+        item_id: cleanItemId,
         target_url: targetPathWithId,
         full_url: fullUrl,
         url: fullUrl,

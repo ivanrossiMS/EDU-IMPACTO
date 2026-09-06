@@ -49,122 +49,7 @@ declare global {
   }
 }
 
-/**
- * Mapeia o tipo de push para a rota correta da agenda.
- * Usado no deep link ao clicar na notificação.
- */
-function typeToRoute(type?: string): string {
-  if (!type) return ''
-  const map: Record<string, string> = {
-    comunicados: 'comunicados',
-    comunicado:  'comunicados',
-    momentos:    'momentos',
-    momento:     'momentos',
-    calendario:  'calendario',
-    evento:      'calendario',
-    eventos:     'calendario',
-    frequencia:  'frequencia',
-    ocorrencias: 'ocorrencias',
-    ocorrencia:  'ocorrencias',
-    notas:       'notas',
-    nota:        'notas',
-    cobrancas:   'financeiro',
-    cobranca:    'financeiro',
-    saida:       'portaria',
-  }
-  return map[type.toLowerCase()] || type
-}
-
-/**
- * Resolve a rota de destino ao clicar em qualquer notificação push (Nativo ou Web).
- * Garante que:
- * 1. Pushes institucionais (colaborador) abram diretamente em /agenda-digital/colaborador/{seção}?id=...
- * 2. Pushes familiares abram em /agenda-digital/{alunoId}/{seção}?id=...
- * 3. Qualquer query param (ex: id=...) seja preservado no redirecionamento.
- */
-function resolveNotificationRoute(data: any, event?: any, alunoIdFallback?: string | null): string | null {
-  if (!data && !event) return null
-
-  // 1. Tentar obter URL completa ou caminho direto fornecido no payload
-  const rawUrl =
-    data?.target_url ||
-    data?.targetUrl ||
-    data?.url ||
-    data?.full_url ||
-    event?.notification?.launchURL ||
-    event?.result?.url ||
-    ''
-
-  let parsedPath = ''
-  if (rawUrl && typeof rawUrl === 'string') {
-    try {
-      if (rawUrl.startsWith('/')) {
-        parsedPath = rawUrl
-      } else {
-        const u = new URL(rawUrl)
-        parsedPath = u.pathname + u.search + u.hash
-      }
-    } catch {
-      parsedPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`
-    }
-  }
-
-  const itemId = data?.item_id || data?.id
-
-  // 2. Verificar se o push é de acesso institucional / colaborador
-  const isColab =
-    data?.isColab === true ||
-    data?.is_colab === true ||
-    data?.perfil === 'colaborador' ||
-    parsedPath.includes('/colaborador/')
-
-  if (isColab) {
-    let route = parsedPath
-    if (!route || !route.includes('/colaborador/')) {
-      const section = data?.rota || typeToRoute(data?.type || data?.tipo) || 'comunicados'
-      route = `/agenda-digital/colaborador/${section}`
-    }
-    if (itemId && !route.includes('id=')) {
-      route += (route.includes('?') ? '&' : '?') + `id=${itemId}`
-    }
-    return route
-  }
-
-  // 3. Se temos uma rota específica já construída para o aluno (ex: /agenda-digital/123/comunicados)
-  if (
-    parsedPath &&
-    !parsedPath.startsWith('/agenda-digital/comunicados') &&
-    !parsedPath.startsWith('/agenda-digital/momentos') &&
-    !parsedPath.startsWith('/agenda-digital/calendario')
-  ) {
-    let route = parsedPath
-    if (itemId && !route.includes('id=')) {
-      route += (route.includes('?') ? '&' : '?') + `id=${itemId}`
-    }
-    return route
-  }
-
-  // 4. Caso padrão familiar: usar o aluno_id do payload ou o aluno atualmente ativo
-  const section = data?.rota || typeToRoute(data?.type || data?.tipo)
-  if (section) {
-    const slug = data?.aluno_id || alunoIdFallback
-    let route = slug ? `/agenda-digital/${slug}/${section}` : `/agenda-digital?redirect=${section}`
-    if (itemId && !route.includes('id=')) {
-      route += (route.includes('?') ? '&' : '?') + `id=${itemId}`
-    }
-    return route
-  }
-
-  if (parsedPath) {
-    let route = parsedPath
-    if (itemId && !route.includes('id=')) {
-      route += (route.includes('?') ? '&' : '?') + `id=${itemId}`
-    }
-    return route
-  }
-
-  return null
-}
+import { resolveNotificationRoute } from '@/lib/notificationRouting'
 
 export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const router = useRouter()
@@ -242,7 +127,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 const data = event?.notification?.additionalData || {}
                 console.log('[OneSignal] Notificação nativa clicada:', data)
                 
-                const route = resolveNotificationRoute(data, event, alunoIdRef.current)
+                const route = resolveNotificationRoute(data, event, alunoIdRef.current, currentUser)
                 if (route) {
                   console.log(`[OneSignal] Deep link nativo → ${route}`)
                   sessionStorage.setItem('pending_deep_link', route)
@@ -316,7 +201,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                     const data = event?.notification?.additionalData || {}
                     console.log('[OneSignal] Notificação web clicada:', data)
 
-                    const route = resolveNotificationRoute(data, event, alunoIdRef.current)
+                    const route = resolveNotificationRoute(data, event, alunoIdRef.current, currentUser)
                     if (route) {
                       console.log(`[OneSignal] Deep link web → ${route}`)
                       sessionStorage.setItem('pending_deep_link', route)
