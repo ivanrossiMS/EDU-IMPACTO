@@ -9,7 +9,7 @@ import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
 import { useState, useEffect, useRef, useMemo, Suspense, useCallback } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -107,7 +107,6 @@ const getAnexoType = (anexoStr: any) => {
 function ColaboradorComunicadosContent() {
   const { currentUser } = useApp()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const queryClient = useQueryClient()
   const { turmas = [] } = useData()
   const [showComposer, setShowComposer] = useState(false)
@@ -170,17 +169,16 @@ function ColaboradorComunicadosContent() {
   }, [colaboradores, effectiveUser]);
 
   const userGroups = useMemo(() => {
-    if (!effectiveColabId && !effectiveUser?.id) return [];
-    const myIds = [effectiveColabId, effectiveUser?.id, (effectiveUser as any)?.system_user_id].filter(Boolean).map(id => String(id).replace(/^f_?/, '').trim());
+    if (!effectiveColabId) return [];
     return (chatGroups || []).filter((g: any) => {
-      let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds;
+      let colabs = g.colaboradoresIds;
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
       }
       if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some((id: any) => myIds.includes(String(id).replace(/^f_?/, '').trim()));
+      return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
     });
-  }, [chatGroups, effectiveColabId, effectiveUser]);
+  }, [chatGroups, effectiveColabId]);
 
   const turmaOptions = useMemo(() => {
     if (!effectiveUser?.id) return [];
@@ -286,12 +284,9 @@ function ColaboradorComunicadosContent() {
         dataAgendamento: dataAgendamento || null,
         status: asRascunho ? 'rascunho' : dataAgendamento ? 'agendado' : 'enviado',
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        gruposIds: selectedDest.filter(d => d.type === 'grupo').map(d => String(d.id).replace(/^g_?/, '')),
         funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
-        colaboradoresIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
         destino: 'selecionados'
       };
       
@@ -317,12 +312,9 @@ function ColaboradorComunicadosContent() {
         autorId: effectiveUser?.id || '',
         autorFoto: effectiveUser?.foto || null,
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
-        turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => d.id.replace(/^a_?/, '')),
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        gruposIds: selectedDest.filter(d => d.type === 'grupo').map(d => String(d.id).replace(/^g_?/, '')),
         funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
-        colaboradoresIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
         destino: 'selecionados',
         prioridade: 'normal',
         fixado: false,
@@ -466,50 +458,6 @@ function ColaboradorComunicadosContent() {
 
   const [comunicadoToDelete, setComunicadoToDelete] = useState<string | null>(null)
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
-
-  // Auto-open comunicado if queryId is present (deep link direto das notificações)
-  const queryId = searchParams?.get('id')
-  const hasAutoOpened = useRef(false)
-  useEffect(() => {
-    if (!queryId || hasAutoOpened.current) return
-
-    // 1. Tentar encontrar na lista de comunicados já carregada
-    if (comunicados && comunicados.length > 0) {
-      const target = comunicados.find((c: any) => String(c.id) === String(queryId))
-      if (target) {
-        setSelectedComunicado(target)
-        hasAutoOpened.current = true
-        try {
-          const urlParams = new URLSearchParams(window.location.search)
-          urlParams.delete('id')
-          const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '')
-          router.replace(newUrl, { scroll: false })
-        } catch(e) {}
-        return
-      }
-    }
-
-    // 2. Se a lista já carregou e o item não estava nos primeiros, buscar direto na API
-    if (!isDataLoading && queryId && !hasAutoOpened.current) {
-      fetch(`/api/comunicados?id=${encodeURIComponent(queryId)}`)
-        .then(res => res.json())
-        .then(data => {
-          const item = Array.isArray(data) ? data[0] : (data?.comunicados?.[0] || data)
-          if (item && item.id) {
-            setSelectedComunicado(item)
-            hasAutoOpened.current = true
-            try {
-              const urlParams = new URLSearchParams(window.location.search)
-              urlParams.delete('id')
-              const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '')
-              router.replace(newUrl, { scroll: false })
-            } catch(e) {}
-          }
-        })
-        .catch(err => console.error('Erro ao buscar comunicado via deep link:', err))
-    }
-  }, [queryId, comunicados, isDataLoading, router])
-
   const [searchTerm, setSearchTerm] = useState('')
   const [limit, setLimit] = useState(6)
 
@@ -899,15 +847,14 @@ function ColaboradorComunicadosContent() {
           const cargoStr = effectiveUser?.cargo || ''; 
           const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
           const myTurmaNames = feedTurmaOptions.map((t: any) => t.nome);
-          const myColabIds = [effectiveColabId, effectiveUser?.id, (effectiveUser as any)?.system_user_id].filter(Boolean).map(id => String(id).replace(/^f_?/, '').trim());
           const myGroups = (chatGroups || []).filter((g: any) => {
-            let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds;
+            let colabs = g.colaboradoresIds;
             if (typeof colabs === 'string') {
               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
             }
             if (!Array.isArray(colabs)) colabs = [];
-            return colabs.some((id: any) => myColabIds.includes(String(id).replace(/^f_?/, '').trim()));
-          }).map((g: any) => g.nome || g.dados?.nome).filter(Boolean);
+            return colabs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
+          }).map((g: any) => g.nome);
 
           // Deduplicar por id — previne "Encountered two children with the same key"
           // causado pela atualização otimística (setComunicadosLocally) sobreposta ao
@@ -930,7 +877,7 @@ function ColaboradorComunicadosContent() {
             const targetGrupos = c.grupos || (c.dados?.grupos) || [];
             const targetTurmas = c.turmas || (c.dados?.turmas) || [];
             
-            const inFuncs = targetFuncs.some((id: any) => myColabIds.includes(String(id).replace(/^f_?/, '').trim()));
+            const inFuncs = targetFuncs.some((id: any) => String(id).replace(/^f_?/, '').trim() === String(effectiveColabId).replace(/^f_?/, '').trim());
             const inGrupos = targetGrupos.some((g: string) => myGroups.some((m: string) => String(m).toLowerCase().trim() === String(g).toLowerCase().trim()));
             const inTurmas = targetTurmas.some((t: string) => myTurmaNames.some((m: string) => String(m).toLowerCase().trim() === String(t).toLowerCase().trim()));
             

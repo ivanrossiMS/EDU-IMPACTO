@@ -71,19 +71,17 @@ async function attemptSend(
     }
 
     if (response.ok) {
-      const notificationId = parsedBody.id || ''
-      const allUnsubscribed = Array.isArray(parsedBody.errors) && parsedBody.errors.includes('All included players are not subscribed')
-      const hasSubscribers = notificationId.length > 0 && !allUnsubscribed
-      const recipientCount = parsedBody.recipients ?? parsedBody.num_recipients ?? (hasSubscribers ? 1 : 0)
+      const recipientCount = parsedBody.recipients ?? parsedBody.num_recipients ?? 0
+      const notificationId = parsedBody.id || 'N/A'
 
-      if (!hasSubscribers) {
+      if (recipientCount === 0) {
         console.warn(`⚠️ [PushService] OneSignal aceitou a requisição (200 OK), porém 0 destinatários inscritos (Recipients: 0).`, {
-          id: notificationId || 'N/A',
+          id: notificationId,
           targetCount: payload.include_aliases?.external_id?.length || payload.include_external_user_ids?.length || 0,
           errors: parsedBody.errors || null,
         })
       } else {
-        console.log(`✅ [PushService] Push aceito pelo OneSignal com sucesso! ID: ${notificationId} | Subscritos: ${recipientCount}`)
+        console.log(`✅ [PushService] Push entregue com sucesso! ID: ${notificationId} | Destinatários ativos: ${recipientCount}`)
       }
       return { success: true, data: parsedBody, statusCode: response.status, recipients: recipientCount }
     }
@@ -174,10 +172,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     headings: { en: params.title, pt: params.title },
     contents: { en: params.body, pt: params.body },
     ...(params.url && { web_url: params.url }),
-    data: {
-      url: params.url,
-      ...(params.data || {}),
-    },
+    ...(params.data && { data: params.data }),
     ...(params.sendAfter && { send_after: params.sendAfter }),
     chrome_web_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
     adm_large_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
@@ -196,7 +191,6 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
       external_id: params.targetUserIds,
       responsavel_id: params.targetUserIds,
       aluno_id: params.targetUserIds,
-      system_user_id: params.targetUserIds,
     },
     target_channel: 'push',
   }

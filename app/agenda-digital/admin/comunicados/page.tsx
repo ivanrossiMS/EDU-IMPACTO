@@ -218,10 +218,8 @@ export default function ADAdminComunicados() {
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        gruposIds: selectedDest.filter(d => d.type === 'grupo').map(d => String(d.id).replace(/^g_?/, '')),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_?/, '')),
         funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_?/, '')),
-        colaboradoresIds: selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_?/, '')),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados'
       }
 
@@ -249,10 +247,8 @@ export default function ADAdminComunicados() {
         turmas: selectedDest.filter(d => d.type === 'turma').map(d => d.name),
         turmasIds: selectedDest.filter(d => d.type === 'turma').map(d => String(d.id).replace(/^t_?/, '')),
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
-        gruposIds: selectedDest.filter(d => d.type === 'grupo').map(d => String(d.id).replace(/^g_?/, '')),
         alunosIds: selectedDest.filter(d => d.type === 'aluno').map(d => String(d.id).replace(/^a_?/, '')),
         funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_?/, '')),
-        colaboradoresIds: selectedDest.filter(d => d.type === 'funcionario').map(d => String(d.id).replace(/^f_?/, '')),
         destino: selectedDest.length === 0 ? 'todos' : 'selecionados',
         prioridade: 'normal',
         fixado: false,

@@ -28,7 +28,6 @@ import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
-import { Capacitor } from '@capacitor/core'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
@@ -48,8 +47,6 @@ declare global {
     __OS_USER_ID__?: string
   }
 }
-
-import { resolveNotificationRoute } from '@/lib/notificationRouting'
 
 export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const router = useRouter()
@@ -104,7 +101,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         }
 
         // ── Verificar ambiente nativo (Capacitor) ─────────────────────────
-        const isNative = Capacitor.isNativePlatform()
+        let isNative = false
+        try {
+          isNative = !!(window as any).Capacitor?.isNativePlatform()
+        } catch {}
 
         if (isNative) {
           if (!window.__OS_INIT__) {
@@ -127,13 +127,24 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 const data = event?.notification?.additionalData || {}
                 console.log('[OneSignal] Notificação nativa clicada:', data)
                 
-                const route = resolveNotificationRoute(data, event, alunoIdRef.current, currentUser)
-                if (route) {
-                  console.log(`[OneSignal] Deep link nativo → ${route}`)
-                  sessionStorage.setItem('pending_deep_link', route)
-                  localStorage.setItem('pending_deep_link', route)
-                  window.__PENDING_DEEP_LINK__ = route
-                  window.location.replace(route)
+                if (data?.rota || data?.type) {
+                  const slug = data.aluno_id || alunoIdRef.current
+                  let route = ''
+
+                  if (slug) {
+                    route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                  } else {
+                    route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
+                  }
+                  
+                  if (data?.item_id) {
+                    route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
+                  }
+
+                  if (route) {
+                    console.log(`[OneSignal] Deep link nativo → ${route}`)
+                    router.push(route)
+                  }
                 }
               })
 
@@ -201,13 +212,24 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                     const data = event?.notification?.additionalData || {}
                     console.log('[OneSignal] Notificação web clicada:', data)
 
-                    const route = resolveNotificationRoute(data, event, alunoIdRef.current, currentUser)
-                    if (route) {
-                      console.log(`[OneSignal] Deep link web → ${route}`)
-                      sessionStorage.setItem('pending_deep_link', route)
-                      localStorage.setItem('pending_deep_link', route)
-                      window.__PENDING_DEEP_LINK__ = route
-                      window.location.replace(route)
+                    if (data?.rota || data?.type) {
+                      const slug = data.aluno_id || alunoIdRef.current
+                      let route = ''
+
+                      if (slug) {
+                        route = `/agenda-digital/${slug}/${data.rota || typeToRoute(data.type)}`
+                      } else {
+                        route = `/agenda-digital?redirect=${data.rota || typeToRoute(data.type)}`
+                      }
+                      
+                      if (data?.item_id) {
+                        route += (route.includes('?') ? '&' : '?') + `id=${data.item_id}`
+                      }
+
+                      if (route) {
+                        console.log(`[OneSignal] Deep link web → ${route}`)
+                        router.push(route)
+                      }
                     }
                   })
                 }
@@ -245,7 +267,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
     const gerenciarUsuarioPush = async (retryCount = 0) => {
       try {
-        const isNative = Capacitor.isNativePlatform()
+        let isNative = false
+        try {
+          isNative = !!(window as any).Capacitor?.isNativePlatform()
+        } catch {}
+
         let OS: any = null
         if (isNative) {
           // Aguarda a inicialização nativa completar antes de logar
@@ -284,35 +310,25 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 await OS.login(userId)
                 window.__OS_USER_ID__ = userId
                 console.log(`✅ [OneSignal] Usuário identificado: ${userId}`)
+                
+                // Add aliases for responsavel_id and aluno_id to allow backend to target them
+                if (OS.User && typeof OS.User.addAlias === 'function') {
+                  try {
+                    if (currentUser.responsavel_id) {
+                      const p = OS.User.addAlias('responsavel_id', String(currentUser.responsavel_id));
+                      if (p && p.catch) p.catch(() => {});
+                    }
+                    if (currentUser.aluno_id) {
+                      const p = OS.User.addAlias('aluno_id', String(currentUser.aluno_id));
+                      if (p && p.catch) p.catch(() => {});
+                    }
+                  } catch (e) {
+                    // ignore
+                  }
+                }
               }
             } catch (loginErr: any) {
               console.warn('[OneSignal] Erro no login (pode ser normal):', loginErr?.message)
-            }
-          }
-
-          // Add aliases for responsavel_id, aluno_id and email to allow backend to target them
-          if (OS.User && typeof OS.User.addAlias === 'function') {
-            try {
-              const effectiveRespId = currentUser.responsavel_id || (currentUser as any)?.dados?.responsavel_id;
-              if (effectiveRespId) {
-                const p = OS.User.addAlias('responsavel_id', String(effectiveRespId));
-                if (p && p.catch) p.catch(() => {});
-              }
-              if (currentUser.aluno_id) {
-                const p = OS.User.addAlias('aluno_id', String(currentUser.aluno_id));
-                if (p && p.catch) p.catch(() => {});
-              }
-              if (currentUser.email) {
-                const p = OS.User.addAlias('email', String(currentUser.email).toLowerCase().trim());
-                if (p && p.catch) p.catch(() => {});
-              }
-              const effectiveSysId = (currentUser as any)?.system_user_id || (currentUser as any)?.system_users_id || (currentUser as any)?.dados?.system_user_id || (currentUser.id && String(currentUser.id).length > 20 ? currentUser.id : null);
-              if (effectiveSysId) {
-                const p = OS.User.addAlias('system_user_id', String(effectiveSysId));
-                if (p && p.catch) p.catch(() => {});
-              }
-            } catch (e) {
-              // ignore
             }
           }
           
@@ -356,7 +372,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     gerenciarUsuarioPush()
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.responsavel_id, responsavelId, alunoId, turmaNome])
+  }, [currentUser?.id, responsavelId, alunoId, turmaNome])
 
   // ── Supabase Realtime (In-App Toasts) ────────────────────────────────────
   useEffect(() => {
@@ -383,56 +399,30 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     const isTargetingAluno = (dados: any): boolean => {
       if (!dados) return false
 
+
       const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses)
       const alvoTurmasIds = ensureStringArray(dados.turmasIds || dados.targetClassesIds)
       const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents)
       const alvoGrupos = ensureStringArray(dados.grupos || dados.targetGroups)
-      const alvoColabs = ensureStringArray(dados.funcionariosIds || dados.colaboradoresIds)
       const destino = String(dados.destino || '').toLowerCase().trim()
 
       // Admin recebe tudo
-      if (
-        currentUser?.perfil === 'Administrador' ||
-        currentUser?.perfil === 'Diretor Geral' ||
-        currentUser?.cargo === 'Administrador Master'
-      ) return true
+      if (currentUser?.perfil === 'Administrador') return true
 
-      // Todos/Escola toda
-      if (
-        destino === 'todos' ||
-        alvoTurmas.some(t => {
-          const tl = t.toLowerCase().trim()
-          return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
-        })
-      ) return true
+      // Família/Aluno: filtra por turma ou aluno específico
+      if (alunoId) {
+        const alunoStr = String(alunoId)
 
-      // 1. CHECAGEM DIRETA DE COLABORADOR (Funciona mesmo navegando no contexto familiar)
-      const myUserIds = [
-        String(currentUser?.id || ''),
-        String((currentUser as any)?.system_user_id || ''),
-        String((currentUser as any)?.system_users_id || ''),
-      ].filter(Boolean)
+        // Todos/Escola toda
+        if (
+          destino === 'todos' ||
+          alvoTurmas.some(t => {
+            const tl = t.toLowerCase().trim()
+            return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
+          })
+        ) return true
 
-      if (alvoColabs.length > 0 && myUserIds.some(uId => alvoColabs.includes(uId) || alvoColabs.includes(`f_${uId}`))) {
-        return true
-      }
-
-      // 2. CHECAGEM DE ALUNO / FAMÍLIA (Funciona mesmo navegando no contexto de colaborador)
-      const activeAlunoIds = [
-        alunoId ? String(alunoId) : null,
-        currentUser?.aluno_id ? String(currentUser.aluno_id) : null,
-      ].filter(Boolean) as string[]
-
-      if (activeAlunoIds.length > 0) {
-        for (const aId of activeAlunoIds) {
-          if (
-            alvoAlunos.includes(aId) ||
-            alvoAlunos.includes(`a_${aId}`) ||
-            alvoAlunos.includes(`_ALU${aId}`)
-          ) return true
-        }
-
-        // Turma do aluno selecionado
+        // Turma específica
         const tNomeStr = turmaNome ? String(turmaNome).toLowerCase() : ''
         const rTurmaStr = rawTurma ? String(rawTurma).toLowerCase() : ''
 
@@ -449,48 +439,46 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           })) return true
         }
 
-        // Grupos customizados
+        // Aluno específico (suporta prefixos legados)
+        if (
+          alvoAlunos.includes(alunoStr) ||
+          alvoAlunos.includes(`a_${alunoStr}`) ||
+          alvoAlunos.includes(`_ALU${alunoStr}`)
+        ) return true
+
+        // Grupos customizados (Deixamos passar para que o backend verifique no refetch)
         if (alvoGrupos.length > 0) return true
+
+        return false
       }
 
-      // 3. Colaborador: turmas e grupos associados (quando tem vínculo institucional)
-      if (!isFamily || (currentUser as any)?.hasDualRole) {
+      // Colaborador: filtra por turmas que ministra
+      if (currentUser?.perfil === 'Colaborador') {
+        if (
+          destino === 'todos' ||
+          alvoTurmas.some(t => {
+            const tl = t.toLowerCase().trim()
+            return ['todos', 'toda a escola', 'todas', 'all'].includes(tl) || tl.startsWith('todos:')
+          })
+        ) return true
+
         const userGroups = agendaCtx?.chatGroups || []
         const userTurmas = turmasArray.filter(t =>
           userGroups.some((g: any) => {
-            let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds || []
+            let colabs = g.colaboradoresIds
             if (typeof colabs === 'string') {
               try { colabs = JSON.parse(colabs) } catch { colabs = [] }
             }
             if (!Array.isArray(colabs)) colabs = []
             return (
-              colabs.some((id: any) => myUserIds.includes(String(id))) &&
+              colabs.some((id: any) => String(id) === String(currentUser.id)) &&
               (String(g.id) === `sync-${t.id}` ||
                 String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
             )
           })
         )
 
-        // Verificar se algum grupo de destino contém o colaborador
-        if (alvoGrupos.length > 0) {
-          const matchesGrupo = userGroups.some((g: any) => {
-            let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds || []
-            if (typeof colabs === 'string') {
-              try { colabs = JSON.parse(colabs) } catch { colabs = [] }
-            }
-            if (!Array.isArray(colabs)) colabs = []
-            const isColabInGroup = colabs.some((id: any) => myUserIds.includes(String(id).replace(/^f_?/, '').trim()))
-            const gNome = String(g.nome || g.dados?.nome || '').toLowerCase().trim()
-            const gId = String(g.id || '').toLowerCase().trim()
-            return isColabInGroup && alvoGrupos.some(alvo => {
-              const al = alvo.toLowerCase().trim()
-              return al === gNome || al === gId || gNome.includes(al) || al.includes(gNome)
-            })
-          })
-          if (matchesGrupo) return true
-        }
-
-        const matchesTurma = userTurmas.some(t => {
+        return userTurmas.some(t => {
           const tNome = String(t.nome || '').toLowerCase()
           const tId = String(t.id).toLowerCase()
           const tCod = String(t.codigo || '').toLowerCase()
@@ -506,8 +494,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             })
           )
         })
-
-        if (matchesTurma) return true
       }
 
       return false
@@ -575,7 +561,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               title: merged.titulo,
               createdAt: merged.created_at || new Date().toISOString(),
               read: false,
-              link: isFamily && alunoId ? `/agenda-digital/${alunoId}/comunicados?id=${merged.id}` : `/agenda-digital/colaborador/comunicados?id=${merged.id}`,
+              link: `/agenda-digital/${alunoId}/comunicados`,
             })
 
             // toast in-app removido para evitar duplicidade com as notificações push
@@ -614,7 +600,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             title: row.titulo || 'Novo Evento',
             createdAt: row.created_at || new Date().toISOString(),
             read: false,
-            link: isFamily && alunoId ? `/agenda-digital/${alunoId}/calendario?id=${row.id}` : `/agenda-digital/colaborador/calendario?id=${row.id}`,
+            link: `/agenda-digital/${alunoId}/calendario`,
           })
           // toast in-app removido
         }
@@ -742,7 +728,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             title: merged.titulo || 'Novo Momento',
             createdAt: merged.created_at || new Date().toISOString(),
             read: false,
-            link: isFamily && alunoId ? `/agenda-digital/${alunoId}/momentos?id=${merged.id}` : `/agenda-digital/colaborador/momentos?id=${merged.id}`,
+            link: `/agenda-digital/${alunoId}/momentos`,
           })
           // toast in-app removido
         }
@@ -770,4 +756,22 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       {children}
     </>
   )
+}
+
+/**
+ * Mapeia o tipo de push para a rota correta da agenda.
+ * Usado no deep link ao clicar na notificação.
+ */
+function typeToRoute(type: string): string {
+  const map: Record<string, string> = {
+    comunicados: 'comunicados',
+    momentos:    'momentos',
+    calendario:  'calendario',
+    frequencia:  'frequencia',
+    ocorrencias: 'ocorrencias',
+    notas:       'notas',
+    cobrancas:   'financeiro',
+    saida:       'portaria', // ← deep link de saída/portaria
+  }
+  return map[type] || ''
 }

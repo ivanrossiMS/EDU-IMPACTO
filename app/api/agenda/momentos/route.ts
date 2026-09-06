@@ -277,8 +277,7 @@ export async function POST(request: Request) {
                 title: '📸 Novo Momento Publicado!',
                 message: `Um novo conteúdo foi compartilhado. Confira!`,
                 targetUserIds: directColaboradores,
-                targetUrl: '/agenda-digital/colaborador/momentos',
-                metadata: { isColab: true }
+                targetUrl: '/agenda-digital/momentos'
               }).catch(err => console.error('Momento Push Error Colab:', err))
             )
           }
@@ -330,8 +329,7 @@ export async function POST(request: Request) {
               title: '📸 Novo Momento Publicado!',
               message: `Um novo conteúdo foi compartilhado. Confira!`,
               targetUserIds: directColaboradores,
-              targetUrl: '/agenda-digital/colaborador/momentos',
-              metadata: { isColab: true }
+              targetUrl: '/agenda-digital/momentos'
             }).catch(err => console.error('Momento Push Error Colab:', err))
           )
         }

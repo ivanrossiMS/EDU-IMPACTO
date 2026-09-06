@@ -70,6 +70,7 @@ export async function POST(request: Request) {
 
     // 4. Dispatch Push Notification EXCLUSIVELY to authorId (if they are not the one interacting)
     if (!isRemoval && dados.authorId && String(dados.authorId) !== String(user.id)) {
+      const isColab = String(dados.authorId).startsWith('COLAB-') || String(dados.authorId).startsWith('AD-')
       const message = action === 'like' 
         ? `${authorName} curtiu sua publicação.` 
         : `${authorName} comentou na sua publicação: "${value}"`
@@ -79,9 +80,8 @@ export async function POST(request: Request) {
         itemId: String(momentId),
         title: action === 'like' ? '❤️ Nova Curtida' : '💬 Novo Comentário',
         message,
-        targetUserIds: [String(dados.authorId)],
-        targetUrl: '/agenda-digital/colaborador/momentos',
-        metadata: { isColab: true }
+        targetUserIds: [dados.authorId],
+        targetUrl: isColab ? '/agenda-digital/colaborador/momentos' : '/agenda-digital/momentos'
       }).catch(err => console.error('[Push Dispatch Error] Interacoes Momento:', err))
     }
 

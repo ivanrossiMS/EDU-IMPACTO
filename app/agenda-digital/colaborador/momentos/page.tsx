@@ -5,7 +5,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { PrivacyScreen } from '@capacitor-community/privacy-screen';
 
@@ -31,7 +31,6 @@ import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
-import { Capacitor } from '@capacitor/core'
 
 export default function ADMomentosPage() {
   const { momentosFeed, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
@@ -40,7 +39,7 @@ export default function ADMomentosPage() {
   useEffect(() => {
     let enabled = false;
     const enablePrivacy = async () => {
-      if (Capacitor.isNativePlatform()) {
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
         try {
           await PrivacyScreen.enable();
           enabled = true;
@@ -387,9 +386,6 @@ export default function ADMomentosPage() {
   
   const meusMomentos = React.useMemo(() => {
     return momentosFeed.filter(m => {
-      // Se queryId foi passado na URL (deep link direto), SEMPRE incluir o momento selecionado
-      if (queryId && String(m.id).trim() === String(queryId).trim()) return true
-
       const targetClasses = m.targetClasses || []
       const targetAlunos = m.alunosIds || []
       const targetFuncs = m.funcionariosIds || m.dados?.funcionariosIds || []
@@ -472,32 +468,6 @@ export default function ADMomentosPage() {
       .catch(err => console.error('Failed to mark momentos as read:', err));
     }
   }, [meusMomentos, effectiveUser?.id]);
-
-  // Auto-scroll e destaque para o Momento se queryId estiver presente (deep link direto)
-  const queryId = searchParams?.get('id')
-  const hasScrolledToId = useRef(false)
-  useEffect(() => {
-    if (!queryId || meusMomentos.length === 0 || hasScrolledToId.current) return
-
-    const targetIndex = meusMomentos.findIndex((m: any) => String(m.id) === String(queryId))
-    if (targetIndex !== -1) {
-      if (targetIndex >= visibleCount) {
-        setVisibleCount(targetIndex + 5)
-      }
-      setTimeout(() => {
-        const el = document.getElementById(`momento-${queryId}`)
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          el.style.transition = 'box-shadow 0.4s ease, transform 0.4s ease'
-          el.style.boxShadow = '0 0 0 4px #ec4899, 0 12px 28px rgba(236, 72, 153, 0.35)'
-          setTimeout(() => {
-            el.style.boxShadow = ''
-          }, 3500)
-          hasScrolledToId.current = true
-        }
-      }, 350)
-    }
-  }, [queryId, meusMomentos, visibleCount])
 
   return (
     <div style={{
@@ -681,7 +651,6 @@ export default function ADMomentosPage() {
               return (
                 <div 
                   key={m.id} 
-                  id={`momento-${m.id}`}
                   className="polaroid-card"
                   style={{ 
                     transform: `rotate(${initialRotation}deg)`

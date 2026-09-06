@@ -115,42 +115,19 @@ function _buildTargetUrl(targetUrl: string, itemId: string): string {
 
   if (!itemId) return base
 
-  const cleanId = String(itemId)
-    .replace(/-all-students-reminder$/, '')
-    .replace(/-all-students$/, '')
-    .replace(/-reminder$/, '')
-
   try {
     const parsed = new URL(base)
     if (!parsed.searchParams.has('id')) {
-      parsed.searchParams.set('id', cleanId)
+      parsed.searchParams.set('id', itemId)
     }
     return parsed.toString()
   } catch {
     // URL inválida — fallback manual (evita crash)
     if (!base.includes('id=')) {
-      return base + (base.includes('?') ? '&' : '?') + `id=${encodeURIComponent(cleanId)}`
+      return base + (base.includes('?') ? '&' : '?') + `id=${encodeURIComponent(itemId)}`
     }
     return base
   }
-}
-
-/**
- * Normaliza o título da notificação push para comunicados, garantindo
- * que prefixos como "Comunicado escolar", "Comunicado institucional", "📢 Comunicado: xxx" ou variações
- * sejam sempre formatados estritamente como 'Comunicado: "Título do comunicado"'.
- */
-export function formatComunicadoPushTitle(rawTitle?: string): string {
-  if (!rawTitle) return 'Comunicado';
-  let clean = rawTitle.trim();
-  clean = clean.replace(/^[📢\s]+/, '');
-  clean = clean.replace(/^comunicado(\s+(institucional|interno|escolar))?(\s*[:\-\–]\s*|\s+)/i, '');
-  clean = clean.replace(/^["'“”«»]+|["'“”«»]+$/g, '').trim();
-  const lower = clean.toLowerCase();
-  if (!clean || lower === 'institucional' || lower === 'interno' || lower === 'escolar' || lower === 'comunicado') {
-    return 'Comunicado';
-  }
-  return `Comunicado: "${clean}"`;
 }
 
 /**
@@ -171,7 +148,6 @@ export async function sendAgendaPushNotification({
   metadata,
   sendAfter,
 }: SendAgendaPushParams): Promise<PushResult> {
-  const finalTitle = type === 'comunicados' ? formatComunicadoPushTitle(title) : title
   const dedupKey = metadata?.aluno_id ? `${itemId}_${metadata.aluno_id}` : itemId
   const logPrefix = `[Push Central][${type}][${itemId}]`
 
@@ -247,7 +223,7 @@ export async function sendAgendaPushNotification({
         user_id: senderUserId || null,
         type,
         item_id: dedupKey,
-        title: finalTitle,
+        title,
         message,
         target_url: targetUrl,
         target_count: cleanTargetIds.length,
@@ -270,23 +246,15 @@ export async function sendAgendaPushNotification({
 
     // Construir URL segura com URLSearchParams (evita duplicar parâmetro 'id=')
     const fullUrl = _buildTargetUrl(targetUrl, itemId)
-    const targetPathWithId = fullUrl.replace(/^https?:\/\/[^\/]+/, '')
-    const cleanItemId = String(itemId)
-      .replace(/-all-students-reminder$/, '')
-      .replace(/-all-students$/, '')
-      .replace(/-reminder$/, '')
 
     const pushResponse = await sendPushNotification({
-      title: finalTitle,
+      title,
       body: message,
       targetUserIds: cleanTargetIds,
       url: fullUrl,
       data: {
         type,
-        item_id: cleanItemId,
-        target_url: targetPathWithId,
-        full_url: fullUrl,
-        url: fullUrl,
+        item_id: itemId,
         ...metadata,
       },
       sendAfter,

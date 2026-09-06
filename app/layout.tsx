@@ -26,7 +26,6 @@ import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoad
 
 import { KeyboardProvider } from '@/components/providers/KeyboardProvider'
 import { CapacitorResumeGuard } from '@/components/providers/CapacitorResumeGuard'
-import { GlobalPushNotificationHandler } from '@/components/providers/GlobalPushNotificationHandler'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -47,7 +46,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <CapacitorResumeGuard />
         <ReactQueryProvider>
           <AppProvider>
-            <GlobalPushNotificationHandler />
             <KeyboardProvider>
               <GlobalAccessGuard>
                 {children}

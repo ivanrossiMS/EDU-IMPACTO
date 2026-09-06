@@ -184,8 +184,7 @@ async function dispatchPushNotifications(supabase: any, row: any) {
       title: '📅 Novo Evento!',
       message: `O evento "${row.titulo}" foi adicionado à sua agenda.`,
       targetUserIds: directColaboradores,
-      targetUrl: '/agenda-digital/colaborador/calendario',
-      metadata: { isColab: true }
+      targetUrl: '/agenda-digital/calendario'
     }).catch(err => console.error('Evento Push Error:', err))
 
     if (shouldSendReminder && sendAfterStr) {
@@ -195,8 +194,7 @@ async function dispatchPushNotifications(supabase: any, row: any) {
         title: '⏰ Lembrete: Amanhã!',
         message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
         targetUserIds: directColaboradores,
-        targetUrl: '/agenda-digital/colaborador/calendario',
-        metadata: { isColab: true },
+        targetUrl: '/agenda-digital/calendario',
         sendAfter: sendAfterStr
       }).catch(err => console.error('Evento Reminder Error:', err))
     }

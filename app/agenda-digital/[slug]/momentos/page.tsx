@@ -13,7 +13,6 @@ import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, 
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { PrivacyScreen } from '@capacitor-community/privacy-screen';
-import { Capacitor } from '@capacitor/core';
 import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials, formatDateTime } from '@/lib/utils'
@@ -33,7 +32,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   useEffect(() => {
     let enabled = false;
     const enablePrivacy = async () => {
-      if (Capacitor.isNativePlatform()) {
+      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
         try {
           await PrivacyScreen.enable();
           enabled = true;
