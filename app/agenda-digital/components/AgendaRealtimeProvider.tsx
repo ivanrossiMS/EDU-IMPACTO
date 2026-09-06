@@ -28,6 +28,7 @@ import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { toast, Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
+import { Capacitor } from '@capacitor/core'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
@@ -218,10 +219,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         }
 
         // ── Verificar ambiente nativo (Capacitor) ─────────────────────────
-        let isNative = false
-        try {
-          isNative = !!(window as any).Capacitor?.isNativePlatform()
-        } catch {}
+        const isNative = Capacitor.isNativePlatform()
 
         if (isNative) {
           if (!window.__OS_INIT__) {
@@ -247,7 +245,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 const route = resolveNotificationRoute(data, event, alunoIdRef.current)
                 if (route) {
                   console.log(`[OneSignal] Deep link nativo → ${route}`)
-                  router.push(route)
+                  sessionStorage.setItem('pending_deep_link', route)
+                  localStorage.setItem('pending_deep_link', route)
+                  window.__PENDING_DEEP_LINK__ = route
+                  window.location.replace(route)
                 }
               })
 
@@ -318,7 +319,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                     const route = resolveNotificationRoute(data, event, alunoIdRef.current)
                     if (route) {
                       console.log(`[OneSignal] Deep link web → ${route}`)
-                      router.push(route)
+                      sessionStorage.setItem('pending_deep_link', route)
+                      localStorage.setItem('pending_deep_link', route)
+                      window.__PENDING_DEEP_LINK__ = route
+                      window.location.replace(route)
                     }
                   })
                 }
@@ -356,11 +360,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
     const gerenciarUsuarioPush = async (retryCount = 0) => {
       try {
-        let isNative = false
-        try {
-          isNative = !!(window as any).Capacitor?.isNativePlatform()
-        } catch {}
-
+        const isNative = Capacitor.isNativePlatform()
         let OS: any = null
         if (isNative) {
           // Aguarda a inicialização nativa completar antes de logar

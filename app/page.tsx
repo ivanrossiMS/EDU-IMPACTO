@@ -4,6 +4,8 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { extractAppPath } from '@/lib/notificationRouting'
+import { Capacitor } from '@capacitor/core'
 
 export default function Root() {
   const router = useRouter()
@@ -13,7 +15,20 @@ export default function Root() {
     // Wait for AppProvider to hydrate the session from localStorage/Capacitor Preferences
     if (!hydrated) return
 
-    // If no user is logged in, redirect to /login on the client side.
+    // 1. Checar se há deep link pendente (de notificação OneSignal ou appUrlOpen)
+    if (typeof window !== 'undefined') {
+      const pending = sessionStorage.getItem('pending_deep_link') || localStorage.getItem('pending_deep_link') || (window as any).__PENDING_DEEP_LINK__
+      if (pending) {
+        sessionStorage.removeItem('pending_deep_link')
+        localStorage.removeItem('pending_deep_link')
+        delete (window as any).__PENDING_DEEP_LINK__
+        console.log('[Root] Navegando imediatamente para deep link pendente:', pending)
+        window.location.replace(pending)
+        return
+      }
+    }
+
+    // 2. If no user is logged in, redirect to /login on the client side.
     if (!currentUser) {
       router.replace('/login')
       return
@@ -29,6 +44,44 @@ export default function Root() {
       cargo === 'Aluno'
     )
 
+    // 3. No ambiente nativo do celular (Capacitor), o app é dedicado à Agenda Digital
+    const isNative = Capacitor.isNativePlatform()
+    if (isNative) {
+      import('@capacitor/app').then(async ({ App }) => {
+        try {
+          const launch = await App.getLaunchUrl()
+          if (launch?.url) {
+            const parsed = extractAppPath(launch.url)
+            if (parsed && parsed !== '/' && !parsed.includes('choose_system')) {
+              console.log('[Root] Redirecionando via Launch URL:', parsed)
+              router.replace(parsed)
+              return
+            }
+          }
+        } catch (e) {}
+
+        if (isFamilyOrStudent) {
+          if (cargo === 'Aluno' && currentUser.aluno_id) {
+            router.replace(`/agenda-digital/${currentUser.aluno_id}/comunicados`)
+            return
+          }
+          router.replace('/agenda-digital/selecionar-aluno')
+        } else if (perfil === 'Diretor Geral' || cargo === 'Administrador Master') {
+          router.replace('/agenda-digital/selecionar-perfil-admin')
+        } else {
+          router.replace('/agenda-digital/colaborador/comunicados')
+        }
+      }).catch(() => {
+        if (isFamilyOrStudent) {
+          router.replace('/agenda-digital/selecionar-aluno')
+        } else {
+          router.replace('/agenda-digital/colaborador/comunicados')
+        }
+      })
+      return
+    }
+
+    // 4. No navegador desktop:
     if (isFamilyOrStudent) {
       if (cargo === 'Aluno' && currentUser.aluno_id) {
         router.replace(`/agenda-digital/${currentUser.aluno_id}/comunicados`)

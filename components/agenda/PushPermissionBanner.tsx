@@ -17,6 +17,7 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, BellOff, BellRing, X, Smartphone, Settings, Shield } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
 
 type PermissionStatus = 'default' | 'granted' | 'denied' | 'unsupported' | 'ios-pwa'
 type BannerState = 'hidden' | 'prompt' | 'blocked' | 'ios-install' | 'unsupported'
@@ -35,10 +36,7 @@ export function PushPermissionBanner() {
       const dismissed = localStorage.getItem('edu_push_dismissed_v2')
       if (dismissed === 'true') return
 
-      let isNative = false
-      try {
-        isNative = !!(window as any).Capacitor?.isNativePlatform()
-      } catch {}
+      const isNative = Capacitor.isNativePlatform()
 
       if (isNative) {
         try {
@@ -102,10 +100,7 @@ export function PushPermissionBanner() {
   const handleActivate = async () => {
     setBannerState('hidden')
     try {
-      let isNative = false
-      try {
-        isNative = !!(window as any).Capacitor?.isNativePlatform()
-      } catch {}
+      const isNative = Capacitor.isNativePlatform()
 
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')

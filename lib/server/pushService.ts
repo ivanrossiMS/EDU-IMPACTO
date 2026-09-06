@@ -173,7 +173,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     app_id: ONESIGNAL_APP_ID,
     headings: { en: params.title, pt: params.title },
     contents: { en: params.body, pt: params.body },
-    ...(params.url && { web_url: params.url, app_url: params.url }),
+    ...(params.url && { web_url: params.url }),
     data: {
       url: params.url,
       ...(params.data || {}),

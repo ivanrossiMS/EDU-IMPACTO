@@ -158,6 +158,19 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // 0. Se houver deep link pendente, redirecionar imediatamente
+      const pending = sessionStorage.getItem('pending_deep_link') || localStorage.getItem('pending_deep_link') || (window as any).__PENDING_DEEP_LINK__
+      if (pending) {
+        try {
+          sessionStorage.removeItem('pending_deep_link')
+          localStorage.removeItem('pending_deep_link')
+          delete (window as any).__PENDING_DEEP_LINK__
+        } catch (e) {}
+        console.log('[Login] Deep link pendente interceptado na montagem, redirecionando:', pending)
+        window.location.replace(pending)
+        return
+      }
+
       const params = new URLSearchParams(window.location.search)
       const stepParam = params.get('step') as Step
       const nextParam = params.get('next')
@@ -247,7 +260,49 @@ export default function LoginPage() {
           try {
             const user = storedUser
             const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
-            
+
+            // 1. Checar se há deep link pendente
+            const pendingDeepLink = sessionStorage.getItem('pending_deep_link') || localStorage.getItem('pending_deep_link') || (window as any).__PENDING_DEEP_LINK__
+            if (pendingDeepLink) {
+              try {
+                sessionStorage.removeItem('pending_deep_link')
+                localStorage.removeItem('pending_deep_link')
+                delete (window as any).__PENDING_DEEP_LINK__
+              } catch (e) {}
+              console.log('[Login] checkStoredUser redirecionando para deep link pendente:', pendingDeepLink)
+              window.location.replace(pendingDeepLink)
+              return
+            }
+
+            // 2. No app nativo (Capacitor), o usuário autenticado NUNCA deve ir para choose_system (ERP desktop)
+            if (Capacitor.isNativePlatform()) {
+              const perfil = user.perfil || ''
+              const cargo = user.cargo || ''
+              const isFamilyOrStudent = (
+                perfil === 'Família' ||
+                perfil === 'Responsável' ||
+                perfil === 'Aluno' ||
+                cargo === 'Responsável' ||
+                cargo === 'Aluno'
+              )
+              if (isFamilyOrStudent) {
+                if (cargo === 'Aluno' && user.aluno_id) {
+                  router.replace(`/agenda-digital/${user.aluno_id}/comunicados`)
+                } else {
+                  router.replace('/agenda-digital/selecionar-aluno')
+                }
+              } else if (perfil === 'Diretor Geral' || cargo === 'Administrador Master') {
+                router.replace('/agenda-digital/selecionar-perfil-admin')
+              } else if (isAlsoFamily) {
+                setPendingAuth({ cargo: user.cargo, perfil: user.perfil })
+                setHasDualRole(true)
+                setStep('choose_agenda_role')
+              } else {
+                router.replace('/agenda-digital/colaborador/comunicados')
+              }
+              return
+            }
+
             setPendingAuth({
               cargo: user.cargo,
               perfil: user.perfil
@@ -376,6 +431,38 @@ export default function LoginPage() {
         // É um colaborador (Professor, Diretor, Coordenador, Financeiro, Secretaria, etc)
         // Verificação de papel duplo feita no backend de forma performática
         const isAlsoFamily = !!meta.responsavel_id || !!authData.user?.hasDualRole;
+
+        // 1. Prioridade máxima: deep link pendente (ex: push clicado antes do login)
+        const pending = (typeof window !== 'undefined') && (
+          sessionStorage.getItem('pending_deep_link') ||
+          localStorage.getItem('pending_deep_link') ||
+          (window as any).__PENDING_DEEP_LINK__
+        )
+        if (pending) {
+          try {
+            sessionStorage.removeItem('pending_deep_link')
+            localStorage.removeItem('pending_deep_link')
+            delete (window as any).__PENDING_DEEP_LINK__
+          } catch (e) {}
+          setLoginLoading(false)
+          window.location.replace(pending)
+          return
+        }
+
+        // 2. Se for app nativo (Capacitor), não exibir módulo ERP desktop
+        if (Capacitor.isNativePlatform()) {
+          setLoginLoading(false)
+          if (perfilReal === 'Diretor Geral' || cargoReal === 'Administrador Master') {
+            router.push('/agenda-digital/selecionar-perfil-admin')
+          } else if (isAlsoFamily) {
+            setPendingAuth({ cargo: cargoReal, perfil: perfilReal })
+            setHasDualRole(true)
+            setStep('choose_agenda_role')
+          } else {
+            router.push('/agenda-digital/colaborador/comunicados')
+          }
+          return
+        }
         
         setPendingAuth({
            cargo: cargoReal,

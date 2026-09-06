@@ -31,6 +31,7 @@ import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
+import { Capacitor } from '@capacitor/core'
 
 export default function ADMomentosPage() {
   const { momentosFeed, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
@@ -39,7 +40,7 @@ export default function ADMomentosPage() {
   useEffect(() => {
     let enabled = false;
     const enablePrivacy = async () => {
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
+      if (Capacitor.isNativePlatform()) {
         try {
           await PrivacyScreen.enable();
           enabled = true;
