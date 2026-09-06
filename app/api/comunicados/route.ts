@@ -118,7 +118,7 @@ export async function GET(request: Request) {
     const [alunoRes, turmasRes, gruposRes] = await Promise.all([
       supabase.from('alunos').select('id, turma, created_at, dados').eq('id', alunoId).maybeSingle(),
       supabase.from('turmas').select('*'),
-      supabase.from('agenda_grupos').select('id, dados, nome, alunosIds'),
+      supabase.from('agenda_grupos').select('id, dados'),
     ]);
 
     const alunoData = alunoRes.data;
@@ -237,7 +237,8 @@ export async function GET(request: Request) {
          colaboradorConditions.push(`id.not.is.null`); // Vê tudo (acesso global total)
       } else {
          myGroups.forEach(g => {
-           if (g.dados?.nome) colaboradorConditions.push(`dados->grupos.cs.["${g.dados.nome}"]`);
+            if (g.dados?.nome) colaboradorConditions.push(`dados->grupos.cs.["${g.dados.nome}"]`);
+            if (g.id) colaboradorConditions.push(`dados->gruposIds.cs.["${g.id}"]`);
          });
          
          const syncIds = myGroups.filter(g => String(g.dados?.syncId || '').startsWith('sync-') || String(g.id).startsWith('sync-')).map(g => String(g.dados?.syncId || g.id).replace('sync-', ''));
@@ -460,7 +461,8 @@ export async function POST(request: Request) {
                 title: formatComunicadoPushTitle(row.titulo),
                 message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
                 targetUserIds: directColaboradores,
-                targetUrl: '/agenda-digital/comunicados'
+                targetUrl: '/agenda-digital/colaborador/comunicados',
+                metadata: { isColab: true }
               }).catch(err => console.error("Push Error Colab:", err))
             );
           }
@@ -556,7 +558,8 @@ export async function POST(request: Request) {
               title: formatComunicadoPushTitle(data.titulo),
               message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
               targetUserIds: directColaboradores,
-              targetUrl: '/agenda-digital/comunicados'
+              targetUrl: '/agenda-digital/colaborador/comunicados',
+              metadata: { isColab: true }
             }).catch(err => console.error("Push Error Colab:", err))
           );
         }

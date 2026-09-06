@@ -215,6 +215,7 @@ export async function POST(request: NextRequest) {
     let dbRecordExists = false
     let responsavel_id = ''
     let aluno_id = ''
+    let system_user_id = ''
 
     // 1. Check system_users
     let hasDualRole = false
@@ -228,6 +229,7 @@ export async function POST(request: NextRequest) {
       const dbSystemUser = dbSystemUserRows?.[0]
 
       if (dbSystemUser) {
+        system_user_id = String(dbSystemUser.id)
         dbRecordExists = true
         if (dbSystemUser.status === 'inativo') {
           const supabaseSignOut = createServerClient(
@@ -318,6 +320,7 @@ export async function POST(request: NextRequest) {
     const userMetadataUpdate: any = { nome, cargo, perfil }
     if (responsavel_id) userMetadataUpdate.responsavel_id = responsavel_id
     if (aluno_id) userMetadataUpdate.aluno_id = aluno_id
+    if (system_user_id) userMetadataUpdate.system_user_id = system_user_id
 
     if (user) {
       const currentMeta = user.user_metadata || {}
@@ -335,13 +338,15 @@ export async function POST(request: NextRequest) {
     const enrichedUser = {
       ...user,
       hasDualRole,
+      system_user_id: system_user_id || '',
       responsavel_id: responsavel_id || user?.user_metadata?.responsavel_id || '',
       aluno_id: aluno_id || user?.user_metadata?.aluno_id || '',
       user_metadata: { 
         ...user?.user_metadata, 
         ...userMetadataUpdate,
         ...(responsavel_id ? { responsavel_id } : {}),
-        ...(aluno_id ? { aluno_id } : {})
+        ...(aluno_id ? { aluno_id } : {}),
+        ...(system_user_id ? { system_user_id } : {})
       }
     }
 

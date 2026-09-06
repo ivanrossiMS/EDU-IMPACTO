@@ -42,6 +42,8 @@ async function fetchInChunks<T>(
 interface TargetParams {
   /** Nomes ou IDs das turmas destinatárias */
   turmas?: string[]
+  /** IDs das turmas destinatárias */
+  turmasIds?: string[]
   /** Alias para turmas */
   targetClasses?: string[]
   /** IDs dos alunos destinatários */
@@ -54,6 +56,8 @@ interface TargetParams {
   colaboradoresIds?: string[]
   /** Nomes ou IDs de grupos manuais a incluir */
   grupos?: string[]
+  /** IDs de grupos manuais a incluir */
+  gruposIds?: string[]
   /** IDs de funcionários enviados pelo frontend */
   funcionariosIds?: string[]
 }
@@ -71,10 +75,13 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
   try {
     const supabase = supabaseServer
 
+    const turmas = (dados.turmas || dados.targetClasses || []).map(String).filter(Boolean)
+    const turmasIds = (dados.turmasIds || []).map(String).filter(Boolean)
     const grupos = (dados.grupos || []).map(String).filter(Boolean)
-    const allGroupTerms = Array.from(new Set([...(dados.turmas || dados.targetClasses || []).map(String).filter(Boolean), ...grupos]))
+    const gruposIds = (dados.gruposIds || []).map(String).filter(Boolean)
+    const allGroupTerms = Array.from(new Set([...turmas, ...turmasIds, ...grupos, ...gruposIds]))
     const alunosIds = (dados.alunosIds || dados.targetStudents || []).map(String).filter(Boolean)
-    const colaboradoresIds = (dados.colaboradoresIds || []).map(String).filter(Boolean)
+    const colaboradoresIds = [...(dados.colaboradoresIds || []), ...(dados.funcionariosIds || [])].map(String).filter(Boolean)
     const destino = String(dados.destino || '').toLowerCase().trim()
 
     const todosAnoMatch = allGroupTerms.find(t => t.toLowerCase().trim().startsWith('todos:'))
@@ -121,18 +128,18 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     })
 
     if (allGroupTerms.length > 0) {
-      // 1. Resolver grupos na tabela agenda_grupos
+      // 1. Resolver grupos na tabela agenda_grupos (apenas id e dados existem na tabela)
       const { data: allGrupos, error: gruposError } = await supabase
         .from('agenda_grupos')
-        .select('id, nome, dados')
+        .select('id, dados')
 
       if (!gruposError && allGrupos) {
         const matchedGrupos = allGrupos.filter(g => {
           const gId = String(g.id).toLowerCase()
-          const gNome = String(g.nome || '').toLowerCase()
+          const gNome = String(g.dados?.nome || (g as any).nome || '').toLowerCase()
           return allGroupTerms.some(term => {
             const tl = term.toLowerCase().trim()
-            return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
+            return tl === gId || tl === gNome || (tl.length > 2 && (gNome.includes(tl) || tl.includes(gNome)))
           })
         })
         
@@ -326,8 +333,10 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     const supabase = supabaseServer
 
     const turmas = (dados.turmas || dados.targetClasses || []).map(String).filter(Boolean)
+    const turmasIds = (dados.turmasIds || []).map(String).filter(Boolean)
     const grupos = (dados.grupos || []).map(String).filter(Boolean)
-    const allGroupTerms = Array.from(new Set([...turmas, ...grupos]))
+    const gruposIds = (dados.gruposIds || []).map(String).filter(Boolean)
+    const allGroupTerms = Array.from(new Set([...turmas, ...turmasIds, ...grupos, ...gruposIds]))
     const alunosIds = (dados.alunosIds || dados.targetStudents || []).map(String).filter(Boolean)
     const colaboradoresIds = [...(dados.colaboradoresIds || []), ...(dados.funcionariosIds || [])].map(String).filter(Boolean)
     const destino = String(dados.destino || '').toLowerCase().trim()
@@ -362,15 +371,15 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
       // Adicionar turmas e grupos
       if (allGroupTerms.length > 0) {
-        // 1. Resolver grupos na tabela agenda_grupos
-        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, nome, dados')
+        // 1. Resolver grupos na tabela agenda_grupos (apenas id e dados existem na tabela)
+        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, dados')
         if (!gruposError && allGrupos) {
           const matchedGrupos = allGrupos.filter(g => {
             const gId = String(g.id).toLowerCase()
             const gNome = String((g as any).nome || g.dados?.nome || '').toLowerCase()
             return allGroupTerms.some(term => {
               const tl = term.toLowerCase().trim()
-              return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
+              return tl === gId || tl === gNome || (tl.length > 2 && (gNome.includes(tl) || tl.includes(gNome)))
             })
           })
           

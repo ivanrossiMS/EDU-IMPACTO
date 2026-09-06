@@ -79,6 +79,7 @@ export async function GET(request: Request) {
     status: dbUser?.status || 'ativo',
     responsavel_id: resolvedResponsavelId,
     aluno_id: dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
+    system_user_id: dbUser?.id || '',
     hasDualRole: hasDualRole || !!resolvedResponsavelId,
   };
 

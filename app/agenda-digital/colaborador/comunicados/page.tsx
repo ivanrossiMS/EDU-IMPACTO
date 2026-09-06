@@ -290,6 +290,7 @@ function ColaboradorComunicadosContent() {
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
         gruposIds: selectedDest.filter(d => d.type === 'grupo').map(d => String(d.id).replace(/^g_?/, '')),
         funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
+        colaboradoresIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
         destino: 'selecionados'
       };
       
@@ -320,6 +321,7 @@ function ColaboradorComunicadosContent() {
         grupos: selectedDest.filter(d => d.type === 'grupo').map(d => d.name),
         gruposIds: selectedDest.filter(d => d.type === 'grupo').map(d => String(d.id).replace(/^g_?/, '')),
         funcionariosIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
+        colaboradoresIds: selectedDest.filter(d => d.type === 'funcionario').map(d => d.id.replace(/^f_?/, '')),
         destino: 'selecionados',
         prioridade: 'normal',
         fixado: false,

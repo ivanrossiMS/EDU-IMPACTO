@@ -332,7 +332,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 const p = OS.User.addAlias('email', String(currentUser.email).toLowerCase().trim());
                 if (p && p.catch) p.catch(() => {});
               }
-              const effectiveSysId = (currentUser as any)?.system_user_id || (currentUser as any)?.system_users_id || (currentUser as any)?.dados?.system_user_id;
+              const effectiveSysId = (currentUser as any)?.system_user_id || (currentUser as any)?.system_users_id || (currentUser as any)?.dados?.system_user_id || (currentUser.id && String(currentUser.id).length > 20 ? currentUser.id : null);
               if (effectiveSysId) {
                 const p = OS.User.addAlias('system_user_id', String(effectiveSysId));
                 if (p && p.catch) p.catch(() => {});
