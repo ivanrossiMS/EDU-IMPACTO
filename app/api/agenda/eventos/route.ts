@@ -22,6 +22,7 @@ export async function GET(request: Request) {
     const limitParam = url.searchParams.get('limit')
     const offsetParam = url.searchParams.get('offset')
     const alunoId = url.searchParams.get('aluno_id')
+    const idParam = url.searchParams.get('id')
     
     let query = supabase.from('eventos_agenda').select('*')
     
@@ -81,6 +82,10 @@ export async function GET(request: Request) {
       query = query.range(offset, offset + limit - 1)
     } else {
       query = query.limit(30)
+    }
+
+    if (idParam) {
+      query = query.eq('id', idParam)
     }
 
     query = query.order('data', { ascending: false })
@@ -159,8 +164,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
       title: '📅 Novo Evento!',
       message: `Novo evento no calendário: ${row.titulo}. Confira os detalhes!`,
       targetUserIds: studentTargetArray,
-      targetUrl: '/agenda-digital/calendario',
-      metadata: { perfil_destino: 'familia' }
+      targetUrl: `/agenda-digital/calendario?id=${row.id}`,
+      metadata: { perfil_destino: 'familia', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/calendario?id=${row.id}` }
     }).catch(err => console.error('Evento Push Error:', err));
 
     // Lembrete Agendado em Lote
@@ -171,8 +176,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
         title: '⏰ Lembrete: Amanhã!',
         message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
         targetUserIds: studentTargetArray,
-        targetUrl: '/agenda-digital/calendario',
-        metadata: { perfil_destino: 'familia' },
+        targetUrl: `/agenda-digital/calendario?id=${row.id}`,
+        metadata: { perfil_destino: 'familia', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/calendario?id=${row.id}` },
         sendAfter: sendAfterStr
       }).catch(err => console.error('Evento Reminder Error:', err));
     }
@@ -186,8 +191,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
       title: '📅 Novo Evento!',
       message: `O evento "${row.titulo}" foi adicionado à sua agenda.`,
       targetUserIds: directColaboradores,
-      targetUrl: '/agenda-digital/colaborador/calendario',
-      metadata: { perfil_destino: 'colaborador' }
+      targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}`,
+      metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}` }
     }).catch(err => console.error('Evento Push Error:', err))
 
     if (shouldSendReminder && sendAfterStr) {
@@ -197,8 +202,8 @@ async function dispatchPushNotifications(supabase: any, row: any) {
         title: '⏰ Lembrete: Amanhã!',
         message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
         targetUserIds: directColaboradores,
-        targetUrl: '/agenda-digital/colaborador/calendario',
-        metadata: { perfil_destino: 'colaborador' },
+        targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}`,
+        metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/colaborador/calendario?id=${row.id}` },
         sendAfter: sendAfterStr
       }).catch(err => console.error('Evento Reminder Error:', err))
     }

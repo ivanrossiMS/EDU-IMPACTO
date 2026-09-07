@@ -10,6 +10,7 @@ import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { LogOut } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
 type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
@@ -83,6 +84,20 @@ export default function LoginPage() {
         })
     }
   }, [step, pendingAuth])
+
+  useEffect(() => {
+    if (step === 'choose_system' && typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('redirect') || localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
+      if (p) {
+        localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+        if (Capacitor.isNativePlatform()) {
+          Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
+        }
+        console.log('[Login] Encaminhando automaticamente da escolha de módulos para rota de push:', p)
+        router.replace(p)
+      }
+    }
+  }, [step, router])
   const [hasDualRole, setHasDualRole] = useState(false)
   const [profileData, setProfileData] = useState<any>(null)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
@@ -248,6 +263,20 @@ export default function LoginPage() {
             const user = storedUser
             const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
             
+            // Se houver redirect pendente (ex: notificação clicada), redireciona direto sem parar na escolha de módulos
+            const pendingRoute = params.get('redirect') || (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
+            if (pendingRoute) {
+              console.log('[Login] Usuário já logado e notificação pendente detectada:', pendingRoute)
+              try {
+                localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+                if (Capacitor.isNativePlatform()) {
+                  Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
+                }
+              } catch {}
+              router.replace(pendingRoute)
+              return
+            }
+
             setPendingAuth({
               cargo: user.cargo,
               perfil: user.perfil
@@ -367,6 +396,22 @@ export default function LoginPage() {
         saveSetting('edu-current-user', userObj)
         saveSetting('edu-current-perfil', perfilReal)
       } catch (e) {}
+
+      // Se houver notificação pendente ou redirect especificado, vai direto para ele!
+      const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+      const pendingRedirect = urlParams?.get('redirect') || (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
+      if (pendingRedirect) {
+        console.log('[Login] Login com sucesso. Redirecionando direto para notificação pendente:', pendingRedirect)
+        try {
+          localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+          if (Capacitor.isNativePlatform()) {
+            Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
+          }
+        } catch {}
+        setLoginLoading(false)
+        router.push(pendingRedirect)
+        return
+      }
 
       if (cargoReal === 'Aluno') {
         if (meta.aluno_id) {

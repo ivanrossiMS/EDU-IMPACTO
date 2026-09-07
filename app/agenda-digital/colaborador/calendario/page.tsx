@@ -303,6 +303,56 @@ export default function ADCalendarioPage() {
     tipo: 'todos', turmasSel: [], usuario: 'Todos', anoTodos: ''
   })
 
+  const queryId = searchParams?.get('id')
+  const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null)
+  const hasAutoOpenedEvent = useRef(false)
+
+  useEffect(() => {
+    if (!queryId || hasAutoOpenedEvent.current) return
+
+    const navigateToEvent = (ev: any) => {
+      hasAutoOpenedEvent.current = true
+      setHighlightedEventId(String(ev.id))
+      if (ev.data) {
+        const parts = String(ev.data).split('-')
+        if (parts.length >= 2) {
+          const evYear = parseInt(parts[0], 10)
+          const evMonth = parseInt(parts[1], 10) - 1
+          if (!isNaN(evYear) && !isNaN(evMonth)) {
+            setViewDate(new Date(evYear, evMonth, 1))
+          }
+        }
+        setSelectedDay(ev.data)
+      }
+      setTimeout(() => {
+        const el = document.getElementById(`evento-${ev.id}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 450)
+    }
+
+    const target = (eventosAgenda || []).find((e: any) => String(e.id) === String(queryId))
+    if (target) {
+      navigateToEvent(target)
+    } else {
+      fetch(`/api/agenda/eventos?id=${encodeURIComponent(queryId)}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && Array.isArray(data) && data.length > 0) {
+            const ev = data[0]
+            setLocalEventos?.(prev => {
+              const current = prev || []
+              if (current.some((c: any) => String(c.id) === String(ev.id))) return current
+              return [ev, ...current]
+            })
+            navigateToEvent(ev)
+          }
+        })
+        .catch(err => console.error('Erro ao buscar evento por id:', err))
+    }
+  }, [queryId, eventosAgenda, setLocalEventos])
+
   const year = viewDate.getFullYear()
   const month = viewDate.getMonth()
   const daysInMonth = getDaysInMonth(year, month)
@@ -972,10 +1022,12 @@ export default function ADCalendarioPage() {
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                       {eventsList.map((ev, idx) => {
+                        const isHighlighted = highlightedEventId === String(ev.id)
                         const color = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
                         return (
                           <div
                             key={ev.id}
+                            id={`evento-${ev.id}`}
                             style={{
                               display: 'flex',
                               flexDirection: 'column',
@@ -983,7 +1035,15 @@ export default function ADCalendarioPage() {
                               paddingBottom: idx < eventsList.length - 1 ? 14 : 0,
                               borderBottom: idx < eventsList.length - 1 ? '1px solid #f1f5f9' : 'none',
                               position: 'relative',
-                              zIndex: 2
+                              zIndex: 2,
+                              transition: 'all 0.3s ease',
+                              ...(isHighlighted ? {
+                                background: '#f5f3ff',
+                                padding: '12px 14px',
+                                borderRadius: 14,
+                                border: '2px solid #6366f1',
+                                boxShadow: '0 4px 18px rgba(99,102,241,0.22)'
+                              } : {})
                             }}
                           >
                             {/* Top Row: Time Badge + Edit/Delete Actions */}

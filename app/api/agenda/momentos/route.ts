@@ -23,6 +23,7 @@ export async function GET(request: Request) {
     const limit = limitParam ? parseInt(limitParam, 10) : 30
     const offset = offsetParam ? parseInt(offsetParam, 10) : 0
     const alunoId = searchParams.get('aluno_id')
+    const idParam = searchParams.get('id')
 
     // VERIFICAÇÃO DE PERFIL E IDOR
     let isFamilyOrStudent = false;
@@ -277,6 +278,10 @@ export async function GET(request: Request) {
       query = query.gte('created_at', adjustedStartDate.toISOString());
     }
 
+    if (idParam) {
+      query = query.eq('id', idParam);
+    }
+
     const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
     if (error) throw new Error(error.message)
     
@@ -371,8 +376,8 @@ export async function POST(request: Request) {
                   title: '📸 Novo Momento Publicado!',
                   message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
                   targetUserIds: student.responsaveis_ids,
-                  targetUrl: `/agenda-digital/${student.aluno_id}/momentos`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia' }
+                  targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}` }
                 }).catch(err => console.error('Momento Push Error:', err))
               )
             }
@@ -386,8 +391,8 @@ export async function POST(request: Request) {
                 title: '📸 Novo Momento Publicado!',
                 message: `Um novo conteúdo foi compartilhado. Confira!`,
                 targetUserIds: directColaboradores,
-                targetUrl: '/agenda-digital/colaborador/momentos',
-                metadata: { perfil_destino: 'colaborador' }
+                targetUrl: `/agenda-digital/colaborador/momentos?id=${row.id}`,
+                metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/colaborador/momentos?id=${row.id}` }
               }).catch(err => console.error('Momento Push Error Colab:', err))
             )
           }
@@ -424,8 +429,8 @@ export async function POST(request: Request) {
                 title: '📸 Novo Momento Publicado!',
                 message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
                 targetUserIds: student.responsaveis_ids,
-                targetUrl: `/agenda-digital/${student.aluno_id}/momentos`,
-                metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia' }
+                targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}`,
+                metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}` }
               }).catch(err => console.error('Momento Push Error:', err))
             )
           }
@@ -439,8 +444,8 @@ export async function POST(request: Request) {
               title: '📸 Novo Momento Publicado!',
               message: `Um novo conteúdo foi compartilhado. Confira!`,
               targetUserIds: directColaboradores,
-              targetUrl: '/agenda-digital/colaborador/momentos',
-              metadata: { perfil_destino: 'colaborador' }
+              targetUrl: `/agenda-digital/colaborador/momentos?id=${data.id}`,
+              metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/colaborador/momentos?id=${data.id}` }
             }).catch(err => console.error('Momento Push Error Colab:', err))
           )
         }

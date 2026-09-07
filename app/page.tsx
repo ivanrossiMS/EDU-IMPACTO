@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 
+import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
+import { Capacitor } from '@capacitor/core'
+import { Preferences } from '@capacitor/preferences'
+
 export default function Root() {
   const router = useRouter()
   const { currentUser, hydrated } = useApp()
@@ -13,31 +17,70 @@ export default function Root() {
     // Wait for AppProvider to hydrate the session from localStorage/Capacitor Preferences
     if (!hydrated) return
 
-    // If no user is logged in, redirect to /login on the client side.
-    if (!currentUser) {
-      router.replace('/login')
-      return
-    }
+    const checkPendingPushAndRoute = async () => {
+      // Se estiver em ambiente nativo, concede uma pequena janela (180ms)
+      // para o OneSignal descarregar a fila de clique de notificação (cold start)
+      if (Capacitor.isNativePlatform()) {
+        await new Promise(r => setTimeout(r, 180))
+      }
 
-    const perfil = currentUser.perfil || ''
-    const cargo = currentUser.cargo || ''
-    const isFamilyOrStudent = (
-      perfil === 'Família' ||
-      perfil === 'Responsável' ||
-      perfil === 'Aluno' ||
-      cargo === 'Responsável' ||
-      cargo === 'Aluno'
-    )
+      let pendingPushRoute = typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null
+      if (!pendingPushRoute && Capacitor.isNativePlatform()) {
+        try {
+          const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
+          pendingPushRoute = value
+        } catch {}
+      }
 
-    if (isFamilyOrStudent) {
-      if (cargo === 'Aluno' && currentUser.aluno_id) {
-        router.replace(`/agenda-digital/${currentUser.aluno_id}/comunicados`)
+      // Se houver notificação pendente que o usuário clicou:
+      if (pendingPushRoute) {
+        console.log('[Root] Notificação pendente detectada:', pendingPushRoute)
+        try {
+          localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+          if (Capacitor.isNativePlatform()) {
+            await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
+          }
+        } catch {}
+
+        if (currentUser) {
+          console.log('[Root] Usuário autenticado. Redirecionando direto para o item da notificação:', pendingPushRoute)
+          router.replace(pendingPushRoute)
+          return
+        } else {
+          console.log('[Root] Usuário deslogado. Enviando para login com redirect:', pendingPushRoute)
+          router.replace(`/login?redirect=${encodeURIComponent(pendingPushRoute)}`)
+          return
+        }
+      }
+
+      // If no user is logged in, redirect to /login on the client side.
+      if (!currentUser) {
+        router.replace('/login')
         return
       }
-      router.replace('/agenda-digital/selecionar-aluno')
-    } else {
-      router.replace('/login?step=choose_system')
+
+      const perfil = currentUser.perfil || ''
+      const cargo = currentUser.cargo || ''
+      const isFamilyOrStudent = (
+        perfil === 'Família' ||
+        perfil === 'Responsável' ||
+        perfil === 'Aluno' ||
+        cargo === 'Responsável' ||
+        cargo === 'Aluno'
+      )
+
+      if (isFamilyOrStudent) {
+        if (cargo === 'Aluno' && currentUser.aluno_id) {
+          router.replace(`/agenda-digital/${currentUser.aluno_id}/comunicados`)
+          return
+        }
+        router.replace('/agenda-digital/selecionar-aluno')
+      } else {
+        router.replace('/login?step=choose_system')
+      }
     }
+
+    checkPendingPushAndRoute()
   }, [hydrated, currentUser, router])
 
   // Fallback de segurança para liberar a splash screen se a navegação demorar mais que 1.2s

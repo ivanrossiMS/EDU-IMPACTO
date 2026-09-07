@@ -178,6 +178,20 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     return results
   }, [agendaCtx?.chatGroups, myCandidateStaffIds])
 
+  // Escuta eventos globais de foreground emitidos pelo GlobalNotificationProvider
+  useEffect(() => {
+    const handleRefresh = () => {
+      console.log('🔄 [AgendaRealtime] Revalidando queries da agenda após evento foreground...')
+      queryClient.invalidateQueries({ queryKey: ['agenda'] })
+    }
+    window.addEventListener('ad:push-foreground', handleRefresh)
+    window.addEventListener('ad:app-foreground', handleRefresh)
+    return () => {
+      window.removeEventListener('ad:push-foreground', handleRefresh)
+      window.removeEventListener('ad:app-foreground', handleRefresh)
+    }
+  }, [queryClient])
+
   // ── OneSignal Initialization ──────────────────────────────────────────────
   // 1. Inicializa o SDK (apenas uma vez)
   useEffect(() => {

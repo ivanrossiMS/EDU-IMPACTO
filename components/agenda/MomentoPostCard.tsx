@@ -19,6 +19,7 @@ import { ADMomento } from '@/lib/agendaDigitalContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApp } from '@/lib/context'
 import { formatDateTime } from '@/lib/utils'
+import { MomentoLightbox } from '@/components/agenda/MomentoLightbox'
 
 // Ultra-modern gradient configs per card slot
 const CARD_THEMES = [
@@ -362,46 +363,15 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
         </div>
         </ClientPortal>
       )}
-      {/* Lightbox: Media View */}
-      <AnimatePresence>
-        {showLightbox && (
-          <ClientPortal>
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setShowLightbox(false)}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(10px)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}
-          >
-            <motion.button 
-              initial={{ scale: 0.5 }} animate={{ scale: 1 }}
-              style={{ position: 'absolute', top: 30, right: 30, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', padding: 10, cursor: 'pointer', color: '#fff', zIndex: 10 }}
-            >
-              <X size={28} />
-            </motion.button>
-
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-              onClick={e => e.stopPropagation()}
-              style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-            >
-              {currentMedia?.type === 'video' || currentMedia?.url.match(/\.(mp4|webm)$/i) ? (
-                <video 
-                  src={currentMedia?.url} 
-                  controls 
-                  autoPlay 
-                  style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, boxShadow: '0 0 60px rgba(0,0,0,0.5)' }} 
-                />
-              ) : (
-                <img 
-                  src={currentMedia?.url} 
-                  alt="Full size" 
-                  style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, objectFit: 'contain', boxShadow: '0 0 60px rgba(0,0,0,0.5)' }} 
-                />
-              )}
-            </motion.div>
-          </motion.div>
-          </ClientPortal>
-        )}
-      </AnimatePresence>
+      {/* Lightbox: Media View com Zoom */}
+      <MomentoLightbox
+        isOpen={showLightbox && medias.length > 0}
+        onClose={() => setShowLightbox(false)}
+        media={medias}
+        initialIndex={slide}
+        author={authorName}
+        description={post.desc}
+      />
     </>
   )
 }

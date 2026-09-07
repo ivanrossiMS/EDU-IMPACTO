@@ -220,7 +220,8 @@ export async function POST(request: Request) {
               title: `💬 Resposta de ${remetenteNome}`,
               message: `No comunicado "${comData.titulo}": ${msgTexto}`,
               targetUserIds: [targetUserId],
-              targetUrl: `/agenda-digital/comunicados`
+              targetUrl: `/agenda-digital/colaborador/comunicados?id=${body.comunicado_id}`,
+              metadata: { perfil_destino: 'colaborador', item_id: String(body.comunicado_id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${body.comunicado_id}` }
             });
           } catch (err) {
             console.error("Push erro:", err);
@@ -243,7 +244,7 @@ export async function POST(request: Request) {
               user_id: targetUserId,
               titulo: `Nova resposta da Escola`,
               mensagem: `Resposta no comunicado "${tituloCom}": "${msgTexto}"`,
-              link: `/agenda-digital/comunicados`,
+              link: `/agenda-digital/comunicados?id=${body.comunicado_id}`,
               lida: false,
               tipo: 'comunicado',
               created_at: new Date().toISOString()
@@ -259,7 +260,8 @@ export async function POST(request: Request) {
               title: `🏫 Nova mensagem da Escola`,
               message: `Sobre "${tituloCom}": ${msgTexto}`,
               targetUserIds: [targetUserId],
-              targetUrl: `/agenda-digital/comunicados`
+              targetUrl: `/agenda-digital/comunicados?id=${body.comunicado_id}`,
+              metadata: { perfil_destino: 'familia', item_id: String(body.comunicado_id), rota: 'comunicados', targetUrl: `/agenda-digital/comunicados?id=${body.comunicado_id}` }
             });
           } catch (err) {
             console.error("Push erro:", err);

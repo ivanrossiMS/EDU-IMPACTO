@@ -5,7 +5,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { PrivacyScreen } from '@capacitor-community/privacy-screen';
 
@@ -33,6 +33,7 @@ import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
+import { MomentoLightbox } from '@/components/agenda/MomentoLightbox'
 
 export default function ADMomentosPage() {
   const queryClient = useQueryClient()
@@ -106,6 +107,49 @@ export default function ADMomentosPage() {
   const [lightboxMedia, setLightboxMedia] = useState<{ url: string, type: string }[]>([])
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const [isMounted, setIsMounted] = useState(false)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+
+  const queryId = searchParams?.get('id')
+  const hasAutoOpenedMomento = useRef(false)
+
+  useEffect(() => {
+    if (!queryId || hasAutoOpenedMomento.current) return
+
+    const openMomento = (target: any) => {
+      hasAutoOpenedMomento.current = true
+      setHighlightedId(String(target.id))
+      setVisibleCount(prev => Math.max(prev, 15))
+      const targetMedia = target.media || target.midias || []
+      if (targetMedia && targetMedia.length > 0) {
+        setLightboxMedia(targetMedia.map((item: any) => ({
+          url: item.url,
+          type: item.type === 'video' || (item.url && item.url.match(/\.(mp4|webm)$/i)) ? 'video' : 'image'
+        })))
+        setLightboxIndex(0)
+        setLightboxOpen(true)
+      }
+      setTimeout(() => {
+        const el = document.getElementById(`momento-${target.id}`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 400)
+    }
+
+    const target = (momentosFeed || []).find((m: any) => String(m.id) === String(queryId))
+    if (target) {
+      openMomento(target)
+    } else {
+      fetch(`/api/agenda/momentos?id=${encodeURIComponent(queryId)}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && Array.isArray(data) && data.length > 0) {
+            openMomento(data[0])
+          }
+        })
+        .catch(err => console.error('Erro ao buscar momento alvo:', err))
+    }
+  }, [queryId, momentosFeed])
 
   useEffect(() => { setIsMounted(true) }, [])
 
@@ -1224,12 +1268,17 @@ export default function ADMomentosPage() {
                 return m.time || 'Agora';
               })()
 
+              const isTargeted = highlightedId === String(m.id);
               return (
                 <div 
                   key={m.id} 
+                  id={`momento-${m.id}`}
                   className="polaroid-card"
                   style={{ 
-                    transform: `rotate(${initialRotation}deg)`
+                    transform: `rotate(${initialRotation}deg)`,
+                    border: isTargeted ? '3px solid #7928CA' : undefined,
+                    boxShadow: isTargeted ? '0 0 25px rgba(121,40,202,0.45)' : undefined,
+                    transition: 'all 0.3s ease'
                   }}
                 >
                   {/* Header Simplificado para caber no formato polaroid */}
@@ -1476,122 +1525,13 @@ export default function ADMomentosPage() {
         )}
       </div>
 
-      {/* LIGHTBOX / GALLERY MODAL */}
-      {isMounted && (
-        <ClientPortal>
-        <AnimatePresence>
-          {lightboxOpen && lightboxMedia.length > 0 && (
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              style={{ 
-                position: 'fixed', inset: 0, zIndex: 999999, 
-                background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                backdropFilter: 'none' 
-              }}
-              onClick={() => setLightboxOpen(false)}
-            >
-              {/* Close Button */}
-              <button 
-                onClick={(e) => { e.stopPropagation(); setLightboxOpen(false) }} 
-                style={{ 
-                  position: 'absolute', top: 24, right: 24, width: 48, height: 48, borderRadius: '50%', 
-                  background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', 
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                  cursor: 'pointer', zIndex: 2, transition: 'background 0.2s' 
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-              >
-                <X size={24} />
-              </button>
-
-              {/* Navigation Buttons */}
-              {lightboxMedia.length > 1 && (
-                <>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setLightboxIndex(prev => prev > 0 ? prev - 1 : lightboxMedia.length - 1) }}
-                    style={{ 
-                      position: 'absolute', left: 24, top: '50%', transform: 'translateY(-50%)', 
-                      width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', 
-                      border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                      cursor: 'pointer', zIndex: 2, transition: 'background 0.2s' 
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                  >
-                    <ChevronLeft size={32} />
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setLightboxIndex(prev => prev < lightboxMedia.length - 1 ? prev + 1 : 0) }}
-                    style={{ 
-                      position: 'absolute', right: 24, top: '50%', transform: 'translateY(-50%)', 
-                      width: 56, height: 56, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', 
-                      border: 'none', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                      cursor: 'pointer', zIndex: 2, transition: 'background 0.2s' 
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-                  >
-                    <ChevronRight size={32} />
-                  </button>
-                </>
-              )}
-
-              {/* Media Content */}
-              <div 
-                style={{ maxWidth: '90vw', maxHeight: '90vh', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-                onClick={(e) => e.stopPropagation()} // Evita fechar ao clicar na imagem
-              >
-                <AnimatePresence mode="wait">
-                  <motion.div 
-                    key={lightboxIndex}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 1.05 }}
-                    transition={{ duration: 0.2 }}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    {lightboxMedia[lightboxIndex].type === 'video' ? (
-                      <video 
-                        src={lightboxMedia[lightboxIndex].url} 
-                        controls 
-                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,0.85)', outline: 'none' }} 
-                      />
-                    ) : (
-                      <img 
-                        src={lightboxMedia[lightboxIndex].url} 
-                        alt="Ampliado" 
-                        style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: 16, boxShadow: '0 20px 60px rgba(15,23,42,0.85)', objectFit: 'contain' }} 
-                      />
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-              
-              {/* Pagination Dots */}
-              {lightboxMedia.length > 1 && (
-                <div style={{ position: 'absolute', bottom: 32, display: 'flex', gap: 10 }} onClick={(e) => e.stopPropagation()}>
-                  {lightboxMedia.map((_, idx) => (
-                    <div 
-                      key={idx}
-                      style={{ 
-                        width: 12, height: 12, borderRadius: '50%', 
-                        background: idx === lightboxIndex ? 'white' : 'rgba(255,255,255,0.3)',
-                        transition: 'background 0.3s', cursor: 'pointer',
-                        boxShadow: idx === lightboxIndex ? '0 0 10px rgba(255,255,255,0.5)' : 'none'
-                      }}
-                      onClick={() => setLightboxIndex(idx)}
-                    />
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-        </ClientPortal>
-      )}
+      {/* LIGHTBOX / GALLERY MODAL COM SUPORTE A ZOOM */}
+      <MomentoLightbox
+        isOpen={lightboxOpen && lightboxMedia.length > 0}
+        onClose={() => setLightboxOpen(false)}
+        media={lightboxMedia}
+        initialIndex={lightboxIndex}
+      />
 
       {/* === MODAL: NOVO MOMENTO === */}
       {isMounted && showModal && (

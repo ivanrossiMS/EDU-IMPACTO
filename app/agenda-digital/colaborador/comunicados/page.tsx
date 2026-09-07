@@ -542,25 +542,29 @@ function ColaboradorComunicadosContent() {
       return;
     }
 
-    if (!isDataLoading) {
-      fetch(`/api/comunicados?id=${encodeURIComponent(queryId)}`)
-        .then(res => res.json())
-        .then(data => {
-          const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
-          if (item && (item.id || item.titulo)) {
-            setSelectedComunicado(item);
-            hasAutoOpened.current = true;
-            try {
-              const urlParams = new URLSearchParams(window.location.search);
-              urlParams.delete('id');
-              const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
-              router.replace(newUrl, { scroll: false });
-            } catch(e) {}
-          }
-        })
-        .catch(err => console.error("Error auto-opening single comunicado:", err));
-    }
-  }, [queryId, comunicados, isDataLoading, router]);
+    let isCancelled = false;
+    fetch(`/api/comunicados?id=${encodeURIComponent(queryId)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (isCancelled) return;
+        const item = Array.isArray(data) ? data[0] : (data?.data?.[0] || data);
+        if (item && (item.id || item.titulo)) {
+          setSelectedComunicado(item);
+          hasAutoOpened.current = true;
+          try {
+            const urlParams = new URLSearchParams(window.location.search);
+            urlParams.delete('id');
+            const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
+            router.replace(newUrl, { scroll: false });
+          } catch(e) {}
+        }
+      })
+      .catch(err => console.error("Error auto-opening single comunicado:", err));
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [queryId, comunicados, router]);
 
   useEffect(() => {
     const handleOpenCustom = (e: any) => {

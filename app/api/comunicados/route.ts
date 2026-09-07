@@ -496,7 +496,7 @@ export async function POST(request: Request) {
                 message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
                 targetUserIds: directColaboradores,
                 targetUrl: `/agenda-digital/colaborador/comunicados?id=${row.id}`,
-                metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'comunicados' }
+                metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${row.id}` }
               }).catch(err => console.error("Push Error Colab:", err))
             );
           }
@@ -594,7 +594,7 @@ export async function POST(request: Request) {
               message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
               targetUserIds: directColaboradores,
               targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
-              metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'comunicados' }
+              metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}` }
             }).catch(err => console.error("Push Error Colab:", err))
           );
         }
