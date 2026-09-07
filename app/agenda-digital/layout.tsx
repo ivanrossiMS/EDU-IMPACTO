@@ -57,7 +57,7 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 }
 
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
-  const { bannerUrl, adLoading } = useAgendaDigital()
+  const { bannerUrl, adLoading, isLoaded } = useAgendaDigital()
   const { currentUser, hydrated, loadingPath, setLoadingPath } = useApp()
   const { perfis, perfisLoading } = useData()
   const router = useRouter()
@@ -106,6 +106,13 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
       } else {
         setAccessState('allowed')
       }
+      clearTimeout(emergencyTimer)
+      return
+    }
+
+    // Páginas de seleção de perfil ou aluno nunca devem ser bloqueadas
+    if (isRouterPage) {
+      setAccessState('allowed')
       clearTimeout(emergencyTimer)
       return
     }
@@ -209,6 +216,36 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
             position: relative;
             display: block;
             flex-shrink: 0;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);
+            overflow: hidden;
+            aspect-ratio: 1600 / 400;
+            min-height: 110px;
+            max-height: 360px;
+          }
+
+          .ad-banner-global img,
+          .ad-banner-img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            aspect-ratio: 1600 / 400;
+            min-height: 110px;
+            max-height: 360px;
+            object-fit: cover;
+            margin: 0;
+            transform: translateZ(0);
+            backface-visibility: hidden;
+          }
+
+          .ad-banner-skeleton {
+            background: linear-gradient(90deg, rgba(226, 232, 240, 0.4) 0%, rgba(241, 245, 249, 0.8) 50%, rgba(226, 232, 240, 0.4) 100%);
+            background-size: 200% 100%;
+            animation: adBannerShimmer 1.5s infinite ease-in-out;
+          }
+
+          @keyframes adBannerShimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
           }
 
           .ad-content-inner.ad-has-banner {
@@ -222,24 +259,26 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
           }
           
           @media (max-width: 768px) {
-            .ad-main-scroll {
-              /* Remover padding-top no wrapper principal para o banner encostar no topo */
-            }
             .ad-banner-global {
               position: relative !important;
               width: 100% !important;
               height: auto !important;
+              aspect-ratio: 1600 / 400 !important;
+              min-height: 105px !important;
+              max-height: 260px !important;
               background: transparent;
               margin: 0 !important;
               padding: 0 !important;
               display: block !important;
             }
-            .ad-banner-global img {
+            .ad-banner-global img,
+            .ad-banner-img {
               display: block !important;
               width: 100% !important;
-              height: auto !important;
-              min-height: 120px !important;
-              max-height: 400px !important;
+              height: 100% !important;
+              aspect-ratio: 1600 / 400 !important;
+              min-height: 105px !important;
+              max-height: 260px !important;
               object-fit: cover !important;
               margin: 0 !important;
             }
@@ -263,17 +302,22 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         )}
 
         <div className="ad-main-scroll no-scrollbar">
-          {bannerUrl && (
+          {bannerUrl ? (
             <div className="ad-banner-global">
               <img 
                 src={bannerUrl} 
                 alt="Cover Banner" 
-                style={{ width: '100%', height: 'auto', minHeight: '120px', display: 'block', objectFit: 'cover' }} 
+                fetchPriority="high"
+                loading="eager"
+                decoding="async"
+                className="ad-banner-img"
               />
             </div>
-          )}
+          ) : !isLoaded ? (
+            <div className="ad-banner-global ad-banner-skeleton" />
+          ) : null}
 
-          <main className={`ad-content-inner ${bannerUrl ? 'ad-has-banner' : ''}`}>
+          <main className={`ad-content-inner ${bannerUrl || !isLoaded ? 'ad-has-banner' : ''}`}>
             {children}
           </main>
 

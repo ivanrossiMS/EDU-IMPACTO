@@ -110,11 +110,11 @@ export default function ADAdminAjustes() {
         throw new Error(errJson.error || 'Erro ao salvar configurações')
       }
 
-      if (localBanner) {
+      if (localBanner !== undefined) {
          const resBanner = await fetch('/api/configuracoes', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chave: 'ad_banner', valor: localBanner })
+            body: JSON.stringify({ chave: 'ad_banner', valor: localBanner || null })
          })
          if (!resBanner.ok) {
            const errJson = await resBanner.json().catch(() => ({}))

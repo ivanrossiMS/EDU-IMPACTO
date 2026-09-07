@@ -590,7 +590,10 @@ const SELECTOR_STYLES = `
             padding: 20px;
             gap: 14px;
             border-radius: 24px;
-            margin-top: 48px;
+            margin-top: 16px;
+          }
+          .ad-has-banner .premium-welcome-card {
+            margin-top: 8px !important;
           }
           .premium-logout-btn {
             padding: 10px 12px;

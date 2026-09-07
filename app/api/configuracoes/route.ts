@@ -5,11 +5,9 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
-// Cache persistente em Dev Mode para evitar wiping durante Hot-Reloads
-const globalCache = (global as any).configCache || new Map<string, { value: any, timestamp: number }>();
-if (process.env.NODE_ENV !== 'production') {
-  (global as any).configCache = globalCache;
-}
+// Cache persistente em memória e em serverless containers
+const globalCache = (globalThis as any).configCache || new Map<string, { value: any, timestamp: number }>();
+(globalThis as any).configCache = globalCache;
 const CACHE_TTL = 300_000; // 5 minutos
 
 // Chaves que são puramente visuais/públicas e não necessitam de bloqueio por autenticação
@@ -35,19 +33,26 @@ export async function GET(request: Request) {
     if (errorResponse) return errorResponse
   }
 
+  const cacheHeaders: Record<string, string> = isPublicRequest
+    ? {
+        'Cache-Control': 'public, max-age=180, stale-while-revalidate=86400',
+        'CDN-Cache-Control': 'public, max-age=300, stale-while-revalidate=86400',
+      }
+    : {
+        'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+      };
+
   const supabase = getAdminClient();
 
   // ── BULK fetch (multiple keys in one query) ─────────────────────
   if (chaves) {
     const keys = chaves.split(',').map(k => k.trim()).filter(Boolean)
-    if (keys.length === 0) return NextResponse.json({})
+    if (keys.length === 0) return NextResponse.json({}, { headers: cacheHeaders })
 
     const cacheKey = keys.sort().join(',');
     const cached = globalCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-       return NextResponse.json(cached.value, {
-         headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=600' }
-       })
+       return NextResponse.json(cached.value, { headers: cacheHeaders })
     }
 
     const { data, error } = await supabase
@@ -65,11 +70,7 @@ export async function GET(request: Request) {
 
     globalCache.set(cacheKey, { value: result, timestamp: Date.now() });
 
-    return NextResponse.json(result, {
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate'
-      }
-    })
+    return NextResponse.json(result, { headers: cacheHeaders })
   }
 
   // ── Single key ─────────────────────────────────────────────────
@@ -77,9 +78,7 @@ export async function GET(request: Request) {
     const cacheKey = `single:${chave}`;
     const cached = globalCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return NextResponse.json({ valor: cached.value }, {
-        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
-      })
+      return NextResponse.json({ valor: cached.value }, { headers: cacheHeaders })
     }
 
     const { data, error } = await supabase
@@ -87,12 +86,10 @@ export async function GET(request: Request) {
       .select('valor')
       .eq('chave', chave)
       .single()
-    if (error) return NextResponse.json({ valor: null })
+    if (error) return NextResponse.json({ valor: null }, { headers: cacheHeaders })
 
     globalCache.set(cacheKey, { value: data?.valor ?? null, timestamp: Date.now() });
-    return NextResponse.json({ valor: data?.valor ?? null }, {
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' }
-    })
+    return NextResponse.json({ valor: data?.valor ?? null }, { headers: cacheHeaders })
   }
 
 

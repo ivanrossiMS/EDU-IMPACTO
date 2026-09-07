@@ -107,6 +107,7 @@ interface ADContextState {
   adLoading: boolean
   setAdLoading: React.Dispatch<React.SetStateAction<boolean>>
   isDataLoading: boolean
+  isLoaded?: boolean
   comunicadosLoading?: boolean
   chatGroupsLoading?: boolean
   fetchNextPageComunicados?: () => void
@@ -142,6 +143,7 @@ const AgendaDigitalContext = createContext<ADContextState>({
   adLoading: false,
   setAdLoading: () => {},
   isDataLoading: false,
+  isLoaded: false,
   comunicadosLoading: false,
   chatGroupsLoading: false,
   fetchNextPageComunicados: () => {},
@@ -259,24 +261,99 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
     })
   }, [setMessagesArray])
 
-  const [adLoading, setAdLoading] = useState(false)
-  const [isLoaded, setIsLoaded] = useState(false)
-  const isDataLoading = comunicadosLoading || comunicadosQuery.isFetching || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
-  const [bannerUrl, setBannerUrlState] = useState<string | null>(null)
-  const [adConfig, setAdConfig] = useState<ADConfig>({
+  const BANNER_STORAGE_KEY = 'impacto_ad_banner'
+  const CONFIG_STORAGE_KEY = 'impacto_ad_config'
+
+  // Helper síncrono para obter banner em 0ms do cache local
+  const getInitialBanner = (): string | null => {
+    if (typeof window === 'undefined') return null
+    try {
+      return localStorage.getItem(BANNER_STORAGE_KEY) || null
+    } catch (_) {
+      return null
+    }
+  }
+
+  // Helper síncrono para obter config em 0ms do cache local
+  const getInitialConfig = (fallback: ADConfig): ADConfig => {
+    if (typeof window === 'undefined') return fallback
+    try {
+      const raw = localStorage.getItem(CONFIG_STORAGE_KEY)
+      if (!raw) return fallback
+      const parsed = JSON.parse(raw)
+      return {
+        ...fallback,
+        ...parsed,
+        permissoes: { ...fallback.permissoes, ...(parsed.permissoes || {}) },
+        notificacoes: { ...fallback.notificacoes, ...(parsed.notificacoes || {}) },
+      }
+    } catch (_) {
+      return fallback
+    }
+  }
+
+  const defaultInitialConfig: ADConfig = {
     permissoes: { chat: false, comentariosMural: true, visualizarAniversariantes: true, visualizarRelatorios: false, confirmarPresencaEventos: false, visualizarFinanceiro: true, visualizarNotas: true, visualizarFrequencia: true, visualizarOcorrencias: true, chamadaAlunoPortaria: true },
     horarios: { inicio: '07:00', fim: '18:00', msgAusencia: 'Olá!\nNosso horário de atendimento encerrou.' },
     notificacoes: { pushComunicados: true, pushMomentos: true, pushFinanceiro: true, pushCalendario: true, pushAlteracaoCalendario: true, pushFrequencia: true, pushOcorrencias: true, pushNotas: true, pushSaidaPortaria: true, pushMensagemChat: false, pushRelatorios: false },
     saudacao: { ativa: false, titulo: 'Bem-vindo à nossa escola!', mensagem: 'Olá {nome_responsavel},\n\nÉ com muita alegria que recebemos o(a) aluno(a) {nome_aluno} em nossa instituição.', imagemUrl: '' }
-  })
+  }
 
+  const [adLoading, setAdLoading] = useState(false)
+  const [isLoaded, setIsLoaded] = useState(false)
+  const isDataLoading = comunicadosLoading || comunicadosQuery.isFetching || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
+  
+  // Inicia com banner do cache síncrono (0ms de espera visual)
+  const [bannerUrl, setBannerUrlState] = useState<string | null>(getInitialBanner)
+  const [adConfig, setAdConfig] = useState<ADConfig>(() => getInitialConfig(defaultInitialConfig))
+
+  const setBannerUrl = useCallback((url: string | null) => {
+    setBannerUrlState(url)
+    if (typeof window !== 'undefined') {
+      try {
+        if (url) {
+          localStorage.setItem(BANNER_STORAGE_KEY, url)
+        } else {
+          localStorage.removeItem(BANNER_STORAGE_KEY)
+        }
+      } catch (_) {}
+    }
+  }, [])
+
+  // Sincronização multi-abas e multi-janelas instantânea via StorageEvent
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === BANNER_STORAGE_KEY) {
+        setBannerUrlState(e.newValue)
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  // SWR (Stale-While-Revalidate): Carrega dados frescos em background e atualiza o cache
+  useEffect(() => {
+    let isSubscribed = true
     const loadConfig = async () => {
       try {
-        const res = await fetch('/api/configuracoes?chaves=ad_banner,ad_config', { cache: 'no-store' })
-        if (res.ok) {
+        const res = await fetch('/api/configuracoes?chaves=ad_banner,ad_config', {
+          headers: { 'Accept': 'application/json' },
+          priority: 'high' as any
+        })
+        if (res.ok && isSubscribed) {
           const db = await res.json()
-          if (db.ad_banner) setBannerUrlState(db.ad_banner)
+          if (db.ad_banner !== undefined) {
+            const freshBanner = db.ad_banner || null
+            setBannerUrlState(freshBanner)
+            try {
+              if (freshBanner) {
+                localStorage.setItem(BANNER_STORAGE_KEY, freshBanner)
+              } else {
+                localStorage.removeItem(BANNER_STORAGE_KEY)
+              }
+            } catch (_) {}
+          }
           if (db.ad_config) {
             // Force removed features to false, while ensuring defaults for active modules
             const sanitizedConfig = {
@@ -310,14 +387,21 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
               }
             }
             setAdConfig(sanitizedConfig)
+            try {
+              localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(sanitizedConfig))
+            } catch (_) {}
           }
         }
       } catch(e) {
         console.error('Erro ao carregar configurações da agenda:', e)
+      } finally {
+        if (isSubscribed) {
+          setIsLoaded(true)
+        }
       }
-      setIsLoaded(true)
     }
     loadConfig()
+    return () => { isSubscribed = false }
   }, [])
 
   // Auto-Publish Cron Client-Side
@@ -383,7 +467,8 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
       setMomentosFeed,
       setMomentosFeedLocally: setLocalMomentosFeed,
       bannerUrl,
-      setBannerUrl: setBannerUrlState,
+      setBannerUrl,
+      isLoaded,
       adConfig: adConfig || {},
       setAdConfig,
       adAlert,

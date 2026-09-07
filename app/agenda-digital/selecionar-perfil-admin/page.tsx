@@ -463,7 +463,10 @@ function SelecionarPerfilAdminContent() {
             padding: 20px;
             gap: 18px;
             border-radius: 24px;
-            margin-top: 48px;
+            margin-top: 16px;
+          }
+          .ad-has-banner .premium-welcome-card {
+            margin-top: 8px !important;
           }
           .welcome-avatar-wrapper {
             width: 72px;
