@@ -886,7 +886,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
 
       if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamily) {
-        window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: payload }))
+        window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: { ...payload, new: merged } }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
       }
 

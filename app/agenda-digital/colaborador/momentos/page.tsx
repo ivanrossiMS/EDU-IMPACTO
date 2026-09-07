@@ -30,9 +30,12 @@ import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 
+import { useQueryClient } from '@tanstack/react-query'
+import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 
 export default function ADMomentosPage() {
+  const queryClient = useQueryClient()
   const { momentosFeed, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
   
   
@@ -77,6 +80,7 @@ export default function ADMomentosPage() {
   
   const { turmas = [], cfgCalendarioLetivo = [] } = useData()
   const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
+  const [colaboradores = []] = useSupabaseArray<any>('configuracoes/usuarios')
   
   
   
@@ -112,91 +116,361 @@ export default function ADMomentosPage() {
     return () => { document.body.style.overflow = ''; }
   }, [lightboxOpen]);
 
+  useAgendaRealtime({
+    table: 'momentos',
+    toastConfig: {
+      enabled: true,
+      insertMessage: (doc) => `Novo momento de ${doc.author || doc.dados?.author || 'alguém'}!`,
+      updateMessage: (doc) => `Momento atualizado!`,
+      icon: <Camera size={18} color="#00D2FF" />
+    },
+    onInsert: ({ new: newMomento }) => {
+      const merged = { ...newMomento, ...(newMomento?.dados || {}), _isNew: true };
+      if (setMomentosFeedLocally) {
+        setMomentosFeedLocally((prev: any[]) => {
+          if (prev.some((p: any) => String(p.id) === String(merged.id))) return prev;
+          const newFeed = [merged, ...prev].sort((a: any, b: any) => {
+            const dateA = new Date(a.date || a.created_at || 0).getTime();
+            const dateB = new Date(b.date || b.created_at || 0).getTime();
+            return dateB - dateA;
+          });
+          return newFeed;
+        });
+      }
+    },
+    onUpdate: ({ new: updatedMomento }) => {
+      const merged = { ...updatedMomento, ...(updatedMomento?.dados || {}) };
+      if (setMomentosFeedLocally) {
+        setMomentosFeedLocally((prev: any[]) => prev.map((p: any) => String(p.id) === String(merged.id) ? { ...p, ...merged } : p));
+      }
+    },
+    onDelete: ({ old }) => {
+      if (setMomentosFeedLocally && old?.id) {
+        setMomentosFeedLocally((prev: any[]) => prev.filter((p: any) => String(p.id) !== String(old.id)));
+      }
+    }
+  });
+
+  useEffect(() => {
+    const handleSync = () => {
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] });
+    };
+    window.addEventListener('ad:momentos-insert', handleSync);
+    window.addEventListener('ad:momentos-update', handleSync);
+    window.addEventListener('ad:momentos-delete', handleSync);
+    return () => {
+      window.removeEventListener('ad:momentos-insert', handleSync);
+      window.removeEventListener('ad:momentos-update', handleSync);
+      window.removeEventListener('ad:momentos-delete', handleSync);
+    };
+  }, [queryClient]);
+
   const { chatGroups } = useAgendaDigital()
+  const [equipesList = []] = useSupabaseArray<any>('agenda/equipes')
   const [selectedTurmaId, setSelectedTurmaId] = useState<string>('all')
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [visibleCount, setVisibleCount] = useState(5)
 
-  const userGroups = React.useMemo(() => {
-    if (!effectiveUser?.id) return [];
-    return (chatGroups || []).filter((g: any) => {
-      let colabs = g.colaboradoresIds;
-      if (typeof colabs === 'string') {
-        try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+  // 1. Identificação precisa se o usuário atual é Administrador Master
+  const isMasterAdmin = useMemo(() => {
+    if (!effectiveUser) return false;
+    const perfil = String(effectiveUser.perfil || '').toLowerCase().trim();
+    const cargo = String(effectiveUser.cargo || '').toLowerCase().trim();
+    const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master'];
+    return masterRoles.includes(cargo) || masterRoles.includes(perfil);
+  }, [effectiveUser]);
+
+  // Identificadores possíveis do colaborador logado (Auth UUID, ID numérico do system_users, etc.)
+  const candidateColabIds = useMemo(() => {
+    const ids = new Set<string>();
+    const effId = String(effectiveUser?.id || '').replace(/^f_?/, '').trim().toLowerCase();
+    const curId = String(currentUser?.id || '').replace(/^f_?/, '').trim().toLowerCase();
+    if (effId) ids.add(effId);
+    if (curId) ids.add(curId);
+    if ((effectiveUser as any)?.colaborador_id) ids.add(String((effectiveUser as any).colaborador_id).replace(/^f_?/, '').trim().toLowerCase());
+    if ((effectiveUser as any)?.system_user_id) ids.add(String((effectiveUser as any).system_user_id).replace(/^f_?/, '').trim().toLowerCase());
+    if ((currentUser as any)?.colaborador_id) ids.add(String((currentUser as any).colaborador_id).replace(/^f_?/, '').trim().toLowerCase());
+    if ((currentUser as any)?.system_user_id) ids.add(String((currentUser as any).system_user_id).replace(/^f_?/, '').trim().toLowerCase());
+
+    const effEmail = (effectiveUser?.email || currentUser?.email || '').trim().toLowerCase();
+    const effNome = (effectiveUser?.nome || currentUser?.nome || '').trim().toLowerCase();
+
+    (colaboradores || []).forEach((c: any) => {
+      const cEmail = (c.email || c.dados?.email || '').trim().toLowerCase();
+      const cNome = (c.nome || c.dados?.nome || '').trim().toLowerCase();
+      const cId = String(c.id || c.usuarioId || '').replace(/^f_?/, '').trim().toLowerCase();
+      const cAuthId = String(c.auth_id || c.dados?.auth_id || '').replace(/^f_?/, '').trim().toLowerCase();
+
+      const match = (
+        (effEmail && cEmail && cEmail === effEmail) ||
+        (effNome && cNome && cNome === effNome) ||
+        (effId && (cId === effId || cAuthId === effId)) ||
+        (curId && (cId === curId || cAuthId === curId))
+      );
+
+      if (match) {
+        if (c.id) ids.add(String(c.id).replace(/^f_?/, '').trim().toLowerCase());
+        if (c.usuarioId) ids.add(String(c.usuarioId).replace(/^f_?/, '').trim().toLowerCase());
+        if (c.uid_legacy) ids.add(String(c.uid_legacy).replace(/^f_?/, '').trim().toLowerCase());
+        if (c.auth_id) ids.add(String(c.auth_id).replace(/^f_?/, '').trim().toLowerCase());
+        if (c.dados?.auth_id) ids.add(String(c.dados.auth_id).replace(/^f_?/, '').trim().toLowerCase());
       }
-      if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some((id: any) => String(id) === String(effectiveUser.id));
     });
-  }, [chatGroups, effectiveUser]);
 
-  const turmaOptions = React.useMemo(() => {
-    if (!effectiveUser?.id) return [];
-    const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
-    const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
-    const perfilStr = effectiveUser?.perfil || ''; 
-    const cargoStr = effectiveUser?.cargo || ''; 
-    const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
-    if (effectiveUser.perfil === 'administrador' || isMaster || effectiveUser.perfil === 'admin') return turmas;
-    
-    const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
-    const hasGlobalWithoutYear = globalGroups.some((g: any) => {
-      const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
-      return a === '';
-    });
-    
-    if (hasGlobalWithoutYear) return turmas;
-    
-    const globalYears = new Set(globalGroups.map((g: any) => {
-      return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
-    }).filter((a: string) => a !== ''));
+    return Array.from(ids);
+  }, [colaboradores, effectiveUser, currentUser]);
 
-    const accessibleTurmas = turmas.filter((t: any) => {
-       const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
-       if (globalYears.has(tAno)) return true;
-       return userGroups.some((g: any) => String(g.syncId || g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
+  // Helper para verificar se o colaborador atual é membro de um grupo de agenda_grupos
+  const isColabInGroup = React.useCallback((g: any) => {
+    if (!g) return false;
+    let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds || [];
+    if (typeof colabs === 'string') {
+      try { colabs = JSON.parse(colabs); } catch (e) { colabs = []; }
+    }
+    if (!Array.isArray(colabs)) colabs = [];
+
+    // Se o grupo tem acesso global explícito para todos
+    if (g.isGlobalAccess === true || g.dados?.isGlobalAccess === true) return true;
+
+    const myName = String(effectiveUser?.nome || currentUser?.nome || '').trim().toLowerCase();
+    const hasMatch = colabs.some((cid: any) => {
+      const clean = String(typeof cid === 'object' ? (cid.id || cid.usuarioId || '') : cid).replace(/^f_?/, '').trim().toLowerCase();
+      const cNome = typeof cid === 'object' ? String(cid.nome || '').trim().toLowerCase() : '';
+      return candidateColabIds.includes(clean) || (myName && cNome && cNome === myName);
     });
-    return accessibleTurmas
-  }, [turmas, userGroups, effectiveUser])
+
+    return hasMatch;
+  }, [candidateColabIds, effectiveUser, currentUser]);
+
+  // Helper para verificar se o colaborador atual é membro de uma equipe em agenda_equipes
+  const isColabInEquipe = React.useCallback((e: any) => {
+    if (!e) return false;
+    let colabs = e.membrosIds || e.colaboradoresIds || e.dados?.membrosIds || e.dados?.colaboradoresIds || [];
+    if (typeof colabs === 'string') {
+      try { colabs = JSON.parse(colabs); } catch (e) { colabs = []; }
+    }
+    if (!Array.isArray(colabs)) colabs = [];
+
+    const myName = String(effectiveUser?.nome || currentUser?.nome || '').trim().toLowerCase();
+    return colabs.some((cid: any) => {
+      const clean = String(typeof cid === 'object' ? (cid.id || cid.usuarioId || '') : cid).replace(/^f_?/, '').trim().toLowerCase();
+      const cNome = typeof cid === 'object' ? String(cid.nome || '').trim().toLowerCase() : '';
+      return candidateColabIds.includes(clean) || (myName && cNome && cNome === myName);
+    });
+  }, [candidateColabIds, effectiveUser, currentUser]);
+
+  // Grupos e turmas aos quais o colaborador atual pertence ou tem vínculo
+  const myStaffGroups = useMemo(() => {
+    const list: { id: string; nome: string; raw?: any; tipo: 'equipe' | 'grupo' | 'turma' }[] = [];
+    const seen = new Set<string>();
+
+    const addGroup = (id: string, nome: string, tipo: 'equipe' | 'grupo' | 'turma', raw?: any) => {
+      const nomeClean = String(nome || '').trim();
+      if (!nomeClean) return;
+      const key = nomeClean.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({ id: String(id || nomeClean), nome: nomeClean, tipo, raw });
+      }
+    };
+
+    // 1. Grupos de agenda_grupos onde o colaborador é membro
+    (chatGroups || []).forEach((g: any) => {
+      if (isColabInGroup(g)) {
+        const isEq = g.isEquipeEscolar || g.dados?.isEquipeEscolar || g.ano === 'Equipe Escolar' || g.dados?.ano === 'Equipe Escolar';
+        addGroup(g.id, g.nome || g.dados?.nome, isEq ? 'equipe' : 'grupo', g);
+      }
+    });
+
+    // 2. Equipes de agenda_equipes onde o colaborador é membro
+    (equipesList || []).forEach((e: any) => {
+      if (isColabInEquipe(e)) {
+        addGroup(e.id, e.nome || e.dados?.nome, 'equipe', e);
+      }
+    });
+
+    // 3. Turmas vinculadas aos grupos onde o colaborador atua
+    (turmas || []).forEach((t: any) => {
+      const isLinked = (chatGroups || []).some((g: any) => {
+        const matches = (
+          String(g.syncId || g.id) === `sync-${t.id}` ||
+          String(g.syncId || g.id) === String(t.id) ||
+          String(g.nome || '').trim().toLowerCase() === String(t.nome || '').trim().toLowerCase()
+        );
+        return matches && isColabInGroup(g);
+      });
+      if (isLinked) {
+        addGroup(t.id, t.nome, 'turma', t);
+      }
+    });
+
+    return list.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [chatGroups, equipesList, turmas, isColabInGroup, isColabInEquipe]);
+
+  // Todos os grupos da Equipe Escolar cadastrados (para o Admin Master e fallback)
+  const equipeEscolarGrupos = useMemo(() => {
+    const list: { id: string; nome: string; raw: any; colabs: any[] }[] = [];
+    const seen = new Set<string>();
+
+    const addGroup = (id: string, nome: string, raw: any, colabs: any[] = []) => {
+      const nomeClean = String(nome || '').trim();
+      if (!nomeClean) return;
+      const key = nomeClean.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({
+          id: String(id || nomeClean),
+          nome: nomeClean,
+          raw,
+          colabs
+        });
+      }
+    };
+
+    (equipesList || []).forEach((e: any) => {
+      const nome = e.nome || e.dados?.nome;
+      const colabs = e.membrosIds || e.colaboradoresIds || e.dados?.membrosIds || e.dados?.colaboradoresIds || [];
+      if (nome) addGroup(e.id, nome, e, Array.isArray(colabs) ? colabs : []);
+    });
+
+    (chatGroups || []).forEach((g: any) => {
+      if (!g || !g.nome) return;
+      let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds || [];
+      if (typeof colabs === 'string') {
+        try { colabs = JSON.parse(colabs); } catch { colabs = []; }
+      }
+      addGroup(g.id, g.nome, g, Array.isArray(colabs) ? colabs : []);
+    });
+
+    (momentosFeed || []).forEach((m: any) => {
+      const targets = [
+        ...(m.targetClasses || []),
+        ...(m.dados?.targetClasses || []),
+        ...(m.grupos || []),
+        ...(m.dados?.grupos || [])
+      ];
+      targets.forEach((t: any) => {
+        if (typeof t === 'string') {
+          const tl = t.toLowerCase();
+          if (
+            (tl.includes('coordenação') || tl.includes('direção') || tl.includes('secretaria') || tl.includes('financeiro') || tl.includes('inspetor') || tl.includes('recepção') || tl.includes('equipe')) &&
+            !tl.includes('ano') && !tl.includes('série') && !tl.includes('nível')
+          ) {
+            addGroup(t, t, { id: t, nome: t });
+          }
+        }
+      });
+    });
+
+    return list.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [chatGroups, equipesList, momentosFeed]);
+
+  // Determinar o Ano Vigente oficial da escola
+  const anoVigente = React.useMemo(() => {
+    // 1. Procurar no calendário letivo oficial do ERP (isVigente === true ou status === 'Aberto')
+    const vigenteConfig = (cfgCalendarioLetivo || []).find((c: any) => 
+      c.isVigente === true || 
+      c.isVigente === 'true' || 
+      String(c.status || '').toLowerCase() === 'aberto'
+    );
+    if (vigenteConfig?.ano) return String(vigenteConfig.ano);
+
+    // 2. Ano com o maior número de turmas acadêmicas cadastradas
+    const yearCounts: Record<string, number> = {};
+    (turmas || []).forEach((t: any) => {
+      const y = String(t.ano || t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+      if (y) yearCounts[y] = (yearCounts[y] || 0) + 1;
+    });
+    const sortedByTurmas = Object.entries(yearCounts).sort((a, b) => b[1] - a[1]);
+    if (sortedByTurmas.length > 0 && sortedByTurmas[0][1] > 0) {
+      return sortedByTurmas[0][0];
+    }
+
+    // 3. Fallback: ano corrente do sistema
+    return new Date().getFullYear().toString();
+  }, [cfgCalendarioLetivo, turmas]);
 
   const anosLetivos = React.useMemo(() => {
     const anos = new Set<string>();
-    cfgCalendarioLetivo.forEach((c: any) => c.ano && anos.add(String(c.ano)));
-    turmas.forEach(t => {
+    (cfgCalendarioLetivo || []).forEach((c: any) => c.ano && anos.add(String(c.ano)));
+    (turmas || []).forEach((t: any) => {
       if (t.ano) anos.add(String(t.ano));
+      if (t.ano_letivo) anos.add(String(t.ano_letivo));
+      if (t.dados?.anoLetivo) anos.add(String(t.dados.anoLetivo));
     });
+    if (anoVigente) anos.add(anoVigente);
     return Array.from(anos).sort().reverse();
-  }, [turmas, cfgCalendarioLetivo])
+  }, [turmas, cfgCalendarioLetivo, anoVigente]);
 
+  // Inicialização inteligente do ano: SEMPRE prioriza o ano vigente com turmas ativas!
   useEffect(() => {
-    if (!selectedYear && anosLetivos.length > 0) {
-      setSelectedYear(anosLetivos[0])
+    if (!selectedYear) {
+      if (anoVigente && anosLetivos.includes(anoVigente)) {
+        setSelectedYear(anoVigente);
+      } else if (anosLetivos.length > 0) {
+        setSelectedYear(anosLetivos[0]);
+      } else {
+        setSelectedYear('todos');
+      }
     }
-  }, [anosLetivos, selectedYear])
+  }, [anosLetivos, selectedYear, anoVigente]);
 
   useEffect(() => {
-    setSelectedTurmaId('all')
-  }, [selectedYear])
+    setSelectedTurmaId('all');
+  }, [selectedYear]);
 
-  const filteredTurmas = React.useMemo(() => {
-    if (!selectedYear || selectedYear === 'todos') return turmaOptions
-    return turmaOptions.filter((t: any) => {
-      const year = String(t.ano || t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || new Date().getFullYear())
-      return year === selectedYear
-    })
-  }, [turmaOptions, selectedYear])
+  // Turmas acadêmicas filtradas pelo ano letivo selecionado
+  const filteredAcademicTurmas = React.useMemo(() => {
+    if (!selectedYear || selectedYear === 'todos') return turmas;
+    return turmas.filter((t: any) => {
+      const year = String(t.ano || t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+      return year === selectedYear;
+    });
+  }, [turmas, selectedYear]);
 
-  const selectedTurmaName = React.useMemo(() => {
-    if (selectedTurmaId === 'all') return 'Todas as Turmas'
-    const t = turmas.find(x => String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId))
-    return t ? t.nome : 'Selecione uma turma'
-  }, [selectedTurmaId, turmas])
+  // Opções para o filtro do Administrador Master:
+  // - Grupos da Equipe Escolar (sempre visíveis)
+  // - Turmas acadêmicas do ano selecionado (ou todas se 'todos')
+  const masterFilterOptions = React.useMemo(() => {
+    const equipeOpts = equipeEscolarGrupos.map(g => ({
+      id: `grupo_${g.id}`,
+      nome: g.nome,
+      categoria: 'Equipe Escolar',
+      badge: 'Equipe'
+    }));
 
-  // Get list of active turmas to filter moments
-  const activeTurmas = React.useMemo(() => {
-    if (selectedTurmaId === 'all') return turmaOptions
-    const t = turmas.find(x => String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId))
-    return t ? [t] : []
-  }, [selectedTurmaId, turmaOptions, turmas])
+    const turmaCatLabel = selectedYear && selectedYear !== 'todos' ? `Turmas (${selectedYear})` : 'Turmas';
+    const turmasOpts = filteredAcademicTurmas.map(t => ({
+      id: `turma_${t.id}`,
+      nome: t.nome,
+      categoria: turmaCatLabel
+    }));
+
+    return [...equipeOpts, ...turmasOpts];
+  }, [equipeEscolarGrupos, filteredAcademicTurmas, selectedYear]);
+
+  // Opções para o filtro de Colaborador regular (seus próprios grupos e turmas)
+  const colabFilterOptions = React.useMemo(() => {
+    return myStaffGroups.map(g => ({
+      id: g.tipo === 'turma' ? `turma_${g.id}` : `grupo_${g.id}`,
+      nome: g.nome,
+      categoria: g.tipo === 'equipe' ? 'Equipe Escolar' : (g.tipo === 'turma' ? 'Minhas Turmas' : 'Meus Grupos'),
+      badge: g.tipo === 'equipe' ? 'Equipe' : undefined
+    }));
+  }, [myStaffGroups]);
+
+  const activeFilterOptions = isMasterAdmin ? masterFilterOptions : colabFilterOptions;
+
+  const selectedFilterName = React.useMemo(() => {
+    if (selectedTurmaId === 'all') {
+      return isMasterAdmin ? 'Todos (Equipe e Turmas)' : 'Todos (Meus Grupos e Turmas)';
+    }
+    const rawId = selectedTurmaId.replace(/^(grupo_|turma_)/, '');
+    const g = myStaffGroups.find(x => x.id === rawId || x.nome === rawId) || equipeEscolarGrupos.find(x => x.id === rawId || x.nome === rawId);
+    if (g) return g.nome;
+    const anyOpt = activeFilterOptions.find(o => o.id === selectedTurmaId);
+    return anyOpt ? anyOpt.nome : 'Filtro Selecionado';
+  }, [selectedTurmaId, isMasterAdmin, myStaffGroups, equipeEscolarGrupos, activeFilterOptions]);
 
   const submitPost = async () => {
     if (isSubmitting) return
@@ -258,32 +532,69 @@ export default function ADMomentosPage() {
         ? selectedTurmas.map(t => t.name) 
         : (selectedAlunos.length > 0 || selectedFuncionarios.length > 0 ? [] : ['Toda a Escola']);
         
-      const targetClassesIds = selectedTurmas.map(t => String(t.id).replace(/^t_?/, ''));
+      const targetClassesIds = selectedTurmas.flatMap(t => {
+        const rawId = String(t.id);
+        const cleanId = rawId.replace(/^[tg]_?/, '');
+        return [rawId, cleanId];
+      });
       const alunosIds = selectedAlunos.map(t => String(t.id).replace(/^a_?/, ''));
       const alunosNomes = selectedAlunos.map(t => t.name);
       const funcionariosIds = selectedFuncionarios.map(t => String(t.id).replace(/^f_?/, ''));
+      const selectedGruposNames = selectedTurmas.filter(t => t.type === 'grupo').map(t => t.name);
+      const selectedGruposIds = selectedTurmas.filter(t => t.type === 'grupo').map(t => String(t.id).replace(/^[tg]_?/, ''));
 
+      const nowIso = new Date().toISOString()
       const post: ADMomento = {
         id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         author: effectiveUser?.nome || 'Administração',
         authorId: effectiveUser?.id,
         targetClasses,
-        targetClassesIds,
+        targetClassesIds: Array.from(new Set(targetClassesIds)),
         alunosIds,
         alunosNomes,
         funcionariosIds,
-        media: mediaArray, desc: newPost.desc, status: 'approved', time: 'Agora', likes: [], comments: []
+        media: mediaArray,
+        desc: newPost.desc,
+        status: 'approved',
+        time: 'Agora',
+        date: nowIso,
+        created_at: nowIso,
+        likes: [],
+        comments: [],
+        dados: {
+          grupos: selectedGruposNames,
+          gruposIds: selectedGruposIds,
+          targetGrupos: selectedGruposNames
+        }
       }
 
+      // Atualização imediata local (otimista)
       setMomentosFeedLocally?.(prev => [post, ...prev])
-      fetch('/api/agenda/momentos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(post)
-      }).catch(err => console.error("Error creating momento:", err))
       setShowModal(false)
       setNewPost({ mediaFiles: [], targetClasses: [], desc: '' })
       adAlert('Momento publicado com sucesso!', '🎉 Sucesso')
+
+      try {
+        const res = await fetch('/api/agenda/momentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(post)
+        })
+        if (res.ok) {
+          const savedData = await res.json()
+          if (savedData && savedData.id) {
+            setMomentosFeedLocally?.((prev: any[]) =>
+              prev.map(item => String(item.id) === String(post.id) ? { ...post, ...savedData, ...(savedData.dados || {}) } : item)
+            )
+          }
+        } else {
+          console.error("Error creating momento: status", res.status)
+        }
+      } catch (err) {
+        console.error("Error creating momento:", err)
+      } finally {
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
+      }
     } catch (e: any) {
       console.error('[Momentos Upload] Error:', e)
       adAlert(`Erro ao enviar mídias: ${e.message || 'Erro desconhecido'}`, 'Erro')
@@ -370,6 +681,7 @@ export default function ADMomentosPage() {
       const res = await fetch(`/api/agenda/momentos?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
         setMomentosFeedLocally?.(prev => prev.filter(m => String(m.id) !== String(id)));
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] });
         adAlert('Momento excluído com sucesso!', 'Sucesso');
       } else {
         throw new Error('Erro ao excluir momento');
@@ -382,61 +694,301 @@ export default function ADMomentosPage() {
     }
   }
   
-  // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'
-  
+  // Filtrar momentos conforme o perfil de acesso institucional:
+  // Administrador Master: filtra pelo grupo da equipe escolar ou turma selecionada (ou vê todos)
+  // Outros Colaboradores: vê momentos do seu grupo/turma (equipe escolar), globais, marcados diretamente e os enviados por ele
   const meusMomentos = React.useMemo(() => {
-    return momentosFeed.filter(m => {
-      const targetClasses = m.targetClasses || []
-      const targetAlunos = m.alunosIds || []
-      const targetFuncs = m.funcionariosIds || m.dados?.funcionariosIds || []
-      
-      const isGlobal = targetClasses.length === 0 && targetAlunos.length === 0 && targetFuncs.length === 0
-      if (isGlobal) return true
+    return (momentosFeed || []).filter(m => {
+      // 1. Checa se o usuário atual é autor deste momento
+      const mAuthorId = String(m.authorId || m.dados?.authorId || '').replace(/^f_?/, '').trim().toLowerCase();
+      const mAuthor = String(m.author || m.dados?.author || '').trim().toLowerCase();
+      const myName = String(effectiveUser?.nome || currentUser?.nome || '').trim().toLowerCase();
 
-      // Se o momento foi criado por mim (colaborador)
-      const isAuthor = String(m.authorId) === String(effectiveUser?.id) || m.author === effectiveUser?.nome;
-      if (isAuthor) return true;
+      const isAuthor = Boolean(
+        (effectiveUser?.id && (mAuthorId === String(effectiveUser.id).replace(/^f_?/, '').trim().toLowerCase())) ||
+        (currentUser?.id && (mAuthorId === String(currentUser.id).replace(/^f_?/, '').trim().toLowerCase())) ||
+        (mAuthorId && candidateColabIds.includes(mAuthorId)) ||
+        (myName && mAuthor && (mAuthor === myName || mAuthor.includes(myName) || myName.includes(mAuthor)))
+      );
 
-      // Se o momento foi endereçado diretamente para mim (colaborador)
-      if (targetFuncs.some((id: string) => String(id) === String(effectiveUser?.id) || String(id) === `f_${effectiveUser?.id}`)) {
-        return true
+      // Destinatários do momento
+      const targetClasses = [
+        ...(m.targetClasses || []),
+        ...(m.dados?.targetClasses || [])
+      ].map((tc: any) => String(tc).trim());
+
+      const targetClassesIds = [
+        ...(m.targetClassesIds || []),
+        ...(m.dados?.targetClassesIds || [])
+      ].map((tId: any) => String(tId).trim());
+
+      const targetFuncs = [
+        ...(m.funcionariosIds || []),
+        ...(m.dados?.funcionariosIds || []),
+        ...((m as any).colaboradoresIds || []),
+        ...(m.dados?.colaboradoresIds || [])
+      ].map((f: any) => String(f).replace(/^f_?/, '').trim().toLowerCase());
+
+      const extraGrupos = [
+        ...(m.grupos || []),
+        ...(m.dados?.grupos || []),
+        ...(m.targetGrupos || []),
+        ...(m.dados?.targetGrupos || []),
+        ...((m as any).gruposIds || []),
+        ...(m.dados?.gruposIds || [])
+      ];
+
+      // É momento global da escola ou institucional?
+      const isGlobalMomento = targetClasses.some(tc => {
+        const tcl = tc.toLowerCase();
+        return ['todos', 'toda a escola', 'todas', 'todas as turmas', 'institucional'].includes(tcl);
+      }) || (targetClasses.length === 0 && targetClassesIds.length === 0 && targetFuncs.length === 0);
+
+      // É momento direcionado diretamente para a Equipe Escolar genérica?
+      const isEquipeEscolarTarget = targetClasses.some(tc => {
+        const tcl = tc.toLowerCase();
+        return tcl === 'equipe escolar' || tcl === 'equipe' || tcl === 'funcionários' || tcl === 'colaboradores';
+      });
+
+      // É momento direcionado diretamente ao colaborador como funcionário?
+      const isDirectlyTargeted = targetFuncs.some(fId => candidateColabIds.includes(fId));
+
+      // ── CASO 1: ADMINISTRADOR MASTER ──
+      if (isMasterAdmin) {
+        // Se selecionou "Todos", visualiza todos os momentos (respeitando o ano letivo se houver filtro de ano ativo)
+        if (selectedTurmaId === 'all') {
+          if (selectedYear && selectedYear !== 'todos') {
+            if (isEquipeEscolarTarget || isGlobalMomento) return true;
+
+            // É momento direcionado à Equipe Escolar? Sempre exibe no "Todos"
+            const isEquipeMomento = equipeEscolarGrupos.some(eg => {
+              const egNome = eg.nome.toLowerCase().trim();
+              const egId = String(eg.id).toLowerCase().trim();
+              const cleanEgId = egId.replace(/^[tg]_?/, '');
+              return (
+                targetClasses.some(tc => {
+                  const tcl = tc.toLowerCase().trim();
+                  return tcl === egNome || tcl.includes(egNome) || egNome.includes(tcl);
+                }) ||
+                targetClassesIds.some(tId => {
+                  const clean = tId.replace(/^[tg]_?/, '').toLowerCase().trim();
+                  return clean === cleanEgId || tId.toLowerCase().trim() === egId;
+                })
+              );
+            });
+            if (isEquipeMomento) return true;
+
+            // É turma acadêmica pertencente ao ano selecionado?
+            const isAnoTurma = filteredAcademicTurmas.some(at => {
+              const atNome = at.nome.toLowerCase().trim();
+              const atId = String(at.id).toLowerCase().trim();
+              const atCod = String(at.codigo || '').toLowerCase().trim();
+              return (
+                targetClasses.some(tc => {
+                  const tcl = tc.toLowerCase().trim();
+                  return tcl === atNome || tcl.includes(atNome) || atNome.includes(tcl);
+                }) ||
+                targetClassesIds.some(tId => {
+                  const clean = tId.replace(/^[tg]_?/, '').toLowerCase().trim();
+                  return clean === atId || clean === atCod || tId.toLowerCase().trim() === atId;
+                })
+              );
+            });
+            if (isAnoTurma) return true;
+
+            // Momento criado no ano selecionado
+            const momentoYear = m.date ? new Date(m.date).getFullYear().toString() : (m.created_at ? new Date(m.created_at).getFullYear().toString() : '');
+            if (momentoYear && momentoYear === selectedYear) {
+              return true;
+            }
+
+            return false;
+          }
+          return true;
+        }
+
+        // Se o Administrador Master selecionou um Grupo da Equipe Escolar
+        if (selectedTurmaId.startsWith('grupo_')) {
+          const rawId = selectedTurmaId.replace('grupo_', '');
+          const targetGroup = equipeEscolarGrupos.find(x => x.id === rawId || x.nome === rawId);
+          if (!targetGroup) return false;
+
+          const gNome = targetGroup.nome.toLowerCase().trim();
+          const gId = String(targetGroup.id).toLowerCase().trim();
+          const cleanGId = gId.replace(/^[tg]_?/, '');
+
+          return (
+            targetClasses.some(tc => {
+              const tcl = String(tc).toLowerCase().trim();
+              return tcl === gNome || tcl.includes(gNome) || gNome.includes(tcl);
+            }) ||
+            targetClassesIds.some(tId => {
+              const clean = String(tId).replace(/^[tg]_?/, '').toLowerCase().trim();
+              return clean === cleanGId || String(tId).toLowerCase().trim() === gId || String(tId).toLowerCase().trim() === `g_${cleanGId}`;
+            }) ||
+            extraGrupos.some((eg: any) => {
+              if (typeof eg === 'string') {
+                const egl = eg.trim().toLowerCase();
+                return egl === gNome || egl.includes(gNome) || gNome.includes(egl) || eg === gId || eg === cleanGId;
+              }
+              if (eg && typeof eg === 'object') {
+                return String(eg.id) === gId || String(eg.nome || '').trim().toLowerCase() === gNome;
+              }
+              return false;
+            })
+          );
+        }
+
+        // Se o Administrador Master selecionou uma Turma acadêmica
+        if (selectedTurmaId.startsWith('turma_')) {
+          const rawId = selectedTurmaId.replace('turma_', '');
+          const targetTurma = turmas.find(x => String(x.id) === rawId || String(x.codigo) === rawId || x.nome === rawId);
+          if (!targetTurma) return false;
+
+          const tNome = targetTurma.nome.toLowerCase().trim();
+          const tId = String(targetTurma.id).toLowerCase().trim();
+          const tCod = String(targetTurma.codigo || '').toLowerCase().trim();
+
+          const targetAlunos = (m.alunosIds || []) as string[];
+          if (targetAlunos.length > 0) {
+            const matchedAlunos = (alunos || []).filter((a: any) => 
+              targetAlunos.some((idRaw: string) => String(idRaw).replace(/^_*(ALU)?/, '') === String(a.id).replace(/^_*(ALU)?/, ''))
+            );
+            if (matchedAlunos.some((a: any) => String(a.turma) === tId || String(a.turma) === tCod || String(a.turma) === tNome)) {
+              return true;
+            }
+          }
+
+          return (
+            targetClasses.some(tc => {
+              const tcl = String(tc).toLowerCase().trim();
+              return tcl === tNome || tcl.includes(tNome) || tNome.includes(tcl);
+            }) ||
+            targetClassesIds.some(tcId => {
+              const clean = String(tcId).replace(/^[tg]_?/, '').toLowerCase().trim();
+              return clean === tId || clean === tCod || String(tcId).toLowerCase().trim() === tId;
+            })
+          );
+        }
+
+        return true;
       }
 
-      // Se o momento é direcionado a alunos específicos
-      if (targetAlunos.length > 0) {
-        const matchedAlunos = (alunos || []).filter((a: any) => 
-          targetAlunos.some((idRaw: string) => String(idRaw).replace(/^_*(ALU)?/, '') === String(a.id).replace(/^_*(ALU)?/, ''))
-        )
-        const hasAlunoInActiveTurma = matchedAlunos.some((a: any) => 
-          activeTurmas.some(at => 
-            String(a.turma) === String(at.id) || 
-            String(a.turma) === String(at.codigo) || 
-            String(a.turma) === String(at.nome)
-          )
-        )
-        if (hasAlunoInActiveTurma) return true
+      // ── CASO 2: OUTROS COLABORADORES (ACESSO INSTITUCIONAL) ──
+      // 1. Momento enviado pelo próprio colaborador
+      if (isAuthor) {
+        return true;
       }
 
-      // Se o momento é direcionado a classes
-      if (targetClasses.length > 0) {
-        return targetClasses.some(tc => {
-          const tcl = tc.toLowerCase()
-          if (tcl === 'todos' || tcl === 'toda a escola' || tcl === 'todas') return true
-          return activeTurmas.some(at => 
-            tcl.includes(at.nome.toLowerCase()) || 
-            at.nome.toLowerCase().includes(tcl)
-          )
+      // 2. Momento onde o colaborador foi marcado diretamente
+      if (isDirectlyTargeted) {
+        return true;
+      }
+
+      // 3. Se selecionou "Todos" (comportamento padrão)
+      if (selectedTurmaId === 'all') {
+        if (isGlobalMomento || isEquipeEscolarTarget) {
+          return true;
+        }
+
+        // Checar se algum grupo ou turma do colaborador foi marcado
+        const matchesStaffGroup = myStaffGroups.some(g => {
+          const gNome = g.nome.toLowerCase().trim();
+          const gId = String(g.id).toLowerCase().trim();
+          const cleanGId = gId.replace(/^[tg]_?/, '');
+
+          const nameMatch = targetClasses.some(tc => {
+            const tcl = tc.toLowerCase().trim();
+            return tcl === gNome || tcl.includes(gNome) || gNome.includes(tcl);
+          });
+          if (nameMatch) return true;
+
+          const idMatch = targetClassesIds.some(tId => {
+            const clean = tId.replace(/^[tg]_?/, '').toLowerCase().trim();
+            return clean === cleanGId || clean === gId || tId.toLowerCase().trim() === gId || tId.toLowerCase().trim() === `g_${cleanGId}` || tId.toLowerCase().trim() === `t_${cleanGId}`;
+          });
+          if (idMatch) return true;
+
+          const extraMatch = extraGrupos.some((eg: any) => {
+            if (typeof eg === 'string') {
+              const egl = eg.trim().toLowerCase();
+              const cleanEg = egl.replace(/^[tg]_?/, '');
+              return egl === gNome || egl.includes(gNome) || gNome.includes(egl) || cleanEg === cleanGId || egl === gId;
+            }
+            if (eg && typeof eg === 'object') {
+              const egId = String(eg.id || '').replace(/^[tg]_?/, '').toLowerCase();
+              const egNome = String(eg.nome || '').trim().toLowerCase();
+              return egId === cleanGId || egNome === gNome || (egNome && gNome.includes(egNome));
+            }
+            return false;
+          });
+          if (extraMatch) return true;
+
+          return false;
+        });
+
+        if (matchesStaffGroup) return true;
+
+        // Fallback direto em chatGroups (caso o grupo não tenha sido mapeado em myStaffGroups)
+        const directGroupMatch = (chatGroups || []).some((cg: any) => {
+          if (!isColabInGroup(cg)) return false;
+          const cgNome = String(cg.nome || cg.dados?.nome || '').toLowerCase().trim();
+          const cgId = String(cg.id || '').toLowerCase().trim();
+          const cleanCgId = cgId.replace(/^[tg]_?/, '');
+
+          return (
+            targetClasses.some(tc => {
+              const tcl = tc.toLowerCase().trim();
+              return tcl === cgNome || tcl.includes(cgNome) || cgNome.includes(tcl);
+            }) ||
+            targetClassesIds.some(tId => {
+              const clean = tId.replace(/^[tg]_?/, '').toLowerCase().trim();
+              return clean === cleanCgId || clean === cgId || tId.toLowerCase().trim() === cgId;
+            })
+          );
+        });
+
+        return directGroupMatch;
+      }
+
+      // Se o colaborador selecionou um grupo/turma específico no filtro
+      const targetId = selectedTurmaId.replace(/^(grupo_|turma_)/, '');
+      const selectedGroup = myStaffGroups.find(x => x.id === targetId || x.nome === targetId);
+      if (!selectedGroup) return false;
+
+      const gNome = selectedGroup.nome.toLowerCase().trim();
+      const gId = String(selectedGroup.id).toLowerCase().trim();
+      const cleanGId = gId.replace(/^[tg]_?/, '');
+
+      return (
+        targetClasses.some(tc => {
+          const tcl = tc.toLowerCase().trim();
+          return tcl === gNome || tcl.includes(gNome) || gNome.includes(tcl);
+        }) ||
+        targetClassesIds.some(tId => {
+          const clean = tId.replace(/^[tg]_?/, '').toLowerCase().trim();
+          return clean === cleanGId || clean === gId || tId.toLowerCase().trim() === gId || tId.toLowerCase().trim() === `g_${cleanGId}` || tId.toLowerCase().trim() === `t_${cleanGId}`;
+        }) ||
+        extraGrupos.some((eg: any) => {
+          if (typeof eg === 'string') {
+            const egl = eg.trim().toLowerCase();
+            const cleanEg = egl.replace(/^[tg]_?/, '');
+            return egl === gNome || egl.includes(gNome) || gNome.includes(egl) || cleanEg === cleanGId || egl === gId;
+          }
+          if (eg && typeof eg === 'object') {
+            const egId = String(eg.id || '').replace(/^[tg]_?/, '').toLowerCase();
+            const egNome = String(eg.nome || '').trim().toLowerCase();
+            return egId === cleanGId || egNome === gNome;
+          }
+          return false;
         })
-      }
-
-      return false
+      );
     }).sort((a, b) => {
-      // Ordem do mais novo para o mais antigo
-      const dateA = new Date((a as any).date || 0).getTime()
-      const dateB = new Date((b as any).date || 0).getTime()
-      return dateB - dateA
-    })
-  }, [momentosFeed, activeTurmas, alunos])
+      const dateA = new Date((a as any).date || (a as any).created_at || 0).getTime();
+      const dateB = new Date((b as any).date || (b as any).created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [momentosFeed, isMasterAdmin, selectedTurmaId, selectedYear, equipeEscolarGrupos, filteredAcademicTurmas, myStaffGroups, candidateColabIds, chatGroups, turmas, alunos, effectiveUser, currentUser, isColabInGroup]);
 
   // Marcação de lidos
   useEffect(() => {
@@ -573,30 +1125,34 @@ export default function ADMomentosPage() {
               overflow: 'hidden',
               textOverflow: 'ellipsis'
             }}>
-              Fotos/Vídeos da Turma
+              {isMasterAdmin ? 'Fotos/Vídeos Institucionais' : 'Fotos/Vídeos da Equipe Escolar'}
             </h2>
             <div style={{ marginTop: 8, position: 'relative', zIndex: 50, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ maxWidth: 300, width: '100%' }}>
+              {(isMasterAdmin || colabFilterOptions.length > 0) && (
+                <div style={{ maxWidth: 320, width: '100%' }}>
                   <TurmaDropdown 
-                    turmaOptions={filteredTurmas} 
+                    turmaOptions={activeFilterOptions} 
                     selectedTurmaId={selectedTurmaId} 
                     setSelectedTurmaId={setSelectedTurmaId} 
-                    selectedTurmaName={selectedTurmaName} 
-                    anosLetivos={anosLetivos}
+                    selectedTurmaName={selectedFilterName} 
+                    anosLetivos={isMasterAdmin ? anosLetivos : []}
                     selectedAno={selectedYear}
                     setSelectedAno={setSelectedYear}
+                    anoVigente={anoVigente}
+                    allLabel={isMasterAdmin ? "Todos (Equipe e Turmas)" : "Todos (Meus Grupos e Turmas)"}
                   />
                 </div>
+              )}
               {!isMirroring && (
-<button onClick={() => setShowModal(true)} style={{
-                height: 42, padding: '0 20px', border: 'none', borderRadius: 12, cursor: 'pointer',
-                background: 'linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)',
-                color: '#fff', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6,
-                boxShadow: '0 4px 16px rgba(168,85,247,0.4)', transition: 'opacity 0.2s', flexShrink: 0
-              }}>
-                <Plus size={16} /> Novo Foto/Vídeo
-              </button>
-)}
+                <button onClick={() => setShowModal(true)} style={{
+                  height: 42, padding: '0 20px', border: 'none', borderRadius: 12, cursor: 'pointer',
+                  background: 'linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)',
+                  color: '#fff', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6,
+                  boxShadow: '0 4px 16px rgba(168,85,247,0.4)', transition: 'opacity 0.2s', flexShrink: 0
+                }}>
+                  <Plus size={16} /> Novo Foto/Vídeo
+                </button>
+              )}
             </div>
 
             <p className="ad-momentos-desc" style={{ 
@@ -608,7 +1164,19 @@ export default function ADMomentosPage() {
               lineHeight: 1.5,
               fontWeight: 500
             }}>
-              Acompanhe o dia a dia, sorrisos e as atividades incríveis de <strong style={{ color: '#4f46e5', fontWeight: 800 }}>{selectedTurmaName}</strong>.
+              {isMasterAdmin ? (
+                selectedTurmaId === 'all' ? (
+                  <>Acompanhe as publicações da <strong style={{ color: '#4f46e5', fontWeight: 800 }}>Equipe Escolar</strong> e de todas as turmas.</>
+                ) : (
+                  <>Acompanhe as publicações de <strong style={{ color: '#4f46e5', fontWeight: 800 }}>{selectedFilterName}</strong>.</>
+                )
+              ) : (
+                selectedTurmaId === 'all' ? (
+                  <>Acompanhe as fotos e vídeos compartilhados com seus grupos de equipe escolar e enviados por você.</>
+                ) : (
+                  <>Acompanhe as fotos e vídeos compartilhados com <strong style={{ color: '#4f46e5', fontWeight: 800 }}>{selectedFilterName}</strong>.</>
+                )
+              )}
             </p>
           </div>
         </div>
@@ -620,7 +1188,15 @@ export default function ADMomentosPage() {
             ) : (
               <EmptyStateCard 
                 title="Nenhum Momento Registrado"
-                description={`Ainda não há fotos publicadas para a turma ${selectedTurmaName} hoje.`}
+                description={
+                  isMasterAdmin 
+                    ? (selectedTurmaId === 'all' 
+                        ? 'Ainda não há fotos publicadas no mural institucional.' 
+                        : `Ainda não há fotos publicadas para ${selectedFilterName}.`)
+                    : (selectedTurmaId === 'all'
+                        ? 'Ainda não há fotos ou vídeos compartilhados com seus grupos de equipe ou enviados por você.'
+                        : `Ainda não há fotos ou vídeos compartilhados com ${selectedFilterName}.`)
+                }
                 icon={<ImageIcon size={48} style={{ opacity: 0.2 }} />}
               />
             )}
@@ -678,13 +1254,16 @@ export default function ADMomentosPage() {
                             const classes = m.targetClasses || [];
                             if (classes.some((c: string) => c.toLowerCase() === 'todos' || c.toLowerCase() === 'toda a escola' || c.toLowerCase() === 'todas')) return 'Toda a Escola';
                             const classNames = classes.map((c: string) => {
+                              const equipeMatch = equipeEscolarGrupos.find(eg => eg.id === c || eg.nome.toLowerCase() === c.toLowerCase());
+                              if (equipeMatch) return `${equipeMatch.nome} (Equipe)`;
                               const turmaMatch = turmas.find((t: any) => String(t.id) === String(c) || String(t.codigo) === String(c) || String(t.nome) === String(c));
                               return turmaMatch ? turmaMatch.nome : c;
                             });
-                            if (classNames.length > 2) return `${classNames.length} Turmas`;
+                            if (classNames.length > 2) return `${classNames.length} Destinos`;
                             return classNames.join(', ');
                           })()
-                          return `${hasAlunos ? 'Alunos' : 'Turma'}: ${label}`;
+                          const isEquipeOnly = !hasAlunos && (m.targetClasses || []).some((c: string) => equipeEscolarGrupos.some(eg => eg.id === c || eg.nome.toLowerCase() === c.toLowerCase()));
+                          return `${hasAlunos ? 'Alunos' : (isEquipeOnly ? 'Equipe' : 'Turma')}: ${label}`;
                         })()} • {displayTime}
                       </div>
                     </div>
@@ -1100,7 +1679,7 @@ export default function ADMomentosPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <label style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Visibilidade</label>
                     <button onClick={() => setShowDestModal(true)} style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#374151' }}>
-                      + Selecionar Turmas
+                      + Selecionar Destinatários
                     </button>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 40, background: '#f9fafb', padding: 10, borderRadius: 12, border: '1.5px solid #e5e7eb' }}>
@@ -1141,8 +1720,8 @@ export default function ADMomentosPage() {
         onClose={() => setShowDestModal(false)}
         initialSelected={newPost.targetClasses}
         onAdd={res => setNewPost({ ...newPost, targetClasses: res as any })}
-        allowedTurmasIds={turmaOptions.map(t => String(t.id))}
-        allowedGruposIds={effectiveUser?.perfil === 'administrador' || String(effectiveUser?.cargo || '').toLowerCase().includes('admin') || String(effectiveUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
+        allowedTurmasIds={isMasterAdmin ? undefined : turmas.map(t => String(t.id))}
+        allowedGruposIds={isMasterAdmin ? undefined : (myStaffGroups.length > 0 ? myStaffGroups.map((g: any) => String(g.id)) : undefined)}
       />
 
     </div>

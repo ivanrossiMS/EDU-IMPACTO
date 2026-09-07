@@ -226,8 +226,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       
     if (isFamilyOrStudent) {
       return [...fetchMomentos].sort((a, b) => {
-        const dateA = new Date((a as any).date || 0).getTime();
-        const dateB = new Date((b as any).date || 0).getTime();
+        const dateA = new Date((a as any).date || (a as any).created_at || 0).getTime();
+        const dateB = new Date((b as any).date || (b as any).created_at || 0).getTime();
         return dateB - dateA;
       });
     }
@@ -271,8 +271,8 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       return false
     }).sort((a, b) => {
       // Ordem do mais novo para o mais antigo
-      const dateA = new Date((a as any).date || 0).getTime()
-      const dateB = new Date((b as any).date || 0).getTime()
+      const dateA = new Date((a as any).date || (a as any).created_at || 0).getTime()
+      const dateB = new Date((b as any).date || (b as any).created_at || 0).getTime()
       return dateB - dateA
     })
   }, [fetchMomentos, aluno?.turma, aluno?.id, nomeTurmaDoAluno, todasTurmasDoAluno, currentUser])

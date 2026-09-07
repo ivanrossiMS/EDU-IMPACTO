@@ -20,6 +20,7 @@ import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { compressImage, compressVideo } from '@/lib/mediaCompressor'
+import { useQueryClient } from '@tanstack/react-query'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
@@ -27,6 +28,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 
 export default function ADAdminMomentos() {
+  const queryClient = useQueryClient()
   const { momentosFeed: feed, setMomentosFeed: setFeed, setMomentosFeedLocally, adAlert, adConfirm, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
   const { turmas = [] } = useData()
   const [alunos = []] = useSupabaseArray<any>('alunos/lightweight?limit=2000', [])
@@ -48,34 +50,49 @@ export default function ADAdminMomentos() {
     table: 'momentos',
     toastConfig: {
       enabled: true,
-      insertMessage: (doc) => `Novo momento de ${doc.author || 'alguém'}!`,
+      insertMessage: (doc) => `Novo momento de ${doc.author || doc.dados?.author || 'alguém'}!`,
       updateMessage: (doc) => `Momento atualizado!`,
       icon: <Camera size={18} color="#00D2FF" />
     },
     onInsert: ({ new: newMomento }) => {
-      const m = { ...newMomento, _isNew: true };
+      const merged = { ...newMomento, ...(newMomento?.dados || {}), _isNew: true };
       if (setMomentosFeedLocally) {
         setMomentosFeedLocally((prev: any) => {
-          if (prev.some((p: any) => p.id === m.id)) return prev;
-          const newFeed = [m, ...prev].sort((a: any, b: any) => new Date(b.date || b.created_at).getTime() - new Date(a.date || a.created_at).getTime());
+          if (prev.some((p: any) => String(p.id) === String(merged.id))) return prev;
+          const newFeed = [merged, ...prev].sort((a: any, b: any) => new Date(b.date || b.created_at || 0).getTime() - new Date(a.date || a.created_at || 0).getTime());
           return newFeed;
         });
         setTimeout(() => {
-          setMomentosFeedLocally((curr: any) => curr.map((c: any) => c.id === m.id ? { ...c, _isNew: false } : c));
+          setMomentosFeedLocally((curr: any) => curr.map((c: any) => String(c.id) === String(merged.id) ? { ...c, _isNew: false } : c));
         }, 5000);
       }
     },
     onUpdate: ({ new: updatedMomento }) => {
+      const merged = { ...updatedMomento, ...(updatedMomento?.dados || {}) };
       if (setMomentosFeedLocally) {
-        setMomentosFeedLocally((prev: any) => prev.map((p: any) => p.id === updatedMomento.id ? { ...p, ...updatedMomento } : p));
+        setMomentosFeedLocally((prev: any) => prev.map((p: any) => String(p.id) === String(merged.id) ? { ...p, ...merged } : p));
       }
     },
     onDelete: ({ old }) => {
-      if (setMomentosFeedLocally) {
-        setMomentosFeedLocally((prev: any) => prev.filter((p: any) => p.id !== old?.id));
+      if (setMomentosFeedLocally && old?.id) {
+        setMomentosFeedLocally((prev: any) => prev.filter((p: any) => String(p.id) !== String(old.id)));
       }
     }
   });
+
+  useEffect(() => {
+    const handleSync = () => {
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] });
+    };
+    window.addEventListener('ad:momentos-insert', handleSync);
+    window.addEventListener('ad:momentos-update', handleSync);
+    window.addEventListener('ad:momentos-delete', handleSync);
+    return () => {
+      window.removeEventListener('ad:momentos-insert', handleSync);
+      window.removeEventListener('ad:momentos-update', handleSync);
+      window.removeEventListener('ad:momentos-delete', handleSync);
+    };
+  }, [queryClient]);
 
   const handleDelete = async (id: string | number) => {
     try {
@@ -83,6 +100,7 @@ export default function ADAdminMomentos() {
       if (res.ok) {
         setFeed(prev => prev.filter(p => String(p.id) !== String(id)));
         setMomentosFeedLocally?.((prev: any) => prev.filter((p: any) => String(p.id) !== String(id)));
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] });
         adAlert('Momento excluído com sucesso!', 'Sucesso');
       } else {
         throw new Error('Erro ao excluir momento na API');
@@ -92,8 +110,6 @@ export default function ADAdminMomentos() {
       adAlert(err.message || 'Ocorreu um erro ao excluir o momento.', 'Erro');
     }
   };
-
-
 
   const submitPost = async () => {
     if (isSubmitting) return
@@ -149,36 +165,74 @@ export default function ADAdminMomentos() {
       const isSelected = newPost.targetClasses.length > 0;
       const selectedTurmas = isSelected ? newPost.targetClasses.filter(t => t.type === 'turma' || t.type === 'grupo') : [];
       const selectedAlunos = isSelected ? newPost.targetClasses.filter(t => t.type === 'aluno') : [];
+      const selectedFuncionarios = isSelected ? newPost.targetClasses.filter(t => t.type === 'funcionario') : [];
 
       const targetClasses = selectedTurmas.length > 0 
         ? selectedTurmas.map(t => t.name) 
-        : (selectedAlunos.length > 0 ? [] : ['Toda a Escola']);
+        : (selectedAlunos.length > 0 || selectedFuncionarios.length > 0 ? [] : ['Toda a Escola']);
         
-      const targetClassesIds = selectedTurmas.map(t => String(t.id).replace(/^t_?/, ''));
+      const targetClassesIds = selectedTurmas.flatMap(t => {
+        const rawId = String(t.id);
+        const cleanId = rawId.replace(/^[tg]_?/, '');
+        return [rawId, cleanId];
+      });
       const alunosIds = selectedAlunos.map(t => String(t.id).replace(/^a_?/, ''));
       const alunosNomes = selectedAlunos.map(t => t.name);
+      const funcionariosIds = selectedFuncionarios.map(t => String(t.id).replace(/^f_?/, ''));
+      const selectedGruposNames = selectedTurmas.filter(t => t.type === 'grupo').map(t => t.name);
+      const selectedGruposIds = selectedTurmas.filter(t => t.type === 'grupo').map(t => String(t.id).replace(/^[tg]_?/, ''));
 
+      const nowIso = new Date().toISOString()
       const post: ADMomento = {
         id: `momento_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         author: currentUser?.nome || 'Administração',
         authorId: currentUser?.id,
         targetClasses,
-        targetClassesIds,
+        targetClassesIds: Array.from(new Set(targetClassesIds)),
         alunosIds,
         alunosNomes,
-        media: mediaArray, desc: newPost.desc, status: 'approved', time: 'Agora', likes: [], comments: []
+        funcionariosIds,
+        media: mediaArray,
+        desc: newPost.desc,
+        status: 'approved',
+        time: 'Agora',
+        date: nowIso,
+        created_at: nowIso,
+        likes: [],
+        comments: [],
+        dados: {
+          grupos: selectedGruposNames,
+          gruposIds: selectedGruposIds,
+          targetGrupos: selectedGruposNames
+        }
       }
 
       setMomentosFeedLocally?.(prev => [post, ...prev])
-      fetch('/api/agenda/momentos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(post)
-      }).catch(err => console.error("Error creating momento:", err))
-
       setShowModal(false)
       setNewPost({ mediaFiles: [], targetClasses: [], desc: '' })
       adAlert('Momento publicado com sucesso!', '🎉 Sucesso')
+
+      try {
+        const res = await fetch('/api/agenda/momentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(post)
+        })
+        if (res.ok) {
+          const savedData = await res.json()
+          if (savedData && savedData.id) {
+            setMomentosFeedLocally?.((prev: any[]) =>
+              prev.map(item => String(item.id) === String(post.id) ? { ...post, ...savedData, ...(savedData.dados || {}) } : item)
+            )
+          }
+        } else {
+          console.error("Error creating momento: status", res.status)
+        }
+      } catch (err) {
+        console.error("Error creating momento:", err)
+      } finally {
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
+      }
     } catch (e: any) {
       console.error('[Momentos Upload] Error:', e)
       adAlert(`Erro ao enviar mídias: ${e.message || 'Erro desconhecido'}`, 'Erro')
@@ -198,8 +252,22 @@ export default function ADAdminMomentos() {
       // Se for global
       if (targetClasses.length === 0 && targetAlunos.length === 0) return true
 
-      // Se for direcionado a turmas
-      if (targetClasses.includes(filterTurma) || targetClasses.includes('Toda a Escola')) return true
+      // Se for direcionado a turmas ou grupos
+      const cleanFilter = filterTurma.replace(/^[tg]_?/, '');
+      const targetClassesIds = p.targetClassesIds || []
+      const postGrupos = (p as any).dados?.grupos || (p as any).grupos || []
+      const postGruposIds = (p as any).dados?.gruposIds || []
+
+      if (
+        targetClasses.includes(filterTurma) ||
+        targetClasses.includes('Toda a Escola') ||
+        targetClassesIds.includes(filterTurma) ||
+        targetClassesIds.includes(cleanFilter) ||
+        targetClassesIds.includes(`t_${cleanFilter}`) ||
+        targetClassesIds.includes(`g_${cleanFilter}`) ||
+        postGrupos.includes(filterTurma) ||
+        postGruposIds.includes(cleanFilter)
+      ) return true
 
       // Se for direcionado a alunos específicos
       if (targetAlunos.length > 0) {

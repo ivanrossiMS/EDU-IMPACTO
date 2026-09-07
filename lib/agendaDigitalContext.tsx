@@ -38,8 +38,8 @@ export type ADChat = { id: number | string, name: string, status: string, previe
 export type ADMessage = { id: number | string, text: string, sender: 'them' | 'us', time: string, date?: string, author?: string, authorRole?: string, authorId?: string }
 export type ADMedia = { type: 'image' | 'video', url: string }
 export type ADComment = { id: string, author: string, text: string, time: string }
-export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[], isGlobalAccess?: boolean }
-export type ADMomento = { id: number | string, author: string, authorId?: string, targetClasses: string[], targetClassesIds?: string[], alunosIds?: string[], alunosNomes?: string[], funcionariosIds?: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[], dados?: any }
+export type ADChatGroup = { id: string, nome: string, cor?: string, colaboradoresIds: string[], alunosIds: string[], isGlobalAccess?: boolean, isEquipeEscolar?: boolean, ano?: string, dados?: any, syncId?: string }
+export type ADMomento = { id: number | string, author: string, authorId?: string, targetClasses: string[], targetClassesIds?: string[], alunosIds?: string[], alunosNomes?: string[], funcionariosIds?: string[], media: ADMedia[], desc: string, status: 'pending' | 'approved' | 'rejected', time: string, reason?: string, likes: string[], comments: ADComment[], dados?: any, date?: string, created_at?: string, _isNew?: boolean, grupos?: string[], targetGrupos?: string[] }
 
 export interface ADConfig {
   permissoes: { 
@@ -171,6 +171,13 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const comunicadosLoading = comunicadosQuery.isLoading || comunicadosQuery.isFetching
 
   const applyFlatUpdater = (oldData: any, updater: any, limit = 5) => {
+    if (Array.isArray(oldData)) {
+      if (typeof updater === 'function') {
+        return updater(oldData);
+      }
+      return updater;
+    }
+
     // Se o cache ainda não foi inicializado (oldData nulo), criamos a estrutura
     // vazia para que o updater seja aplicado normalmente (fix: atualização otimista
     // não aparecia quando o comunicado era enviado antes do primeiro fetch terminar)
@@ -191,7 +198,10 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   }
 
   const setLocalComunicadosState = useCallback((updater: any) => {
-    queryClient.setQueryData(['agenda', 'comunicados', '/api/comunicados'], (oldData: any) => applyFlatUpdater(oldData, updater, 5))
+    queryClient.setQueriesData(
+      { queryKey: ['agenda', 'comunicados'] },
+      (oldData: any) => applyFlatUpdater(oldData, updater, 5)
+    )
   }, [queryClient])
   const setComunicadosState = useCallback((updater: any) => {
     setLocalComunicadosState(updater)
@@ -209,7 +219,10 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const momentosLoading = momentosQuery.isLoading || momentosQuery.isFetching
 
   const setLocalMomentosFeed = useCallback((updater: any) => {
-    queryClient.setQueryData(['agenda', 'momentos', '/api/agenda/momentos'], (oldData: any) => applyFlatUpdater(oldData, updater, 20))
+    queryClient.setQueriesData(
+      { queryKey: ['agenda', 'momentos'] },
+      (oldData: any) => applyFlatUpdater(oldData, updater, 20)
+    )
   }, [queryClient])
   const setMomentosFeed = useCallback((updater: any) => {
     setLocalMomentosFeed(updater)
