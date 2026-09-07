@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { ProvaPreviewModal, Questao, Alternative } from '@/components/simulados/ProvaPreviewModal'
-import { formatProfessorHeaderName, downloadOriginalFile } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile, normalizeQuestionImages, normalizeQuestoesList } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadProvaPage() {
   const router = useRouter()
@@ -111,7 +111,7 @@ export default function UploadProvaPage() {
 
       // If questions already exist, load them for review
       if (provaData?.questoes_json && provaData.questoes_json.length > 0) {
-        let qs = provaData.questoes_json
+        let qs = normalizeQuestoesList(provaData.questoes_json)
         
         if (!showAll) {
           if (targetReq) {

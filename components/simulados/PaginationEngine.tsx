@@ -964,15 +964,19 @@ export function PaginationEngine({
                       const imgWidths = q.simulados_alternativas
                         ?.filter((a: any) => a.imagem_url)
                         .map((a: any) => {
-                          const parts = a.imagem_url.split('#w=');
-                          return parts.length > 1 ? parseInt(parts[1]) : 250;
+                          const hashStr = a.imagem_url.indexOf('#') >= 0 ? a.imagem_url.substring(a.imagem_url.indexOf('#') + 1) : '';
+                          const params = new URLSearchParams(hashStr);
+                          const wStr = params.get('w');
+                          return wStr ? parseInt(wStr) : 250;
                         }) || [];
                       const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
 
                       return q.simulados_alternativas?.map((a: any) => {
-                        const urlParts = a.imagem_url ? a.imagem_url.split('#w=') : [];
-                        const imgBaseUrl = urlParts[0];
-                        const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
+                        const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
+                        const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
+                        const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
+                        const params = new URLSearchParams(hashStr);
+                        const imgWidthStr = params.get('w');
                         const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
                         const effectiveWidth = imgWidth || maxImgWidth;
 

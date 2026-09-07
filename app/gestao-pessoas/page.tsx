@@ -33,7 +33,13 @@ export default function GestaoPessoasDashboard() {
       fetch('/api/gestao-pessoas/atendimentos').then(res => res.ok ? res.json() : [])
     ]).then(([funcs, pesq, denun, atends]) => {
       
-      const isAdmin = currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Administrador'
+      const isAdmin = 
+        currentUser?.cargo === 'Administrador Master' || 
+        currentUser?.perfil === 'Administrador' ||
+        currentUser?.perfil === 'Diretor Geral' ||
+        currentUser?.cargo === 'Diretor Geral' ||
+        currentUser?.perfil === 'Administrador Master' ||
+        currentUser?.cargo === 'Administrador'
       
       const pAtivas = Array.isArray(pesq) ? pesq.filter(p => String(p.status || '').toLowerCase() === 'ativa') : []
       const dAbertas = Array.isArray(denun) ? denun.filter(d => {
@@ -64,11 +70,17 @@ export default function GestaoPessoasDashboard() {
     })
   }, [currentUser])
 
-  const isAdmin = currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Administrador'
+  const isAdmin = 
+    currentUser?.cargo === 'Administrador Master' || 
+    currentUser?.perfil === 'Administrador' ||
+    currentUser?.perfil === 'Diretor Geral' ||
+    currentUser?.cargo === 'Diretor Geral' ||
+    currentUser?.perfil === 'Administrador Master' ||
+    currentUser?.cargo === 'Administrador'
 
   const modules = [
     { title: 'Colaboradores', desc: 'Gestão de equipe e perfis.', icon: Users, link: '/gestao-pessoas/colaboradores', color: '#3b82f6', bg: '#eff6ff', adminOnly: true },
-    { title: 'Plataforma SHAI', desc: 'Envio de códigos via WhatsApp.', icon: KeyRound, link: '/gestao-pessoas/shai', color: '#6366f1', bg: '#ede9fe' },
+    { title: 'Plataforma SHAI', desc: 'Envio de códigos via WhatsApp.', icon: KeyRound, link: '/gestao-pessoas/shai', color: '#6366f1', bg: '#ede9fe', adminOnly: true },
     { title: 'Pesquisa de Clima', desc: 'Análise de engajamento.', icon: PieChart, link: '/gestao-pessoas/pesquisa-clima', color: '#0ea5e9', bg: '#e0f2fe' },
     { title: 'Treinamentos', desc: 'Capacitação contínua.', icon: GraduationCap, link: '/gestao-pessoas/treinamentos', color: '#14b8a6', bg: '#ccfbf1' },
     { title: 'SST e NR-01', desc: 'Segurança do trabalho.', icon: Stethoscope, link: '/gestao-pessoas/sst', color: '#8b5cf6', bg: '#f3e8ff', adminOnly: true },

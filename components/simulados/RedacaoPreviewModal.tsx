@@ -5,8 +5,9 @@ import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns,
 import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { IgnoredQuestionsList } from '@/components/simulados/IgnoredQuestionsList'
 import { supabase } from '@/lib/supabase'
+import { normalizeQuestionImages } from '@/lib/utils'
 
-export interface Alternative { letter: string; text: string; correct: boolean }
+export interface Alternative { letter: string; text: string; correct: boolean; imagem_url?: string }
 export interface Questao {
   numero: number
   enunciado: string
@@ -307,7 +308,8 @@ export function RedacaoPreviewModal({ questoes, setQuestoes, prova, config, onCl
     }
   }, [printOnMount])
 
-  const mappedQuestoes = localQuestoes.map((q, idx) => {
+  const mappedQuestoes = localQuestoes.map((rawQ, idx) => {
+    const q = normalizeQuestionImages(rawQ)
     let enunciadoHtml = q.enunciado
 
     // Clean up excessive newlines

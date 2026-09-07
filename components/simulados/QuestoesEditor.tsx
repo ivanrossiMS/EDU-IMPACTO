@@ -271,6 +271,29 @@ export function QuestoesEditor({
     input.click()
   }
 
+  const handleUploadAlternativaImagem = async (qIdx: number, aIdx: number) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async (e: any) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('bucket', 'comunicados-midia')
+        const res = await fetch('/api/upload-midia', { method: 'POST', body: formData })
+        if (!res.ok) throw new Error('Erro no upload')
+        const data = await res.json()
+        updateAlternativa(qIdx, aIdx, 'imagem_url', `${data.url}#w=150`)
+      } catch (err: any) {
+        alert('Erro: ' + err.message)
+      }
+    }
+    input.click()
+  }
+
   const handleGenerateQuestaoImagemAi = async (qIdx: number, enunciadoTxt: string) => {
     const plainText = (enunciadoTxt || '').replace(/<[^>]+>/g, '').trim()
     if (!plainText) {
@@ -834,14 +857,43 @@ export function QuestoesEditor({
                                 <div style={{ width: 28, height: 28, borderRadius: 8, background: alt.correct ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800, fontSize: 13, color: alt.correct ? '#10b981' : 'hsl(var(--text-secondary))' }}>
                                   {alt.letter}
                                 </div>
-                                <HtmlContent
-                                  editable={!readOnly}
-                                  html={alt.text || ''}
-                                  onBlurHtml={(newHtml: string) => updateAlternativa(qIdx, aIdx, 'text', newHtml)}
-                                  style={{ flex: 1, border: 'none', background: 'transparent', color: alt.correct ? '#1e293b' : 'hsl(var(--text-primary))', fontSize: 14, outline: 'none', width: '100%', minHeight: 24 }}
-                                />
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  {alt.imagem_url && (
+                                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: 'rgba(59,130,246,0.06)', borderRadius: 8, border: '1px solid rgba(59,130,246,0.2)', width: 'fit-content' }}>
+                                      <img
+                                        src={alt.imagem_url.split('#')[0]}
+                                        alt={`Alternativa ${alt.letter}`}
+                                        style={{ maxHeight: 40, maxWidth: 180, objectFit: 'contain', borderRadius: 4 }}
+                                      />
+                                      {!readOnly && (
+                                        <button
+                                          type="button"
+                                          onClick={() => updateAlternativa(qIdx, aIdx, 'imagem_url', null)}
+                                          style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}
+                                          title="Remover imagem da alternativa"
+                                        >
+                                          <X size={13} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                  <HtmlContent
+                                    editable={!readOnly}
+                                    html={alt.text || ''}
+                                    onBlurHtml={(newHtml: string) => updateAlternativa(qIdx, aIdx, 'text', newHtml)}
+                                    style={{ flex: 1, border: 'none', background: 'transparent', color: alt.correct ? '#1e293b' : 'hsl(var(--text-primary))', fontSize: 14, outline: 'none', width: '100%', minHeight: 24 }}
+                                  />
+                                </div>
                                 {!readOnly && (
                                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                    <button 
+                                      type="button"
+                                      onClick={() => handleUploadAlternativaImagem(qIdx, aIdx)} 
+                                      title={alt.imagem_url ? "Alterar imagem da alternativa" : "Adicionar imagem à alternativa"}
+                                      style={{ width: 28, height: 28, borderRadius: 7, background: alt.imagem_url ? 'rgba(59,130,246,0.1)' : 'transparent', border: `1px solid ${alt.imagem_url ? '#3b82f6' : 'hsl(var(--border-subtle))'}`, color: alt.imagem_url ? '#3b82f6' : 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                    >
+                                      <ImageIcon size={13} />
+                                    </button>
                                     <button onClick={() => updateAlternativa(qIdx, aIdx, 'correct', !alt.correct)} title={alt.correct ? 'Remover gabarito' : 'Marcar como correta'}
                                       style={{ width: 28, height: 28, borderRadius: 7, background: alt.correct ? 'rgba(16,185,129,0.15)' : 'transparent', border: `1px solid ${alt.correct ? '#10b981' : 'hsl(var(--border-subtle))'}`, color: alt.correct ? '#10b981' : 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.15s' }}>
                                       <CheckCircle size={14} />

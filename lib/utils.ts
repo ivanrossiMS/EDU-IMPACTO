@@ -481,5 +481,126 @@ export async function downloadOriginalFile(url: string, filename?: string) {
   }
 }
 
+/**
+ * Normaliza questões onde as alternativas possuem tags [IMAGEM N] ou onde as imagens
+ * pertencem às alternativas mas ficaram retidas em q.imagens.
+ * Transfere a imagem para alt.imagem_url, limpa o alt.text e remove de q.imagens
+ * para evitar que sejam renderizadas no enunciado da questão.
+ */
+export function normalizeQuestionImages(q: any): any {
+  if (!q || !Array.isArray(q.alternativas) || q.alternativas.length === 0) {
+    return q
+  }
 
+  const imagens = Array.isArray(q.imagens) ? [...q.imagens] : []
+  let changed = false
+  const usedImageIndices = new Set<number>()
 
+  const updatedAlternativas = q.alternativas.map((alt: any) => {
+    let altText = alt.text || ''
+    let altImgUrl = alt.imagem_url
+
+    const match = altText.match(/\[IMAGEM\s+(\d+)\]/i)
+    if (match) {
+      const imgNum = parseInt(match[1], 10)
+      const imgIdx = imgNum - 1
+      if (imgIdx >= 0 && imgIdx < imagens.length) {
+        const rawImg = imagens[imgIdx]
+        const src = typeof rawImg === 'string' ? rawImg : rawImg?.src
+        if (src) {
+          const hashIdx = src.indexOf('#')
+          const baseSrc = hashIdx >= 0 ? src.substring(0, hashIdx) : src
+          const hashStr = hashIdx >= 0 ? src.substring(hashIdx + 1) : ''
+          const params = new URLSearchParams(hashStr)
+          if (!params.has('w')) params.set('w', '100')
+          if (params.get('a') === 'right') params.delete('a')
+          const finalHash = params.toString()
+          altImgUrl = finalHash ? `${baseSrc}#${finalHash}` : baseSrc
+
+          altText = altText
+            .replace(/\[IMAGEM\s+\d+\]/gi, '')
+            .replace(/<\/?(?:b|strong|i|em|span|p|div)\b[^>]*>/gi, '')
+            .trim()
+
+          usedImageIndices.add(imgIdx)
+          changed = true
+        }
+      }
+    }
+
+    return {
+      ...alt,
+      text: altText,
+      ...(altImgUrl ? { imagem_url: altImgUrl } : {})
+    }
+  })
+
+  // Fallback: se nenhuma alternativa tinha [IMAGEM N], mas todas têm texto vazio,
+  // q.imagens tem a mesma quantidade de alternativas e enunciado não referencia imagens
+  if (!changed && usedImageIndices.size === 0 && imagens.length > 0 && imagens.length === q.alternativas.length) {
+    const allAltsEmpty = q.alternativas.every((a: any) => !a.text || !a.text.trim())
+    const enunciadoHasImages = (q.enunciado || '').includes('[IMAGEM')
+    const altsAlreadyHaveImages = q.alternativas.some((a: any) => a.imagem_url)
+    if (allAltsEmpty && !enunciadoHasImages && !altsAlreadyHaveImages) {
+      const remappedAlts = q.alternativas.map((alt: any, i: number) => {
+        const rawImg = imagens[i]
+        const src = typeof rawImg === 'string' ? rawImg : rawImg?.src
+        const hashIdx = src.indexOf('#')
+        const baseSrc = hashIdx >= 0 ? src.substring(0, hashIdx) : src
+        const hashStr = hashIdx >= 0 ? src.substring(hashIdx + 1) : ''
+        const params = new URLSearchParams(hashStr)
+        if (!params.has('w')) params.set('w', '100')
+        if (params.get('a') === 'right') params.delete('a')
+        const finalHash = params.toString()
+        const finalUrl = finalHash ? `${baseSrc}#${finalHash}` : baseSrc
+
+        return {
+          ...alt,
+          text: '',
+          imagem_url: finalUrl
+        }
+      })
+      return {
+        ...q,
+        imagens: [],
+        alternativas: remappedAlts
+      }
+    }
+  }
+
+  if (changed) {
+    const oldToNewIndex = new Map<number, number>()
+    const newImagens: any[] = []
+    imagens.forEach((img, oldIdx) => {
+      if (!usedImageIndices.has(oldIdx)) {
+        oldToNewIndex.set(oldIdx, newImagens.length)
+        newImagens.push(img)
+      }
+    })
+
+    let newEnunciado = q.enunciado || ''
+    if (newImagens.length !== imagens.length) {
+      newEnunciado = newEnunciado.replace(/\[IMAGEM\s+(\d+)\]/gi, (match: string, numStr: string) => {
+        const oldIdx = parseInt(numStr, 10) - 1
+        if (oldToNewIndex.has(oldIdx)) {
+          return `[IMAGEM ${oldToNewIndex.get(oldIdx)! + 1}]`
+        }
+        return match
+      })
+    }
+
+    return {
+      ...q,
+      enunciado: newEnunciado,
+      imagens: newImagens,
+      alternativas: updatedAlternativas
+    }
+  }
+
+  return q
+}
+
+export function normalizeQuestoesList(questoes: any[]): any[] {
+  if (!Array.isArray(questoes)) return []
+  return questoes.map(q => normalizeQuestionImages(q))
+}

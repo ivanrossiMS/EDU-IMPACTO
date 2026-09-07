@@ -15,7 +15,7 @@ import { useIsMobile } from '@/lib/hooks/useIsMobile'
 const MENUS = [
   { href: '/gestao-pessoas', icon: Home, label: 'Visão Geral' },
   { href: '/gestao-pessoas/colaboradores', icon: Users, label: 'Colaboradores', adminOnly: true },
-  { href: '/gestao-pessoas/shai', icon: KeyRound, label: 'Plataforma SHAI' },
+  { href: '/gestao-pessoas/shai', icon: KeyRound, label: 'Plataforma SHAI', adminOnly: true },
   { href: '/gestao-pessoas/materiais-divulgacao', icon: Megaphone, label: 'Materiais de Divulgação' },
   { href: '/gestao-pessoas/pesquisa-clima', icon: PieChart, label: 'Pesquisa de Clima' },
   { href: '/gestao-pessoas/treinamentos', icon: GraduationCap, label: 'Treinamentos' },
@@ -42,7 +42,13 @@ export function PeopleSidebar() {
     }
   }
 
-  const isAdmin = currentUser?.cargo === 'Administrador Master' || currentUser?.perfil === 'Administrador'
+  const isAdmin = 
+    currentUser?.cargo === 'Administrador Master' || 
+    currentUser?.perfil === 'Administrador' ||
+    currentUser?.perfil === 'Diretor Geral' ||
+    currentUser?.cargo === 'Diretor Geral' ||
+    currentUser?.perfil === 'Administrador Master' ||
+    currentUser?.cargo === 'Administrador'
   const filteredMenus = MENUS.filter(m => isAdmin || !m.adminOnly)
 
   if (isMobile) {

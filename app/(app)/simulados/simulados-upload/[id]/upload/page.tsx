@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
-import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao } from '@/lib/utils'
+import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao, normalizeQuestionImages, normalizeQuestoesList } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
 const isTextoApoio = (q: any) => q?.tipo_questao === 'texto_apoio' || q?.is_texto_apoio || q?.isTextoApoio
@@ -162,7 +162,7 @@ export default function UploadSimuladoPage() {
       }
 
       // Load questions strictly matching active requisition (or all if showAll)
-      const allQuestions = Array.isArray(simuladoData?.questoes_json) ? simuladoData.questoes_json : []
+      const allQuestions = Array.isArray(simuladoData?.questoes_json) ? normalizeQuestoesList(simuladoData.questoes_json) : []
       if (allQuestions.length > 0) {
         let filteredQs: any[] = []
 
@@ -264,7 +264,13 @@ export default function UploadSimuladoPage() {
             }))
           })
 
+          const rawQuestions = Array.isArray(simuladoData?.questoes_json) ? simuladoData.questoes_json : []
+          const hasUnnormalizedAlts = rawQuestions.some((q: any) =>
+            (q.alternativas || []).some((a: any) => a.text && a.text.includes('[IMAGEM'))
+          )
+
           const needsHealing = validReqQuestions.length > 0 && (
+            hasUnnormalizedAlts ||
             allQuestions.length !== validReqQuestions.length ||
             allQuestions.some((q: any) => !q.id_requisicao || !q.disciplina_nome) ||
             simuladoData?.questoes_count !== validReqQuestions.filter((q: any) => !isTextoApoio(q)).length

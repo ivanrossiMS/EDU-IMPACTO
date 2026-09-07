@@ -1836,14 +1836,18 @@ export function PageContent({
                           const imgWidths = q.simulados_alternativas
                             ?.filter((altInfo: any) => altInfo.imagem_url)
                             .map((altInfo: any) => {
-                              const parts = altInfo.imagem_url.split('#w=');
-                              return parts.length > 1 ? parseInt(parts[1]) : 250;
+                              const hashStr = altInfo.imagem_url.indexOf('#') >= 0 ? altInfo.imagem_url.substring(altInfo.imagem_url.indexOf('#') + 1) : '';
+                              const params = new URLSearchParams(hashStr);
+                              const wStr = params.get('w');
+                              return wStr ? parseInt(wStr) : 250;
                             }) || [];
                           const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
                           
-                          const urlParts = a.imagem_url ? a.imagem_url.split('#w=') : [];
-                          const imgBaseUrl = urlParts[0];
-                          const imgWidthStr = urlParts.length > 1 ? urlParts[1] : null;
+                          const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
+                          const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
+                          const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
+                          const params = new URLSearchParams(hashStr);
+                          const imgWidthStr = params.get('w');
                           const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
                           const effectiveWidth = imgWidth || maxImgWidth;
 

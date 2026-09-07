@@ -92,8 +92,14 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
     // Se o perfil não foi encontrado na tabela, por padrão PERMITE acesso a funcionários internos (exceto rotas restritas)
     const hasAccess = userPerfilObj ? !userPerfilObj.bloqueadoGestaoPessoas : true
     
-    const isAdmin = currentUser.cargo === 'Administrador Master' || currentUser.perfil === 'Administrador' || currentUser.perfil === 'Diretor Geral'
-    const restrictedPaths = ['/gestao-pessoas/colaboradores', '/gestao-pessoas/sst']
+    const isAdmin = 
+      currentUser.cargo === 'Administrador Master' || 
+      currentUser.perfil === 'Administrador' || 
+      currentUser.perfil === 'Diretor Geral' ||
+      currentUser.cargo === 'Diretor Geral' ||
+      currentUser.perfil === 'Administrador Master' ||
+      currentUser.cargo === 'Administrador'
+    const restrictedPaths = ['/gestao-pessoas/colaboradores', '/gestao-pessoas/sst', '/gestao-pessoas/shai']
     const isTryingToAccessRestricted = restrictedPaths.some(p => pathname.startsWith(p))
 
     if (hasAccess) {

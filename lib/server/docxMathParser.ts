@@ -3,6 +3,7 @@ import JSZip from 'jszip'
 import { DOMParser } from '@xmldom/xmldom'
 import { convertMetafileToSvg, isWmfOrEmf } from './wmfToSvg'
 import { parseMtefToLatex } from './mtefParser'
+import { normalizeQuestionImages } from '@/lib/utils'
 
 // ═══════════════════════════════════════════════════════════════════════════
 // OMML (Office Math Markup Language) to LaTeX Converter
@@ -447,7 +448,7 @@ export interface ParsedBlock {
 export interface ParsedQuestion {
   numero: number
   enunciado: string
-  alternativas: { letter: string; text: string; correct: boolean }[]
+  alternativas: { letter: string; text: string; correct: boolean; imagem_url?: string }[]
   imagens: { src: string; contentType?: string }[]
   gabarito: string
   pontuacao: number
@@ -660,14 +661,14 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
       .filter(Boolean)
       .map((img: any) => ({ src: img.src, contentType: img.contentType }))
 
-    questions.push({
+    questions.push(normalizeQuestionImages({
       numero: 1,
       enunciado: cleanStmt,
       alternativas: alternatives,
       imagens,
       gabarito: detectedGabarito || alternatives.find((a) => a.correct)?.letter || '',
       pontuacao: 1,
-    })
+    }))
     return questions
   }
 
@@ -708,14 +709,14 @@ export function parseQuestionsFromText(text: string, imageMap: Map<string, any>)
       .filter(Boolean)
       .map((img: any) => ({ src: img.src, contentType: img.contentType }))
 
-    questions.push({
+    questions.push(normalizeQuestionImages({
       numero: unique[i].num,
       enunciado: statement,
       alternativas: alternatives,
       imagens,
       gabarito: detectedGabarito || alternatives.find((a) => a.correct)?.letter || '',
       pontuacao: 1,
-    })
+    }))
   }
 
   return questions

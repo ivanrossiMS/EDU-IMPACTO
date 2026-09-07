@@ -188,7 +188,23 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
                   }}>
                     {alt.letra}
                   </div>
-                  <HtmlContent html={alt.texto} style={{ fontSize: '10pt', lineHeight: 1.4, textAlign: 'justify' }} />
+                  <div style={{ flex: 1 }}>
+                    {alt.imagem_url && (
+                      <img
+                        src={alt.imagem_url.split('#')[0]}
+                        alt={`Alternativa ${alt.letra}`}
+                        style={{
+                          maxWidth: '100%',
+                          width: alt.imagem_url.match(/w=(\d+)/)?.[1] ? `${alt.imagem_url.match(/w=(\d+)/)?.[1]}px` : 'auto',
+                          height: 'auto',
+                          borderRadius: 4,
+                          display: 'block',
+                          marginBottom: alt.texto ? 4 : 0
+                        }}
+                      />
+                    )}
+                    {alt.texto && <HtmlContent html={alt.texto} style={{ fontSize: '10pt', lineHeight: 1.4, textAlign: 'justify' }} />}
+                  </div>
                 </div>
               ))}
             </div>
