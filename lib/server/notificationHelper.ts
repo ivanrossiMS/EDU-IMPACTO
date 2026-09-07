@@ -420,8 +420,9 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             }
             if (Array.isArray(colabs)) {
               colabs.forEach((c: any) => {
-                const clean = String(c).replace(/^f_?/, '').trim()
-                if (clean) colaboradoresIds.push(clean)
+                const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId) : c;
+                const clean = String(val || '').replace(/^f_?/, '').trim()
+                if (clean && clean !== '[object Object]') colaboradoresIds.push(clean)
               });
             }
           })
@@ -469,7 +470,11 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
                     try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
                   }
                   if (Array.isArray(colabs)) {
-                    colabs.forEach((c: any) => colaboradoresIds.push(String(c)));
+                    colabs.forEach((c: any) => {
+                      const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId) : c;
+                      const clean = String(val || '').replace(/^f_?/, '').trim()
+                      if (clean && clean !== '[object Object]') colaboradoresIds.push(clean)
+                    });
                   }
                 }
              });
@@ -571,45 +576,75 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       }))
     }
 
-    // Mapear colaboradoresIds para incluir IDs de system_users e Auth UUIDs (OneSignal external_id)
+    // Mapear colaboradoresIds para incluir IDs de system_users, funcionarios e Auth UUIDs (OneSignal external_id)
     const finalColabIds = new Set<string>()
     colaboradoresIds.forEach(id => {
-      const clean = String(id).replace(/^f_?/, '').trim()
-      if (clean) finalColabIds.add(clean)
+      const idAny = id as any
+      const val = typeof idAny === 'object' && idAny !== null ? (idAny.id || idAny.colaboradorId || idAny.usuarioId || idAny.funcionarioId) : idAny;
+      const clean = String(val || '').replace(/^f_?/, '').trim()
+      if (clean && clean !== '[object Object]') finalColabIds.add(clean)
     })
 
     if (finalColabIds.size > 0) {
       try {
-        const { data: sysColabs } = await supabase
-          .from('system_users')
-          .select('id, auth_id, email, dados')
-          .limit(2000)
+        const [sysRes, funcRes] = await Promise.allSettled([
+          supabase.from('system_users').select('id, auth_id, email, dados').limit(3000),
+          supabase.from('funcionarios').select('id, user_id, email').limit(3000),
+        ])
 
-        if (sysColabs && sysColabs.length > 0) {
-          sysColabs.forEach((su: any) => {
-            const suId = String(su.id)
-            const suAuthId = su.auth_id ? String(su.auth_id) : ''
-            const suEmail = (su.email || '').toLowerCase().trim()
-            const dadosAuthId = su.dados?.auth_id ? String(su.dados.auth_id) : ''
-            const dadosColabId = su.dados?.colaborador_id ? String(su.dados.colaborador_id) : ''
+        const sysColabs = sysRes.status === 'fulfilled' && sysRes.value.data ? sysRes.value.data : []
+        const funcRows = funcRes.status === 'fulfilled' && funcRes.value.data ? funcRes.value.data : []
 
-            const matches = 
-              finalColabIds.has(suId) || 
-              (suAuthId && finalColabIds.has(suAuthId)) || 
-              (suEmail && finalColabIds.has(suEmail)) ||
-              (dadosAuthId && finalColabIds.has(dadosAuthId)) ||
-              (dadosColabId && finalColabIds.has(dadosColabId))
+        const matchedEmails = new Set<string>()
+        const matchedUserIds = new Set<string>()
 
-            if (matches) {
-              finalColabIds.add(suId)
-              if (suAuthId) finalColabIds.add(suAuthId)
-              if (dadosAuthId) finalColabIds.add(dadosAuthId)
-              if (dadosColabId) finalColabIds.add(dadosColabId)
+        // 1. Mapear de funcionarios para user_id e email
+        funcRows.forEach((f: any) => {
+          const fId = String(f.id).trim()
+          const fUserId = f.user_id ? String(f.user_id).trim() : ''
+          const fEmail = (f.email || '').toLowerCase().trim()
+
+          if (finalColabIds.has(fId) || (fUserId && finalColabIds.has(fUserId))) {
+            finalColabIds.add(fId)
+            if (fUserId) {
+              finalColabIds.add(fUserId)
+              matchedUserIds.add(fUserId)
             }
-          })
-        }
+            if (fEmail) {
+              finalColabIds.add(fEmail)
+              matchedEmails.add(fEmail)
+            }
+          }
+        })
+
+        // 2. Mapear de system_users para auth_id (UUID do OneSignal) e outros identificadores
+        sysColabs.forEach((su: any) => {
+          const suId = String(su.id).trim()
+          const suAuthId = su.auth_id ? String(su.auth_id).trim() : ''
+          const suEmail = (su.email || '').toLowerCase().trim()
+          const dadosAuthId = su.dados?.auth_id ? String(su.dados.auth_id).trim() : ''
+          const dadosColabId = su.dados?.colaborador_id ? String(su.dados.colaborador_id).trim() : ''
+
+          const matches = 
+            finalColabIds.has(suId) || 
+            (suAuthId && finalColabIds.has(suAuthId)) || 
+            (suEmail && finalColabIds.has(suEmail)) ||
+            (dadosAuthId && finalColabIds.has(dadosAuthId)) ||
+            (dadosColabId && finalColabIds.has(dadosColabId)) ||
+            (suEmail && matchedEmails.has(suEmail)) ||
+            (suId && matchedUserIds.has(suId)) ||
+            (suAuthId && matchedUserIds.has(suAuthId))
+
+          if (matches) {
+            finalColabIds.add(suId)
+            if (suAuthId) finalColabIds.add(suAuthId)
+            if (dadosAuthId) finalColabIds.add(dadosAuthId)
+            if (dadosColabId) finalColabIds.add(dadosColabId)
+            if (suEmail) finalColabIds.add(suEmail)
+          }
+        })
       } catch (colabErr) {
-        console.warn('[NotifHelper] Aviso ao expandir colaboradores via system_users:', colabErr)
+        console.warn('[NotifHelper] Aviso ao expandir colaboradores via system_users e funcionarios:', colabErr)
       }
     }
 

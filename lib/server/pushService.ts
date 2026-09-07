@@ -95,11 +95,21 @@ async function attemptSend(
       }
 
       if (recipientCount === 0 || !hasValidId) {
+        const errorDetail = allUnsubscribed
+          ? 'All included players are not subscribed'
+          : (parsedBody.errors ? JSON.stringify(parsedBody.errors) : 'No subscribed recipients found')
         console.warn(`⚠️ [PushService] OneSignal aceitou a requisição (200 OK), porém 0 destinatários inscritos (Recipients: 0).`, {
           id: notificationId || 'N/A',
-          targetCount: payload.include_aliases?.external_id?.length || payload.include_external_user_ids?.length || 0,
+          targetCount: payload.include_aliases?.external_id?.length || payload.include_aliases?.colaborador_id?.length || payload.include_aliases?.responsavel_id?.length || payload.include_external_user_ids?.length || 0,
           errors: parsedBody.errors || null,
         })
+        return {
+          success: false,
+          data: parsedBody,
+          statusCode: response.status,
+          recipients: 0,
+          error: errorDetail,
+        }
       } else {
         console.log(`✅ [PushService] Push aceito pelo OneSignal com sucesso! ID: ${notificationId} | Destinatários ativos: ${recipientCount}`)
       }
@@ -219,47 +229,66 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ttl: 86400,
   }
 
-  // ── Tentativa 1: OneSignal User Model Aliases (Web SDK v16 & Capacitor v5+) ──
-  // Mapeia external_id, responsavel_id e aluno_id para encontrar inscritos por qualquer ID
-  const aliasPayload: Record<string, any> = {
+  // ── Tentativa 1: OneSignal User Model (external_id) ──
+  // Usuários autenticados no app via OneSignal.login(userId) possuem external_id = userId
+  console.log(`🔔 [PushService] Tentativa 1 (User Model external_id) para ${uniqueTargetUserIds.length} usuário(s)...`)
+  const externalIdPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
       external_id: uniqueTargetUserIds,
-      responsavel_id: uniqueTargetUserIds,
-      aluno_id: uniqueTargetUserIds,
-      colaborador_id: uniqueTargetUserIds,
-      system_user_id: uniqueTargetUserIds,
     },
     target_channel: 'push',
   }
+  const resultExternalId = await attemptSend(externalIdPayload, ONESIGNAL_REST_API_KEY)
+  const externalIdSucceeded = resultExternalId.success &&
+    Boolean(resultExternalId.data?.id && typeof resultExternalId.data.id === 'string' && resultExternalId.data.id.trim() !== '') &&
+    (resultExternalId.recipients ?? 0) > 0
 
-  console.log(`🔔 [PushService] Tentativa 1 (User Model Aliases) para ${uniqueTargetUserIds.length} usuário(s)...`)
-  const resultAlias = await attemptSend(aliasPayload, ONESIGNAL_REST_API_KEY)
-
-  // Se entregou com sucesso para 1+ dispositivos via Aliases, finalizar imediatamente!
-  // NUNCA executar o fallback legacy se a Tentativa 1 já gerou um ID de notificação válido no OneSignal.
-  const aliasSucceeded = resultAlias.success &&
-    Boolean(resultAlias.data?.id && typeof resultAlias.data.id === 'string' && resultAlias.data.id.trim() !== '') &&
-    (resultAlias.recipients ?? 0) > 0
-
-  if (aliasSucceeded) {
-    return resultAlias
+  if (externalIdSucceeded) {
+    return resultExternalId
   }
 
   // ── Tentativa 2 (Fallback): Legacy include_external_user_ids (OneSignal v1) ──
-  // Executado EXCLUSIVAMENTE quando a Tentativa 1 falhou em encontrar qualquer inscrito ativo
-  console.warn(`⚠️ [PushService] Tentativa 1 retornou 0 inscritos ou falhou. Executando Fallback Legacy (include_external_user_ids)...`)
+  console.warn(`⚠️ [PushService] Tentativa 1 retornou 0 inscritos. Executando Tentativa 2: Fallback Legacy (include_external_user_ids)...`)
   const legacyPayload: Record<string, any> = {
     ...commonFields,
     include_external_user_ids: uniqueTargetUserIds,
   }
-
   const resultLegacy = await attemptSend(legacyPayload, ONESIGNAL_REST_API_KEY)
   if (resultLegacy.success && (resultLegacy.recipients ?? 0) > 0) {
     console.log(`✅ [PushService] Fallback legacy entregou com sucesso para ${resultLegacy.recipients} dispositivo(s)!`)
     return resultLegacy
   }
 
-  // Retornar o resultado do alias se ambos retornaram 0
-  return resultAlias
+  // ── Tentativa 3 (Fallback): Custom Alias colaborador_id ──
+  console.warn(`⚠️ [PushService] Tentativa 2 retornou 0 inscritos. Executando Tentativa 3: Custom Alias (colaborador_id)...`)
+  const colabPayload: Record<string, any> = {
+    ...commonFields,
+    include_aliases: {
+      colaborador_id: uniqueTargetUserIds,
+    },
+    target_channel: 'push',
+  }
+  const resultColab = await attemptSend(colabPayload, ONESIGNAL_REST_API_KEY)
+  if (resultColab.success && (resultColab.recipients ?? 0) > 0) {
+    console.log(`✅ [PushService] Custom alias colaborador_id entregou com sucesso para ${resultColab.recipients} dispositivo(s)!`)
+    return resultColab
+  }
+
+  // ── Tentativa 4 (Fallback): Custom Alias responsavel_id ──
+  const respPayload: Record<string, any> = {
+    ...commonFields,
+    include_aliases: {
+      responsavel_id: uniqueTargetUserIds,
+    },
+    target_channel: 'push',
+  }
+  const resultResp = await attemptSend(respPayload, ONESIGNAL_REST_API_KEY)
+  if (resultResp.success && (resultResp.recipients ?? 0) > 0) {
+    console.log(`✅ [PushService] Custom alias responsavel_id entregou com sucesso para ${resultResp.recipients} dispositivo(s)!`)
+    return resultResp
+  }
+
+  // Retornar o resultado com o erro mais informativo
+  return resultExternalId.error ? resultExternalId : resultLegacy
 }

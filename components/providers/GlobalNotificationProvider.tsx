@@ -204,7 +204,11 @@ export function GlobalNotificationProvider() {
 
               // Solicitar permissão nativa de notificações (Android 13+ e iOS)
               try {
-                await OneSignalNative.Notifications.requestPermission(true)
+                const permResult = await OneSignalNative.Notifications.requestPermission(true)
+                console.log('📱 [GlobalPush] Permissão nativa solicitada:', permResult)
+                if (OneSignalNative.User?.pushSubscription?.optIn) {
+                  await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
+                }
               } catch (permErr: any) {
                 console.warn('📱 [GlobalPush] Permissão nativa:', permErr?.message)
               }
@@ -346,6 +350,11 @@ export function GlobalNotificationProvider() {
                 window.__OS_GLOBAL_USER_ID__ = userId
                 console.log(`✅ [GlobalPush] Usuário autenticado no OneSignal: ${userId}`)
 
+                // Garantir optIn na push subscription
+                if (OS.User?.pushSubscription?.optIn) {
+                  await OS.User.pushSubscription.optIn().catch(() => {})
+                }
+
                 // Aliases para identificação flexível pelo backend
                 if (OS.User && typeof OS.User.addAlias === 'function') {
                   if (currentUser.responsavel_id) {
@@ -362,6 +371,9 @@ export function GlobalNotificationProvider() {
                   if (colabId) {
                     OS.User.addAlias('colaborador_id', String(colabId)).catch(() => {})
                     OS.User.addAlias('system_user_id', String(colabId)).catch(() => {})
+                  }
+                  if (currentUser.email) {
+                    OS.User.addAlias('email', String(currentUser.email).toLowerCase().trim()).catch(() => {})
                   }
                 }
               }
@@ -387,6 +399,20 @@ export function GlobalNotificationProvider() {
             if (OS.User && typeof OS.User.addTags === 'function') {
               await OS.User.addTags(tags)
             }
+          } catch {}
+
+          // Salvar estado da subscrição no window para diagnóstico rápido
+          try {
+            const pushSubId = OS.User?.pushSubscription?.id
+            const pushOptedIn = OS.User?.pushSubscription?.optedIn
+            ;(window as any).__OS_SUBSCRIPTION_STATE__ = {
+              platform: isNative ? 'native' : 'web',
+              userId,
+              pushSubId,
+              pushOptedIn,
+              updatedAt: new Date().toISOString(),
+            }
+            console.log('📱 [GlobalPush] Status da Inscrição OneSignal:', (window as any).__OS_SUBSCRIPTION_STATE__)
           } catch {}
         } else {
           // Logout se o usuário deslogou

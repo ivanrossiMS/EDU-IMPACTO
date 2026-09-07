@@ -110,7 +110,10 @@ export function PushPermissionBanner() {
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
         await OneSignalNative.Notifications.requestPermission(true)
-        console.log('✅ [PushBanner] Permissão solicitada via API nativa')
+        if (OneSignalNative.User?.pushSubscription?.optIn) {
+          await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
+        }
+        console.log('✅ [PushBanner] Permissão solicitada via API nativa e optIn ativado')
         return
       }
 
@@ -119,6 +122,9 @@ export function PushPermissionBanner() {
         // Vai direto para o prompt nativo do navegador, pulando o Slidedown do OneSignal
         if (OneSignal.Notifications?.requestPermission) {
           await OneSignal.Notifications.requestPermission()
+          if (OneSignal.User?.pushSubscription?.optIn) {
+            await OneSignal.User.pushSubscription.optIn().catch(() => {})
+          }
         } else {
           const result = await Notification.requestPermission()
           if (result === 'granted') {

@@ -459,6 +459,11 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 window.__OS_USER_ID__ = userId
                 console.log(`✅ [OneSignal] Usuário identificado: ${userId}`)
                 
+                // Garantir optIn na push subscription
+                if (OS.User?.pushSubscription?.optIn) {
+                  await OS.User.pushSubscription.optIn().catch(() => {})
+                }
+
                 // Add aliases for responsavel_id, aluno_id, colaborador_id and system_user_id to allow backend to target them
                 if (OS.User && typeof OS.User.addAlias === 'function') {
                   try {
@@ -476,6 +481,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                       if (p1 && p1.catch) p1.catch(() => {});
                       const p2 = OS.User.addAlias('system_user_id', String(colabId));
                       if (p2 && p2.catch) p2.catch(() => {});
+                    }
+                    if (currentUser.email) {
+                      const pMail = OS.User.addAlias('email', String(currentUser.email).toLowerCase().trim());
+                      if (pMail && pMail.catch) pMail.catch(() => {});
                     }
                   } catch (e) {
                     // ignore

@@ -20,8 +20,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell, BellOff, BellRing, CheckCircle2, XCircle, AlertTriangle,
   RefreshCw, Trash2, Send, ChevronDown, ChevronUp, Clock, Users,
-  Settings, Shield, Zap, Activity, Info,
+  Settings, Shield, Zap, Activity, Info, Smartphone, Check,
 } from 'lucide-react'
+import { useApp } from '@/lib/context'
 
 interface PushLog {
   id: string
@@ -72,6 +73,22 @@ export function PushDiagnosticoPanel() {
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
 
+  const { currentUser } = useApp()
+  const [devicePermission, setDevicePermission] = useState<string>('checking...')
+  const [deviceState, setDeviceState] = useState<any>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if ('Notification' in window) {
+        setDevicePermission(Notification.permission)
+      } else {
+        setDevicePermission('unsupported')
+      }
+      const st = (window as any).__OS_SUBSCRIPTION_STATE__ || null
+      setDeviceState(st)
+    }
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -100,10 +117,11 @@ export function PushDiagnosticoPanel() {
   const handleTestPush = async () => {
     setTestLoading(true)
     try {
+      const target = testUserId || currentUser?.id || undefined
       const res = await fetch('/api/push/diagnostico', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'test-push', userId: testUserId || undefined }),
+        body: JSON.stringify({ action: 'test-push', userId: target }),
       })
       const result = await res.json()
       if (result.mock) {
@@ -236,6 +254,57 @@ export function PushDiagnosticoPanel() {
           <RefreshCw size={14} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
           Atualizar
         </button>
+      </div>
+
+      {/* Status Deste Aparelho */}
+      <div style={{
+        background: 'white',
+        border: '1px solid #e2e8f0',
+        borderRadius: 20,
+        padding: '20px 24px',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #0ea5e9, #3b82f6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Smartphone size={18} color="white" />
+          </div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>Status Deste Aparelho</div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>Diagnóstico local da sessão e permissão push</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Usuário Autenticado</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>{currentUser?.nome || 'Não logado'}</div>
+            <div style={{ fontSize: 11, color: '#94a3b8', wordBreak: 'break-all' }}>ID: {currentUser?.id || 'N/A'}</div>
+          </div>
+
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Permissão no Dispositivo</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              {devicePermission === 'granted' ? (
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>✅ Concedida</span>
+              ) : devicePermission === 'denied' ? (
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#dc2626' }}>❌ Negada / Bloqueada</span>
+              ) : (
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b' }}>⚠️ Padrão (Não Solicitada)</span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8' }}>{devicePermission === 'denied' ? 'Ative nas configurações do celular' : 'Notificações do sistema'}</div>
+          </div>
+
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Inscrição OneSignal</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: deviceState?.pushOptedIn ? '#16a34a' : '#f59e0b', marginTop: 4 }}>
+              {deviceState?.pushOptedIn ? '✅ Ativo (Inscrito)' : '⏳ Sincronizando'}
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', wordBreak: 'break-all' }}>
+              Sub ID: {deviceState?.pushSubId ? `${String(deviceState.pushSubId).slice(0, 16)}...` : 'Carregando...'}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Credenciais */}
