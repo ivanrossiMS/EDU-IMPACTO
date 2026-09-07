@@ -60,10 +60,8 @@ export default function VerProvaUploadPage() {
         if (reqs && reqs.length > 0) {
           enriched = reqs.flatMap((req: any) => {
             const matching = rawList.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
-            const maxQtd = req.qtd_questoes || undefined
-            const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
             const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
-            return sliced.map((q: any) => ({
+            return matching.map((q: any) => ({
               ...q,
               id_requisicao: req.id,
               id_disciplina: req.id_disciplina || q.id_disciplina,
@@ -80,10 +78,14 @@ export default function VerProvaUploadPage() {
           enriched = rawList
         }
 
-        setQuestoes(enriched.map((q: any, i: number) => ({
-          ...q,
-          numero: i + 1,
-        })))
+        let numCounter = 1
+        setQuestoes(enriched.map((q: any) => {
+          const isApoio = q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio
+          return {
+            ...q,
+            numero: isApoio ? 0 : numCounter++
+          }
+        }))
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }

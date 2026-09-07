@@ -9,7 +9,7 @@ import {
   User, Users, DollarSign, Calendar, FileText, Settings, Key, Eye, EyeOff,
   Download, ArrowRight, Sparkles, CheckSquare, Trash2, Smartphone, Monitor,
   Upload, FileUp, Paperclip, X, File, FileCheck, Layers, ChevronRight, Zap,
-  BookOpen, Building2, Plus, Edit3, UserCheck
+  BookOpen, Building2, Plus, Edit3, UserCheck, Lock, GraduationCap
 } from 'lucide-react'
 
 export interface SignatarioEscola {
@@ -1153,7 +1153,7 @@ export default function MatriculasOnlinePage() {
   }
 
   return (
-    <div style={{ fontFamily: 'Outfit, system-ui, -apple-system, sans-serif' }} className="space-y-6 pb-20">
+    <div style={{ fontFamily: 'Outfit, system-ui, -apple-system, sans-serif' }} className="space-y-6 pb-20 mo-page-wrapper">
       
       {/* Estilos Globais e Micro-interações da Página (Light & Ultra Moderno) */}
       <style dangerouslySetInnerHTML={{ __html: `
@@ -1280,6 +1280,184 @@ export default function MatriculasOnlinePage() {
           background: #ffffff;
           box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
         }
+
+        /* ─── RESPONSIVIDADE MOBILE & TABLET (CLASSE MUNDIAL) ─── */
+        @media (max-width: 1024px) {
+          .mo-grid-layout {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 20px !important;
+          }
+          .mo-col-main {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          .mo-col-side {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          .mo-sticky-card {
+            position: relative !important;
+            top: 0 !important;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .mo-page-wrapper {
+            padding-bottom: 60px !important;
+          }
+          .mo-top-banner {
+            padding: 16px 18px !important;
+            border-radius: 18px !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 16px !important;
+          }
+          .mo-top-banner h1 {
+            font-size: 19px !important;
+            line-height: 1.3 !important;
+            margin-bottom: 6px !important;
+          }
+          .mo-top-banner p {
+            font-size: 12.5px !important;
+            line-height: 1.45 !important;
+          }
+          .mo-top-actions {
+            width: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+          }
+          .mo-top-actions button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .mo-kpi-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 10px !important;
+            margin: 16px 0 !important;
+          }
+          .mo-kpi-card {
+            padding: 12px 14px !important;
+            border-radius: 16px !important;
+          }
+          .mo-kpi-card:last-child {
+            grid-column: span 2 !important;
+          }
+          .mo-kpi-value {
+            font-size: 20px !important;
+          }
+          .mo-tabs-container {
+            padding: 4px !important;
+            border-radius: 14px !important;
+            gap: 4px !important;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+          }
+          .mo-tabs-container::-webkit-scrollbar {
+            display: none;
+          }
+          .mo-tab-btn {
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+            gap: 6px !important;
+            border-radius: 10px !important;
+            flex-shrink: 0 !important;
+          }
+          .mo-card {
+            border-radius: 18px !important;
+          }
+          .mo-card-header {
+            padding: 14px 16px !important;
+            border-radius: 17px 17px 0 0 !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 10px !important;
+          }
+          .mo-card-header h2 {
+            font-size: 14.5px !important;
+          }
+          .mo-card-header p {
+            font-size: 11.5px !important;
+          }
+          .mo-card-body {
+            padding: 16px 14px !important;
+            gap: 14px !important;
+          }
+          .mo-input-grid {
+            grid-template-columns: 1fr !important;
+            gap: 12px !important;
+          }
+          .mo-input {
+            font-size: 15px !important;
+            padding: 11px 14px !important;
+            border-radius: 12px !important;
+          }
+          .mo-auth-grid {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+          .mo-resp-grid {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+          .mo-file-dropzone {
+            padding: 22px 14px !important;
+            border-radius: 14px !important;
+          }
+          .mo-file-item {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 10px !important;
+          }
+          .mo-file-item > div:first-child {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .mo-file-item-actions {
+            width: 100% !important;
+            display: flex !important;
+            justify-content: flex-end !important;
+          }
+          .mo-filters-bar {
+            padding: 14px !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 10px !important;
+          }
+          .mo-filters-bar > div {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .mo-filters-bar select {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+          .mo-filters-bar button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .mo-modal-card {
+            padding: 18px 16px !important;
+            border-radius: 20px !important;
+            max-height: 90vh !important;
+            overflow-y: auto !important;
+          }
+          .mo-modal-actions {
+            grid-template-columns: 1fr !important;
+          }
+          .mo-resumo-card {
+            padding: 18px 16px !important;
+            border-radius: 20px !important;
+          }
+          .mo-cockpit-grid {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 5px !important;
+          }
+          .mo-mobile-hint {
+            display: flex !important;
+          }
+        }
       `}} />
       
       {/* Toast flutuante moderno */}
@@ -1309,7 +1487,7 @@ export default function MatriculasOnlinePage() {
       </AnimatePresence>
 
       {/* ─── 1. TOP HEADER BANNER (LIGHT & ULTRA MODERNO) ─── */}
-      <div style={{
+      <div className="mo-top-banner" style={{
         background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
         borderRadius: 22,
         border: '1px solid #e2e8f0',
@@ -1351,7 +1529,7 @@ export default function MatriculasOnlinePage() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              letterSpacing: '0.04em'
+              letterSpacing: '0.05em'
             }}>
               <CheckCircle2 size={13} color="#059669" />
               WHATSAPP & E-MAIL
@@ -1366,7 +1544,7 @@ export default function MatriculasOnlinePage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div className="mo-top-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {!hasTokenConfigurado && (
             <button
               onClick={() => setActiveTab('config')}
@@ -1427,7 +1605,7 @@ export default function MatriculasOnlinePage() {
       </div>
 
       {/* ─── 2. KPI METRIC CARDS (LIGHT & ULTRA MODERNO) ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, margin: '28px 0' }}>
+      <div className="mo-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 12, margin: '28px 0' }}>
         {/* Total */}
         <div className="mo-kpi-card" style={{ borderLeft: '4px solid #3b82f6', padding: '13px 16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1438,7 +1616,7 @@ export default function MatriculasOnlinePage() {
               <FileSignature size={14} color="#2563eb" />
             </div>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', marginTop: 6, letterSpacing: '-0.02em' }}>
+          <div className="mo-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', marginTop: 6, letterSpacing: '-0.02em' }}>
             {calculatedMetrics.total}
           </div>
           <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1457,7 +1635,7 @@ export default function MatriculasOnlinePage() {
               <Clock size={14} color="#d97706" />
             </div>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: '#b45309', marginTop: 6, letterSpacing: '-0.02em' }}>
+          <div className="mo-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#b45309', marginTop: 6, letterSpacing: '-0.02em' }}>
             {calculatedMetrics.aguardando}
           </div>
           <div style={{ fontSize: 11, color: '#d97706', fontWeight: 600, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1476,7 +1654,7 @@ export default function MatriculasOnlinePage() {
               <CheckCircle2 size={14} color="#059669" />
             </div>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: '#047857', marginTop: 6, letterSpacing: '-0.02em' }}>
+          <div className="mo-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#047857', marginTop: 6, letterSpacing: '-0.02em' }}>
             {calculatedMetrics.assinados}
           </div>
           <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1495,7 +1673,7 @@ export default function MatriculasOnlinePage() {
               <XCircle size={14} color="#dc2626" />
             </div>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: '#b91c1c', marginTop: 6, letterSpacing: '-0.02em' }}>
+          <div className="mo-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#b91c1c', marginTop: 6, letterSpacing: '-0.02em' }}>
             {calculatedMetrics.recusados}
           </div>
           <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1514,7 +1692,7 @@ export default function MatriculasOnlinePage() {
               <Sparkles size={14} color="#7c3aed" />
             </div>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: '#6d28d9', marginTop: 6, letterSpacing: '-0.02em' }}>
+          <div className="mo-kpi-value" style={{ fontSize: 22, fontWeight: 900, color: '#6d28d9', marginTop: 6, letterSpacing: '-0.02em' }}>
             {calculatedMetrics.taxaAssinatura}%
           </div>
           <div style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1525,7 +1703,7 @@ export default function MatriculasOnlinePage() {
       </div>
 
       {/* ─── 3. SEGMENTED TABS PILLS (LIGHT & ULTRA MODERNO) ─── */}
-      <div style={{
+      <div className="mo-tabs-container mo-scroll" style={{
         background: '#f1f5f9',
         padding: '6px',
         borderRadius: 18,
@@ -1576,11 +1754,38 @@ export default function MatriculasOnlinePage() {
       {/* ────────────────────────────────────────────────────────────────────────
           ABA 1: EMITIR (FLUXO SIMPLIFICADO: ALUNO -> RESPONSÁVEL -> ANEXAR -> ENVIAR - LIGHT & ULTRA MODERNO)
       ──────────────────────────────────────────────────────────────────────── */}
-      {activeTab === 'emitir' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 20 }}>
+      {activeTab === 'emitir' && (() => {
+        const faltamArquivos = arquivosAnexados.length === 0
+        const faltaRespNome = !respNome.trim()
+        const faltaRespTelefone = authModeContratante === 'tokenWhatsapp' && !respTelefone.trim()
+        const faltaRespEmail = authModeContratante === 'tokenEmail' && !respEmail.trim()
+        const faltaEscolaRepr = assinarPelaEscola && (!escolaSignatarioAtual || !escolaSignatarioAtual.nomeRepresentante?.trim())
+        const faltaEscolaTelefone = assinarPelaEscola && authModeContratado === 'tokenWhatsapp' && !(escolaSignatarioAtual?.telefone || escolaSignatarioAtual?.celular)?.trim()
+        const faltaEscolaEmail = assinarPelaEscola && authModeContratado === 'tokenEmail' && !escolaSignatarioAtual?.email?.trim()
+
+        const isFormIncomplete = isSendingZapSign ||
+          faltamArquivos ||
+          faltaRespNome ||
+          faltaRespTelefone ||
+          faltaRespEmail ||
+          faltaEscolaRepr ||
+          faltaEscolaTelefone ||
+          faltaEscolaEmail
+
+        const statusAluno = !!alunoSel
+        const statusResp = !faltaRespNome && !faltaRespTelefone && !faltaRespEmail
+        const statusEscola = !faltaEscolaRepr && !faltaEscolaTelefone && !faltaEscolaEmail
+        const statusArquivos = !faltamArquivos
+
+        const totalRequisitos = 3
+        const requisitosCompletos = (statusResp ? 1 : 0) + (statusEscola ? 1 : 0) + (statusArquivos ? 1 : 0)
+        const percentualProntidao = Math.round((requisitosCompletos / totalRequisitos) * 100)
+
+        return (
+          <div className="mo-grid-layout" style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 20 }}>
           
           {/* Coluna Principal: Passos 1, 2, 3 e 4 (8 colunas) */}
-          <div style={{ gridColumn: 'span 8', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div className="mo-col-main" style={{ gridColumn: 'span 8', display: 'flex', flexDirection: 'column', gap: 20 }}>
             
             {/* PASSO 1: Localizar Estudante */}
             <div className="mo-card" style={{
@@ -1593,7 +1798,7 @@ export default function MatriculasOnlinePage() {
               borderRadius: 20
             }}>
               {/* Header com Gradiente Pastel e Badge Vibrante */}
-              <div style={{
+              <div className="mo-card-header" style={{
                 background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
                 borderBottom: '1.5px solid #bfdbfe',
                 padding: '16px 24px',
@@ -1661,12 +1866,12 @@ export default function MatriculasOnlinePage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 6,
-                      boxShadow: '0 1px 3px rgba(220, 38, 38, 0.08)',
+                      boxShadow: '0 2px 6px rgba(220, 38, 38, 0.1)',
                       transition: 'all 0.2s'
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.background = '#fee2e2'
-                      e.currentTarget.style.borderColor = '#f87171'
+                      e.currentTarget.style.background = '#fef2f2'
+                      e.currentTarget.style.borderColor = '#ef4444'
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.background = '#ffffff'
@@ -1679,7 +1884,7 @@ export default function MatriculasOnlinePage() {
                 )}
               </div>
 
-              <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="mo-card-body" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {!alunoSel ? (
                   <div ref={searchContainerRef} style={{ position: 'relative', zIndex: 110 }}>
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -1851,7 +2056,7 @@ export default function MatriculasOnlinePage() {
               borderRadius: 20
             }}>
               {/* Header com Gradiente Pastel e Badge Vibrante */}
-              <div style={{
+              <div className="mo-card-header" style={{
                 background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
                 borderBottom: '1.5px solid #ddd6fe',
                 padding: '16px 24px',
@@ -1878,7 +2083,7 @@ export default function MatriculasOnlinePage() {
                 </div>
               </div>
 
-              <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div className="mo-card-body" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
                 {/* 1. Responsável pelo Aluno */}
                 <div>
                   <label style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: '#4338ca', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
@@ -1889,7 +2094,7 @@ export default function MatriculasOnlinePage() {
                   {alunoSel && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
                       {responsaveisAluno.length > 0 ? (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+                        <div className="mo-resp-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
                           {responsaveisAluno.map(resp => {
                             const isSelected = responsavelSel?.id === resp.id || respNome.toLowerCase() === resp.nome.toLowerCase()
                             return (
@@ -1968,7 +2173,7 @@ export default function MatriculasOnlinePage() {
                   )}
 
                   {/* Inputs Nome, Telefone e Email do Responsável (CPF é digitado diretamente na tela de assinatura do ZapSign) */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+                  <div className="mo-input-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
                     <div>
                       <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
                         Nome do Responsável <span style={{ color: '#ef4444' }}>*</span>
@@ -2259,7 +2464,7 @@ export default function MatriculasOnlinePage() {
               borderRadius: 20
             }}>
               {/* Header com Gradiente Pastel e Badge Vibrante */}
-              <div style={{
+              <div className="mo-card-header" style={{
                 background: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)',
                 borderBottom: '1.5px solid #fbcfe8',
                 padding: '16px 24px',
@@ -2286,7 +2491,7 @@ export default function MatriculasOnlinePage() {
                 </div>
               </div>
 
-              <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="mo-card-body" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Título do Documento no ZapSign */}
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
@@ -2322,6 +2527,7 @@ export default function MatriculasOnlinePage() {
                     onDragOver={e => { e.preventDefault(); setIsDraggingFile(true); }}
                     onDragLeave={() => setIsDraggingFile(false)}
                     onDrop={handleDrop}
+                    className="mo-file-dropzone"
                     style={{
                       border: isDraggingFile ? '2px dashed #ec4899' : '2px dashed #cbd5e1',
                       background: isDraggingFile ? '#fdf2f8' : '#f8fafc',
@@ -2449,46 +2655,47 @@ export default function MatriculasOnlinePage() {
                       </button>
                     </div>
 
-                    {/* Lista dos Arquivos Anexados */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {arquivosAnexados.map((item, index) => (
-                        <div
-                          key={item.id}
-                          style={{
-                            background: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: 14,
-                            padding: '12px 16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            flexWrap: 'wrap',
-                            gap: 12,
-                            boxShadow: '0 1px 3px rgba(15, 23, 42, 0.03)',
-                            transition: 'all 0.2s'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 200, flex: 1 }}>
-                            <div style={{
-                              width: 28, height: 28, borderRadius: 8,
-                              background: '#fdf2f8', border: '1px solid #fbcfe8',
-                              color: '#db2777', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 12, fontWeight: 900, flexShrink: 0
-                            }}>
-                              {index + 1}
-                            </div>
-                            <FileText size={18} color="#db2777" style={{ flexShrink: 0 }} />
-                            <div style={{ overflow: 'hidden' }}>
-                              <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                {item.nome}
+                      {/* Lista dos Arquivos Anexados */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {arquivosAnexados.map((item, index) => (
+                          <div
+                            key={item.id}
+                            className="mo-file-item"
+                            style={{
+                              background: '#ffffff',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 14,
+                              padding: '12px 16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: 12,
+                              boxShadow: '0 1px 3px rgba(15, 23, 42, 0.03)',
+                              transition: 'all 0.2s'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 200, flex: 1 }}>
+                              <div style={{
+                                width: 28, height: 28, borderRadius: 8,
+                                background: '#fdf2f8', border: '1px solid #fbcfe8',
+                                color: '#db2777', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 12, fontWeight: 900, flexShrink: 0
+                              }}>
+                                {index + 1}
                               </div>
-                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
-                                {item.tamanhoFormatado}
+                              <FileText size={18} color="#db2777" style={{ flexShrink: 0 }} />
+                              <div style={{ overflow: 'hidden' }}>
+                                <div style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                  {item.nome}
+                                </div>
+                                <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                                  {item.tamanhoFormatado}
+                                </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div className="mo-file-item-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <button
                               type="button"
                               onClick={() => visualizarArquivoItem(item)}
@@ -2547,7 +2754,7 @@ export default function MatriculasOnlinePage() {
               borderRadius: 20
             }}>
               {/* Header com Gradiente Pastel e Badge Vibrante */}
-              <div style={{
+              <div className="mo-card-header" style={{
                 background: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
                 borderBottom: '1.5px solid #a7f3d0',
                 padding: '16px 24px',
@@ -2574,7 +2781,7 @@ export default function MatriculasOnlinePage() {
                 </div>
               </div>
 
-              <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div className="mo-card-body" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {/* ── PARTE A: CONTRATANTE (Responsável Legal) ── */}
                 <div style={{
                   background: '#ffffff',
@@ -2640,7 +2847,7 @@ export default function MatriculasOnlinePage() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                  <div className="mo-auth-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
                     {/* Opção WhatsApp Contratante */}
                     <div
                       onClick={() => setAuthModeContratante('tokenWhatsapp')}
@@ -2772,7 +2979,7 @@ export default function MatriculasOnlinePage() {
                         )}
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                      <div className="mo-auth-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
                         {/* Opção WhatsApp Contratado */}
                         <div
                           onClick={() => setAuthModeContratado('tokenWhatsapp')}
@@ -3012,197 +3219,441 @@ export default function MatriculasOnlinePage() {
             </div>
           </div>
 
-          {/* Coluna Lateral: Resumo da Operação (4 colunas) com Gradiente Moderno */}
-          <div style={{ gridColumn: 'span 4' }}>
-            <div className="mo-card" style={{
-              background: 'linear-gradient(160deg, #ffffff 0%, #f8fafc 40%, #eff6ff 100%)',
-              border: '1.5px solid #dbeafe',
-              borderRadius: 20,
-              boxShadow: '0 10px 30px -4px rgba(37, 99, 235, 0.08), 0 2px 6px rgba(15, 23, 42, 0.03)',
-              padding: '24px',
+          {/* Coluna Lateral: Resumo do Envio (Cockpit Deep Royal Sapphire & Glow) */}
+          <div className="mo-col-side" style={{ gridColumn: 'span 4' }}>
+            <div className="mo-sticky-card mo-resumo-card" style={{
+              background: 'linear-gradient(165deg, #091224 0%, #0d1b3e 40%, #15224e 85%, #191c3b 100%)',
+              border: '1.5px solid rgba(99, 102, 241, 0.35)',
+              borderRadius: 24,
+              boxShadow: '0 20px 50px -10px rgba(10, 17, 40, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
+              padding: '22px',
               position: 'sticky',
               top: 24,
               display: 'flex',
               flexDirection: 'column',
-              gap: 14
+              gap: 12,
+              color: '#ffffff',
+              overflow: 'hidden'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 14, borderBottom: '1px solid #e2e8f0' }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: 12,
-                  background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff',
-                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)'
-                }}>
-                  <ShieldCheck size={20} />
+              {/* Barra Superior Neon da Identidade Visual Impacto */}
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 4,
+                background: 'linear-gradient(90deg, #38bdf8 0%, #818cf8 50%, #ec4899 100%)',
+                boxShadow: '0 2px 12px rgba(99, 102, 241, 0.6)'
+              }} />
+
+              {/* Header do Cockpit */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingBottom: 12,
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                gap: 10
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 12,
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff',
+                    boxShadow: '0 4px 14px rgba(59, 130, 246, 0.4)',
+                    flexShrink: 0
+                  }}>
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 13.5, fontWeight: 900, color: '#ffffff', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Resumo do Envio
+                    </h3>
+                    <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Lock size={10} color="#60a5fa" /> Contrato Digital Certificado
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', margin: 0, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    Resumo do Envio
-                  </h3>
-                  <span style={{ fontSize: 11.5, color: '#2563eb', fontWeight: 600 }}>Contrato Digital Certificado</span>
+
+                {/* Badge Vivo de Status */}
+                {!isFormIncomplete ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '4px 10px', borderRadius: 999,
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(52, 211, 153, 0.35)',
+                    color: '#34d399', fontSize: 10, fontWeight: 800,
+                    letterSpacing: '0.04em', textTransform: 'uppercase',
+                    boxShadow: '0 0 12px rgba(16, 185, 129, 0.2)'
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981', display: 'inline-block' }} />
+                    Pronto
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '4px 10px', borderRadius: 999,
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    border: '1px solid rgba(251, 191, 36, 0.35)',
+                    color: '#fbbf24', fontSize: 10, fontWeight: 800,
+                    letterSpacing: '0.04em', textTransform: 'uppercase'
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', display: 'inline-block' }} />
+                    Pendente
+                  </div>
+                )}
+              </div>
+
+              {/* Cockpit: Barra de Prontidão e Checklist em Tempo Real */}
+              <div style={{
+                background: 'rgba(255, 255, 255, 0.04)',
+                borderRadius: 14,
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                padding: '10px 12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 7
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Prontidão para Assinatura
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 900, color: percentualProntidao === 100 ? '#34d399' : '#38bdf8' }}>
+                    {percentualProntidao}% ({requisitosCompletos}/3)
+                  </span>
+                </div>
+
+                {/* Barra de Progresso com Gradiente */}
+                <div style={{ width: '100%', height: 5, borderRadius: 999, background: 'rgba(255, 255, 255, 0.1)', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${percentualProntidao}%`,
+                    height: '100%',
+                    background: percentualProntidao === 100
+                      ? 'linear-gradient(90deg, #10b981, #34d399)'
+                      : 'linear-gradient(90deg, #38bdf8, #818cf8)',
+                    borderRadius: 999,
+                    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                    boxShadow: percentualProntidao === 100 ? '0 0 10px rgba(52, 211, 153, 0.5)' : 'none'
+                  }} />
+                </div>
+
+                {/* 4 Micro-chips rápidos */}
+                <div className="mo-cockpit-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 5, marginTop: 2 }}>
+                  <div style={{
+                    fontSize: 9.5, fontWeight: 700,
+                    padding: '3px 7px', borderRadius: 6,
+                    background: statusAluno ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.05)',
+                    color: statusAluno ? '#34d399' : '#94a3b8',
+                    border: `1px solid ${statusAluno ? 'rgba(16, 185, 129, 0.25)' : 'rgba(255, 255, 255, 0.07)'}`,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                  }}>
+                    {statusAluno ? <Check size={10} color="#10b981" /> : <span style={{ opacity: 0.6 }}>ℹ</span>}
+                    <span>{statusAluno ? 'Aluno vinculado' : 'Aluno avulso'}</span>
+                  </div>
+
+                  <div style={{
+                    fontSize: 9.5, fontWeight: 700,
+                    padding: '3px 7px', borderRadius: 6,
+                    background: statusResp ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                    color: statusResp ? '#34d399' : '#fbbf24',
+                    border: `1px solid ${statusResp ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.3)'}`,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                  }}>
+                    {statusResp ? <Check size={10} color="#10b981" /> : <AlertCircle size={10} color="#f59e0b" />}
+                    <span>{statusResp ? 'Contratante OK' : 'Falta contratante'}</span>
+                  </div>
+
+                  <div style={{
+                    fontSize: 9.5, fontWeight: 700,
+                    padding: '3px 7px', borderRadius: 6,
+                    background: statusEscola ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                    color: statusEscola ? '#34d399' : '#fbbf24',
+                    border: `1px solid ${statusEscola ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.3)'}`,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                  }}>
+                    {statusEscola ? <Check size={10} color="#10b981" /> : <AlertCircle size={10} color="#f59e0b" />}
+                    <span>{assinarPelaEscola ? 'Escola bilateral' : 'Escola unilateral'}</span>
+                  </div>
+
+                  <div style={{
+                    fontSize: 9.5, fontWeight: 700,
+                    padding: '3px 7px', borderRadius: 6,
+                    background: statusArquivos ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
+                    color: statusArquivos ? '#34d399' : '#fbbf24',
+                    border: `1px solid ${statusArquivos ? 'rgba(16, 185, 129, 0.25)' : 'rgba(245, 158, 11, 0.3)'}`,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                  }}>
+                    {statusArquivos ? <Check size={10} color="#10b981" /> : <AlertCircle size={10} color="#f59e0b" />}
+                    <span>{statusArquivos ? `${arquivosAnexados.length} PDF${arquivosAnexados.length > 1 ? 's' : ''}` : 'Falta PDF'}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Estudante */}
+              {/* 1. Card Estudante */}
               <div style={{
-                background: '#ffffff', borderRadius: 14,
-                border: '1px solid #e2e8f0', padding: '12px 14px',
-                display: 'flex', flexDirection: 'column', gap: 4,
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)'
+                background: 'rgba(255, 255, 255, 0.04)',
+                borderRadius: 14,
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                padding: '11px 13px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
+                backdropFilter: 'blur(10px)'
               }}>
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Estudante
-                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <GraduationCap size={13} color="#60a5fa" />
+                    Estudante
+                  </span>
+                  {alunoSel ? (
+                    <span style={{ fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      VINCULADO
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.25)' }}>
+                      AVULSO
+                    </span>
+                  )}
+                </div>
+
                 {alunoSel ? (
                   <>
-                    <span style={{ fontSize: 13.5, fontWeight: 900, color: '#0f172a' }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#ffffff' }}>
                       {alunoSel.nome}
                     </span>
-                    <span style={{ fontSize: 11.5, color: '#2563eb', fontWeight: 700 }}>
-                      Turma: {getNomeTurma(alunoSel)} • Matrícula: {alunoSel.matricula || alunoSel.codigo || '—'}
-                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 2 }}>
+                      <span style={{ fontSize: 10.5, color: '#93c5fd', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)', padding: '2px 7px', borderRadius: 6, fontWeight: 700 }}>
+                        Turma: {getNomeTurma(alunoSel)}
+                      </span>
+                      <span style={{ fontSize: 10.5, color: '#cbd5e1', background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(255, 255, 255, 0.1)', padding: '2px 7px', borderRadius: 6, fontWeight: 700 }}>
+                        Matrícula: {alunoSel.matricula || alunoSel.codigo || '—'}
+                      </span>
+                    </div>
                   </>
                 ) : (
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#64748b', fontStyle: 'italic' }}>
-                    Não vinculado (Envio Avulso / Direto)
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#94a3b8', fontStyle: 'italic' }}>
+                    Não vinculado (Envio Avulso / Direto ao Responsável)
                   </span>
                 )}
               </div>
 
-              {/* Responsável Signatário */}
+              {/* 2. Card Responsável Signatário (Contratante) */}
               <div style={{
-                background: '#ffffff', borderRadius: 14,
-                border: '1px solid #e2e8f0', padding: '12px 14px',
-                display: 'flex', flexDirection: 'column', gap: 4,
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)'
+                background: 'rgba(255, 255, 255, 0.04)',
+                borderRadius: 14,
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                padding: '11px 13px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
+                backdropFilter: 'blur(10px)'
               }}>
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Signatário Responsável (Contratante)
-                </span>
-                <span style={{ fontSize: 13.5, fontWeight: 900, color: '#0f172a' }}>
-                  {respNome || 'Pendente de seleção'}
-                </span>
-                <span style={{ fontSize: 11.5, color: '#475569', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  CPF: {respCpf ? <strong style={{ color: '#0f172a' }}>{respCpf}</strong> : <span style={{ color: '#2563eb', fontWeight: 600 }}>Exigido no ZapSign</span>}
-                </span>
-                {respTelefone && (
-                  <span style={{ fontSize: 11.5, color: '#059669', display: 'flex', alignItems: 'center', gap: 5, fontWeight: 700, marginTop: 2 }}>
-                    <Smartphone size={12} />
-                    WhatsApp: {respTelefone}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <UserCheck size={13} color="#818cf8" />
+                    Signatário (Contratante)
                   </span>
-                )}
-                {respEmail && (
-                  <span style={{ fontSize: 11.5, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}>
-                    <Mail size={12} />
-                    E-mail: {respEmail}
-                  </span>
-                )}
+                  {respNome.trim() ? (
+                    <span style={{ fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      CONFIRMADO
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(251, 191, 36, 0.3)' }}>
+                      PENDENTE
+                    </span>
+                  )}
+                </div>
+
+                <span style={{ fontSize: 13, fontWeight: 800, color: respNome.trim() ? '#ffffff' : '#fcd34d' }}>
+                  {respNome || 'Pendente de preenchimento no Passo 2'}
+                </span>
+
+                <div style={{ fontSize: 11, color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: 5, marginTop: 1 }}>
+                  <span style={{ color: '#94a3b8' }}>CPF:</span>
+                  {respCpf ? (
+                    <strong style={{ color: '#ffffff' }}>{respCpf}</strong>
+                  ) : (
+                    <span style={{ color: '#60a5fa', fontWeight: 600, background: 'rgba(59, 130, 246, 0.15)', padding: '1px 6px', borderRadius: 4, border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                      Exigido no ZapSign
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 3 }}>
+                  {respTelefone && (
+                    <div style={{
+                      fontSize: 11, color: '#34d399',
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      border: '1px solid rgba(16, 185, 129, 0.25)',
+                      padding: '3px 8px', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700
+                    }}>
+                      <Smartphone size={12} color="#10b981" />
+                      <span>WhatsApp: {respTelefone}</span>
+                    </div>
+                  )}
+                  {respEmail && (
+                    <div style={{
+                      fontSize: 11, color: '#60a5fa',
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.25)',
+                      padding: '3px 8px', borderRadius: 6,
+                      display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600
+                    }}>
+                      <Mail size={12} color="#3b82f6" />
+                      <span>E-mail: {respEmail}</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Assinatura pela Escola */}
+              {/* 3. Card Co-Assinatura da Escola (Contratado) */}
               <div style={{
-                background: '#ffffff', borderRadius: 14,
-                border: '1px solid #e2e8f0', padding: '12px 14px',
-                display: 'flex', flexDirection: 'column', gap: 4,
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)'
+                background: 'rgba(255, 255, 255, 0.04)',
+                borderRadius: 14,
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                padding: '11px 13px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
+                backdropFilter: 'blur(10px)'
               }}>
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Co-assinatura da Escola (Contratado)
-                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Building2 size={13} color="#c084fc" />
+                    Co-assinatura Escola (Contratado)
+                  </span>
+                  {assinarPelaEscola ? (
+                    <span style={{ fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: 'rgba(168, 85, 247, 0.18)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.35)' }}>
+                      BILATERAL
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 9.5, fontWeight: 800, padding: '2px 7px', borderRadius: 999, background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.25)' }}>
+                      UNILATERAL
+                    </span>
+                  )}
+                </div>
+
                 {assinarPelaEscola && escolaSignatarioAtual ? (
                   <>
-                    <span style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#ffffff' }}>
                       {escolaSignatarioAtual.razaoSocial}
                     </span>
-                    <span style={{ fontSize: 11.5, color: '#4338ca', fontWeight: 700 }}>
+                    <span style={{ fontSize: 11, color: '#c084fc', fontWeight: 700 }}>
                       CNPJ: {escolaSignatarioAtual.cnpj}
                     </span>
-                    <span style={{ fontSize: 11.5, color: '#64748b' }}>
+                    <span style={{ fontSize: 11, color: '#cbd5e1' }}>
                       Repr: {escolaSignatarioAtual.nomeRepresentante} ({escolaSignatarioAtual.cargo || 'Direção'})
                     </span>
-                    <span style={{ fontSize: 11.5, color: '#64748b' }}>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>
                       CPF Repr: {escolaSignatarioAtual.cpfRepresentante ? (
-                        <strong style={{ color: '#0f172a' }}>{formatarCPF(escolaSignatarioAtual.cpfRepresentante)}</strong>
+                        <strong style={{ color: '#ffffff' }}>{formatarCPF(escolaSignatarioAtual.cpfRepresentante)}</strong>
                       ) : (
-                        <span style={{ color: '#6d28d9', fontWeight: 600 }}>Exigido no ZapSign</span>
+                        <span style={{ color: '#c084fc', fontWeight: 600 }}>Exigido no ZapSign</span>
                       )}
                     </span>
                   </>
                 ) : (
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
+                  <span style={{ fontSize: 11.5, color: '#94a3b8', fontStyle: 'italic' }}>
                     Apenas assinatura do responsável (unilateral).
                   </span>
                 )}
               </div>
 
-              {/* Arquivos do Pacote */}
+              {/* 4. Card Documentos do Pacote */}
               <div style={{
-                background: '#ffffff', borderRadius: 14,
-                border: '1px solid #e2e8f0', padding: '12px 14px',
-                display: 'flex', flexDirection: 'column', gap: 6,
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)'
+                background: 'rgba(255, 255, 255, 0.04)',
+                borderRadius: 14,
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                padding: '11px 13px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
+                backdropFilter: 'blur(10px)'
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <FileText size={13} color="#f472b6" />
                     Documentos ({arquivosAnexados.length})
                   </span>
                   {arquivosAnexados.length > 0 && (
-                    <span style={{ fontSize: 10.5, color: '#db2777', fontWeight: 800 }}>
+                    <span style={{ fontSize: 10, color: '#f472b6', background: 'rgba(236, 72, 153, 0.15)', border: '1px solid rgba(236, 72, 153, 0.3)', padding: '2px 7px', borderRadius: 6, fontWeight: 800 }}>
                       {totalTamanhoFormatado}
                     </span>
                   )}
                 </div>
 
                 {arquivosAnexados.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {arquivosAnexados.slice(0, 3).map((item, i) => (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 }}>
+                    {arquivosAnexados.slice(0, 3).map((item) => (
                       <div key={item.id} style={{
-                        background: '#fdf2f8',
-                        padding: '6px 10px',
+                        background: 'rgba(236, 72, 153, 0.08)',
+                        padding: '5px 8px',
                         borderRadius: 8,
-                        border: '1px solid #fbcfe8',
+                        border: '1px solid rgba(236, 72, 153, 0.2)',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 6
                       }}>
-                        <FileText size={14} color="#db2777" style={{ flexShrink: 0 }} />
-                        <span style={{ fontSize: 11.5, fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <FileText size={13} color="#f472b6" style={{ flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#ffffff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {item.nome}
                         </span>
                       </div>
                     ))}
                     {arquivosAnexados.length > 3 && (
-                      <span style={{ fontSize: 11, color: '#db2777', fontWeight: 700 }}>
+                      <span style={{ fontSize: 10.5, color: '#f472b6', fontWeight: 700 }}>
                         + {arquivosAnexados.length - 3} outro(s) documento(s)
                       </span>
                     )}
                   </div>
                 ) : (
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
-                    Nenhum arquivo PDF anexado.
+                  <div style={{
+                    fontSize: 11,
+                    color: '#fbbf24',
+                    background: 'rgba(245, 158, 11, 0.06)',
+                    border: '1px dashed rgba(245, 158, 11, 0.3)',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 2
+                  }}>
+                    <AlertCircle size={13} color="#f59e0b" style={{ flexShrink: 0 }} />
+                    <span>Nenhum arquivo PDF anexado no Passo 3.</span>
                   </div>
                 )}
               </div>
 
-              {/* Canais de Envio e Validação ZapSign */}
+              {/* 5. Card Canais de Envio ZapSign */}
               <div style={{
-                background: '#ffffff', borderRadius: 14,
-                border: '1px solid #e2e8f0', padding: '12px 14px',
-                display: 'flex', flexDirection: 'column', gap: 8,
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)'
+                background: 'rgba(255, 255, 255, 0.04)',
+                borderRadius: 14,
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                padding: '11px 13px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 7,
+                backdropFilter: 'blur(10px)'
               }}>
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Send size={13} color="#38bdf8" />
                   Canais de Envio ZapSign
                 </span>
 
                 {/* Contratante */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#cbd5e1' }}>
                     Contratante (Responsável):
                   </span>
                   <span style={{
-                    fontSize: 12, fontWeight: 800,
-                    color: authModeContratante === 'tokenWhatsapp' ? '#047857' : '#1d4ed8',
+                    fontSize: 11.5, fontWeight: 800,
+                    color: authModeContratante === 'tokenWhatsapp' ? '#34d399' : '#60a5fa',
                     display: 'flex', alignItems: 'center', gap: 5
                   }}>
                     {authModeContratante === 'tokenWhatsapp' ? (
@@ -3214,14 +3665,14 @@ export default function MatriculasOnlinePage() {
                 </div>
 
                 {/* Contratado */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, borderTop: '1px dashed rgba(255, 255, 255, 0.1)', paddingTop: 6 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#cbd5e1' }}>
                     Contratado (Escola):
                   </span>
                   {assinarPelaEscola ? (
                     <span style={{
-                      fontSize: 12, fontWeight: 800,
-                      color: authModeContratado === 'tokenWhatsapp' ? '#047857' : '#1d4ed8',
+                      fontSize: 11.5, fontWeight: 800,
+                      color: authModeContratado === 'tokenWhatsapp' ? '#34d399' : '#60a5fa',
                       display: 'flex', alignItems: 'center', gap: 5
                     }}>
                       {authModeContratado === 'tokenWhatsapp' ? (
@@ -3231,35 +3682,100 @@ export default function MatriculasOnlinePage() {
                       )}
                     </span>
                   ) : (
-                    <span style={{ fontSize: 11.5, color: '#94a3b8', fontStyle: 'italic' }}>
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
                       Não se aplica (Unilateral)
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Selo de Validade Jurídica */}
+              {/* 6. Selo de Validade Jurídica Assegurada */}
               <div style={{
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
+                background: 'linear-gradient(135deg, rgba(30, 58, 138, 0.35) 0%, rgba(30, 27, 75, 0.35) 100%)',
+                border: '1px solid rgba(96, 165, 250, 0.25)',
                 borderRadius: 14,
-                padding: '12px 14px',
+                padding: '10px 12px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 5
+                gap: 4
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#1d4ed8', fontSize: 12, fontWeight: 800 }}>
-                  <CheckCircle2 size={15} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#60a5fa', fontSize: 11.5, fontWeight: 800 }}>
+                  <CheckCircle2 size={14} color="#38bdf8" />
                   <span>Validade Jurídica Assegurada</span>
                 </div>
-                <p style={{ margin: 0, fontSize: 11, color: '#475569', lineHeight: 1.45 }}>
+                <p style={{ margin: 0, fontSize: 10.5, color: '#cbd5e1', lineHeight: 1.45 }}>
                   Assinatura eletrônica certificada com trilha de auditoria completa, IP e carimbo de tempo via ZapSign (MP 2.200-2/2001).
                 </p>
+              </div>
+
+              {/* 7. Botão de Disparo Rápido Integrado no Card */}
+              <div style={{ paddingTop: 2 }}>
+                <button
+                  onClick={handleEnviarZapSign}
+                  disabled={isFormIncomplete}
+                  style={{
+                    width: '100%',
+                    height: 48,
+                    borderRadius: 14,
+                    fontSize: 13,
+                    fontWeight: 900,
+                    letterSpacing: '0.04em',
+                    cursor: isFormIncomplete ? 'not-allowed' : 'pointer',
+                    border: isFormIncomplete ? '1px solid rgba(255, 255, 255, 0.1)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    color: '#ffffff',
+                    transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                    background: isFormIncomplete
+                      ? 'rgba(255, 255, 255, 0.06)'
+                      : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #4f46e5 100%)',
+                    boxShadow: isFormIncomplete
+                      ? 'none'
+                      : '0 8px 25px rgba(37, 99, 235, 0.45)',
+                    opacity: isFormIncomplete ? 0.6 : 1
+                  }}
+                  onMouseEnter={e => {
+                    if (!isFormIncomplete) {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 12px 30px rgba(37, 99, 235, 0.6)'
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'none'
+                    if (!isFormIncomplete) {
+                      e.currentTarget.style.boxShadow = '0 8px 25px rgba(37, 99, 235, 0.45)'
+                    }
+                  }}
+                >
+                  {isSendingZapSign ? (
+                    <>
+                      <RefreshCw size={16} className="animate-spin" />
+                      <span>Disparando via ZapSign...</span>
+                    </>
+                  ) : isFormIncomplete ? (
+                    <>
+                      <AlertCircle size={15} color="#fbbf24" />
+                      <span>PREENCHIMENTO PENDENTE</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={15} />
+                      <span>
+                        {arquivosAnexados.length > 1
+                          ? `DISPARAR CONTRATO (${arquivosAnexados.length} PDFS)`
+                          : 'DISPARAR CONTRATO AGORA'}
+                      </span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
         </div>
-      )}
+      )
+    })()}
 
       {/* ────────────────────────────────────────────────────────────────────────
           ABA 2: PAINEL DE ASSINATURAS (LIGHT & ULTRA MODERNO)
@@ -3268,7 +3784,7 @@ export default function MatriculasOnlinePage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           
           {/* Barra de Filtros e Busca */}
-          <div className="mo-card" style={{
+          <div className="mo-card mo-filters-bar" style={{
             padding: '16px 20px',
             display: 'flex',
             flexWrap: 'wrap',
@@ -3352,10 +3868,27 @@ export default function MatriculasOnlinePage() {
             </div>
           </div>
 
+          {/* Dica de rolagem horizontal em telas mobile */}
+          <div className="mo-mobile-hint" style={{
+            display: 'none',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 14px',
+            background: '#eff6ff',
+            borderRadius: 12,
+            border: '1px solid #bfdbfe',
+            fontSize: 12,
+            color: '#1d4ed8',
+            fontWeight: 700
+          }}>
+            <Smartphone size={16} color="#2563eb" style={{ flexShrink: 0 }} />
+            <span>Deslize a tabela horizontalmente para visualizar todos os dados e ações rápidas.</span>
+          </div>
+
           {/* Tabela de Contratos (Design Light & Ultra Moderno - 100% Responsiva sem Scroll Horizontal) */}
           <div className="mo-card" style={{ overflow: 'hidden', padding: 0 }}>
             <div className="mo-scroll" style={{ overflowX: 'auto', width: '100%' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5, tableLayout: 'fixed' }}>
+              <table style={{ width: '100%', minWidth: 860, borderCollapse: 'collapse', textAlign: 'left', fontSize: 12.5, tableLayout: 'fixed' }}>
                 <colgroup>
                   <col style={{ width: '17%' }} />
                   <col style={{ width: '13%' }} />
@@ -3820,7 +4353,7 @@ export default function MatriculasOnlinePage() {
           ABA 3: INFORMAÇÕES & VALIDADE JURÍDICA (ULTRA MODERNO)
       ──────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'modelos' && (
-        <div className="mo-card" style={{
+        <div className="mo-card mo-card-body" style={{
           padding: '28px 32px',
           display: 'flex',
           flexDirection: 'column',
@@ -3951,7 +4484,7 @@ export default function MatriculasOnlinePage() {
           ABA 4: CONFIGURAÇÕES ZAPSIGN (ULTRA MODERNO)
       ──────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'config' && (
-        <div className="mo-card" style={{
+        <div className="mo-card mo-card-body" style={{
           maxWidth: 780,
           padding: '28px 32px',
           display: 'flex',
@@ -4724,6 +5257,7 @@ export default function MatriculasOnlinePage() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.94, opacity: 0, y: 10 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="mo-modal-card"
               style={{
                 background: '#ffffff',
                 border: '1px solid #e2e8f0',
@@ -4853,7 +5387,7 @@ export default function MatriculasOnlinePage() {
                     {envioSucessoModal.signUrl}
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: envioSucessoModal.whatsappLink ? '1fr 1fr' : '1fr', gap: 8, marginTop: 8 }}>
+                  <div className="mo-modal-actions" style={{ display: 'grid', gridTemplateColumns: envioSucessoModal.whatsappLink ? '1fr 1fr' : '1fr', gap: 8, marginTop: 8 }}>
                     <motion.button
                       type="button"
                       whileTap={{ scale: 0.94 }}
@@ -5003,7 +5537,7 @@ export default function MatriculasOnlinePage() {
                           {envioSucessoModal.escolaSignatario.signUrl}
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: envioSucessoModal.escolaSignatario.whatsappLink ? '1fr 1fr' : '1fr', gap: 8, marginTop: 8 }}>
+                        <div className="mo-modal-actions" style={{ display: 'grid', gridTemplateColumns: envioSucessoModal.escolaSignatario.whatsappLink ? '1fr 1fr' : '1fr', gap: 8, marginTop: 8 }}>
                           <a
                             href={envioSucessoModal.escolaSignatario.signUrl}
                             target="_blank"
@@ -5129,6 +5663,7 @@ export default function MatriculasOnlinePage() {
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.94, opacity: 0, y: 10 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="mo-modal-card"
               style={{
                 background: '#ffffff',
                 border: '1px solid #e2e8f0',
@@ -5187,7 +5722,7 @@ export default function MatriculasOnlinePage() {
               </div>
 
               {/* Form Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+              <div className="mo-input-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
                 {/* CNPJ */}
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 800, color: '#1e3a8a', textTransform: 'uppercase', marginBottom: 5 }}>
@@ -5366,7 +5901,7 @@ export default function MatriculasOnlinePage() {
             flexDirection: 'column',
             padding: '20px'
           }}>
-            <div style={{
+            <div className="mo-card-header" style={{
               background: '#ffffff',
               border: '1px solid #e2e8f0',
               borderBottom: 'none',
@@ -5494,6 +6029,7 @@ export default function MatriculasOnlinePage() {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="mo-modal-card"
               style={{
                 background: '#ffffff',
                 border: '1.5px solid #fecdd3',

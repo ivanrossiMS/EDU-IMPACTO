@@ -19,6 +19,8 @@ import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulad
 import { formatProfessorHeaderName, downloadOriginalFile, isQuestionForRequisicao, isFileForRequisicao } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
+const isTextoApoio = (q: any) => q?.tipo_questao === 'texto_apoio' || q?.is_texto_apoio || q?.isTextoApoio
+
 export default function UploadSimuladoPage() {
   const router = useRouter()
   const params = useParams()
@@ -168,10 +170,8 @@ export default function UploadSimuladoPage() {
           if (reqs.length > 0) {
             filteredQs = reqs.flatMap((req: any) => {
               const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
-              const maxQtd = req.qtd_questoes || undefined
-              const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
               const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
-              return sliced.map((q: any) => ({
+              return matching.map((q: any) => ({
                 ...q,
                 id_requisicao: req.id,
                 id_disciplina: req.id_disciplina || q.id_disciplina,
@@ -189,10 +189,8 @@ export default function UploadSimuladoPage() {
           }
         } else if (currentActiveReq) {
           const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, currentActiveReq, reqs, false))
-          const maxQtd = currentActiveReq.qtd_questoes || undefined
-          const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
           const discName = currentActiveReq.disciplina_nome || currentActiveReq.simulados_disciplinas?.nome || ''
-          filteredQs = sliced.map((q: any) => ({
+          filteredQs = matching.map((q: any) => ({
             ...q,
             id_requisicao: currentActiveReq.id,
             id_disciplina: currentActiveReq.id_disciplina || q.id_disciplina,
@@ -204,10 +202,8 @@ export default function UploadSimuladoPage() {
         } else if (reqs.length === 1) {
           const req = reqs[0]
           const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
-          const maxQtd = req.qtd_questoes || undefined
-          const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
           const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
-          filteredQs = (sliced.length > 0 ? sliced : allQuestions).map((q: any) => ({
+          filteredQs = (matching.length > 0 ? matching : allQuestions).map((q: any) => ({
             ...q,
             id_requisicao: req.id,
             id_disciplina: req.id_disciplina || q.id_disciplina,
@@ -219,7 +215,8 @@ export default function UploadSimuladoPage() {
         }
 
         if (filteredQs.length > 0) {
-          const finalMapped = filteredQs.map((q: any, i: number) => {
+          let numCounter = 1
+          const finalMapped = filteredQs.map((q: any) => {
             let discNome = q.disciplina_nome || q.disciplina || ''
             let reqFound: any = null
             if (q.id_requisicao && reqs.length > 0) {
@@ -231,10 +228,11 @@ export default function UploadSimuladoPage() {
             if (reqFound) {
               discNome = discNome || reqFound.disciplina_nome || reqFound.simulados_disciplinas?.nome || ''
             }
+            const isApoio = isTextoApoio(q)
             return {
               ...q,
               expandido: true,
-              numero: i + 1,
+              numero: isApoio ? 0 : numCounter++,
               id_requisicao: q.id_requisicao || reqFound?.id || undefined,
               id_disciplina: q.id_disciplina || reqFound?.id_disciplina || undefined,
               disciplina_nome: discNome || q.disciplina_nome || undefined,
@@ -254,10 +252,8 @@ export default function UploadSimuladoPage() {
         if (reqs.length > 0) {
           const validReqQuestions = reqs.flatMap((req: any) => {
             const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
-            const maxQtd = req.qtd_questoes || undefined
-            const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
             const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
-            return sliced.map((q: any) => ({
+            return matching.map((q: any) => ({
               ...q,
               id_requisicao: req.id,
               id_disciplina: req.id_disciplina || q.id_disciplina,
@@ -271,15 +267,19 @@ export default function UploadSimuladoPage() {
           const needsHealing = validReqQuestions.length > 0 && (
             allQuestions.length !== validReqQuestions.length ||
             allQuestions.some((q: any) => !q.id_requisicao || !q.disciplina_nome) ||
-            simuladoData?.questoes_count !== validReqQuestions.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+            simuladoData?.questoes_count !== validReqQuestions.filter((q: any) => !isTextoApoio(q)).length
           )
 
           if (needsHealing) {
-            const renumberedHealed = validReqQuestions.map((q: any, idx: number) => ({
-              ...q,
-              numero: idx + 1
-            }))
-            const validCount = renumberedHealed.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+            let healNumCounter = 1
+            const renumberedHealed = validReqQuestions.map((q: any) => {
+              const isApoio = isTextoApoio(q)
+              return {
+                ...q,
+                numero: isApoio ? 0 : healNumCounter++
+              }
+            })
+            const validCount = renumberedHealed.filter((q: any) => !isTextoApoio(q)).length
 
             ;(supabase as any)
               .from('simulados_upload')
@@ -351,18 +351,22 @@ export default function UploadSimuladoPage() {
         })
       }
 
-      const parsed: Questao[] = (data.questoes || []).map((q: any, i: number) => ({
-        ...q,
-        expandido: true,
-        numero: i + 1,
-        id_requisicao: targetReq || undefined,
-        id_disciplina: targetDisc || undefined,
-        disciplina_id: targetDisc || undefined,
-        disciplina_nome: activeRequisicao?.disciplina_nome || q.disciplina_nome || undefined,
-        disciplina: activeRequisicao?.disciplina_nome || q.disciplina || undefined,
-        id_professor: targetProf || undefined,
-        professor_nome: activeRequisicao?.professor_nome || q.professor_nome || undefined
-      }))
+      let parseNumCounter = 1
+      const parsed: Questao[] = (data.questoes || []).map((q: any) => {
+        const isApoio = isTextoApoio(q)
+        return {
+          ...q,
+          expandido: true,
+          numero: isApoio ? 0 : parseNumCounter++,
+          id_requisicao: targetReq || undefined,
+          id_disciplina: targetDisc || undefined,
+          disciplina_id: targetDisc || undefined,
+          disciplina_nome: activeRequisicao?.disciplina_nome || q.disciplina_nome || undefined,
+          disciplina: activeRequisicao?.disciplina_nome || q.disciplina || undefined,
+          id_professor: targetProf || undefined,
+          professor_nome: activeRequisicao?.professor_nome || q.professor_nome || undefined
+        }
+      })
 
       setQuestoes(parsed)
       setUploadStep('review')
@@ -384,19 +388,21 @@ export default function UploadSimuladoPage() {
   const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aprovar', config_estudio?: any) => {
     const currentQs = Array.isArray(updatedQuestoes) ? updatedQuestoes : questoes;
 
+    const currentQuestionsOnly = currentQs.filter((q: any) => !isTextoApoio(q));
+
     // Validate limit for active requisition
     if (currentUser?.perfil === 'Professor' && activeRequisicao) {
-      if (currentQs.length > activeRequisicao.qtd_questoes) {
+      if (currentQuestionsOnly.length > activeRequisicao.qtd_questoes) {
         setAlertModal({ 
           open: true, 
           message: `Você não pode salvar. Estão liberadas apenas ${activeRequisicao.qtd_questoes} questões para ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Edite ou exclua algumas questões para prosseguir.` 
         });
         return;
       }
-      if (actionType === 'enviar_revisao' && currentQs.length < activeRequisicao.qtd_questoes) {
+      if (actionType === 'enviar_revisao' && currentQuestionsOnly.length < activeRequisicao.qtd_questoes) {
         setAlertModal({ 
           open: true, 
-          message: `Você só pode enviar para revisão quando completar todas as ${activeRequisicao.qtd_questoes} questões de ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Faltam ${activeRequisicao.qtd_questoes - currentQs.length} questões.` 
+          message: `Você só pode enviar para revisão quando completar todas as ${activeRequisicao.qtd_questoes} questões de ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Faltam ${activeRequisicao.qtd_questoes - currentQuestionsOnly.length} questões.` 
         });
         return;
       }
@@ -453,10 +459,15 @@ export default function UploadSimuladoPage() {
       })
 
       // 4. Merge preserved other questions with our updated active questions
-      const finalQToSave = (showAll ? myQuestionsToSave : [...otherQuestions, ...myQuestionsToSave]).map((q: any, idx: number) => ({
-        ...q,
-        numero: idx + 1
-      }))
+      let globalNumCounter = 1
+      const mergedList = showAll ? myQuestionsToSave : [...otherQuestions, ...myQuestionsToSave]
+      const finalQToSave = mergedList.map((q: any) => {
+        const isApoio = isTextoApoio(q)
+        return {
+          ...q,
+          numero: isApoio ? 0 : globalNumCounter++
+        }
+      })
 
       // 5. Merge config_estudio with original file list
       let currentConfig = dbData?.config_estudio || simulado?.config_estudio || {}
@@ -478,7 +489,7 @@ export default function UploadSimuladoPage() {
 
       let updatePayload: any = {
         questoes_json: finalQToSave,
-        questoes_count: finalQToSave.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
+        questoes_count: finalQToSave.filter((q: any) => !isTextoApoio(q)).length,
         config_estudio: {
           ...currentConfig,
           ...(config_estudio || {}),
@@ -697,7 +708,8 @@ export default function UploadSimuladoPage() {
               </motion.button>
             )}
             <motion.button onClick={() => {
-              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && activeRequisicao && questoes.length > activeRequisicao.qtd_questoes) {
+              const qCount = questoes.filter((q: any) => !isTextoApoio(q)).length;
+              if (!isProfessorViewAll && currentUser?.perfil === 'Professor' && activeRequisicao && qCount > activeRequisicao.qtd_questoes) {
                 setAlertModal({ open: true, message: `Você não pode pré-visualizar. Estão liberadas apenas ${activeRequisicao.qtd_questoes} questões para ${activeRequisicao.disciplina_nome || 'esta disciplina'}. Edite ou exclua algumas questões para acessar.` });
                 return;
               }
@@ -893,6 +905,7 @@ export default function UploadSimuladoPage() {
             setQuestoes={setQuestoes} 
             defaultDisciplinaId={activeRequisicao?.id_disciplina || targetDiscId}
             defaultProfessorId={activeRequisicao?.id_professor || targetProfId || currentUser?.id}
+            defaultRequisicaoId={activeRequisicao?.id || targetReqId || undefined}
             readOnly={isProfessorViewAll}
             requisicoes={simulado?.simulados_upload_requisicoes || []}
           />

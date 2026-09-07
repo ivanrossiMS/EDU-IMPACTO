@@ -87,10 +87,8 @@ export default function UploadSimuladoPage() {
         if (reqs && reqs.length > 0) {
           enriched = reqs.flatMap((req: any) => {
             const matching = rawList.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
-            const maxQtd = req.qtd_questoes || undefined
-            const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
             const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
-            return sliced.map((q: any) => ({
+            return matching.map((q: any) => ({
               ...q,
               id_requisicao: req.id,
               id_disciplina: req.id_disciplina || q.id_disciplina,
@@ -108,7 +106,15 @@ export default function UploadSimuladoPage() {
         }
 
         if (enriched.length > 0) {
-          setQuestoes(enriched.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
+          let numCounter = 1
+          setQuestoes(enriched.map((q: any) => {
+            const isApoio = q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio
+            return {
+              ...q,
+              expandido: true,
+              numero: isApoio ? 0 : numCounter++
+            }
+          }))
           setUploadStep('review')
         }
       }
@@ -164,14 +170,16 @@ export default function UploadSimuladoPage() {
   const handleSave = async (updatedQuestoes?: any[], actionType?: 'enviar_revisao' | 'aprovar', config_estudio?: any) => {
     const currentQs = Array.isArray(updatedQuestoes) ? updatedQuestoes : questoes;
 
+    const currentQuestionsOnly = currentQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio);
+
     const myAssignment = simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id);
     if (currentUser?.perfil === 'Professor' && myAssignment) {
-      if (currentQs.length > myAssignment.qtd_questoes) {
+      if (currentQuestionsOnly.length > myAssignment.qtd_questoes) {
         setAlertModal({ open: true, message: `Você não pode salvar. Estão liberadas apenas ${myAssignment.qtd_questoes} questões para você neste simulado. Edite ou exclua algumas questões para prosseguir.` });
         return;
       }
-      if (actionType === 'enviar_revisao' && currentQs.length < myAssignment.qtd_questoes) {
-        setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - currentQs.length} questões.` });
+      if (actionType === 'enviar_revisao' && currentQuestionsOnly.length < myAssignment.qtd_questoes) {
+        setAlertModal({ open: true, message: `Você só pode enviar para revisão quando completar toda a quantidade de questões vinculadas a você (${myAssignment.qtd_questoes} questões). Faltam ${myAssignment.qtd_questoes - currentQuestionsOnly.length} questões.` });
         return;
       }
     }
@@ -184,10 +192,15 @@ export default function UploadSimuladoPage() {
 
       // 2. Since we are adapting, we edit ALL questions and don't preserve any hidden ones.
       // 3. Prepare our questions (keep their original id_professor if they have one)
-      const finalQToSave = currentQs.map(({ expandido, ...q }) => ({ 
-        ...q, 
-        id_professor: q.id_professor || currentUser?.id 
-      }))
+      let globalNumCounter = 1
+      const finalQToSave = currentQs.map(({ expandido, ...q }) => {
+        const isApoio = q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio
+        return { 
+          ...q, 
+          numero: isApoio ? 0 : globalNumCounter++,
+          id_professor: q.id_professor || currentUser?.id 
+        }
+      })
 
       let updatePayload: any = {
         questoes_json: finalQToSave,
@@ -459,6 +472,7 @@ export default function UploadSimuladoPage() {
             setQuestoes={setQuestoes} 
             defaultDisciplinaId={simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina}
             defaultProfessorId={currentUser?.id}
+            defaultRequisicaoId={simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id}
             readOnly={isProfessorViewAll}
             requisicoes={simulado?.simulados_upload_requisicoes || []}
           />

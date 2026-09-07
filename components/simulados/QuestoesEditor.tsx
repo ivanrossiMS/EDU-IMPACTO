@@ -4,7 +4,8 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Trash2, ChevronDown, ChevronUp, Image as ImageIcon,
-  Loader2, Sparkles, Plus, X, ZoomIn, ZoomOut, CheckCircle, Upload, Edit, FileText, BookOpen
+  Loader2, Sparkles, Plus, X, ZoomIn, ZoomOut, CheckCircle, Upload, Edit, FileText, BookOpen,
+  ArrowUp, ArrowDown
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { isQuestionForRequisicao } from '@/lib/utils'
@@ -18,6 +19,7 @@ interface QuestoesEditorProps {
   showAddQuestao?: boolean
   defaultDisciplinaId?: string
   defaultProfessorId?: string
+  defaultRequisicaoId?: string
   readOnly?: boolean
   disciplinas?: any[]
   requisicoes?: any[]
@@ -29,6 +31,7 @@ export function QuestoesEditor({
   showAddQuestao = true, 
   defaultDisciplinaId, 
   defaultProfessorId, 
+  defaultRequisicaoId,
   readOnly = false,
   disciplinas,
   requisicoes
@@ -182,15 +185,27 @@ export function QuestoesEditor({
     return palette[Math.abs(hash) % palette.length]
   }
 
+  const isTextoApoio = (q: any) => q?.tipo_questao === 'texto_apoio' || q?.is_texto_apoio || q?.isTextoApoio
+
   const recalculateNumeros = (list: Questao[]) => {
     let numCounter = 1
     return list.map(q => {
-      if (q.tipo_questao === 'texto_apoio') {
+      if (isTextoApoio(q)) {
         return { ...q, numero: 0 }
       }
       const updated = { ...q, numero: numCounter }
       numCounter++
       return updated
+    })
+  }
+
+  const moveQuestao = (fromIdx: number, toIdx: number) => {
+    if (toIdx < 0 || toIdx >= questoes.length) return
+    setQuestoes(prev => {
+      const updated = [...prev]
+      const [moved] = updated.splice(fromIdx, 1)
+      updated.splice(toIdx, 0, moved)
+      return recalculateNumeros(updated)
     })
   }
 
@@ -363,35 +378,63 @@ export function QuestoesEditor({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
   const handleAddQuestao = (novaQuestao: any) => {
+    const activeReq = requisicoes?.find((r: any) => r.id === (novaQuestao.id_requisicao || defaultRequisicaoId))
+    const discNome = novaQuestao.disciplina_nome || novaQuestao.disciplina || activeReq?.disciplina_nome || activeReq?.simulados_disciplinas?.nome || ''
+    const profNome = novaQuestao.professor_nome || activeReq?.professor_nome || ''
+
+    const enriched = {
+      ...novaQuestao,
+      id_requisicao: novaQuestao.id_requisicao || defaultRequisicaoId || activeReq?.id || undefined,
+      id_disciplina: novaQuestao.id_disciplina || defaultDisciplinaId || activeReq?.id_disciplina || undefined,
+      disciplina_id: novaQuestao.disciplina_id || defaultDisciplinaId || activeReq?.id_disciplina || undefined,
+      disciplina_nome: discNome || undefined,
+      disciplina: discNome || undefined,
+      id_professor: novaQuestao.id_professor || defaultProfessorId || activeReq?.id_professor || undefined,
+      professor_nome: profNome || undefined,
+      expandido: true,
+    }
+
     if (editingIndex !== null) {
-      setQuestoes(prev => prev.map((q, i) => i === editingIndex ? { ...novaQuestao, numero: q.numero } : q))
+      setQuestoes(prev => {
+        const updated = prev.map((q, i) => i === editingIndex ? { ...enriched, numero: q.numero } : q)
+        return recalculateNumeros(updated)
+      })
     } else {
-      setQuestoes(prev => recalculateNumeros([...prev, novaQuestao]))
+      setQuestoes(prev => recalculateNumeros([...prev, enriched]))
     }
     setIsModalOpen(false)
     setEditingIndex(null)
   }
 
   const handleAddTextoApoio = () => {
-    setQuestoes(prev => recalculateNumeros([
-      ...prev,
-      {
-        numero: 0,
-        tipo_questao: 'texto_apoio',
-        enunciado: '<p>Digite aqui o texto de apoio ou consulta...</p>',
-        alternativas: [],
-        imagens: [],
-        gabarito: '',
-        pontuacao: 0,
-        expandido: true
-      }
-    ]))
+    const activeReq = requisicoes?.find((r: any) => r.id === defaultRequisicaoId)
+    const discNome = activeReq?.disciplina_nome || activeReq?.simulados_disciplinas?.nome || ''
+    const profNome = activeReq?.professor_nome || ''
+
+    const newApoio: any = {
+      numero: 0,
+      tipo_questao: 'texto_apoio',
+      enunciado: '<div style="text-align: justify;"><p>Digite aqui o texto de apoio ou consulta...</p></div>',
+      alternativas: [],
+      imagens: [],
+      gabarito: '',
+      pontuacao: 0,
+      expandido: true,
+      id_requisicao: defaultRequisicaoId || activeReq?.id || undefined,
+      id_disciplina: defaultDisciplinaId || activeReq?.id_disciplina || undefined,
+      disciplina_id: defaultDisciplinaId || activeReq?.id_disciplina || undefined,
+      disciplina_nome: discNome || undefined,
+      disciplina: discNome || undefined,
+      id_professor: defaultProfessorId || activeReq?.id_professor || undefined,
+      professor_nome: profNome || undefined,
+    }
+    setQuestoes(prev => recalculateNumeros([newApoio, ...prev]))
   }
 
-  const totalQuestoes = questoes.filter(q => q.tipo_questao !== 'texto_apoio').length
-  const comAlternativas = questoes.filter(q => q.tipo_questao !== 'texto_apoio' && (q.alternativas || []).length > 0).length
-  const comGabarito = questoes.filter(q => q.tipo_questao !== 'texto_apoio' && q.gabarito).length
-  const totalTextosApoio = questoes.filter(q => q.tipo_questao === 'texto_apoio').length
+  const totalQuestoes = questoes.filter(q => !isTextoApoio(q)).length
+  const comAlternativas = questoes.filter(q => !isTextoApoio(q) && (q.alternativas || []).length > 0).length
+  const comGabarito = questoes.filter(q => !isTextoApoio(q) && q.gabarito).length
+  const totalTextosApoio = questoes.filter(q => isTextoApoio(q)).length
 
   return (
     <div style={{ width: '100%' }}>
@@ -400,6 +443,7 @@ export function QuestoesEditor({
           questao={editingIndex !== null ? questoes[editingIndex] : undefined}
           defaultDisciplinaId={defaultDisciplinaId}
           defaultProfessorId={defaultProfessorId}
+          defaultRequisicaoId={defaultRequisicaoId}
           onClose={() => { setIsModalOpen(false); setEditingIndex(null); }}
           onSaveObj={handleAddQuestao}
         />
@@ -507,7 +551,7 @@ export function QuestoesEditor({
             <div
               onClick={() => updateQuestao(qIdx, 'expandido', q.expandido === false ? true : false)}
               style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', cursor: 'pointer', userSelect: 'none' }}>
-              {q.tipo_questao === 'texto_apoio' ? (
+              {isTextoApoio(q) ? (
                 <div style={{ padding: '6px 12px', borderRadius: 10, background: 'rgba(168,85,247,0.15)', display: 'flex', alignItems: 'center', gap: 6, color: '#a855f7', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>
                   <FileText size={15} /> APOIO
                 </div>
@@ -540,7 +584,7 @@ export function QuestoesEditor({
                       {discName}
                     </span>
                   )}
-                  {q.tipo_questao === 'texto_apoio' ? (
+                  {isTextoApoio(q) ? (
                     <span style={{ fontSize: 11, color: '#a855f7', fontWeight: 600 }}>Texto de Apoio / Consulta (não contabiliza)</span>
                   ) : (
                     <>
@@ -551,7 +595,45 @@ export function QuestoesEditor({
                   {(q.imagens || []).length > 0 && <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}><ImageIcon size={10} /> {q.imagens.length} imagem{q.imagens.length > 1 ? 'ns' : ''}</span>}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {!readOnly && (
+                  <>
+                    <motion.button 
+                      type="button"
+                      whileHover={qIdx > 0 ? { scale: 1.08 } : {}} 
+                      whileTap={qIdx > 0 ? { scale: 0.92 } : {}} 
+                      disabled={qIdx === 0}
+                      onClick={e => { e.stopPropagation(); moveQuestao(qIdx, qIdx - 1) }}
+                      style={{ 
+                        width: 32, height: 32, borderRadius: 8, 
+                        background: qIdx === 0 ? 'transparent' : 'rgba(139,92,246,0.08)', 
+                        color: qIdx === 0 ? 'hsl(var(--text-disabled, #94a3b8))' : '#8b5cf6', 
+                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        cursor: qIdx === 0 ? 'not-allowed' : 'pointer',
+                        opacity: qIdx === 0 ? 0.3 : 1
+                      }}
+                      title="Mover para Cima">
+                      <ArrowUp size={14} />
+                    </motion.button>
+                    <motion.button 
+                      type="button"
+                      whileHover={qIdx < questoes.length - 1 ? { scale: 1.08 } : {}} 
+                      whileTap={qIdx < questoes.length - 1 ? { scale: 0.92 } : {}} 
+                      disabled={qIdx === questoes.length - 1}
+                      onClick={e => { e.stopPropagation(); moveQuestao(qIdx, qIdx + 1) }}
+                      style={{ 
+                        width: 32, height: 32, borderRadius: 8, 
+                        background: qIdx === questoes.length - 1 ? 'transparent' : 'rgba(139,92,246,0.08)', 
+                        color: qIdx === questoes.length - 1 ? 'hsl(var(--text-disabled, #94a3b8))' : '#8b5cf6', 
+                        border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        cursor: qIdx === questoes.length - 1 ? 'not-allowed' : 'pointer',
+                        opacity: qIdx === questoes.length - 1 ? 0.3 : 1
+                      }}
+                      title="Mover para Baixo">
+                      <ArrowDown size={14} />
+                    </motion.button>
+                  </>
+                )}
                 <motion.button whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.92 }} onClick={e => { e.stopPropagation(); setEditingIndex(qIdx); setIsModalOpen(true); }}
                   style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,0.08)', color: '#3b82f6', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                   title="Editar Questão no Modal">
@@ -578,7 +660,7 @@ export function QuestoesEditor({
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
                         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                          {q.tipo_questao === 'texto_apoio' ? 'Texto / Enunciado de Apoio' : 'Enunciado da Questão'}
+                          {isTextoApoio(q) ? 'Texto / Enunciado de Apoio' : 'Enunciado da Questão'}
                         </label>
                         {discName && discStyle && (
                           <span style={{
@@ -662,7 +744,7 @@ export function QuestoesEditor({
                     </div>
 
                     {/* Alternatives or Texto de Apoio Banner */}
-                    {q.tipo_questao === 'texto_apoio' ? (
+                    {isTextoApoio(q) ? (
                       <div style={{ padding: '16px 20px', borderRadius: 12, background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.2)', display: 'flex', alignItems: 'center', gap: 14 }}>
                         <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(168,85,247,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a855f7', flexShrink: 0 }}>
                           <FileText size={20} />

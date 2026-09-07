@@ -730,16 +730,16 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <span style={{ color: '#475569', fontSize: 14 }}>Questões Originais</span>
-                <span style={{ fontWeight: 700, color: '#0f172a' }}>{localQuestoes.filter((q: any) => q.tipo_questao !== 'texto_apoio').length}</span>
+                <span style={{ fontWeight: 700, color: '#0f172a' }}>{localQuestoes.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: '#475569', fontSize: 14 }}>Questões Selecionadas</span>
-                <span style={{ fontWeight: 700, color: '#10b981' }}>{localQuestoes.filter((q: any) => selectedIds.has(q._internalId) && q.tipo_questao !== 'texto_apoio').length}</span>
+                <span style={{ fontWeight: 700, color: '#10b981' }}>{localQuestoes.filter((q: any) => selectedIds.has(q._internalId) && q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length}</span>
               </div>
-              {localQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio').length > 0 && (
+              {localQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio).length > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8, borderTop: '1px dashed #e2e8f0' }}>
                   <span style={{ color: '#9333ea', fontSize: 14, fontWeight: 600 }}>Textos de Apoio</span>
-                  <span style={{ fontWeight: 700, color: '#9333ea' }}>{localQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio').length}</span>
+                  <span style={{ fontWeight: 700, color: '#9333ea' }}>{localQuestoes.filter((q: any) => q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio).length}</span>
                 </div>
               )}
             </div>
@@ -753,7 +753,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             {(() => {
               let displayCount = 0;
               const questionNumbersMap = localQuestoes.map((q: any) => {
-                if (q.tipo_questao === 'texto_apoio') return null;
+                if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) return null;
                 displayCount++;
                 return displayCount;
               });
@@ -762,7 +762,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                 <Reorder.Group axis="y" values={localQuestoes} onReorder={setLocalQuestoes} style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {localQuestoes.map((q: any, idx) => {
                     const isSelected = selectedIds.has(q._internalId);
-                    const isTextoApoio = q.tipo_questao === 'texto_apoio';
+                    const isTextoApoio = q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio;
 
                     return (
                       <Reorder.Item

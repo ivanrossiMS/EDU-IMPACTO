@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { EditorQuill } from './EditorQuill'
 import { HtmlContent } from '../HtmlContent'
 
-export function QuestaoUploadModal({ questao, defaultProfessorId, defaultDisciplinaId, tituloContexto, onClose, onSaveObj }: { questao?: any, defaultProfessorId?: string, defaultDisciplinaId?: string, tituloContexto?: string, onClose: () => void, onSaveObj: (q: any) => void }) {
+export function QuestaoUploadModal({ questao, defaultProfessorId, defaultDisciplinaId, defaultRequisicaoId, tituloContexto, onClose, onSaveObj }: { questao?: any, defaultProfessorId?: string, defaultDisciplinaId?: string, defaultRequisicaoId?: string, tituloContexto?: string, onClose: () => void, onSaveObj: (q: any) => void }) {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
@@ -366,7 +366,7 @@ export function QuestaoUploadModal({ questao, defaultProfessorId, defaultDiscipl
         disciplina_id: idDisciplina || defaultDisciplinaId || null,
         disciplina: discNomeFound || questao?.disciplina,
         disciplina_nome: discNomeFound || questao?.disciplina_nome || questao?.disciplina,
-        id_requisicao: questao?.id_requisicao,
+        id_requisicao: questao?.id_requisicao || defaultRequisicaoId || null,
         id_professor: questao?.id_professor || defaultProfessorId,
         professor_nome: questao?.professor_nome,
         imagens: imagensApoio.map(i => ({ src: i.url, contentType: 'image/jpeg' })),
