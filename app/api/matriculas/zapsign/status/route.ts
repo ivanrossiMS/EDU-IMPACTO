@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { consultarDocumentoZapSign } from '@/lib/zapsign'
+import { syncContratoWithZapSign } from '@/lib/zapsign'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
     const config = configRow?.valor || {}
     const apiToken = config.apiToken || process.env.ZAPSIGN_API_TOKEN
-    const isSandbox = Boolean(config.sandbox)
+    const defaultSandbox = Boolean(config.sandbox)
 
     if (!apiToken) {
       return NextResponse.json(
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         targetDocToken = data.zapsign_doc_token
       }
     } catch (e) {
-      // continua para checagem em fallback se necessário
+      // continua para checagem em fallback
     }
 
     if (!localContrato) {
@@ -85,63 +85,14 @@ export async function POST(request: Request) {
       )
     }
 
-    // 3. Consultar a API da ZapSign
-    const zapDoc = await consultarDocumentoZapSign(targetDocToken, apiToken, isSandbox)
-
-    // 4. Mapear signatários e status rigoroso (todos devem assinar)
-    const signersList: any[] = Array.isArray(zapDoc.signers) ? zapDoc.signers : []
-    const totalSigners = signersList.length || 1
-
-    const assinados = signersList.filter((s: any) =>
-      s.status === 'signed' || Boolean(s.signed_at) || (Number(s.times_signed) > 0)
-    )
-    const numAssinados = assinados.length
-
-    const pendentes = signersList.filter((s: any) =>
-      !(s.status === 'signed' || Boolean(s.signed_at) || (Number(s.times_signed) > 0))
+    // 3. Sincronizar com a API do ZapSign
+    const { updates, contratoAtualizado, zapDoc } = await syncContratoWithZapSign(
+      localContrato || { zapsign_doc_token: targetDocToken },
+      apiToken,
+      defaultSandbox
     )
 
-    // Só fica como 'assinado' se TODOS os signatários tiverem assinado!
-    let novoStatus = 'aguardando'
-    if (zapDoc.status === 'refused') {
-      novoStatus = 'recusado'
-    } else if (zapDoc.status === 'canceled') {
-      novoStatus = 'cancelado'
-    } else if (totalSigners > 0 && numAssinados >= totalSigners) {
-      novoStatus = 'assinado'
-    } else {
-      novoStatus = 'aguardando'
-    }
-
-    const firstSigner = signersList[0]
-    const escolaSigner = signersList.length > 1 ? signersList[1] : undefined
-
-    const currentMetadata = (localContrato?.metadata && typeof localContrato.metadata === 'object') ? localContrato.metadata : {}
-    const updatedMetadata = {
-      ...currentMetadata,
-      signers: zapDoc.signers || currentMetadata.signers || [],
-      totalSigners,
-      numAssinados,
-      pendentes: pendentes.map((p: any) => ({
-        name: p.name,
-        email: p.email,
-        phoneNumber: p.phone_number,
-        qualification: p.qualification,
-      })),
-      escolaSignUrl: escolaSigner?.sign_url || currentMetadata.escolaSignUrl || null,
-      lastStatusCheck: new Date().toISOString(),
-    }
-
-    const updates: any = {
-      status: novoStatus,
-      zapsign_status: zapDoc.status,
-      signed_file_url: zapDoc.signed_file || localContrato?.signed_file_url || null,
-      zapsign_sign_url: firstSigner?.sign_url || localContrato?.zapsign_sign_url,
-      metadata: updatedMetadata,
-      updated_at: new Date().toISOString(),
-    }
-
-    // 5. Salvar atualização no DB
+    // 4. Salvar atualização no DB
     try {
       await supabase
         .from('matriculas_contratos')
@@ -179,7 +130,8 @@ export async function POST(request: Request) {
       success: true,
       docToken: targetDocToken,
       statusAnterior: localContrato?.status,
-      statusAtual: novoStatus,
+      statusAtual: updates.status,
+      signedFileUrl: updates.signed_file_url,
       zapDoc,
     })
   } catch (err: any) {

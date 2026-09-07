@@ -70,7 +70,27 @@ export async function POST(request: Request) {
       if (Array.isArray(configData?.valor)) {
         const updatedList = configData.valor.map((c: any) => {
           if (c.zapsign_doc_token === docToken) {
-            return { ...c, ...updates }
+            const currentMetadata = (c.metadata && typeof c.metadata === 'object') ? c.metadata : {}
+            const isCompleted = novoStatus === 'assinado'
+            const currentSigners: any[] = Array.isArray(currentMetadata.signers) ? currentMetadata.signers : []
+            const totalSigners = currentSigners.length || currentMetadata.totalSigners || 1
+
+            const updatedMetadata = {
+              ...currentMetadata,
+              totalSigners,
+              numAssinados: isCompleted ? totalSigners : currentMetadata.numAssinados,
+              pendentes: isCompleted ? [] : currentMetadata.pendentes,
+              signers: isCompleted
+                ? currentSigners.map(s => ({ ...s, status: 'signed', signed_at: s.signed_at || new Date().toISOString() }))
+                : currentSigners,
+              lastWebhookAt: new Date().toISOString(),
+            }
+
+            return {
+              ...c,
+              ...updates,
+              metadata: updatedMetadata,
+            }
           }
           return c
         })

@@ -9,7 +9,7 @@ import {
   User, Users, DollarSign, Calendar, FileText, Settings, Key, Eye, EyeOff,
   Download, ArrowRight, Sparkles, CheckSquare, Trash2, Smartphone, Monitor,
   Upload, FileUp, Paperclip, X, File, FileCheck, Layers, ChevronRight, Zap,
-  BookOpen, Building2, Plus, Edit3
+  BookOpen, Building2, Plus, Edit3, UserCheck
 } from 'lucide-react'
 
 export interface SignatarioEscola {
@@ -20,6 +20,7 @@ export interface SignatarioEscola {
   cpfRepresentante?: string
   email: string
   telefone: string
+  celular?: string
   cargo?: string
   isDefault?: boolean
 }
@@ -153,13 +154,20 @@ export default function MatriculasOnlinePage() {
     isDefault: false
   })
 
-  // Canal de Validação e Envio ZapSign
-  const [authMode, setAuthMode] = useState<'tokenWhatsapp' | 'tokenEmail'>('tokenWhatsapp')
+  // Canal de Validação e Envio ZapSign (Contratante e Contratado)
+  const [authModeContratante, setAuthModeContratante] = useState<'tokenWhatsapp' | 'tokenEmail'>('tokenWhatsapp')
+  const [authModeContratado, setAuthModeContratado] = useState<'tokenWhatsapp' | 'tokenEmail'>('tokenWhatsapp')
+  // Compatibilidade legada
+  const authMode = authModeContratante
+  const setAuthMode = setAuthModeContratante
+
   const [isSendingZapSign, setIsSendingZapSign] = useState(false)
   const [envioSucessoModal, setEnvioSucessoModal] = useState<{
     docToken: string
     signUrl: string
     whatsappLink?: string
+    authModeContratante?: 'tokenWhatsapp' | 'tokenEmail'
+    authModeContratado?: 'tokenWhatsapp' | 'tokenEmail'
     alunoNome: string
     respNome: string
     respCpf?: string
@@ -173,6 +181,7 @@ export default function MatriculasOnlinePage() {
       cpf?: string
       signUrl?: string
       whatsappLink?: string
+      authMode?: 'tokenWhatsapp' | 'tokenEmail'
     }
   } | null>(null)
 
@@ -201,6 +210,8 @@ export default function MatriculasOnlinePage() {
     apiToken: string
     sandbox: boolean
     authModePadrao: 'tokenWhatsapp' | 'tokenEmail'
+    authModeContratantePadrao?: 'tokenWhatsapp' | 'tokenEmail'
+    authModeContratadoPadrao?: 'tokenWhatsapp' | 'tokenEmail'
     envioAutomaticoWhatsapp: boolean
     envioAutomaticoEmail: boolean
     signatariosEscola?: SignatarioEscola[]
@@ -208,6 +219,8 @@ export default function MatriculasOnlinePage() {
     apiToken: '',
     sandbox: false,
     authModePadrao: 'tokenWhatsapp',
+    authModeContratantePadrao: 'tokenWhatsapp',
+    authModeContratadoPadrao: 'tokenWhatsapp',
     envioAutomaticoWhatsapp: true,
     envioAutomaticoEmail: false,
     signatariosEscola: [],
@@ -289,8 +302,15 @@ export default function MatriculasOnlinePage() {
         if (data.config) {
           setZapConfig(data.config)
           setHasTokenConfigurado(data.hasToken)
-          if (data.config.authModePadrao) {
-            setAuthMode(data.config.authModePadrao)
+          if (data.config.authModeContratantePadrao) {
+            setAuthModeContratante(data.config.authModeContratantePadrao)
+          } else if (data.config.authModePadrao) {
+            setAuthModeContratante(data.config.authModePadrao)
+          }
+          if (data.config.authModeContratadoPadrao) {
+            setAuthModeContratado(data.config.authModeContratadoPadrao)
+          } else if (data.config.authModePadrao) {
+            setAuthModeContratado(data.config.authModePadrao)
           }
           if (data.config.signatariosEscola && data.config.signatariosEscola.length > 0) {
             const def = data.config.signatariosEscola.find((s: SignatarioEscola) => s.isDefault) || data.config.signatariosEscola[0]
@@ -304,18 +324,60 @@ export default function MatriculasOnlinePage() {
   }
 
   // Carregar Lista de Contratos
-  const carregarContratos = async () => {
+  const carregarContratos = async (autoSync = true) => {
     setIsLoadingContratos(true)
     try {
       // Carrega a base completa para que os KPIs e a filtragem em tempo real funcionem perfeitamente
       const res = await fetch('/api/matriculas/contratos')
       if (res.ok) {
         const data = await res.json()
-        setContratos(data.contratos || [])
+        const listaContratos: ContratoRecord[] = data.contratos || []
+        setContratos(listaContratos)
         if (data.metrics) setMetrics(data.metrics)
+
+        // Se houver contratos em aguardando e autoSync estiver ativo, sincroniza em segundo plano com o ZapSign
+        if (autoSync) {
+          const temAguardando = listaContratos.some(c => (c.status === 'aguardando' || c.status === 'enviado') && Boolean(c.zapsign_doc_token))
+          if (temAguardando) {
+            fetch('/api/matriculas/zapsign/sync-batch', { method: 'POST' })
+              .then(r => r.json())
+              .then(syncRes => {
+                if (syncRes.updatedCount > 0) {
+                  showToast(`${syncRes.updatedCount} assinatura(s) detectada(s) e confirmada(s)!`, 'success')
+                  carregarContratos(false)
+                }
+              })
+              .catch(() => {})
+          }
+        }
       }
     } catch (err: any) {
       showToast('Erro ao carregar lista de contratos.', 'error')
+    } finally {
+      setIsLoadingContratos(false)
+    }
+  }
+
+  // Ação explícita de "Atualizar Lista" sincronizando contratos pendentes com o ZapSign
+  const handleAtualizarListaComSync = async () => {
+    setIsLoadingContratos(true)
+    try {
+      try {
+        const syncRes = await fetch('/api/matriculas/zapsign/sync-batch', { method: 'POST' })
+        if (syncRes.ok) {
+          const syncData = await syncRes.json()
+          if (syncData.updatedCount > 0) {
+            showToast(`${syncData.updatedCount} contrato(s) assinado(s) detectado(s) e atualizado(s)!`, 'success')
+          }
+        }
+      } catch (e) {
+        // ignora falha de rede da checagem em lote
+      }
+
+      await carregarContratos(false)
+      showToast('Lista de contratos atualizada.', 'info')
+    } catch (err: any) {
+      showToast('Erro ao atualizar contratos.', 'error')
     } finally {
       setIsLoadingContratos(false)
     }
@@ -334,8 +396,20 @@ export default function MatriculasOnlinePage() {
 
   // Obter progresso e quem falta assinar no ZapSign
   const getSignersProgress = (c: ContratoRecord) => {
+    const isDocSigned = c.status === 'assinado' || c.zapsign_status === 'signed'
     const signers: any[] = Array.isArray(c.metadata?.signers) ? c.metadata.signers : []
     const total = signers.length > 0 ? signers.length : (c.metadata?.assinarPelaEscola || c.metadata?.escolaSignatario ? 2 : 1)
+
+    // Se o documento já estiver assinado por todos ou confirmado pelo ZapSign
+    if (isDocSigned) {
+      return {
+        total,
+        assinados: total,
+        todosAssinaram: true,
+        pendentesNomes: [],
+        progressoTexto: `${total}/${total} assinados`,
+      }
+    }
 
     let assinados = 0
     const pendentesNomes: string[] = []
@@ -358,14 +432,10 @@ export default function MatriculasOnlinePage() {
         }
       })
     } else {
-      if (c.status === 'assinado') {
-        assinados = total
-      } else {
-        assinados = 0
-        pendentesNomes.push(c.responsavel_nome || 'Contratante')
-        if (c.metadata?.assinarPelaEscola || c.metadata?.escolaSignatario) {
-          pendentesNomes.push(c.metadata?.escolaSignatario?.nomeRepresentante || 'Escola')
-        }
+      assinados = 0
+      pendentesNomes.push(c.responsavel_nome || 'Contratante')
+      if (c.metadata?.assinarPelaEscola || c.metadata?.escolaSignatario) {
+        pendentesNomes.push(c.metadata?.escolaSignatario?.nomeRepresentante || 'Escola')
       }
     }
 
@@ -394,7 +464,7 @@ export default function MatriculasOnlinePage() {
         return
       }
       const progress = getSignersProgress(c)
-      if (progress.todosAssinaram || c.status === 'assinado') {
+      if (progress.todosAssinaram || c.status === 'assinado' || c.zapsign_status === 'signed') {
         assinados++
       } else {
         aguardando++
@@ -417,7 +487,7 @@ export default function MatriculasOnlinePage() {
     return contratos.filter(c => {
       const isRecusado = c.status === 'recusado' || c.status === 'cancelado'
       const progress = getSignersProgress(c)
-      const isAssinado = !isRecusado && (progress.todosAssinaram || c.status === 'assinado')
+      const isAssinado = !isRecusado && (progress.todosAssinaram || c.status === 'assinado' || c.zapsign_status === 'signed')
       const isAguardando = !isRecusado && !isAssinado
 
       // 1. Filtro de Status
@@ -699,12 +769,12 @@ export default function MatriculasOnlinePage() {
     }
     const cleanRespCpfDigits = respCpf.replace(/\D/g, '')
 
-    if (authMode === 'tokenWhatsapp' && !respTelefone.trim()) {
-      showToast('Para envio por WhatsApp, informe o celular com DDD do responsável.', 'error')
+    if (authModeContratante === 'tokenWhatsapp' && !respTelefone.trim()) {
+      showToast('Para envio por WhatsApp ao Contratante, informe o celular com DDD do responsável.', 'error')
       return
     }
-    if (authMode === 'tokenEmail' && !respEmail.trim()) {
-      showToast('Para envio por E-mail, informe o e-mail do responsável.', 'error')
+    if (authModeContratante === 'tokenEmail' && !respEmail.trim()) {
+      showToast('Para envio por E-mail ao Contratante, informe o e-mail do responsável.', 'error')
       return
     }
     if (arquivosAnexados.length === 0) {
@@ -719,6 +789,16 @@ export default function MatriculasOnlinePage() {
       }
       if (!escolaSignatarioAtual.nomeRepresentante?.trim()) {
         showToast('O nome do representante da escola é obrigatório.', 'error')
+        return
+      }
+      const cleanEscolaPhone = (escolaSignatarioAtual.telefone || escolaSignatarioAtual.celular || '').trim()
+      const escolaEmail = (escolaSignatarioAtual.email || '').trim()
+      if (authModeContratado === 'tokenWhatsapp' && !cleanEscolaPhone) {
+        showToast('Para envio por WhatsApp ao Contratado, o representante da escola precisa ter telefone/celular cadastrado.', 'error')
+        return
+      }
+      if (authModeContratado === 'tokenEmail' && !escolaEmail) {
+        showToast('Para envio por E-mail ao Contratado, o representante da escola precisa ter e-mail cadastrado.', 'error')
         return
       }
       cleanEscolaCpfDigits = (escolaSignatarioAtual.cpfRepresentante || '').replace(/\D/g, '')
@@ -750,7 +830,9 @@ export default function MatriculasOnlinePage() {
           ? arquivosAnexados[0].nome
           : `${arquivosAnexados[0].nome} (+${arquivosAnexados.length - 1} anexo${arquivosAnexados.length > 2 ? 's' : ''})`,
         nomeDocumento: tituloDocumento.trim() || (alunoSel ? `Contrato de Matrícula - ${alunoSel.nome}` : (arquivosAnexados[0]?.nome ? arquivosAnexados[0].nome.replace(/\.pdf$/i, '') : 'Contrato para Assinatura')),
-        authMode,
+        authMode: authModeContratante,
+        authModeContratante,
+        authModeContratado,
         assinarPelaEscola: Boolean(assinarPelaEscola),
         escolaSignatario: assinarPelaEscola && escolaSignatarioAtual ? {
           id: escolaSignatarioAtual.id,
@@ -788,6 +870,8 @@ export default function MatriculasOnlinePage() {
         docToken: data.zapsign?.docToken,
         signUrl: data.zapsign?.signUrl,
         whatsappLink: data.zapsign?.whatsappLink,
+        authModeContratante,
+        authModeContratado,
         alunoNome: alunoSel ? alunoSel.nome : 'Avulso (Sem Estudante Vinculado)',
         respNome: respNome,
         respCpf: formatarCPF(cleanRespCpfDigits),
@@ -801,6 +885,7 @@ export default function MatriculasOnlinePage() {
           cpf: formatarCPF(cleanEscolaCpfDigits),
           signUrl: data.zapsign?.escolaSignUrl,
           whatsappLink: data.zapsign?.escolaWhatsappLink,
+          authMode: authModeContratado,
         } : undefined
       })
 
@@ -2484,140 +2569,442 @@ export default function MatriculasOnlinePage() {
                     Como o ZapSign Deve Enviar e Validar
                   </h2>
                   <p style={{ fontSize: 12, color: '#047857', margin: 0, fontWeight: 600 }}>
-                    Selecione por onde os signatários receberão a notificação oficial para assinatura.
+                    Selecione por onde cada signatário receberá a notificação oficial e o código de validação.
                   </p>
                 </div>
               </div>
 
-              <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 14 }}>
-                  {/* Opção WhatsApp */}
-                  <div
-                    onClick={() => setAuthMode('tokenWhatsapp')}
-                    className="mo-auth-card"
-                    style={{
-                      borderColor: authMode === 'tokenWhatsapp' ? '#10b981' : '#e2e8f0',
-                      background: authMode === 'tokenWhatsapp'
-                        ? '#ecfdf5'
-                        : '#f8fafc',
-                      boxShadow: authMode === 'tokenWhatsapp' ? '0 4px 16px rgba(16, 185, 129, 0.15)' : 'none'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 900, color: '#047857', display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <MessageSquare size={16} />
-                        WhatsApp Oficial
-                      </span>
+              <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* ── PARTE A: CONTRATANTE (Responsável Legal) ── */}
+                <div style={{
+                  background: '#ffffff',
+                  border: '1.5px solid #e2e8f0',
+                  borderRadius: 18,
+                  padding: '18px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{
-                        width: 20, height: 20, borderRadius: '50%',
-                        background: authMode === 'tokenWhatsapp' ? '#059669' : '#cbd5e1',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+                        width: 32, height: 32, borderRadius: 10,
+                        background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
+                        color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: '1px solid #a7f3d0'
                       }}>
-                        {authMode === 'tokenWhatsapp' && <Check size={12} strokeWidth={3} />}
+                        <UserCheck size={17} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13.5, fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span>1. Envio para o CONTRATANTE</span>
+                          <span style={{ fontSize: 10.5, fontWeight: 800, background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: 6 }}>
+                            Responsável Legal
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                          {respNome.trim() ? (
+                            <strong style={{ color: '#0f172a' }}>{respNome}</strong>
+                          ) : (
+                            <span style={{ color: '#dc2626' }}>⚠️ Responsável ainda não informado no Passo 2</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <p style={{ fontSize: 11.5, color: '#64748b', margin: '4px 0 0', lineHeight: 1.45 }}>
-                      O ZapSign dispara a mensagem oficial no WhatsApp com o link direto e código de validação.
-                    </p>
+
+                    {/* Badge de Contato do Contratante */}
+                    <div style={{
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      padding: '4px 10px',
+                      borderRadius: 8,
+                      background: authModeContratante === 'tokenWhatsapp' ? (respTelefone.trim() ? '#ecfdf5' : '#fef2f2') : (respEmail.trim() ? '#eff6ff' : '#fef2f2'),
+                      color: authModeContratante === 'tokenWhatsapp' ? (respTelefone.trim() ? '#047857' : '#dc2626') : (respEmail.trim() ? '#1d4ed8' : '#dc2626'),
+                      border: authModeContratante === 'tokenWhatsapp' ? (respTelefone.trim() ? '1px solid #a7f3d0' : '1px solid #fecaca') : (respEmail.trim() ? '1px solid #bfdbfe' : '1px solid #fecaca'),
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}>
+                      {authModeContratante === 'tokenWhatsapp' ? (
+                        <>
+                          <Smartphone size={13} />
+                          <span>{respTelefone.trim() ? `WhatsApp: ${respTelefone}` : 'Celular pendente de preenchimento'}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Mail size={13} />
+                          <span>{respEmail.trim() ? `E-mail: ${respEmail}` : 'E-mail pendente de preenchimento'}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Opção E-mail */}
-                  <div
-                    onClick={() => setAuthMode('tokenEmail')}
-                    className="mo-auth-card"
-                    style={{
-                      borderColor: authMode === 'tokenEmail' ? '#2563eb' : '#e2e8f0',
-                      background: authMode === 'tokenEmail'
-                        ? '#eff6ff'
-                        : '#f8fafc',
-                      boxShadow: authMode === 'tokenEmail' ? '0 4px 16px rgba(37, 99, 235, 0.15)' : 'none'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 900, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <Mail size={16} />
-                        E-mail Certificado
-                      </span>
-                      <div style={{
-                        width: 20, height: 20, borderRadius: '50%',
-                        background: authMode === 'tokenEmail' ? '#2563eb' : '#cbd5e1',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
-                      }}>
-                        {authMode === 'tokenEmail' && <Check size={12} strokeWidth={3} />}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                    {/* Opção WhatsApp Contratante */}
+                    <div
+                      onClick={() => setAuthModeContratante('tokenWhatsapp')}
+                      className="mo-auth-card"
+                      style={{
+                        borderColor: authModeContratante === 'tokenWhatsapp' ? '#10b981' : '#e2e8f0',
+                        background: authModeContratante === 'tokenWhatsapp' ? '#ecfdf5' : '#f8fafc',
+                        boxShadow: authModeContratante === 'tokenWhatsapp' ? '0 4px 16px rgba(16, 185, 129, 0.15)' : 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 900, color: '#047857', display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <MessageSquare size={16} />
+                          WhatsApp Oficial
+                        </span>
+                        <div style={{
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: authModeContratante === 'tokenWhatsapp' ? '#059669' : '#cbd5e1',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+                        }}>
+                          {authModeContratante === 'tokenWhatsapp' && <Check size={12} strokeWidth={3} />}
+                        </div>
                       </div>
+                      <p style={{ fontSize: 11.5, color: '#64748b', margin: '6px 0 0', lineHeight: 1.45 }}>
+                        O ZapSign dispara a mensagem oficial com link direto e código de validação no WhatsApp do responsável.
+                      </p>
                     </div>
-                    <p style={{ fontSize: 11.5, color: '#64748b', margin: '4px 0 0', lineHeight: 1.45 }}>
-                      O ZapSign envia o convite formal de assinatura diretamente para o e-mail cadastrado.
-                    </p>
+
+                    {/* Opção E-mail Contratante */}
+                    <div
+                      onClick={() => setAuthModeContratante('tokenEmail')}
+                      className="mo-auth-card"
+                      style={{
+                        borderColor: authModeContratante === 'tokenEmail' ? '#2563eb' : '#e2e8f0',
+                        background: authModeContratante === 'tokenEmail' ? '#eff6ff' : '#f8fafc',
+                        boxShadow: authModeContratante === 'tokenEmail' ? '0 4px 16px rgba(37, 99, 235, 0.15)' : 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 900, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <Mail size={16} />
+                          E-mail Certificado
+                        </span>
+                        <div style={{
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: authModeContratante === 'tokenEmail' ? '#2563eb' : '#cbd5e1',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+                        }}>
+                          {authModeContratante === 'tokenEmail' && <Check size={12} strokeWidth={3} />}
+                        </div>
+                      </div>
+                      <p style={{ fontSize: 11.5, color: '#64748b', margin: '6px 0 0', lineHeight: 1.45 }}>
+                        O ZapSign envia o convite formal e código de validação diretamente para a caixa de e-mail do responsável.
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Botão de Disparo */}
-                <div style={{ paddingTop: 6 }}>
-                  {(() => {
-                    const isFormIncomplete = isSendingZapSign ||
-                      arquivosAnexados.length === 0 ||
-                      !respNome.trim() ||
-                      (authMode === 'tokenWhatsapp' && !respTelefone.trim()) ||
-                      (authMode === 'tokenEmail' && !respEmail.trim()) ||
-                      (assinarPelaEscola && (!escolaSignatarioAtual || !escolaSignatarioAtual.nomeRepresentante?.trim()))
+                {/* ── PARTE B: CONTRATADO (Escola / Representante Legal) ── */}
+                <div style={{
+                  background: '#ffffff',
+                  border: '1.5px solid #e2e8f0',
+                  borderRadius: 18,
+                  padding: '18px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+                }}>
+                  {assinarPelaEscola ? (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{
+                            width: 32, height: 32, borderRadius: 10,
+                            background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)',
+                            color: '#6d28d9', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            border: '1px solid #c4b5fd'
+                          }}>
+                            <Building2 size={17} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13.5, fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span>2. Envio para o CONTRATADO</span>
+                              <span style={{ fontSize: 10.5, fontWeight: 800, background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: 6 }}>
+                                Escola / Instituição
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                              {escolaSignatarioAtual ? (
+                                <>
+                                  <strong style={{ color: '#0f172a' }}>{escolaSignatarioAtual.nomeRepresentante}</strong> ({escolaSignatarioAtual.razaoSocial})
+                                </>
+                              ) : (
+                                <span style={{ color: '#dc2626' }}>⚠️ Representante da escola não selecionado</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
 
-                    return (
+                        {/* Badge de Contato do Contratado */}
+                        {escolaSignatarioAtual && (
+                          <div style={{
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            padding: '4px 10px',
+                            borderRadius: 8,
+                            background: authModeContratado === 'tokenWhatsapp' ? (escolaSignatarioAtual.telefone ? '#ecfdf5' : '#fef2f2') : (escolaSignatarioAtual.email ? '#eff6ff' : '#fef2f2'),
+                            color: authModeContratado === 'tokenWhatsapp' ? (escolaSignatarioAtual.telefone ? '#047857' : '#dc2626') : (escolaSignatarioAtual.email ? '#1d4ed8' : '#dc2626'),
+                            border: authModeContratado === 'tokenWhatsapp' ? (escolaSignatarioAtual.telefone ? '1px solid #a7f3d0' : '1px solid #fecaca') : (escolaSignatarioAtual.email ? '1px solid #bfdbfe' : '1px solid #fecaca'),
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6
+                          }}>
+                            {authModeContratado === 'tokenWhatsapp' ? (
+                              <>
+                                <Smartphone size={13} />
+                                <span>{escolaSignatarioAtual.telefone ? `WhatsApp: ${escolaSignatarioAtual.telefone}` : 'Celular pendente de cadastro'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Mail size={13} />
+                                <span>{escolaSignatarioAtual.email ? `E-mail: ${escolaSignatarioAtual.email}` : 'E-mail pendente de cadastro'}</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                        {/* Opção WhatsApp Contratado */}
+                        <div
+                          onClick={() => setAuthModeContratado('tokenWhatsapp')}
+                          className="mo-auth-card"
+                          style={{
+                            borderColor: authModeContratado === 'tokenWhatsapp' ? '#10b981' : '#e2e8f0',
+                            background: authModeContratado === 'tokenWhatsapp' ? '#ecfdf5' : '#f8fafc',
+                            boxShadow: authModeContratado === 'tokenWhatsapp' ? '0 4px 16px rgba(16, 185, 129, 0.15)' : 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 900, color: '#047857', display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <MessageSquare size={16} />
+                              WhatsApp Oficial
+                            </span>
+                            <div style={{
+                              width: 20, height: 20, borderRadius: '50%',
+                              background: authModeContratado === 'tokenWhatsapp' ? '#059669' : '#cbd5e1',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+                            }}>
+                              {authModeContratado === 'tokenWhatsapp' && <Check size={12} strokeWidth={3} />}
+                            </div>
+                          </div>
+                          <p style={{ fontSize: 11.5, color: '#64748b', margin: '6px 0 0', lineHeight: 1.45 }}>
+                            O representante institucional receberá a notificação oficial e token de validação no WhatsApp cadastrado.
+                          </p>
+                        </div>
+
+                        {/* Opção E-mail Contratado */}
+                        <div
+                          onClick={() => setAuthModeContratado('tokenEmail')}
+                          className="mo-auth-card"
+                          style={{
+                            borderColor: authModeContratado === 'tokenEmail' ? '#2563eb' : '#e2e8f0',
+                            background: authModeContratado === 'tokenEmail' ? '#eff6ff' : '#f8fafc',
+                            boxShadow: authModeContratado === 'tokenEmail' ? '0 4px 16px rgba(37, 99, 235, 0.15)' : 'none',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 900, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <Mail size={16} />
+                              E-mail Certificado
+                            </span>
+                            <div style={{
+                              width: 20, height: 20, borderRadius: '50%',
+                              background: authModeContratado === 'tokenEmail' ? '#2563eb' : '#cbd5e1',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff'
+                            }}>
+                              {authModeContratado === 'tokenEmail' && <Check size={12} strokeWidth={3} />}
+                            </div>
+                          </div>
+                          <p style={{ fontSize: 11.5, color: '#64748b', margin: '6px 0 0', lineHeight: 1.45 }}>
+                            O representante institucional receberá o convite formal e código de validação no e-mail corporativo.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 12,
+                      padding: '4px 0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 32, height: 32, borderRadius: 10,
+                          background: '#f1f5f9', color: '#64748b',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                          <Building2 size={17} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13.5, fontWeight: 900, color: '#334155' }}>
+                            2. Envio para o CONTRATADO: Desativado (Contrato Unilateral)
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>
+                            A co-assinatura da escola está desativada no Passo 2. Apenas o Contratante receberá o contrato para assinatura.
+                          </div>
+                        </div>
+                      </div>
+
                       <button
-                        onClick={handleEnviarZapSign}
-                        disabled={isFormIncomplete}
+                        type="button"
+                        onClick={() => setAssinarPelaEscola(true)}
                         style={{
-                          width: '100%',
-                          height: 52,
-                          borderRadius: 16,
-                          fontSize: 14,
-                          fontWeight: 900,
-                          letterSpacing: '0.04em',
-                          cursor: isFormIncomplete ? 'not-allowed' : 'pointer',
-                          border: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 10,
-                          color: '#ffffff',
-                          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
-                          background: isFormIncomplete
-                            ? '#cbd5e1'
-                            : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                          boxShadow: isFormIncomplete
-                            ? 'none'
-                            : '0 8px 25px rgba(37, 99, 235, 0.35)',
-                          opacity: isFormIncomplete ? 0.7 : 1
-                        }}
-                        onMouseEnter={e => {
-                          if (!isFormIncomplete) {
-                            e.currentTarget.style.transform = 'translateY(-2px)'
-                            e.currentTarget.style.boxShadow = '0 12px 30px rgba(37, 99, 235, 0.45)'
-                          }
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.transform = 'none'
-                          if (!isFormIncomplete) {
-                            e.currentTarget.style.boxShadow = '0 8px 25px rgba(37, 99, 235, 0.35)'
-                          }
+                          background: '#eff6ff',
+                          border: '1px solid #bfdbfe',
+                          color: '#2563eb',
+                          borderRadius: 10,
+                          padding: '7px 14px',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
                         }}
                       >
-                        {isSendingZapSign ? (
-                          <>
-                            <RefreshCw size={18} className="animate-spin" />
-                            <span>Consolidando e Enviando para o ZapSign...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send size={17} />
-                            <span>
-                              {arquivosAnexados.length > 1
-                                ? `DISPARAR CONTRATO PARA ASSINATURA (${arquivosAnexados.length} ARQUIVOS CONSOLIDADOS)`
-                                : 'DISPARAR CONTRATO PARA ASSINATURA'}
-                            </span>
-                          </>
-                        )}
+                        Ativar Co-Assinatura da Escola
                       </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Banner Informativo Consolidado */}
+                <div style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 14,
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: 12,
+                  color: '#475569'
+                }}>
+                  <ShieldCheck size={18} color="#059669" style={{ flexShrink: 0 }} />
+                  <span>
+                    <strong>Validação Cruzada ZapSign:</strong> O Contratante receberá o token via <strong>{authModeContratante === 'tokenWhatsapp' ? 'WhatsApp' : 'E-mail'}</strong>
+                    {assinarPelaEscola
+                      ? ` e o Contratado (Escola) receberá via ${authModeContratado === 'tokenWhatsapp' ? 'WhatsApp' : 'E-mail'}.`
+                      : ' (apenas o Contratante assinará).'}
+                  </span>
+                </div>
+
+                {/* Botão de Disparo */}
+                <div style={{ paddingTop: 4 }}>
+                  {(() => {
+                    const faltamArquivos = arquivosAnexados.length === 0
+                    const faltaRespNome = !respNome.trim()
+                    const faltaRespTelefone = authModeContratante === 'tokenWhatsapp' && !respTelefone.trim()
+                    const faltaRespEmail = authModeContratante === 'tokenEmail' && !respEmail.trim()
+                    const faltaEscolaRepr = assinarPelaEscola && (!escolaSignatarioAtual || !escolaSignatarioAtual.nomeRepresentante?.trim())
+                    const faltaEscolaTelefone = assinarPelaEscola && authModeContratado === 'tokenWhatsapp' && !(escolaSignatarioAtual?.telefone || escolaSignatarioAtual?.celular)?.trim()
+                    const faltaEscolaEmail = assinarPelaEscola && authModeContratado === 'tokenEmail' && !escolaSignatarioAtual?.email?.trim()
+
+                    const isFormIncomplete = isSendingZapSign ||
+                      faltamArquivos ||
+                      faltaRespNome ||
+                      faltaRespTelefone ||
+                      faltaRespEmail ||
+                      faltaEscolaRepr ||
+                      faltaEscolaTelefone ||
+                      faltaEscolaEmail
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {isFormIncomplete && !isSendingZapSign && (
+                          <div style={{
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a',
+                            borderRadius: 12,
+                            padding: '10px 14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            fontSize: 12,
+                            color: '#92400e'
+                          }}>
+                            <AlertCircle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+                            <div>
+                              <strong>Atenção para disparar: </strong>
+                              {faltamArquivos && 'Anexe ao menos 1 arquivo PDF no Passo 3. '}
+                              {faltaRespNome && 'Informe o nome do responsável. '}
+                              {faltaRespTelefone && 'Informe o celular/WhatsApp do responsável. '}
+                              {faltaRespEmail && 'Informe o e-mail do responsável. '}
+                              {faltaEscolaRepr && 'Selecione o representante da escola no Passo 2. '}
+                              {faltaEscolaTelefone && 'Cadastre o celular do representante da escola para envio via WhatsApp. '}
+                              {faltaEscolaEmail && 'Cadastre o e-mail do representante da escola para envio via E-mail. '}
+                            </div>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={handleEnviarZapSign}
+                          disabled={isFormIncomplete}
+                          style={{
+                            width: '100%',
+                            height: 52,
+                            borderRadius: 16,
+                            fontSize: 14,
+                            fontWeight: 900,
+                            letterSpacing: '0.04em',
+                            cursor: isFormIncomplete ? 'not-allowed' : 'pointer',
+                            border: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 10,
+                            color: '#ffffff',
+                            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                            background: isFormIncomplete
+                              ? '#cbd5e1'
+                              : 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                            boxShadow: isFormIncomplete
+                              ? 'none'
+                              : '0 8px 25px rgba(37, 99, 235, 0.35)',
+                            opacity: isFormIncomplete ? 0.7 : 1
+                          }}
+                          onMouseEnter={e => {
+                            if (!isFormIncomplete) {
+                              e.currentTarget.style.transform = 'translateY(-2px)'
+                              e.currentTarget.style.boxShadow = '0 12px 30px rgba(37, 99, 235, 0.45)'
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.transform = 'none'
+                            if (!isFormIncomplete) {
+                              e.currentTarget.style.boxShadow = '0 8px 25px rgba(37, 99, 235, 0.35)'
+                            }
+                          }}
+                        >
+                          {isSendingZapSign ? (
+                            <>
+                              <RefreshCw size={18} className="animate-spin" />
+                              <span>Consolidando e Enviando para o ZapSign...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send size={17} />
+                              <span>
+                                {arquivosAnexados.length > 1
+                                  ? `DISPARAR CONTRATO PARA ASSINATURA (${arquivosAnexados.length} ARQUIVOS CONSOLIDADOS)`
+                                  : 'DISPARAR CONTRATO PARA ASSINATURA'}
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )
                   })()}
                 </div>
@@ -2797,24 +3184,58 @@ export default function MatriculasOnlinePage() {
                 )}
               </div>
 
-              {/* Canal de Validação */}
+              {/* Canais de Envio e Validação ZapSign */}
               <div style={{
                 background: '#ffffff', borderRadius: 14,
                 border: '1px solid #e2e8f0', padding: '12px 14px',
-                display: 'flex', flexDirection: 'column', gap: 4,
+                display: 'flex', flexDirection: 'column', gap: 8,
                 boxShadow: '0 1px 2px rgba(15, 23, 42, 0.03)'
               }}>
                 <span style={{ fontSize: 10.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Canal de Validação
+                  Canais de Envio ZapSign
                 </span>
-                <span style={{
-                  fontSize: 12.5, fontWeight: 800,
-                  color: authMode === 'tokenWhatsapp' ? '#047857' : '#1d4ed8',
-                  display: 'flex', alignItems: 'center', gap: 6, marginTop: 2
-                }}>
-                  {authMode === 'tokenWhatsapp' && <><MessageSquare size={13} /> Notificação por WhatsApp</>}
-                  {authMode === 'tokenEmail' && <><Mail size={13} /> Notificação por E-mail</>}
-                </span>
+
+                {/* Contratante */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                    Contratante (Responsável):
+                  </span>
+                  <span style={{
+                    fontSize: 12, fontWeight: 800,
+                    color: authModeContratante === 'tokenWhatsapp' ? '#047857' : '#1d4ed8',
+                    display: 'flex', alignItems: 'center', gap: 5
+                  }}>
+                    {authModeContratante === 'tokenWhatsapp' ? (
+                      <><MessageSquare size={13} /> WhatsApp Oficial {respTelefone ? `(${respTelefone})` : ''}</>
+                    ) : (
+                      <><Mail size={13} /> E-mail Certificado {respEmail ? `(${respEmail})` : ''}</>
+                    )}
+                  </span>
+                </div>
+
+                {/* Contratado */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, borderTop: '1px dashed #e2e8f0', paddingTop: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                    Contratado (Escola):
+                  </span>
+                  {assinarPelaEscola ? (
+                    <span style={{
+                      fontSize: 12, fontWeight: 800,
+                      color: authModeContratado === 'tokenWhatsapp' ? '#047857' : '#1d4ed8',
+                      display: 'flex', alignItems: 'center', gap: 5
+                    }}>
+                      {authModeContratado === 'tokenWhatsapp' ? (
+                        <><MessageSquare size={13} /> WhatsApp Oficial {escolaSignatarioAtual?.telefone ? `(${escolaSignatarioAtual.telefone})` : ''}</>
+                      ) : (
+                        <><Mail size={13} /> E-mail Certificado {escolaSignatarioAtual?.email ? `(${escolaSignatarioAtual.email})` : ''}</>
+                      )}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11.5, color: '#94a3b8', fontStyle: 'italic' }}>
+                      Não se aplica (Unilateral)
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Selo de Validade Jurídica */}
@@ -2905,7 +3326,7 @@ export default function MatriculasOnlinePage() {
               </select>
 
               <button
-                onClick={carregarContratos}
+                onClick={handleAtualizarListaComSync}
                 style={{
                   background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
                   color: '#ffffff',
@@ -3016,7 +3437,7 @@ export default function MatriculasOnlinePage() {
                     contratosFiltrados.map(c => {
                       const isRecusado = c.status === 'recusado' || c.status === 'cancelado'
                       const progress = getSignersProgress(c)
-                      const isAssinado = !isRecusado && (progress.todosAssinaram || c.status === 'assinado')
+                      const isAssinado = !isRecusado && (progress.todosAssinaram || c.status === 'assinado' || c.zapsign_status === 'signed')
                       const isAguardando = !isRecusado && !isAssinado
 
                       return (
@@ -3158,7 +3579,7 @@ export default function MatriculasOnlinePage() {
                                 <XCircle size={11} />
                                 RECUSADO
                               </span>
-                            ) : progress.todosAssinaram ? (
+                            ) : isAssinado ? (
                               <div>
                                 <span style={{
                                   display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -3206,7 +3627,7 @@ export default function MatriculasOnlinePage() {
                                 {(() => {
                                   const urlEmpresa = getUrlAssinaturaEmpresa(c)
                                   const urlParaAssinar = urlEmpresa || c.zapsign_sign_url
-                                  if (urlParaAssinar && !progress.todosAssinaram) {
+                                  if (urlParaAssinar && !isAssinado) {
                                     return (
                                       <a
                                         href={urlParaAssinar}
@@ -3741,95 +4162,230 @@ export default function MatriculasOnlinePage() {
               </button>
             </div>
 
-            {/* Método Padrão de Validação */}
-            <div>
-              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                Método Padrão de Envio e Validação
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
-                {[
-                  {
-                    id: 'tokenWhatsapp' as const,
-                    title: 'WhatsApp Oficial',
-                    desc: 'Notificação e token direto no WhatsApp do signatário.',
-                    icon: MessageSquare,
-                    color: '#059669',
-                    activeBorder: '#10b981',
-                    activeBg: '#ecfdf5',
-                    inactiveBorder: '#e2e8f0',
-                    inactiveBg: '#ffffff'
-                  },
-                  {
-                    id: 'tokenEmail' as const,
-                    title: 'E-mail Certificado',
-                    desc: 'Token de autenticação encaminhado para a caixa postal.',
-                    icon: Mail,
-                    color: '#2563eb',
-                    activeBorder: '#3b82f6',
-                    activeBg: '#eff6ff',
-                    inactiveBorder: '#e2e8f0',
-                    inactiveBg: '#ffffff'
-                  }
-                ].map(opt => {
-                  const isSelected = zapConfig.authModePadrao === opt.id
-                  const Icon = opt.icon
-                  return (
-                    <div
-                      key={opt.id}
-                      onClick={() => setZapConfig({ ...zapConfig, authModePadrao: opt.id })}
-                      style={{
-                        background: isSelected ? opt.activeBg : opt.inactiveBg,
-                        border: isSelected ? `2px solid ${opt.activeBorder}` : `1px solid ${opt.inactiveBorder}`,
-                        borderRadius: 16,
-                        padding: '16px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                        transition: 'all 0.2s',
-                        boxShadow: isSelected ? `0 4px 16px rgba(0, 0, 0, 0.05)` : 'none'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: 10,
-                          background: isSelected ? '#ffffff' : '#f8fafc',
-                          border: `1px solid ${isSelected ? opt.activeBorder : '#e2e8f0'}`,
+            {/* Métodos Padrão de Envio e Validação ZapSign */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>
+                  Canais Padrão de Envio e Validação
+                </label>
+                <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>
+                  Defina quais métodos virão pré-selecionados por padrão ao abrir novos envios de contrato.
+                </p>
+              </div>
+
+              {/* 1. Padrão Contratante */}
+              <div style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 16,
+                padding: '16px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <UserCheck size={16} color="#059669" />
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    1. Método Padrão para o CONTRATANTE (Responsável Legal)
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+                  {[
+                    {
+                      id: 'tokenWhatsapp' as const,
+                      title: 'WhatsApp Oficial',
+                      desc: 'Notificação e código de segurança enviados direto no WhatsApp do responsável.',
+                      icon: MessageSquare,
+                      color: '#059669',
+                      activeBorder: '#10b981',
+                      activeBg: '#ecfdf5',
+                      inactiveBorder: '#e2e8f0',
+                      inactiveBg: '#ffffff'
+                    },
+                    {
+                      id: 'tokenEmail' as const,
+                      title: 'E-mail Certificado',
+                      desc: 'Convite formal e código de autenticação encaminhados para o e-mail do responsável.',
+                      icon: Mail,
+                      color: '#2563eb',
+                      activeBorder: '#3b82f6',
+                      activeBg: '#eff6ff',
+                      inactiveBorder: '#e2e8f0',
+                      inactiveBg: '#ffffff'
+                    }
+                  ].map(opt => {
+                    const isSelected = (zapConfig.authModeContratantePadrao || zapConfig.authModePadrao) === opt.id
+                    const Icon = opt.icon
+                    return (
+                      <div
+                        key={opt.id}
+                        onClick={() => setZapConfig({
+                          ...zapConfig,
+                          authModeContratantePadrao: opt.id,
+                          authModePadrao: opt.id
+                        })}
+                        style={{
+                          background: isSelected ? opt.activeBg : opt.inactiveBg,
+                          border: isSelected ? `2px solid ${opt.activeBorder}` : `1px solid ${opt.inactiveBorder}`,
+                          borderRadius: 14,
+                          padding: '14px',
+                          cursor: 'pointer',
                           display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: opt.color
-                        }}>
-                          <Icon size={16} />
-                        </div>
-                        {isSelected && (
+                          flexDirection: 'column',
+                          gap: 8,
+                          transition: 'all 0.2s',
+                          boxShadow: isSelected ? '0 4px 16px rgba(0, 0, 0, 0.05)' : 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                           <div style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: '50%',
-                            background: opt.color,
+                            width: 32,
+                            height: 32,
+                            borderRadius: 10,
+                            background: isSelected ? '#ffffff' : '#f8fafc',
+                            border: `1px solid ${isSelected ? opt.activeBorder : '#e2e8f0'}`,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: '#ffffff'
+                            color: opt.color
                           }}>
-                            <Check size={12} strokeWidth={3} />
+                            <Icon size={16} />
                           </div>
-                        )}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 800, color: isSelected ? '#0f172a' : '#334155' }}>
-                          {opt.title}
+                          {isSelected && (
+                            <div style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: '50%',
+                              background: opt.color,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff'
+                            }}>
+                              <Check size={12} strokeWidth={3} />
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, lineHeight: 1.4 }}>
-                          {opt.desc}
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 800, color: isSelected ? '#0f172a' : '#334155' }}>
+                            {opt.title}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, lineHeight: 1.4 }}>
+                            {opt.desc}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 2. Padrão Contratado */}
+              <div style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 16,
+                padding: '16px 18px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Building2 size={16} color="#4f46e5" />
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    2. Método Padrão para o CONTRATADO (Escola / Representante)
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+                  {[
+                    {
+                      id: 'tokenWhatsapp' as const,
+                      title: 'WhatsApp Oficial',
+                      desc: 'Notificação institucional e token encaminhados para o WhatsApp cadastrado do representante.',
+                      icon: MessageSquare,
+                      color: '#059669',
+                      activeBorder: '#10b981',
+                      activeBg: '#ecfdf5',
+                      inactiveBorder: '#e2e8f0',
+                      inactiveBg: '#ffffff'
+                    },
+                    {
+                      id: 'tokenEmail' as const,
+                      title: 'E-mail Certificado',
+                      desc: 'Notificação formal e token encaminhados para o e-mail corporativo da instituição.',
+                      icon: Mail,
+                      color: '#2563eb',
+                      activeBorder: '#3b82f6',
+                      activeBg: '#eff6ff',
+                      inactiveBorder: '#e2e8f0',
+                      inactiveBg: '#ffffff'
+                    }
+                  ].map(opt => {
+                    const isSelected = (zapConfig.authModeContratadoPadrao || zapConfig.authModePadrao) === opt.id
+                    const Icon = opt.icon
+                    return (
+                      <div
+                        key={opt.id}
+                        onClick={() => setZapConfig({
+                          ...zapConfig,
+                          authModeContratadoPadrao: opt.id
+                        })}
+                        style={{
+                          background: isSelected ? opt.activeBg : opt.inactiveBg,
+                          border: isSelected ? `2px solid ${opt.activeBorder}` : `1px solid ${opt.inactiveBorder}`,
+                          borderRadius: 14,
+                          padding: '14px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 8,
+                          transition: 'all 0.2s',
+                          boxShadow: isSelected ? '0 4px 16px rgba(0, 0, 0, 0.05)' : 'none'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 10,
+                            background: isSelected ? '#ffffff' : '#f8fafc',
+                            border: `1px solid ${isSelected ? opt.activeBorder : '#e2e8f0'}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: opt.color
+                          }}>
+                            <Icon size={16} />
+                          </div>
+                          {isSelected && (
+                            <div style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: '50%',
+                              background: opt.color,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#ffffff'
+                            }}>
+                              <Check size={12} strokeWidth={3} />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 800, color: isSelected ? '#0f172a' : '#334155' }}>
+                            {opt.title}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, lineHeight: 1.4 }}>
+                            {opt.desc}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 
@@ -4240,11 +4796,27 @@ export default function MatriculasOnlinePage() {
 
                 {/* ── SEÇÃO 1: CONTRATANTE (RESPONSÁVEL LEGAL) ── */}
                 <div style={{ paddingTop: 10, borderTop: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ color: '#059669', fontSize: 11.5, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Users size={14} />
-                      1. CONTRATANTE: {envioSucessoModal.respNome} (Responsável){envioSucessoModal.respCpf ? ` • CPF: ${envioSucessoModal.respCpf}` : ''}
-                    </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <span style={{ color: '#059669', fontSize: 11.5, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Users size={14} />
+                        1. CONTRATANTE: {envioSucessoModal.respNome} (Responsável){envioSucessoModal.respCpf ? ` • CPF: ${envioSucessoModal.respCpf}` : ''}
+                      </span>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 800,
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        background: envioSucessoModal.authModeContratante === 'tokenWhatsapp' ? '#ecfdf5' : '#eff6ff',
+                        color: envioSucessoModal.authModeContratante === 'tokenWhatsapp' ? '#047857' : '#1d4ed8',
+                        border: envioSucessoModal.authModeContratante === 'tokenWhatsapp' ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3
+                      }}>
+                        {envioSucessoModal.authModeContratante === 'tokenWhatsapp' ? <><MessageSquare size={10} /> WhatsApp Oficial</> : <><Mail size={10} /> E-mail Certificado</>}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={handleCopiarContratanteModal}
@@ -4365,11 +4937,27 @@ export default function MatriculasOnlinePage() {
                 {/* ── SEÇÃO 2: CONTRATADO (ESCOLA - CNPJ & REPRESENTANTE) ── */}
                 {envioSucessoModal.escolaSignatario && (
                   <div style={{ paddingTop: 14, borderTop: '1.5px dashed #c4b5fd' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <span style={{ color: '#6d28d9', fontSize: 11.5, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Building2 size={14} />
-                        2. CONTRATADO: {envioSucessoModal.escolaSignatario.razaoSocial || 'Colégio Impacto'}
-                      </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, flexWrap: 'wrap', gap: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ color: '#6d28d9', fontSize: 11.5, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Building2 size={14} />
+                          2. CONTRATADO: {envioSucessoModal.escolaSignatario.razaoSocial || 'Colégio Impacto'}
+                        </span>
+                        <span style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          padding: '2px 7px',
+                          borderRadius: 6,
+                          background: (envioSucessoModal.authModeContratado || envioSucessoModal.escolaSignatario.authMode) === 'tokenWhatsapp' ? '#ecfdf5' : '#eff6ff',
+                          color: (envioSucessoModal.authModeContratado || envioSucessoModal.escolaSignatario.authMode) === 'tokenWhatsapp' ? '#047857' : '#1d4ed8',
+                          border: (envioSucessoModal.authModeContratado || envioSucessoModal.escolaSignatario.authMode) === 'tokenWhatsapp' ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3
+                        }}>
+                          {(envioSucessoModal.authModeContratado || envioSucessoModal.escolaSignatario.authMode) === 'tokenWhatsapp' ? <><MessageSquare size={10} /> WhatsApp Oficial</> : <><Mail size={10} /> E-mail Certificado</>}
+                        </span>
+                      </div>
                       {envioSucessoModal.escolaSignatario.signUrl && (
                         <button
                           type="button"

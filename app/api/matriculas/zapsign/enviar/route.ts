@@ -29,11 +29,16 @@ export async function POST(request: Request) {
       arquivos, // Array<{ nome: string; base64: string }>
       nomeArquivo = 'Documento_Matricula.pdf',
       nomeDocumento,
-      authMode = 'tokenWhatsapp', // 'tokenWhatsapp' ou 'tokenEmail'
+      authMode = 'tokenWhatsapp', // legacy fallback
+      authModeContratante, // 'tokenWhatsapp' ou 'tokenEmail'
+      authModeContratado, // 'tokenWhatsapp' ou 'tokenEmail'
       escolaInfo,
       assinarPelaEscola = false,
       escolaSignatario,
     } = body
+
+    const effectiveAuthModeContratante = authModeContratante || authMode || 'tokenWhatsapp'
+    const effectiveAuthModeContratado = authModeContratado || authMode || 'tokenWhatsapp'
 
     // Aluno é opcional: se não informado, segue como contrato avulso / direto
     const alunoNome = (aluno?.nome || '').trim()
@@ -50,17 +55,17 @@ export async function POST(request: Request) {
     const cleanPhone = formatPhoneForZapSign(responsavel?.telefone)
     const signerEmail = (responsavel?.email || '').trim()
 
-    // Validações diretas dos canais do ZapSign
-    if (authMode === 'tokenWhatsapp' && !cleanPhone) {
+    // Validações diretas dos canais do ZapSign para o Contratante
+    if (effectiveAuthModeContratante === 'tokenWhatsapp' && !cleanPhone) {
       return NextResponse.json(
-        { error: 'Para validação por WhatsApp, informe ou confirme o número de telefone/celular com DDD do responsável.' },
+        { error: 'Para validação por WhatsApp do Contratante, informe ou confirme o número de telefone/celular com DDD do responsável.' },
         { status: 400 }
       )
     }
 
-    if (authMode === 'tokenEmail' && !signerEmail) {
+    if (effectiveAuthModeContratante === 'tokenEmail' && !signerEmail) {
       return NextResponse.json(
-        { error: 'Para validação por E-mail, informe ou confirme o endereço de e-mail do responsável.' },
+        { error: 'Para validação por E-mail do Contratante, informe ou confirme o endereço de e-mail do responsável.' },
         { status: 400 }
       )
     }
@@ -168,6 +173,9 @@ export async function POST(request: Request) {
     // Se a escola também assina (Assinatura Bilateral: Contratado)
     const isAssinaturaBilateral = Boolean(assinarPelaEscola || escolaSignatario?.nomeRepresentante)
     let cleanEscolaCpf = ''
+    let cleanEscolaPhone = ''
+    let escolaEmail = ''
+
     if (isAssinaturaBilateral) {
       if (!escolaSignatario?.nomeRepresentante?.trim()) {
         return NextResponse.json(
@@ -176,6 +184,22 @@ export async function POST(request: Request) {
         )
       }
       cleanEscolaCpf = (escolaSignatario?.cpfRepresentante || '').replace(/\D/g, '')
+      cleanEscolaPhone = formatPhoneForZapSign(escolaSignatario.telefone || escolaSignatario.celular)
+      escolaEmail = (escolaSignatario.email || '').trim()
+
+      if (effectiveAuthModeContratado === 'tokenWhatsapp' && !cleanEscolaPhone) {
+        return NextResponse.json(
+          { error: 'Para validação por WhatsApp do Contratado, o representante da instituição precisa ter um número de telefone/celular com DDD cadastrado.' },
+          { status: 400 }
+        )
+      }
+
+      if (effectiveAuthModeContratado === 'tokenEmail' && !escolaEmail) {
+        return NextResponse.json(
+          { error: 'Para validação por E-mail do Contratado, o representante da instituição precisa ter um endereço de e-mail cadastrado.' },
+          { status: 400 }
+        )
+      }
     }
 
     // 3. Configurar Signatários para ZapSign (Contratante e Contratado)
@@ -188,18 +212,15 @@ export async function POST(request: Request) {
         cpf: cleanRespCpf || undefined,
         requireCpf: true,
         qualification: responsavel.parentesco ? `Contratante (${responsavel.parentesco})` : 'Contratante',
-        authMode: authMode as any,
-        sendAutomaticWhatsapp: authMode === 'tokenWhatsapp',
-        sendAutomaticEmail: authMode === 'tokenEmail',
+        authMode: effectiveAuthModeContratante as any,
+        sendAutomaticWhatsapp: effectiveAuthModeContratante === 'tokenWhatsapp',
+        sendAutomaticEmail: effectiveAuthModeContratante === 'tokenEmail',
       },
     ]
 
     if (isAssinaturaBilateral && escolaSignatario?.nomeRepresentante) {
-      const cleanEscolaPhone = formatPhoneForZapSign(escolaSignatario.telefone || escolaSignatario.celular)
-      const escolaEmail = (escolaSignatario.email || '').trim()
       const escolaCargo = escolaSignatario.cargo ? ` - ${escolaSignatario.cargo}` : ''
       const escolaName = `${escolaSignatario.nomeRepresentante.trim()} (Contratado)`
-      const escolaAuthMode = cleanEscolaPhone ? 'tokenWhatsapp' : (escolaEmail ? 'tokenEmail' : 'assinaturaTela')
 
       signers.push({
         name: escolaName,
@@ -208,9 +229,9 @@ export async function POST(request: Request) {
         cpf: cleanEscolaCpf || undefined,
         requireCpf: true,
         qualification: `Contratado (${escolaSignatario.razaoSocial || 'Colégio Impacto'}${escolaCargo})`,
-        authMode: escolaAuthMode,
-        sendAutomaticWhatsapp: Boolean(cleanEscolaPhone),
-        sendAutomaticEmail: Boolean(escolaEmail),
+        authMode: effectiveAuthModeContratado as any,
+        sendAutomaticWhatsapp: effectiveAuthModeContratado === 'tokenWhatsapp',
+        sendAutomaticEmail: effectiveAuthModeContratado === 'tokenEmail',
       })
     }
 
@@ -256,7 +277,7 @@ export async function POST(request: Request) {
       zapsign_doc_token: docToken,
       zapsign_signer_token: signerToken,
       zapsign_sign_url: signUrl,
-      zapsign_auth_mode: authMode,
+      zapsign_auth_mode: effectiveAuthModeContratante,
       zapsign_status: zapSignResponse.status || 'pending',
       status: 'aguardando',
       original_file_url: zapSignResponse.original_file || null,
@@ -266,7 +287,9 @@ export async function POST(request: Request) {
         arquivos: nomesDosArquivos,
         totalArquivos: nomesDosArquivos.length,
         isSandbox,
-        authMode,
+        authMode: effectiveAuthModeContratante,
+        authModeContratante: effectiveAuthModeContratante,
+        authModeContratado: effectiveAuthModeContratado,
         assinarPelaEscola: Boolean(assinarPelaEscola),
         escolaSignatario: assinarPelaEscola && escolaSignatario ? { ...escolaSignatario, cpfRepresentante: cleanEscolaCpf } : null,
         escolaSignUrl: escolaSignUrl || null,
@@ -349,6 +372,8 @@ export async function POST(request: Request) {
         escolaSignUrl,
         whatsappLink,
         escolaWhatsappLink,
+        authModeContratante: effectiveAuthModeContratante,
+        authModeContratado: effectiveAuthModeContratado,
         status: zapSignResponse.status,
         signers: zapSignResponse.signers || []
       }

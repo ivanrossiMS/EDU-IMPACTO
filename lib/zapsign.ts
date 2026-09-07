@@ -293,3 +293,92 @@ export async function testarConexaoZapSign(
     return { ok: false, message: `Erro de conexão com o ZapSign: ${err.message}` }
   }
 }
+
+/**
+ * Função utilitária centralizada para sincronizar um contrato individual com a API do ZapSign
+ */
+export async function syncContratoWithZapSign(
+  contrato: any,
+  apiToken: string,
+  defaultSandbox: boolean
+) {
+  const docToken = contrato?.zapsign_doc_token
+  if (!docToken) return { updated: false, updates: {}, contratoAtualizado: contrato, zapDoc: null }
+
+  const isSandbox = contrato?.metadata?.isSandbox !== undefined
+    ? Boolean(contrato.metadata.isSandbox)
+    : Boolean(defaultSandbox)
+
+  const zapDoc = await consultarDocumentoZapSign(docToken, apiToken, isSandbox)
+
+  const signersList: any[] = Array.isArray(zapDoc.signers) ? zapDoc.signers : []
+  const totalSigners = signersList.length || 1
+
+  const assinados = signersList.filter((s: any) =>
+    s.status === 'signed' || Boolean(s.signed_at) || (Number(s.times_signed) > 0)
+  )
+  const numAssinados = assinados.length
+
+  const pendentes = signersList.filter((s: any) =>
+    !(s.status === 'signed' || Boolean(s.signed_at) || (Number(s.times_signed) > 0))
+  )
+
+  // Status rigoroso: se o documento está 'signed' no ZapSign OU se todos os signatários assinaram
+  let novoStatus = 'aguardando'
+  if (zapDoc.status === 'refused') {
+    novoStatus = 'recusado'
+  } else if (zapDoc.status === 'canceled') {
+    novoStatus = 'cancelado'
+  } else if (zapDoc.status === 'signed' || (totalSigners > 0 && numAssinados >= totalSigners)) {
+    novoStatus = 'assinado'
+  } else {
+    novoStatus = 'aguardando'
+  }
+
+  const isCompleted = novoStatus === 'assinado'
+  const firstSigner = signersList[0]
+  const escolaSigner = signersList.length > 1 ? signersList[1] : undefined
+
+  const currentMetadata = (contrato?.metadata && typeof contrato.metadata === 'object') ? contrato.metadata : {}
+  const normalizedSigners = signersList.map((s: any) => ({
+    ...s,
+    status: isCompleted ? 'signed' : (s.status || 'pending'),
+    signed_at: s.signed_at || (isCompleted ? (contrato.updated_at || new Date().toISOString()) : null)
+  }))
+
+  const updatedMetadata = {
+    ...currentMetadata,
+    signers: normalizedSigners.length > 0 ? normalizedSigners : (currentMetadata.signers || []),
+    totalSigners,
+    numAssinados: isCompleted ? totalSigners : numAssinados,
+    pendentes: isCompleted ? [] : pendentes.map((p: any) => ({
+      name: p.name,
+      email: p.email,
+      phoneNumber: p.phone_number,
+      qualification: p.qualification,
+    })),
+    escolaSignUrl: escolaSigner?.sign_url || currentMetadata.escolaSignUrl || null,
+    lastStatusCheck: new Date().toISOString(),
+  }
+
+  const updates: any = {
+    status: novoStatus,
+    zapsign_status: zapDoc.status,
+    signed_file_url: zapDoc.signed_file || contrato?.signed_file_url || null,
+    zapsign_sign_url: firstSigner?.sign_url || contrato?.zapsign_sign_url,
+    metadata: updatedMetadata,
+    updated_at: new Date().toISOString(),
+  }
+
+  const hasChanged = contrato.status !== novoStatus ||
+    contrato.zapsign_status !== zapDoc.status ||
+    (!contrato.signed_file_url && Boolean(updates.signed_file_url))
+
+  return {
+    updated: hasChanged,
+    updates,
+    contratoAtualizado: { ...contrato, ...updates },
+    zapDoc,
+  }
+}
+

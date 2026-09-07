@@ -22,6 +22,8 @@ export interface ZapSignConfig {
   apiToken: string
   sandbox: boolean
   authModePadrao: 'tokenWhatsapp' | 'tokenEmail' | 'assinaturaTela'
+  authModeContratantePadrao?: 'tokenWhatsapp' | 'tokenEmail'
+  authModeContratadoPadrao?: 'tokenWhatsapp' | 'tokenEmail'
   envioAutomaticoWhatsapp: boolean
   envioAutomaticoEmail: boolean
   signatariosEscola?: SignatarioEscola[]
@@ -45,6 +47,8 @@ const DEFAULT_CONFIG: ZapSignConfig = {
   apiToken: process.env.ZAPSIGN_API_TOKEN || '',
   sandbox: false,
   authModePadrao: 'tokenWhatsapp',
+  authModeContratantePadrao: 'tokenWhatsapp',
+  authModeContratadoPadrao: 'tokenWhatsapp',
   envioAutomaticoWhatsapp: true,
   envioAutomaticoEmail: false,
   signatariosEscola: DEFAULT_SIGNATARIOS_ESCOLA,
@@ -67,6 +71,8 @@ export async function GET() {
       ...DEFAULT_CONFIG,
       ...savedVal,
       apiToken: savedVal.apiToken || process.env.ZAPSIGN_API_TOKEN || '',
+      authModeContratantePadrao: savedVal.authModeContratantePadrao || savedVal.authModePadrao || 'tokenWhatsapp',
+      authModeContratadoPadrao: savedVal.authModeContratadoPadrao || savedVal.authModePadrao || 'tokenWhatsapp',
       signatariosEscola: Array.isArray(savedVal.signatariosEscola) && savedVal.signatariosEscola.length > 0
         ? savedVal.signatariosEscola
         : DEFAULT_SIGNATARIOS_ESCOLA,
@@ -95,7 +101,17 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { action, apiToken, sandbox, authModePadrao, envioAutomaticoWhatsapp, envioAutomaticoEmail, signatariosEscola } = body
+    const {
+      action,
+      apiToken,
+      sandbox,
+      authModePadrao,
+      authModeContratantePadrao,
+      authModeContratadoPadrao,
+      envioAutomaticoWhatsapp,
+      envioAutomaticoEmail,
+      signatariosEscola
+    } = body
 
     const supabase = getAdminClient()
 
@@ -126,10 +142,15 @@ export async function POST(request: Request) {
 
     const currentVal = existing?.valor || DEFAULT_CONFIG
 
+    const effectiveContratante = authModeContratantePadrao || authModePadrao || currentVal.authModeContratantePadrao || currentVal.authModePadrao || 'tokenWhatsapp'
+    const effectiveContratado = authModeContratadoPadrao || currentVal.authModeContratadoPadrao || currentVal.authModePadrao || 'tokenWhatsapp'
+
     const newVal: ZapSignConfig = {
       apiToken: apiToken !== undefined ? String(apiToken).trim() : currentVal.apiToken,
       sandbox: sandbox !== undefined ? Boolean(sandbox) : currentVal.sandbox,
-      authModePadrao: authModePadrao || currentVal.authModePadrao || 'tokenWhatsapp',
+      authModePadrao: effectiveContratante,
+      authModeContratantePadrao: effectiveContratante,
+      authModeContratadoPadrao: effectiveContratado,
       envioAutomaticoWhatsapp: envioAutomaticoWhatsapp !== undefined ? Boolean(envioAutomaticoWhatsapp) : currentVal.envioAutomaticoWhatsapp,
       envioAutomaticoEmail: envioAutomaticoEmail !== undefined ? Boolean(envioAutomaticoEmail) : currentVal.envioAutomaticoEmail,
       signatariosEscola: Array.isArray(signatariosEscola)
