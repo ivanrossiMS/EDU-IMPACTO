@@ -615,17 +615,25 @@ function SelecionarPerfilAdminContent() {
           </div>
         </section>
 
-        {/* LOGOUT BUTTON */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, flexWrap: 'wrap' }} className="animate-reveal delay-2">
+        {/* ACTION BUTTONS (LADO A LADO) */}
+        <div className="ad-footer-actions animate-reveal delay-2" style={{ marginTop: 24, paddingBottom: 32 }}>
           <button 
             onClick={() => window.location.href = '/login?step=choose_system'}
-            className="back-button-modern"
+            className="ad-action-btn ad-btn-switch"
+            title="Trocar Módulo do Sistema"
           >
-            <ArrowLeft size={18} strokeWidth={2.5} />
+            <div className="ad-btn-icon-wrap">
+              <ArrowLeft size={16} strokeWidth={2.5} />
+            </div>
             <span>Trocar Módulo</span>
           </button>
           <button
-            onClick={async () => {
+            onClick={async (e) => {
+              const btn = e.currentTarget;
+              btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px;"><svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Saindo...</span>';
+              btn.style.opacity = '0.7';
+              btn.style.pointerEvents = 'none';
+
               try {
                 await performLogout();
                 const { supabase } = await import('@/lib/supabase');
@@ -639,92 +647,179 @@ function SelecionarPerfilAdminContent() {
                 window.location.href = '/login';
               }
             }}
-            className="logout-button-modern"
+            className="ad-action-btn ad-btn-logout"
+            title="Sair da Conta com segurança"
           >
-            <LogOut size={18} strokeWidth={2.5} />
-            <span>Sair do Sistema</span>
+            <div className="ad-btn-icon-wrap">
+              <LogOut size={16} strokeWidth={2.5} />
+            </div>
+            <span>Sair da Conta</span>
           </button>
         </div>
       </main>
 
       <style dangerouslySetInnerHTML={{__html: `
-        .back-button-modern {
+        /* ── Modern Side-by-Side Action Buttons ── */
+        .ad-footer-actions {
+          margin-top: 24px;
           display: flex;
           align-items: center;
+          justify-content: center;
           gap: 12px;
-          padding: 14px 28px;
-          background: rgba(99, 102, 241, 0.08);
-          border: 1px solid rgba(99, 102, 241, 0.2);
-          border-radius: 100px;
-          color: #6366f1;
+          width: 100%;
+          max-width: 480px;
+          padding: 0 16px 40px 16px;
+          position: relative;
+          z-index: 10;
+          margin-left: auto;
+          margin-right: auto;
+          box-sizing: border-box;
+        }
+
+        .ad-action-btn {
+          flex: 1;
+          height: 50px;
+          min-width: 0;
+          max-width: 230px;
+          padding: 0 14px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          border-radius: 16px;
+          font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 13.5px;
           font-weight: 700;
-          font-size: 14px;
-          font-family: 'Outfit', sans-serif;
-          letter-spacing: 0.02em;
+          letter-spacing: -0.01em;
+          white-space: nowrap;
           cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+          user-select: none;
+          outline: none;
+          box-sizing: border-box;
+          text-decoration: none;
         }
 
-        .back-button-modern:hover {
-          background: rgba(99, 102, 241, 0.15);
-          border-color: rgba(99, 102, 241, 0.4);
+        .ad-btn-icon-wrap {
+          width: 30px;
+          height: 30px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Botão Trocar Módulo */
+        .ad-btn-switch {
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1.5px solid rgba(99, 102, 241, 0.2);
+          color: #4f46e5;
+          box-shadow: 0 4px 16px -2px rgba(99, 102, 241, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+        .ad-btn-switch .ad-btn-icon-wrap {
+          background: rgba(99, 102, 241, 0.08);
+          border: 1px solid rgba(99, 102, 241, 0.16);
+          color: #6366f1;
+        }
+        .ad-btn-switch:hover {
+          background: #ffffff;
+          border-color: rgba(99, 102, 241, 0.45);
           transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.22), 0 3px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff;
+        }
+        .ad-btn-switch:hover .ad-btn-icon-wrap {
+          transform: translateX(-2px);
+          background: rgba(99, 102, 241, 0.15);
+        }
+        .ad-btn-switch:active {
+          transform: translateY(0) scale(0.97);
         }
 
-        .back-button-modern:active {
-          transform: translateY(1px);
+        /* Botão Sair da Conta */
+        .ad-btn-logout {
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1.5px solid rgba(244, 63, 94, 0.22);
+          color: #e11d48;
+          box-shadow: 0 4px 16px -2px rgba(244, 63, 94, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+        .ad-btn-logout .ad-btn-icon-wrap {
+          background: rgba(244, 63, 94, 0.08);
+          border: 1px solid rgba(244, 63, 94, 0.16);
+          color: #f43f5e;
+        }
+        .ad-btn-logout:hover {
+          background: #fff5f6;
+          border-color: rgba(244, 63, 94, 0.45);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px -4px rgba(244, 63, 94, 0.22), 0 3px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff;
+        }
+        .ad-btn-logout:hover .ad-btn-icon-wrap {
+          transform: translateX(2px);
+          background: rgba(244, 63, 94, 0.15);
+        }
+        .ad-btn-logout:active {
+          transform: translateY(0) scale(0.97);
         }
 
-        .dark .back-button-modern {
-          background: rgba(99, 102, 241, 0.1);
-          border-color: rgba(99, 102, 241, 0.3);
+        /* Dark mode */
+        .dark .ad-btn-switch {
+          background: rgba(30, 41, 59, 0.85);
+          border-color: rgba(99, 102, 241, 0.32);
+          color: #a5b4fc;
+          box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        .dark .ad-btn-switch .ad-btn-icon-wrap {
+          background: rgba(99, 102, 241, 0.18);
+          border-color: rgba(99, 102, 241, 0.25);
           color: #818cf8;
         }
-
-        .dark .back-button-modern:hover {
-          background: rgba(99, 102, 241, 0.2);
-          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+        .dark .ad-btn-switch:hover {
+          background: rgba(30, 41, 59, 0.98);
+          border-color: rgba(99, 102, 241, 0.5);
+          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.3);
         }
 
-        .logout-button-modern {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 14px 28px;
-          background: rgba(239, 68, 68, 0.08);
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          border-radius: 100px;
-          color: #ef4444;
-          font-weight: 700;
-          font-size: 14px;
-          font-family: 'Outfit', sans-serif;
-          letter-spacing: 0.02em;
-          cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.0);
+        .dark .ad-btn-logout {
+          background: rgba(30, 41, 59, 0.85);
+          border-color: rgba(244, 63, 94, 0.32);
+          color: #fb7185;
+          box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        .dark .ad-btn-logout .ad-btn-icon-wrap {
+          background: rgba(244, 63, 94, 0.18);
+          border-color: rgba(244, 63, 94, 0.25);
+          color: #fb7185;
+        }
+        .dark .ad-btn-logout:hover {
+          background: rgba(244, 63, 94, 0.15);
+          border-color: rgba(244, 63, 94, 0.5);
+          box-shadow: 0 8px 24px -4px rgba(244, 63, 94, 0.3);
         }
 
-        .logout-button-modern:hover {
-          background: rgba(239, 68, 68, 0.15);
-          border-color: rgba(239, 68, 68, 0.4);
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(239, 68, 68, 0.15);
-        }
-
-        .logout-button-modern:active {
-          transform: translateY(1px);
-        }
-
-        .dark .logout-button-modern {
-          background: rgba(239, 68, 68, 0.1);
-          border-color: rgba(239, 68, 68, 0.3);
-          color: #f87171;
-        }
-
-        .dark .logout-button-modern:hover {
-          background: rgba(239, 68, 68, 0.2);
-          box-shadow: 0 8px 24px rgba(239, 68, 68, 0.2);
+        @media (max-width: 480px) {
+          .ad-footer-actions {
+            gap: 10px;
+            padding: 0 12px 36px 12px;
+            margin-top: 20px;
+          }
+          .ad-action-btn {
+            height: 48px;
+            padding: 0 10px;
+            font-size: 13px;
+            gap: 8px;
+            border-radius: 14px;
+          }
+          .ad-btn-icon-wrap {
+            width: 28px;
+            height: 28px;
+            border-radius: 9px;
+          }
         }
       `}} />
     </div>

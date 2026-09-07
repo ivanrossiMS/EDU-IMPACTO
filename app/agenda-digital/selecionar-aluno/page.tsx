@@ -7,7 +7,7 @@ import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
-import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut, ArrowLeft } from 'lucide-react'
+import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut, ArrowLeft, ShieldCheck, GraduationCap } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 
@@ -247,76 +247,102 @@ const SELECTOR_STYLES = `
           gap: 16px;
         }
 
-        /* Glassmorphic Interactive Cards */
+        /* ── High-End Ultra Modern Cards ── */
         .portal-modern-card {
-          background: rgba(255, 255, 255, 0.85);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.6);
-          border-radius: 24px;
-          padding: 20px 24px;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(250, 245, 255, 0.88) 100%);
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          border: 1.5px solid rgba(139, 92, 246, 0.18);
+          border-left: 4px solid #8b5cf6;
+          border-radius: 20px;
+          padding: 16px 18px;
           display: flex;
           align-items: center;
-          gap: 20px;
+          gap: 16px;
           cursor: pointer;
-          transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+          transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
           position: relative;
           overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+          box-shadow: 0 4px 18px -2px rgba(139, 92, 246, 0.07), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 1);
           text-decoration: none !important;
           width: 100%;
           box-sizing: border-box;
         }
 
         .dark .portal-modern-card {
-          background: rgba(30, 41, 59, 0.45);
-          border-color: rgba(255, 255, 255, 0.05);
-          box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.03);
-        }
-
-        .portal-modern-card::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%);
-          transform: translateX(-100%);
-          transition: transform 0.6s ease;
-          pointer-events: none;
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.75) 100%);
+          border-color: rgba(139, 92, 246, 0.25);
+          border-left-color: #8b5cf6;
+          box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
         }
 
         .portal-modern-card:hover {
-          transform: translateY(-4px) scale(1.01);
-          border-color: rgba(99, 102, 241, 0.35);
-          box-shadow: 0 16px 36px rgba(99, 102, 241, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+          transform: translateY(-2.5px);
+          border-color: rgba(139, 92, 246, 0.45);
+          border-left-color: #7c3aed;
+          box-shadow: 0 14px 32px -4px rgba(139, 92, 246, 0.16), 0 4px 10px rgba(0, 0, 0, 0.03), inset 0 1px 0 #ffffff;
         }
         .dark .portal-modern-card:hover {
-          border-color: rgba(139, 92, 246, 0.3);
-          box-shadow: 0 16px 36px rgba(139, 92, 246, 0.15);
+          border-color: rgba(139, 92, 246, 0.55);
+          border-left-color: #a78bfa;
+          box-shadow: 0 16px 36px rgba(139, 92, 246, 0.25);
         }
 
-        .portal-modern-card:hover::before {
-          transform: translateX(100%);
+        .portal-modern-card:active {
+          transform: scale(0.985);
         }
 
-        /* Avatar styling inside card */
+        /* Collaborator Card Specifics */
+        .portal-modern-card.collaborator-theme {
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 247, 255, 0.88) 100%);
+          border-color: rgba(59, 130, 246, 0.18);
+          border-left: 4px solid #3b82f6;
+          box-shadow: 0 4px 18px -2px rgba(59, 130, 246, 0.08), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 1);
+        }
+        .dark .portal-modern-card.collaborator-theme {
+          background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.75) 100%);
+          border-color: rgba(59, 130, 246, 0.25);
+          border-left-color: #3b82f6;
+        }
+        .portal-modern-card.collaborator-theme:hover {
+          border-color: rgba(59, 130, 246, 0.45);
+          border-left-color: #2563eb;
+          box-shadow: 0 14px 32px -4px rgba(59, 130, 246, 0.18), 0 4px 10px rgba(0, 0, 0, 0.03), inset 0 1px 0 #ffffff;
+        }
+        .dark .portal-modern-card.collaborator-theme:hover {
+          border-color: rgba(59, 130, 246, 0.55);
+          border-left-color: #60a5fa;
+        }
+
+        /* ── Avatar Styling with Micro-Badges ── */
         .card-avatar-container {
           position: relative;
-          width: 60px;
-          height: 60px;
-          border-radius: 18px;
+          width: 66px;
+          height: 66px;
+          flex-shrink: 0;
+        }
+
+        .card-avatar-inner {
+          width: 100%;
+          height: 100%;
+          border-radius: 20px;
           overflow: hidden;
-          background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+          background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
           display: flex;
           align-items: center;
           justify-content: center;
           color: white;
           font-weight: 800;
-          fontSize: 22px;
-          flex-shrink: 0;
-          box-shadow: 0 6px 16px rgba(168, 85, 247, 0.2);
-          transition: transform 0.3s;
+          font-size: 24px;
+          box-shadow: 0 4px 14px rgba(139, 92, 246, 0.25);
+          border: 2px solid #ffffff;
+          transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .portal-modern-card:hover .card-avatar-container {
+        .dark .card-avatar-inner {
+          border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .portal-modern-card:hover .card-avatar-inner {
           transform: scale(1.05);
         }
 
@@ -326,37 +352,57 @@ const SELECTOR_STYLES = `
           object-fit: cover;
         }
 
-        /* Collaborator Card Specifics */
-        .portal-modern-card.collaborator-theme {
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 246, 255, 0.7) 100%);
-          border-color: rgba(59, 130, 246, 0.25);
-        }
-        .dark .portal-modern-card.collaborator-theme {
-          background: linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.4) 100%);
-          border-color: rgba(59, 130, 246, 0.12);
-        }
-        .portal-modern-card.collaborator-theme:hover {
-          border-color: rgba(59, 130, 246, 0.6);
-          box-shadow: 0 16px 36px rgba(59, 130, 246, 0.12);
+        .collaborator-avatar .card-avatar-inner {
+          background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+          box-shadow: 0 4px 14px rgba(37, 99, 235, 0.28);
         }
 
-        .card-avatar-container.collaborator-avatar {
-          background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
-          box-shadow: 0 6px 16px rgba(59, 130, 246, 0.2);
+        .avatar-micro-badge {
+          position: absolute;
+          bottom: -2px;
+          right: -2px;
+          width: 22px;
+          height: 22px;
+          border-radius: 8px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #ffffff;
+          border: 2px solid #ffffff;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+          z-index: 2;
+          transition: transform 0.25s ease;
+        }
+        .dark .avatar-micro-badge {
+          border-color: #1e293b;
+        }
+        .portal-modern-card:hover .avatar-micro-badge {
+          transform: scale(1.12);
         }
 
-        /* Card Content layout */
+        .student-micro-badge {
+          background: #8b5cf6;
+        }
+        .colab-micro-badge {
+          background: #2563eb;
+        }
+
+        /* ── Card Info & Typography ── */
         .card-info {
           flex: 1;
           min-width: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
         }
 
         .card-title {
-          font-size: 18px;
+          font-size: 15.5px;
           font-weight: 800;
           color: #0f172a;
-          margin: 0 0 4px;
-          letter-spacing: -0.01em;
+          margin: 0 0 5px 0;
+          letter-spacing: -0.02em;
+          line-height: 1.25;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -365,35 +411,101 @@ const SELECTOR_STYLES = `
           color: #f8fafc;
         }
 
-        .card-subtitle {
-          font-size: 13px;
-          color: #64748b;
-          margin: 0;
-          font-weight: 600;
+        .card-tags-row {
           display: flex;
           align-items: center;
           gap: 6px;
+          flex-wrap: nowrap;
+          overflow: hidden;
         }
-        .dark .card-subtitle {
+
+        .card-badge-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 8px;
+          border-radius: 8px;
+          font-size: 11.5px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          line-height: 1.3;
+          white-space: nowrap;
+        }
+
+        .badge-colab {
+          background: rgba(37, 99, 235, 0.1);
+          color: #1d4ed8;
+          border: 1px solid rgba(37, 99, 235, 0.2);
+        }
+        .dark .badge-colab {
+          background: rgba(59, 130, 246, 0.2);
+          color: #93c5fd;
+          border-color: rgba(59, 130, 246, 0.35);
+        }
+
+        .badge-cargo {
+          background: rgba(37, 99, 235, 0.08);
+          color: #1d4ed8;
+          border: 1px solid rgba(37, 99, 235, 0.18);
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+        .dark .badge-cargo {
+          background: rgba(59, 130, 246, 0.18);
+          color: #93c5fd;
+          border-color: rgba(59, 130, 246, 0.3);
+        }
+
+        .badge-turma {
+          background: rgba(139, 92, 246, 0.1);
+          color: #6d28d9;
+          border: 1px solid rgba(139, 92, 246, 0.2);
+          flex-shrink: 0;
+        }
+        .dark .badge-turma {
+          background: rgba(139, 92, 246, 0.2);
+          color: #c4b5fd;
+          border-color: rgba(139, 92, 246, 0.35);
+        }
+
+        .badge-integral {
+          background: rgba(16, 185, 129, 0.1);
+          color: #047857;
+          border: 1px solid rgba(16, 185, 129, 0.22);
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+        .dark .badge-integral {
+          background: rgba(16, 185, 129, 0.2);
+          color: #6ee7b7;
+          border-color: rgba(16, 185, 129, 0.35);
+        }
+
+        .badge-ano {
+          background: rgba(100, 116, 139, 0.08);
+          color: #64748b;
+          border: 1px solid rgba(100, 116, 139, 0.14);
+          font-weight: 600;
+          flex-shrink: 0;
+        }
+        .dark .badge-ano {
+          background: rgba(148, 163, 184, 0.12);
           color: #94a3b8;
+          border-color: rgba(148, 163, 184, 0.2);
         }
 
-        .card-dot-separator {
-          width: 3px;
-          height: 3px;
-          border-radius: 50%;
-          background: #cbd5e1;
-          display: inline-block;
-        }
-        .dark .card-dot-separator {
-          background: #475569;
+        .badge-inativo {
+          background: rgba(239, 68, 68, 0.1);
+          color: #dc2626;
+          border: 1px solid rgba(239, 68, 68, 0.2);
+          font-weight: 700;
         }
 
-        /* Badges & Indicators */
+        /* ── Actions & Chevron ── */
         .card-actions-wrapper {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
           flex-shrink: 0;
         }
 
@@ -401,34 +513,38 @@ const SELECTOR_STYLES = `
           width: 36px;
           height: 36px;
           border-radius: 12px;
-          background: #eef2ff;
-          color: #4f46e5;
+          background: rgba(239, 68, 68, 0.08);
+          border: 1px solid rgba(239, 68, 68, 0.18);
+          color: #ef4444;
           display: flex;
           align-items: center;
           justify-content: center;
           position: relative;
+          transition: all 0.2s ease;
         }
         .dark .unread-indicator-badge {
-          background: rgba(79, 70, 229, 0.2);
-          color: #818cf8;
+          background: rgba(239, 68, 68, 0.18);
+          border-color: rgba(239, 68, 68, 0.3);
+          color: #f87171;
         }
 
         .badge-count-bubble {
           position: absolute;
-          top: -6px;
-          right: -6px;
-          background: #ef4444;
+          top: -5px;
+          right: -5px;
+          background: linear-gradient(135deg, #ef4444, #f43f5e);
           color: white;
-          font-size: 11px;
+          font-size: 10.5px;
           font-weight: 800;
-          min-width: 18px;
-          height: 18px;
+          min-width: 17px;
+          height: 17px;
           border-radius: 9px;
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 0 4px;
-          border: 2px solid white;
+          border: 2px solid #ffffff;
+          box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
         }
         .dark .badge-count-bubble {
           border-color: #1e293b;
@@ -439,6 +555,7 @@ const SELECTOR_STYLES = `
           height: 36px;
           border-radius: 12px;
           background: #fffbeb;
+          border: 1px solid rgba(217, 119, 6, 0.2);
           color: #d97706;
           display: flex;
           align-items: center;
@@ -453,28 +570,34 @@ const SELECTOR_STYLES = `
           width: 36px;
           height: 36px;
           border-radius: 12px;
-          border: 1px solid rgba(0, 0, 0, 0.05);
-          background: rgba(0, 0, 0, 0.02);
+          border: 1px solid rgba(0, 0, 0, 0.06);
+          background: rgba(0, 0, 0, 0.03);
           color: #94a3b8;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.35s;
+          transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
         .dark .chevron-circle-btn {
-          border-color: rgba(255, 255, 255, 0.05);
-          background: rgba(255, 255, 255, 0.02);
+          border-color: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.04);
+          color: #64748b;
         }
-        .portal-modern-card:hover .chevron-circle-btn {
-          transform: translateX(4px);
-          color: #6366f1;
-          background: rgba(99, 102, 241, 0.05);
-          border-color: rgba(99, 102, 241, 0.2);
+
+        .portal-modern-card:hover .chevron-circle-btn.student-chevron {
+          transform: translateX(3px);
+          color: #ffffff;
+          background: #8b5cf6;
+          border-color: #8b5cf6;
+          box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);
         }
-        .portal-modern-card.collaborator-theme:hover .chevron-circle-btn {
-          color: #3b82f6;
-          background: rgba(59, 130, 246, 0.05);
-          border-color: rgba(59, 130, 246, 0.2);
+
+        .portal-modern-card.collaborator-theme:hover .chevron-circle-btn.colab-chevron {
+          transform: translateX(3px);
+          color: #ffffff;
+          background: #2563eb;
+          border-color: #2563eb;
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
         }
 
         /* Empty state styling */
@@ -507,72 +630,147 @@ const SELECTOR_STYLES = `
           box-shadow: 0 10px 25px rgba(244, 63, 94, 0.05);
         }
 
-        .back-button-modern {
+        /* ── Modern Side-by-Side Action Buttons ── */
+        .ad-footer-actions {
+          margin-top: 36px;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 12px;
-          padding: 12px 20px;
-          border-radius: 16px;
-          background: rgba(99, 102, 241, 0.1);
-          border: 1px solid rgba(99, 102, 241, 0.2);
-          color: #6366f1;
-          font-weight: 800;
-          font-size: 16px;
-          font-family: 'Outfit', sans-serif;
-          cursor: pointer;
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           width: 100%;
-          max-width: 320px;
-          height: 56px;
-          box-shadow: 0 4px 14px rgba(99, 102, 241, 0.08);
-        }
-        .back-button-modern:hover {
-          background: rgba(99, 102, 241, 0.15);
-          border-color: rgba(99, 102, 241, 0.4);
-          transform: translateY(-2px);
-          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
-        }
-        .dark .back-button-modern {
-          background: rgba(99, 102, 241, 0.1);
-          border-color: rgba(99, 102, 241, 0.3);
-          color: #818cf8;
-        }
-        .dark .back-button-modern:hover {
-          background: rgba(99, 102, 241, 0.2);
-          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.2);
+          max-width: 480px;
+          padding: 0 16px 48px 16px;
+          position: relative;
+          z-index: 10;
+          margin-left: auto;
+          margin-right: auto;
+          box-sizing: border-box;
         }
 
-        .premium-logout-btn {
+        .ad-action-btn {
+          flex: 1;
+          height: 50px;
+          min-width: 0;
+          max-width: 230px;
+          padding: 0 14px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          border-radius: 16px;
+          font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          font-size: 13.5px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          white-space: nowrap;
+          cursor: pointer;
+          transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+          user-select: none;
+          outline: none;
+          box-sizing: border-box;
+          text-decoration: none;
+        }
+
+        .ad-btn-icon-wrap {
+          width: 30px;
+          height: 30px;
+          border-radius: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 8px;
-          padding: 12px 20px;
-          border-radius: 16px;
-          background: rgba(239, 68, 68, 0.1);
-          color: #ef4444;
-          font-weight: 700;
-          font-size: 14px;
-          border: 1px solid rgba(239, 68, 68, 0.2);
-          cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-          margin-left: auto;
+          flex-shrink: 0;
+          transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .premium-logout-btn:hover {
-          background: #ef4444;
-          color: white;
+
+        /* Botão Trocar Módulo */
+        .ad-btn-switch {
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1.5px solid rgba(99, 102, 241, 0.2);
+          color: #4f46e5;
+          box-shadow: 0 4px 16px -2px rgba(99, 102, 241, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+        .ad-btn-switch .ad-btn-icon-wrap {
+          background: rgba(99, 102, 241, 0.08);
+          border: 1px solid rgba(99, 102, 241, 0.16);
+          color: #6366f1;
+        }
+        .ad-btn-switch:hover {
+          background: #ffffff;
+          border-color: rgba(99, 102, 241, 0.45);
           transform: translateY(-2px);
-          box-shadow: 0 8px 20px rgba(239, 68, 68, 0.25);
+          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.22), 0 3px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff;
         }
-        .dark .premium-logout-btn {
-          background: rgba(248, 113, 113, 0.1);
-          color: #f87171;
-          border-color: rgba(248, 113, 113, 0.2);
+        .ad-btn-switch:hover .ad-btn-icon-wrap {
+          transform: translateX(-2px);
+          background: rgba(99, 102, 241, 0.15);
         }
-        .dark .premium-logout-btn:hover {
-          background: #f87171;
-          color: #0f172a;
+        .ad-btn-switch:active {
+          transform: translateY(0) scale(0.97);
+        }
+
+        /* Botão Sair da Conta */
+        .ad-btn-logout {
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1.5px solid rgba(244, 63, 94, 0.22);
+          color: #e11d48;
+          box-shadow: 0 4px 16px -2px rgba(244, 63, 94, 0.1), 0 2px 6px rgba(0, 0, 0, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+        .ad-btn-logout .ad-btn-icon-wrap {
+          background: rgba(244, 63, 94, 0.08);
+          border: 1px solid rgba(244, 63, 94, 0.16);
+          color: #f43f5e;
+        }
+        .ad-btn-logout:hover {
+          background: #fff5f6;
+          border-color: rgba(244, 63, 94, 0.45);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px -4px rgba(244, 63, 94, 0.22), 0 3px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 #ffffff;
+        }
+        .ad-btn-logout:hover .ad-btn-icon-wrap {
+          transform: translateX(2px);
+          background: rgba(244, 63, 94, 0.15);
+        }
+        .ad-btn-logout:active {
+          transform: translateY(0) scale(0.97);
+        }
+
+        /* Dark mode */
+        .dark .ad-btn-switch {
+          background: rgba(30, 41, 59, 0.85);
+          border-color: rgba(99, 102, 241, 0.32);
+          color: #a5b4fc;
+          box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        .dark .ad-btn-switch .ad-btn-icon-wrap {
+          background: rgba(99, 102, 241, 0.18);
+          border-color: rgba(99, 102, 241, 0.25);
+          color: #818cf8;
+        }
+        .dark .ad-btn-switch:hover {
+          background: rgba(30, 41, 59, 0.98);
+          border-color: rgba(99, 102, 241, 0.5);
+          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.3);
+        }
+
+        .dark .ad-btn-logout {
+          background: rgba(30, 41, 59, 0.85);
+          border-color: rgba(244, 63, 94, 0.32);
+          color: #fb7185;
+          box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        .dark .ad-btn-logout .ad-btn-icon-wrap {
+          background: rgba(244, 63, 94, 0.18);
+          border-color: rgba(244, 63, 94, 0.25);
+          color: #fb7185;
+        }
+        .dark .ad-btn-logout:hover {
+          background: rgba(244, 63, 94, 0.15);
+          border-color: rgba(244, 63, 94, 0.5);
+          box-shadow: 0 8px 24px -4px rgba(244, 63, 94, 0.3);
         }
 
         /* Mobile Adjustments */
@@ -595,16 +793,29 @@ const SELECTOR_STYLES = `
           .ad-has-banner .premium-welcome-card {
             margin-top: 8px !important;
           }
-          .premium-logout-btn {
-            padding: 10px 12px;
-            border-radius: 12px;
+          .ad-footer-actions {
+            gap: 10px;
+            padding: 0 12px 42px 12px;
+            margin-top: 28px;
           }
-          .premium-logout-text {
-            display: none;
+          .ad-action-btn {
+            height: 48px;
+            padding: 0 10px;
+            font-size: 13px;
+            gap: 8px;
+            border-radius: 14px;
+          }
+          .ad-btn-icon-wrap {
+            width: 28px !important;
+            height: 28px !important;
+            border-radius: 9px !important;
           }
           .welcome-avatar-wrapper {
-            width: 64px;
-            height: 64px;
+            width: 82px;
+            height: 82px;
+          }
+          .welcome-initials {
+            font-size: 28px !important;
           }
           .welcome-greeting {
             font-size: 22px;
@@ -618,34 +829,42 @@ const SELECTOR_STYLES = `
             box-sizing: border-box;
           }
           .portal-modern-card {
-            padding: 12px 14px;
-            gap: 12px;
-            border-radius: 20px;
+            padding: 14px 15px;
+            gap: 14px;
+            border-radius: 18px;
             width: 100%;
             box-sizing: border-box;
           }
           .card-avatar-container {
-            width: 52px;
-            height: 52px;
-            border-radius: 14px;
+            width: 62px;
+            height: 62px;
+          }
+          .card-avatar-inner {
+            border-radius: 18px !important;
+            font-size: 22px !important;
+          }
+          .avatar-micro-badge {
+            width: 20px !important;
+            height: 20px !important;
+            border-radius: 7px !important;
+            bottom: -2px !important;
+            right: -2px !important;
           }
           .card-title {
-            font-size: 16px;
+            font-size: 15px;
           }
-          .card-subtitle {
-            font-size: 12px;
+          .card-badge-pill {
+            font-size: 11px;
+            padding: 2.5px 7px;
           }
-          .card-actions-wrapper {
-            gap: 8px !important;
+          .chevron-circle-btn {
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 11px !important;
           }
-          .unread-indicator-badge, .pending-warning-badge, .chevron-circle-btn {
-            width: 28px !important;
-            height: 28px !important;
-            border-radius: 8px !important;
-          }
-          .unread-indicator-badge svg, .pending-warning-badge svg, .chevron-circle-btn svg {
-            width: 14px !important;
-            height: 14px !important;
+          .chevron-circle-btn svg {
+            width: 16px !important;
+            height: 16px !important;
           }
         }
 `;
@@ -674,6 +893,7 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
   );
 
   const baseTurma = rawName.split('-')[0].trim()
+  const cleanTurma = baseTurma.replace(/^Turma\s+/i, '').trim()
   const displayTurma = isIntegral ? (baseTurma.toUpperCase().includes('INTEGRAL') ? baseTurma : `${baseTurma} - INTEGRAL/INTERMEDIÁRIO`) : baseTurma
   const anoLetivo = student.anoLetivo || new Date().getFullYear()
 
@@ -682,27 +902,41 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
 
   const content = (
     <>
-      <div className="card-avatar-container">
-        {student.foto ? (
-          <img src={student.foto} alt={student.nome} className="card-avatar-img" />
-        ) : (
-          getInitials(student.nome)
-        )}
+      <div className="card-avatar-container student-avatar">
+        <div className="card-avatar-inner">
+          {student.foto ? (
+            <img src={student.foto} alt={student.nome} className="card-avatar-img" />
+          ) : (
+            getInitials(student.nome)
+          )}
+        </div>
+        <div className="avatar-micro-badge student-micro-badge" title="Aluno">
+          <GraduationCap size={10} strokeWidth={2.8} />
+        </div>
       </div>
 
       <div className="card-info">
         <h3 className="card-title">{formatShortName(student.nome)}</h3>
-        <div className="card-subtitle" style={{ flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          {isInativo ? (
-            <span style={{ color: '#ef4444', fontWeight: 800 }}>Aluno Inativo</span>
-          ) : (
-            <>
-              <span style={{ color: 'hsl(var(--primary))', fontWeight: 800 }}>Turma {displayTurma}</span>
-              <span className="card-dot-separator" />
-              <span>{anoLetivo}</span>
-            </>
-          )}
-        </div>
+        {isInativo ? (
+          <div className="card-tags-row">
+            <span className="card-badge-pill badge-inativo">Aluno Inativo</span>
+          </div>
+        ) : (
+          <div className="card-tags-row">
+            <span className="card-badge-pill badge-turma">
+              <GraduationCap size={11} strokeWidth={2.5} />
+              {cleanTurma}
+            </span>
+            {isIntegral && (
+              <span className="card-badge-pill badge-integral">
+                Integral
+              </span>
+            )}
+            <span className="card-badge-pill badge-ano">
+              {anoLetivo}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="card-actions-wrapper">
@@ -712,20 +946,15 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
           </div>
         ) : (
           <>
-            <div className="unread-indicator-badge">
-              <Bell size={18} />
-              <span className="badge-count-bubble">2</span>
-            </div>
-
             {pendingAlerts > 0 && (
               <div className="pending-warning-badge" title={`${pendingAlerts} Ocorrências ou pendências`}>
-                <AlertTriangle size={18} />
+                <AlertTriangle size={16} strokeWidth={2.4} />
               </div>
             )}
 
-            <div className="chevron-circle-btn">
+            <div className="chevron-circle-btn student-chevron">
               {loadingCardId === student.id ? (
-                <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#6366f1' }} />
+                <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#7c3aed' }} />
               ) : (
                 <ChevronRight size={18} strokeWidth={2.5} />
               )}
@@ -897,27 +1126,33 @@ function SelecionarAlunoContent() {
                 onClick={() => setLoadingCardId('colaborador')}
                 className="portal-modern-card collaborator-theme"
               >
-                <div className="card-avatar-container collaborator-avatar" style={{ padding: 0 }}>
-                  {currentUser.foto ? (
-                    <img src={currentUser.foto} alt={currentUser.nome} className="card-avatar-img" />
-                  ) : (
-                    getInitials(currentUser.nome || 'Colaborador')
-                  )}
+                <div className="card-avatar-container collaborator-avatar">
+                  <div className="card-avatar-inner">
+                    {currentUser.foto ? (
+                      <img src={currentUser.foto} alt={currentUser.nome} className="card-avatar-img" />
+                    ) : (
+                      getInitials(currentUser.nome || 'Colaborador')
+                    )}
+                  </div>
+                  <div className="avatar-micro-badge colab-micro-badge" title="Equipe Escolar">
+                    <ShieldCheck size={10} strokeWidth={2.8} />
+                  </div>
                 </div>
 
                 <div className="card-info">
                   <h3 className="card-title">{formatShortName(currentUser.nome)}</h3>
-                  <div className="card-subtitle">
-                    <span style={{ color: '#3b82f6', fontWeight: 800 }}>Acesso da Equipe</span>
-                    <span className="card-dot-separator" />
-                    <span>{currentUser.cargo || currentUser.perfil}</span>
+                  <div className="card-tags-row">
+                    <span className="card-badge-pill badge-cargo">
+                      <Briefcase size={12} strokeWidth={2.2} />
+                      {currentUser.cargo || currentUser.perfil}
+                    </span>
                   </div>
                 </div>
 
                 <div className="card-actions-wrapper">
-                  <div className="chevron-circle-btn">
+                  <div className="chevron-circle-btn colab-chevron">
                     {loadingCardId === 'colaborador' ? (
-                      <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#3b82f6' }} />
+                      <Loader2 size={18} strokeWidth={2.5} className="animate-spin" style={{ color: '#2563eb' }} />
                     ) : (
                       <ChevronRight size={18} strokeWidth={2.5} />
                     )}
@@ -974,21 +1209,23 @@ function SelecionarAlunoContent() {
         </section>
       </main>
 
-      <footer style={{ marginTop: 40, display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap', width: '100%', maxWidth: 760, padding: '0 20px', paddingBottom: 40, position: 'relative', zIndex: 10 }}>
+      <footer className="ad-footer-actions">
         {currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno' && (
           <button 
             onClick={() => window.location.href = '/login?step=choose_system'}
-            className="back-button-modern"
+            className="ad-action-btn ad-btn-switch"
+            title="Trocar Módulo do Sistema"
           >
-            <ArrowLeft size={20} strokeWidth={2.5} />
+            <div className="ad-btn-icon-wrap">
+              <ArrowLeft size={16} strokeWidth={2.5} />
+            </div>
             <span>Trocar Módulo</span>
           </button>
         )}
         <button 
           onClick={async (e) => {
             const btn = e.currentTarget;
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px;"><svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Saindo...</span>';
+            btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px;"><svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Saindo...</span>';
             btn.style.opacity = '0.7';
             btn.style.pointerEvents = 'none';
 
@@ -1004,21 +1241,13 @@ function SelecionarAlunoContent() {
             // 3. Força o redirecionamento instantâneo para a página inicial de login
             window.location.href = '/login';
           }}
-          className="premium-logout-btn"
-          style={{ width: '100%', maxWidth: 320, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, borderRadius: 16, background: '#fff', border: '1.5px solid #ffe4e6', color: '#f43f5e', fontSize: 16, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 14px rgba(244,63,94,0.08)' }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = '#fff1f2';
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 8px 24px rgba(244,63,94,0.15)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = '#fff';
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 14px rgba(244,63,94,0.08)';
-          }}
+          className="ad-action-btn ad-btn-logout"
+          title="Sair da Conta com segurança"
         >
-          <LogOut size={20} strokeWidth={2.5} />
-          <span>Sair com segurança</span>
+          <div className="ad-btn-icon-wrap">
+            <LogOut size={16} strokeWidth={2.5} />
+          </div>
+          <span>Sair da Conta</span>
         </button>
       </footer>
     </div>
