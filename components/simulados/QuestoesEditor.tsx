@@ -4,8 +4,10 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Trash2, ChevronDown, ChevronUp, Image as ImageIcon,
-  Loader2, Sparkles, Plus, X, ZoomIn, ZoomOut, CheckCircle, Upload, Edit, FileText
+  Loader2, Sparkles, Plus, X, ZoomIn, ZoomOut, CheckCircle, Upload, Edit, FileText, BookOpen
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { isQuestionForRequisicao } from '@/lib/utils'
 import { HtmlContent } from '@/components/HtmlContent'
 import { Questao } from '@/components/simulados/ProvaPreviewModal'
 import { QuestaoUploadModal } from '@/components/simulados/QuestaoUploadModal'
@@ -17,10 +19,168 @@ interface QuestoesEditorProps {
   defaultDisciplinaId?: string
   defaultProfessorId?: string
   readOnly?: boolean
+  disciplinas?: any[]
+  requisicoes?: any[]
 }
 
-export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, defaultDisciplinaId, defaultProfessorId, readOnly = false }: QuestoesEditorProps) {
+export function QuestoesEditor({ 
+  questoes, 
+  setQuestoes, 
+  showAddQuestao = true, 
+  defaultDisciplinaId, 
+  defaultProfessorId, 
+  readOnly = false,
+  disciplinas,
+  requisicoes
+}: QuestoesEditorProps) {
   const [generatingAiFor, setGeneratingAiFor] = useState<number | null>(null)
+  const [disciplinasList, setDisciplinasList] = useState<any[]>(disciplinas || [])
+
+  React.useEffect(() => {
+    if (disciplinas && disciplinas.length > 0) {
+      setDisciplinasList(disciplinas)
+      return
+    }
+    async function loadDisc() {
+      try {
+        const { data } = await supabase.from('simulados_disciplinas').select('id, nome')
+        if (data && data.length > 0) {
+          setDisciplinasList(data)
+        }
+      } catch (err) {
+        console.error('Erro ao carregar disciplinas:', err)
+      }
+    }
+    loadDisc()
+  }, [disciplinas])
+
+  const getQuestaoDisciplina = (q: any): string | null => {
+    if (q.disciplina_nome && typeof q.disciplina_nome === 'string' && q.disciplina_nome.trim()) {
+      return q.disciplina_nome.trim()
+    }
+    if (q.disciplina && typeof q.disciplina === 'string' && q.disciplina.trim()) {
+      return q.disciplina.trim()
+    }
+    if (q.simulados_disciplinas?.nome) {
+      return q.simulados_disciplinas.nome
+    }
+    if (requisicoes && requisicoes.length > 0) {
+      if (q.id_requisicao) {
+        const req = requisicoes.find((r: any) => r.id === q.id_requisicao)
+        if (req?.disciplina_nome) return req.disciplina_nome
+        if (req?.simulados_disciplinas?.nome) return req.simulados_disciplinas.nome
+      }
+      const matchedReq = requisicoes.find((r: any) => isQuestionForRequisicao(q, r, requisicoes, false))
+      if (matchedReq?.disciplina_nome) return matchedReq.disciplina_nome
+      if (matchedReq?.simulados_disciplinas?.nome) return matchedReq.simulados_disciplinas.nome
+    }
+    const discId = q.id_disciplina || q.disciplina_id || defaultDisciplinaId
+    if (discId && disciplinasList.length > 0) {
+      const found = disciplinasList.find((d: any) => d.id === discId)
+      if (found?.nome) return found.nome
+    }
+    if (requisicoes && requisicoes.length === 1 && requisicoes[0].disciplina_nome) {
+      return requisicoes[0].disciplina_nome
+    }
+    return null
+  }
+
+  const getDisciplinaBadgeStyle = (nome: string) => {
+    if (!nome) {
+      return {
+        bg: 'rgba(139, 92, 246, 0.08)',
+        color: '#8b5cf6',
+        border: 'rgba(139, 92, 246, 0.25)'
+      }
+    }
+
+    const clean = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+
+    if (clean.includes('portugues') || clean.includes('gramatica') || clean.includes('literatura') || clean.includes('redacao')) {
+      return {
+        bg: 'rgba(37, 99, 235, 0.08)',
+        color: '#2563eb',
+        border: 'rgba(37, 99, 235, 0.25)'
+      }
+    }
+    if (clean.includes('matematica') || clean.includes('algebra') || clean.includes('geometria')) {
+      return {
+        bg: 'rgba(5, 150, 105, 0.08)',
+        color: '#059669',
+        border: 'rgba(5, 150, 105, 0.25)'
+      }
+    }
+    if (clean.includes('historia')) {
+      return {
+        bg: 'rgba(217, 119, 6, 0.08)',
+        color: '#d97706',
+        border: 'rgba(217, 119, 6, 0.25)'
+      }
+    }
+    if (clean.includes('geografia')) {
+      return {
+        bg: 'rgba(13, 148, 136, 0.08)',
+        color: '#0d9488',
+        border: 'rgba(13, 148, 136, 0.25)'
+      }
+    }
+    if (clean.includes('fisica')) {
+      return {
+        bg: 'rgba(124, 58, 237, 0.08)',
+        color: '#7c3aed',
+        border: 'rgba(124, 58, 237, 0.25)'
+      }
+    }
+    if (clean.includes('quimica')) {
+      return {
+        bg: 'rgba(219, 39, 119, 0.08)',
+        color: '#db2777',
+        border: 'rgba(219, 39, 119, 0.25)'
+      }
+    }
+    if (clean.includes('biologia') || clean.includes('ciencias')) {
+      return {
+        bg: 'rgba(22, 163, 74, 0.08)',
+        color: '#16a34a',
+        border: 'rgba(22, 163, 74, 0.25)'
+      }
+    }
+    if (clean.includes('ingles') || clean.includes('espanhol') || clean.includes('lingua')) {
+      return {
+        bg: 'rgba(2, 132, 199, 0.08)',
+        color: '#0284c7',
+        border: 'rgba(2, 132, 199, 0.25)'
+      }
+    }
+    if (clean.includes('arte')) {
+      return {
+        bg: 'rgba(147, 51, 234, 0.08)',
+        color: '#9333ea',
+        border: 'rgba(147, 51, 234, 0.25)'
+      }
+    }
+    if (clean.includes('filosofia') || clean.includes('sociologia')) {
+      return {
+        bg: 'rgba(71, 85, 105, 0.08)',
+        color: '#475569',
+        border: 'rgba(71, 85, 105, 0.25)'
+      }
+    }
+
+    const palette = [
+      { bg: 'rgba(139, 92, 246, 0.08)', color: '#8b5cf6', border: 'rgba(139, 92, 246, 0.25)' },
+      { bg: 'rgba(234, 88, 12, 0.08)', color: '#ea580c', border: 'rgba(234, 88, 12, 0.25)' },
+      { bg: 'rgba(8, 145, 178, 0.08)', color: '#0891b2', border: 'rgba(8, 145, 178, 0.25)' },
+      { bg: 'rgba(202, 138, 4, 0.08)', color: '#ca8a04', border: 'rgba(202, 138, 4, 0.25)' },
+      { bg: 'rgba(192, 38, 211, 0.08)', color: '#c026d3', border: 'rgba(192, 38, 211, 0.25)' },
+    ]
+    let hash = 0
+    for (let i = 0; i < clean.length; i++) {
+      hash = (hash << 5) - hash + clean.charCodeAt(i)
+      hash |= 0
+    }
+    return palette[Math.abs(hash) % palette.length]
+  }
 
   const recalculateNumeros = (list: Questao[]) => {
     let numCounter = 1
@@ -334,7 +494,11 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
 
       {/* Questions list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {questoes.map((q, qIdx) => (
+        {questoes.map((q, qIdx) => {
+          const discName = getQuestaoDisciplina(q)
+          const discStyle = discName ? getDisciplinaBadgeStyle(discName) : null
+
+          return (
           <motion.div key={qIdx} className="questao-card" layout
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: qIdx * 0.03 }}
             style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 18, overflow: 'hidden', transition: 'border-color 0.2s' }}>
@@ -356,7 +520,26 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
                 <div style={{ color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                   {q.enunciado ? q.enunciado.replace(/<[^>]+>/g, '') : <span style={{ color: 'hsl(var(--text-secondary))', fontStyle: 'italic' }}>Sem enunciado</span>}
                 </div>
-                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 5 }}>
+                  {discName && discStyle && (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 8px',
+                      borderRadius: 6,
+                      background: discStyle.bg,
+                      color: discStyle.color,
+                      border: `1px solid ${discStyle.border}`,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      lineHeight: '16px',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      <BookOpen size={11} />
+                      {discName}
+                    </span>
+                  )}
                   {q.tipo_questao === 'texto_apoio' ? (
                     <span style={{ fontSize: 11, color: '#a855f7', fontWeight: 600 }}>Texto de Apoio / Consulta (não contabiliza)</span>
                   ) : (
@@ -393,9 +576,29 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
 
                     {/* Enunciado */}
                     <div>
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-                        {q.tipo_questao === 'texto_apoio' ? 'Texto / Enunciado de Apoio' : 'Enunciado da Questão'}
-                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          {q.tipo_questao === 'texto_apoio' ? 'Texto / Enunciado de Apoio' : 'Enunciado da Questão'}
+                        </label>
+                        {discName && discStyle && (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '2px 8px',
+                            borderRadius: 6,
+                            background: discStyle.bg,
+                            color: discStyle.color,
+                            border: `1px solid ${discStyle.border}`,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            lineHeight: '16px'
+                          }}>
+                            <BookOpen size={11} />
+                            {discName}
+                          </span>
+                        )}
+                      </div>
                       <HtmlContent
                         editable={!readOnly}
                         html={q.enunciado || ''}
@@ -578,7 +781,8 @@ export function QuestoesEditor({ questoes, setQuestoes, showAddQuestao = true, d
               )}
             </AnimatePresence>
           </motion.div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

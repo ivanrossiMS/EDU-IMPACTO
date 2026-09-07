@@ -16,6 +16,12 @@ export interface Questao {
   pontuacao: number
   expandido: boolean
   id_professor?: string
+  professor_nome?: string
+  id_disciplina?: string
+  disciplina_id?: string
+  disciplina_nome?: string
+  disciplina?: string
+  id_requisicao?: string
   tipo_questao?: 'multipla_escolha' | 'descritiva' | 'texto_apoio'
   estilo_espaco?: 'em_branco' | 'pautado'
   linhas_resposta?: number
@@ -39,6 +45,17 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
   const initialLocal = questoes.map(q => ({ ...q, _internalId: (q as any)._internalId || 'q-' + Math.random().toString(36).substr(2, 9) }))
   const [localQuestoes, setLocalQuestoes] = useState<any[]>(initialLocal)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialLocal.map(q => q._internalId)))
+
+  useEffect(() => {
+    if (questoes && questoes.length > 0) {
+      const updated = questoes.map(q => ({
+        ...q,
+        _internalId: (q as any)._internalId || 'q-' + Math.random().toString(36).substr(2, 9)
+      }))
+      setLocalQuestoes(updated)
+      setSelectedIds(new Set(updated.map(q => q._internalId)))
+    }
+  }, [questoes])
   
   const defaultHeaderLayout = {
     title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },

@@ -16,7 +16,7 @@ import { PaginationEngine } from '@/components/simulados/PaginationEngine'
 import { HtmlContent } from '@/components/HtmlContent'
 
 import { SimuladoPreviewModal, Questao, Alternative } from '@/components/simulados/SimuladoPreviewModal'
-import { formatProfessorHeaderName } from '@/lib/utils'
+import { formatProfessorHeaderName, isQuestionForRequisicao } from '@/lib/utils'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 export default function UploadSimuladoPage() {
   const router = useRouter()
@@ -82,12 +82,33 @@ export default function UploadSimuladoPage() {
 
       // If questions already exist, load them for review
       if (simuladoData?.questoes_json && simuladoData.questoes_json.length > 0) {
-        let qs = simuladoData.questoes_json
-        
-        const showAll = true;
-        
-        if (qs.length > 0) {
-          setQuestoes(qs.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
+        const rawList = Array.isArray(simuladoData.questoes_json) ? simuladoData.questoes_json : []
+        let enriched: any[] = []
+        if (reqs && reqs.length > 0) {
+          enriched = reqs.flatMap((req: any) => {
+            const matching = rawList.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
+            const maxQtd = req.qtd_questoes || undefined
+            const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
+            const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
+            return sliced.map((q: any) => ({
+              ...q,
+              id_requisicao: req.id,
+              id_disciplina: req.id_disciplina || q.id_disciplina,
+              disciplina_nome: q.disciplina_nome || discName,
+              disciplina: q.disciplina || q.disciplina_nome || discName,
+              id_professor: req.id_professor || q.id_professor,
+              professor_nome: req.professor_nome || q.professor_nome,
+            }))
+          })
+          if (enriched.length === 0) {
+            enriched = rawList
+          }
+        } else {
+          enriched = rawList
+        }
+
+        if (enriched.length > 0) {
+          setQuestoes(enriched.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
           setUploadStep('review')
         }
       }
@@ -439,6 +460,7 @@ export default function UploadSimuladoPage() {
             defaultDisciplinaId={simulado?.simulados_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina}
             defaultProfessorId={currentUser?.id}
             readOnly={isProfessorViewAll}
+            requisicoes={simulado?.simulados_upload_requisicoes || []}
           />
 
           {!isProfessorViewAll && (

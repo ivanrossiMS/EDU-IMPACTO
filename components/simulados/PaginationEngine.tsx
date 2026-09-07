@@ -462,11 +462,13 @@ export function PaginationEngine({
         let questionMargin = currentY > 0 ? BLOCK_SPACING : 0;
         const qIndex = questionDisplayNumbers[idx];
 
-        const isNewDisciplina = idx === 0 || q.id_disciplina !== questoes[idx - 1].id_disciplina;
-        if (isNewDisciplina && q.simulados_disciplinas?.nome) {
-          const discId = `disc-${q.id_disciplina || 'unknown'}-${idx}`;
-          const discH = heights[discId] || 0;
-          pushBlock({ type: 'part_disciplina', q, discName: q.simulados_disciplinas.nome }, discH, questionMargin);
+        const currentDiscName = q.disciplina_nome || q.disciplina || q.simulados_disciplinas?.nome;
+        const prevDiscName = idx > 0 ? (questoes[idx - 1].disciplina_nome || questoes[idx - 1].disciplina || questoes[idx - 1].simulados_disciplinas?.nome) : null;
+        const isNewDisciplina = (idx === 0 && !!currentDiscName) || (!!currentDiscName && currentDiscName !== prevDiscName);
+        if (isNewDisciplina && currentDiscName) {
+          const discId = `disc-${q.id_disciplina || currentDiscName}-${idx}`;
+          const discH = heights[discId] || 40;
+          pushBlock({ type: 'part_disciplina', q, discName: currentDiscName }, discH, questionMargin);
           questionMargin = BLOCK_SPACING; // Ensure margin between disc header and question
         }
 
@@ -846,13 +848,15 @@ export function PaginationEngine({
         }}
       >
         {questoes.map((q, idx) => {
-          const isNewDisciplina = idx === 0 || q.id_disciplina !== questoes[idx - 1].id_disciplina;
+          const currentDiscName = q.disciplina_nome || q.disciplina || q.simulados_disciplinas?.nome;
+          const prevDiscName = idx > 0 ? (questoes[idx - 1].disciplina_nome || questoes[idx - 1].disciplina || questoes[idx - 1].simulados_disciplinas?.nome) : null;
+          const isNewDisciplina = (idx === 0 && !!currentDiscName) || (!!currentDiscName && currentDiscName !== prevDiscName);
           return (
-            <div key={`shadow-${q.id}`}>
-              {isNewDisciplina && q.simulados_disciplinas?.nome && (
+            <div key={`shadow-${q.id || (q as any)._internalId || idx}`}>
+              {isNewDisciplina && currentDiscName && (
                 <div 
                   data-measure 
-                  data-id={`disc-${q.id_disciplina || 'unknown'}-${idx}`}
+                  data-id={`disc-${q.id_disciplina || currentDiscName}-${idx}`}
                   style={{
                     marginBottom: 16,
                     display: 'flex',
@@ -864,7 +868,7 @@ export function PaginationEngine({
                 >
                   <div style={{ flexShrink: 0, padding: '6px 16px', background: '#1e293b', color: 'white', borderRadius: 24, fontSize: '10pt', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <BookOpen size={14} color="#38bdf8" />
-                    {q.simulados_disciplinas.nome}
+                    {currentDiscName}
                   </div>
                   <div style={{ flex: 1, height: 2, background: 'linear-gradient(to right, #cbd5e1, transparent)' }} />
                 </div>

@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
-import { getDerivedStatus, formatProfessorHeaderName } from '@/lib/utils'
+import { getDerivedStatus, formatProfessorHeaderName, isQuestionForRequisicao } from '@/lib/utils'
 import { ProvaPreviewModal, Questao } from '@/components/simulados/ProvaPreviewModal'
 import { QuestoesEditor } from '@/components/simulados/QuestoesEditor'
 
@@ -55,7 +55,27 @@ export default function VerProvaUploadPage() {
       if (cfg) setSimConfig(cfg)
 
       if (data?.questoes_json) {
-        setQuestoes(data.questoes_json)
+        const enriched = (data.questoes_json || []).map((q: any) => {
+          let discNome = q.disciplina_nome || q.disciplina || ''
+          let reqFound: any = null
+          if (q.id_requisicao && reqs && reqs.length > 0) {
+            reqFound = reqs.find((r: any) => r.id === q.id_requisicao)
+          }
+          if (!reqFound && reqs && reqs.length > 0) {
+            reqFound = reqs.find((r: any) => isQuestionForRequisicao(q, r, reqs, false))
+          }
+          if (reqFound) {
+            discNome = discNome || reqFound.disciplina_nome || reqFound.simulados_disciplinas?.nome || ''
+          }
+          return {
+            ...q,
+            id_requisicao: q.id_requisicao || reqFound?.id || undefined,
+            id_disciplina: q.id_disciplina || reqFound?.id_disciplina || undefined,
+            disciplina_nome: discNome || q.disciplina_nome || undefined,
+            disciplina: discNome || q.disciplina || undefined,
+          }
+        })
+        setQuestoes(enriched)
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
@@ -245,6 +265,7 @@ export default function VerProvaUploadPage() {
                 setQuestoes={setQuestoes} 
                 defaultDisciplinaId={!isCoord ? requisicoes.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina : undefined}
                 defaultProfessorId={!isCoord ? currentUser?.id : undefined}
+                requisicoes={requisicoes}
               />
               
               {isCoord && (

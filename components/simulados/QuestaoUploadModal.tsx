@@ -358,11 +358,17 @@ export function QuestaoUploadModal({ questao, defaultProfessorId, defaultDiscipl
         finalEnunciado += `\n<meta name="ia_prova_titulo" content="${tituloContexto || 'Simulado'}">`
       }
 
+      const discNomeFound = disciplinas.find((d: any) => d.id === (idDisciplina || defaultDisciplinaId))?.nome
       const questaoDataObj: any = {
         numero: questao?.numero || Date.now(),
         enunciado: finalEnunciado,
         id_disciplina: idDisciplina || defaultDisciplinaId || null,
-        disciplina: disciplinas.find((d: any) => d.id === (idDisciplina || defaultDisciplinaId))?.nome,
+        disciplina_id: idDisciplina || defaultDisciplinaId || null,
+        disciplina: discNomeFound || questao?.disciplina,
+        disciplina_nome: discNomeFound || questao?.disciplina_nome || questao?.disciplina,
+        id_requisicao: questao?.id_requisicao,
+        id_professor: questao?.id_professor || defaultProfessorId,
+        professor_nome: questao?.professor_nome,
         imagens: imagensApoio.map(i => ({ src: i.url, contentType: 'image/jpeg' })),
         tipo_questao: tipoQuestao,
         expandido: true,

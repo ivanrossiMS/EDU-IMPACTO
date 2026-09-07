@@ -165,15 +165,85 @@ export default function UploadSimuladoPage() {
         let filteredQs: any[] = []
 
         if (showAll) {
-          filteredQs = allQuestions
+          if (reqs.length > 0) {
+            filteredQs = reqs.flatMap((req: any) => {
+              const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
+              const maxQtd = req.qtd_questoes || undefined
+              const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
+              const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
+              return sliced.map((q: any) => ({
+                ...q,
+                id_requisicao: req.id,
+                id_disciplina: req.id_disciplina || q.id_disciplina,
+                disciplina_nome: q.disciplina_nome || discName,
+                disciplina: q.disciplina || q.disciplina_nome || discName,
+                id_professor: req.id_professor || q.id_professor,
+                professor_nome: req.professor_nome || q.professor_nome,
+              }))
+            })
+            if (filteredQs.length === 0) {
+              filteredQs = allQuestions
+            }
+          } else {
+            filteredQs = allQuestions
+          }
         } else if (currentActiveReq) {
-          filteredQs = allQuestions.filter((q: any) => isQuestionForRequisicao(q, currentActiveReq, reqs, false))
+          const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, currentActiveReq, reqs, false))
+          const maxQtd = currentActiveReq.qtd_questoes || undefined
+          const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
+          const discName = currentActiveReq.disciplina_nome || currentActiveReq.simulados_disciplinas?.nome || ''
+          filteredQs = sliced.map((q: any) => ({
+            ...q,
+            id_requisicao: currentActiveReq.id,
+            id_disciplina: currentActiveReq.id_disciplina || q.id_disciplina,
+            disciplina_nome: q.disciplina_nome || discName,
+            disciplina: q.disciplina || q.disciplina_nome || discName,
+            id_professor: currentActiveReq.id_professor || q.id_professor,
+            professor_nome: currentActiveReq.professor_nome || q.professor_nome,
+          }))
         } else if (reqs.length === 1) {
-          filteredQs = allQuestions
+          const req = reqs[0]
+          const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
+          const maxQtd = req.qtd_questoes || undefined
+          const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
+          const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
+          filteredQs = (sliced.length > 0 ? sliced : allQuestions).map((q: any) => ({
+            ...q,
+            id_requisicao: req.id,
+            id_disciplina: req.id_disciplina || q.id_disciplina,
+            disciplina_nome: q.disciplina_nome || discName,
+            disciplina: q.disciplina || q.disciplina_nome || discName,
+            id_professor: req.id_professor || q.id_professor,
+            professor_nome: req.professor_nome || q.professor_nome,
+          }))
         }
 
         if (filteredQs.length > 0) {
-          setQuestoes(filteredQs.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })))
+          const finalMapped = filteredQs.map((q: any, i: number) => {
+            let discNome = q.disciplina_nome || q.disciplina || ''
+            let reqFound: any = null
+            if (q.id_requisicao && reqs.length > 0) {
+              reqFound = reqs.find((r: any) => r.id === q.id_requisicao)
+            }
+            if (!reqFound && reqs.length > 0) {
+              reqFound = reqs.find((r: any) => isQuestionForRequisicao(q, r, reqs, false))
+            }
+            if (reqFound) {
+              discNome = discNome || reqFound.disciplina_nome || reqFound.simulados_disciplinas?.nome || ''
+            }
+            return {
+              ...q,
+              expandido: true,
+              numero: i + 1,
+              id_requisicao: q.id_requisicao || reqFound?.id || undefined,
+              id_disciplina: q.id_disciplina || reqFound?.id_disciplina || undefined,
+              disciplina_nome: discNome || q.disciplina_nome || undefined,
+              disciplina: discNome || q.disciplina || undefined,
+              id_professor: q.id_professor || reqFound?.id_professor || undefined,
+              professor_nome: q.professor_nome || reqFound?.professor_nome || undefined,
+            }
+          })
+          setQuestoes(finalMapped)
           setUploadStep('review')
         } else {
           setQuestoes([])
@@ -182,33 +252,40 @@ export default function UploadSimuladoPage() {
 
         // Auto-heal orphaned/unlinked id_requisicao in background so database is permanently accurate
         if (reqs.length > 0) {
-          let hasOrphan = false
-          const healedQs = allQuestions.map((q: any) => {
-            // If already matches a valid req in this simulado, keep it
-            if (q.id_requisicao && reqs.some((r: any) => r.id === q.id_requisicao)) {
-              return q
-            }
-            const matchingReq = reqs.find((r: any) => isQuestionForRequisicao(q, r, reqs, false))
-            if (matchingReq) {
-              hasOrphan = true
-              return {
-                ...q,
-                id_requisicao: matchingReq.id,
-                id_disciplina: matchingReq.id_disciplina || q.id_disciplina,
-                disciplina_nome: matchingReq.disciplina_nome || q.disciplina_nome,
-                id_professor: matchingReq.id_professor || q.id_professor,
-                professor_nome: matchingReq.professor_nome || q.professor_nome
-              }
-            }
-            return q
+          const validReqQuestions = reqs.flatMap((req: any) => {
+            const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
+            const maxQtd = req.qtd_questoes || undefined
+            const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
+            const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
+            return sliced.map((q: any) => ({
+              ...q,
+              id_requisicao: req.id,
+              id_disciplina: req.id_disciplina || q.id_disciplina,
+              disciplina_nome: q.disciplina_nome || discName,
+              disciplina: q.disciplina || q.disciplina_nome || discName,
+              id_professor: req.id_professor || q.id_professor,
+              professor_nome: req.professor_nome || q.professor_nome,
+            }))
           })
 
-          if (hasOrphan) {
-            (supabase as any)
+          const needsHealing = validReqQuestions.length > 0 && (
+            allQuestions.length !== validReqQuestions.length ||
+            allQuestions.some((q: any) => !q.id_requisicao || !q.disciplina_nome) ||
+            simuladoData?.questoes_count !== validReqQuestions.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+          )
+
+          if (needsHealing) {
+            const renumberedHealed = validReqQuestions.map((q: any, idx: number) => ({
+              ...q,
+              numero: idx + 1
+            }))
+            const validCount = renumberedHealed.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+
+            ;(supabase as any)
               .from('simulados_upload')
               .update({
-                questoes_json: healedQs,
-                questoes_count: healedQs.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length,
+                questoes_json: renumberedHealed,
+                questoes_count: validCount,
                 updated_at: new Date().toISOString()
               })
               .eq('id', simuladoId)
@@ -331,26 +408,43 @@ export default function UploadSimuladoPage() {
       const { data: dbData } = await (supabase as any).from('simulados_upload').select('questoes_json, config_estudio').eq('id', simuladoId).single()
       const dbQuestions: any[] = Array.isArray(dbData?.questoes_json) ? dbData.questoes_json : []
 
-      // 2. Filter out ONLY questions belonging to the active requisition
+      const allReqs = (simulado?.simulados_upload_requisicoes && simulado.simulados_upload_requisicoes.length > 0)
+        ? simulado.simulados_upload_requisicoes
+        : []
+
+      // 2. Filter out ONLY questions belonging to other requisitions
       let otherQuestions: any[] = []
       if (!showAll && activeRequisicao) {
+        const otherReqs = allReqs.filter((r: any) => r.id !== activeRequisicao.id)
         otherQuestions = dbQuestions.filter((q: any) => {
-          return !isQuestionForRequisicao(q, activeRequisicao, simulado?.simulados_upload_requisicoes || [], false)
+          if (isQuestionForRequisicao(q, activeRequisicao, allReqs, false)) return false
+          // Only preserve questions that belong to another requisition in this simulado
+          return otherReqs.some((r: any) => isQuestionForRequisicao(q, r, allReqs, false))
         })
       }
 
       // 3. Tag and prepare our active questions
       const myQuestionsToSave = currentQs.map(({ expandido, ...q }) => {
-        const profId = activeRequisicao?.id_professor || targetProfId || (currentUser?.perfil === 'Professor' ? currentUser.id : q.id_professor)
-        const profNome = activeRequisicao?.professor_nome || q.professor_nome || (currentUser?.perfil === 'Professor' ? currentUser.nome : '')
-        const discId = activeRequisicao?.id_disciplina || targetDiscId || q.id_disciplina
-        const discNome = activeRequisicao?.disciplina_nome || q.disciplina_nome || q.disciplina || ''
+        let reqForQ = activeRequisicao
+        if (!reqForQ && allReqs.length > 0) {
+          if (q.id_requisicao) {
+            reqForQ = allReqs.find((r: any) => r.id === q.id_requisicao)
+          }
+          if (!reqForQ) {
+            reqForQ = allReqs.find((r: any) => isQuestionForRequisicao(q, r, allReqs, false))
+          }
+        }
+
+        const profId = reqForQ?.id_professor || targetProfId || (currentUser?.perfil === 'Professor' ? currentUser.id : q.id_professor)
+        const profNome = reqForQ?.professor_nome || q.professor_nome || (currentUser?.perfil === 'Professor' ? currentUser.nome : '')
+        const discId = reqForQ?.id_disciplina || targetDiscId || q.id_disciplina
+        const discNome = reqForQ?.disciplina_nome || reqForQ?.simulados_disciplinas?.nome || q.disciplina_nome || q.disciplina || ''
 
         return {
           ...q,
           id_professor: profId,
           professor_nome: profNome,
-          id_requisicao: activeRequisicao?.id || targetReqId || q.id_requisicao,
+          id_requisicao: reqForQ?.id || targetReqId || q.id_requisicao,
           id_disciplina: discId,
           disciplina_id: discId,
           disciplina_nome: discNome,
@@ -359,7 +453,10 @@ export default function UploadSimuladoPage() {
       })
 
       // 4. Merge preserved other questions with our updated active questions
-      const finalQToSave = showAll ? myQuestionsToSave : [...otherQuestions, ...myQuestionsToSave]
+      const finalQToSave = (showAll ? myQuestionsToSave : [...otherQuestions, ...myQuestionsToSave]).map((q: any, idx: number) => ({
+        ...q,
+        numero: idx + 1
+      }))
 
       // 5. Merge config_estudio with original file list
       let currentConfig = dbData?.config_estudio || simulado?.config_estudio || {}
@@ -780,6 +877,7 @@ export default function UploadSimuladoPage() {
             defaultDisciplinaId={activeRequisicao?.id_disciplina || targetDiscId}
             defaultProfessorId={activeRequisicao?.id_professor || targetProfId || currentUser?.id}
             readOnly={isProfessorViewAll}
+            requisicoes={simulado?.simulados_upload_requisicoes || []}
           />
 
           {!isProfessorViewAll && (
@@ -961,7 +1059,7 @@ export default function UploadSimuladoPage() {
       {/* ─── ISOLATED PREVIEW MODAL ─── */}
       {showPreviewIsolated && (
         <SimuladoPreviewModal
-          questoes={simulado?.questoes_json?.map((q: any, i: number) => ({ ...q, expandido: true, numero: i + 1 })) || []}
+          questoes={questoes}
           setQuestoes={setQuestoes}
           simulado={{ 
             ...simulado, 

@@ -572,6 +572,7 @@ export default function UploadRedaçãoPage() {
             setQuestoes={setQuestoes} 
             defaultDisciplinaId={redacao?.redacao_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina}
             defaultProfessorId={currentUser?.id}
+            requisicoes={redacao?.redacao_upload_requisicoes || []}
           />
 
           {/* Bottom Save */}

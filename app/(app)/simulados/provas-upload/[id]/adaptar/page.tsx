@@ -437,6 +437,7 @@ export default function UploadProvaPage() {
             defaultDisciplinaId={prova?.provas_upload_requisicoes?.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina}
             defaultProfessorId={currentUser?.id}
             readOnly={isProfessorViewAll}
+            requisicoes={prova?.provas_upload_requisicoes || []}
           />
 
           {!isProfessorViewAll && (

@@ -242,6 +242,7 @@ export default function VerRedaçãoUploadPage() {
                 setQuestoes={setQuestoes} 
                 defaultDisciplinaId={!isCoord ? requisicoes.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina : undefined}
                 defaultProfessorId={!isCoord ? currentUser?.id : undefined}
+                requisicoes={requisicoes}
               />
               
               {isCoord && (

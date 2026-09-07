@@ -55,7 +55,35 @@ export default function VerProvaUploadPage() {
       if (cfg) setSimConfig(cfg)
 
       if (data?.questoes_json) {
-        setQuestoes(data.questoes_json)
+        const rawList = Array.isArray(data.questoes_json) ? data.questoes_json : []
+        let enriched: any[] = []
+        if (reqs && reqs.length > 0) {
+          enriched = reqs.flatMap((req: any) => {
+            const matching = rawList.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
+            const maxQtd = req.qtd_questoes || undefined
+            const sliced = maxQtd ? matching.slice(0, maxQtd) : matching
+            const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
+            return sliced.map((q: any) => ({
+              ...q,
+              id_requisicao: req.id,
+              id_disciplina: req.id_disciplina || q.id_disciplina,
+              disciplina_nome: q.disciplina_nome || discName,
+              disciplina: q.disciplina || q.disciplina_nome || discName,
+              id_professor: req.id_professor || q.id_professor,
+              professor_nome: req.professor_nome || q.professor_nome,
+            }))
+          })
+          if (enriched.length === 0) {
+            enriched = rawList
+          }
+        } else {
+          enriched = rawList
+        }
+
+        setQuestoes(enriched.map((q: any, i: number) => ({
+          ...q,
+          numero: i + 1,
+        })))
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
@@ -75,8 +103,11 @@ export default function VerProvaUploadPage() {
   const handleSaveQuestoes = async (updatedQuestoes?: any[], config_estudio?: any) => {
     setSaving(true)
     try {
+      const toSave = updatedQuestoes || questoes
+      const validCount = toSave.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
       let updatePayload: any = {
-        questoes_json: updatedQuestoes || questoes,
+        questoes_json: toSave,
+        questoes_count: validCount,
         updated_at: new Date().toISOString()
       }
       if (config_estudio) {
@@ -84,9 +115,12 @@ export default function VerProvaUploadPage() {
       }
       const { error } = await (supabase as any).from('simulados_upload').update(updatePayload).eq('id', provaId)
       if (error) throw error
-      if (config_estudio) {
-        setProva((prev: any) => ({ ...prev, config_estudio }))
-      }
+      setProva((prev: any) => ({
+        ...prev,
+        questoes_json: toSave,
+        questoes_count: validCount,
+        ...(config_estudio ? { config_estudio } : {})
+      }))
       setSuccessMessage('Alterações salvas com sucesso!')
       setSuccessModal(true)
       setShowPreview(false)
@@ -246,6 +280,7 @@ export default function VerProvaUploadPage() {
                 setQuestoes={setQuestoes} 
                 defaultDisciplinaId={!isCoord ? requisicoes.find((r: any) => r.id_professor === currentUser?.id)?.id_disciplina : undefined}
                 defaultProfessorId={!isCoord ? currentUser?.id : undefined}
+                requisicoes={requisicoes}
               />
               
               {isCoord && (
