@@ -992,7 +992,7 @@ export function PaginationEngine({
                             }}>
                               {a.letra}
                             </div>
-                            <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                            <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
                               {a.imagem_url && <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
                               {(() => {
                                 const altParts = parseEnunciadoParts(a.texto || '', []);
@@ -1050,10 +1050,10 @@ export function PaginationEngine({
                           }}>
                             {a.letra}
                           </div>
-                          <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
+                          <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
                             {a.imagem_url && (
                               <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
-                                <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : '100%', maxWidth: '100%' }}>
+                                <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
                                   <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                 </div>
                               </div>

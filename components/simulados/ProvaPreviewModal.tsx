@@ -978,11 +978,20 @@ export function ProvaPreviewModal({ questoes, setQuestoes, prova, config, onClos
               }))
             }}
             onEditAlternativaImage={isReadOnly ? () => {} : (qId, aId, url) => {
-              const aIdx = parseInt(aId.replace('alt-preview-', ''))
+              let aIdx = -1
+              if (typeof aId === 'string' && aId.startsWith('alt-preview-')) {
+                aIdx = parseInt(aId.replace('alt-preview-', ''))
+              }
               setLocalQuestoes(prev => prev.map(q => {
                 if ((q._internalId || q.id) !== qId) return q
-                const newAlts = [...q.alternativas]
-                newAlts[aIdx] = { ...newAlts[aIdx], imagem_url: url } as any // Need to store it somewhere in our preview model
+                const newAlts = [...(q.alternativas || [])]
+                let targetIdx = aIdx
+                if (targetIdx === -1 || isNaN(targetIdx)) {
+                  targetIdx = newAlts.findIndex((a: any) => a.id === aId)
+                }
+                if (targetIdx !== -1 && newAlts[targetIdx]) {
+                  newAlts[targetIdx] = { ...newAlts[targetIdx], imagem_url: url } as any
+                }
                 return { ...q, alternativas: newAlts }
               }))
             }}

@@ -596,7 +596,8 @@ export function PageContent({
                                               step="10"
                                               defaultValue={imgWidth || 600}
                                               onMouseDown={(e) => {
-                                                const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                                const inputEl = e.currentTarget;
+                                                const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
                                                 if (menu) {
                                                   const rect = menu.getBoundingClientRect();
                                                   menu.dataset.oldLeft = menu.style.left;
@@ -608,6 +609,47 @@ export function PageContent({
                                                   menu.style.bottom = 'auto';
                                                   menu.style.right = 'auto';
                                                 }
+                                                const handleEnd = () => {
+                                                  window.removeEventListener('mouseup', handleEnd);
+                                                  if (menu) {
+                                                    menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                                    menu.style.left = menu.dataset.oldLeft || '4px';
+                                                    menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                                    menu.style.top = 'auto';
+                                                    menu.style.right = 'auto';
+                                                  }
+                                                  setWidth(parseInt(inputEl.value));
+                                                  forceRepaginate?.();
+                                                };
+                                                window.addEventListener('mouseup', handleEnd);
+                                              }}
+                                              onTouchStart={(e) => {
+                                                const inputEl = e.currentTarget;
+                                                const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                                if (menu) {
+                                                  const rect = menu.getBoundingClientRect();
+                                                  menu.dataset.oldLeft = menu.style.left;
+                                                  menu.dataset.oldBottom = menu.style.bottom;
+                                                  menu.dataset.oldPosition = menu.style.position;
+                                                  menu.style.position = 'fixed';
+                                                  menu.style.left = `${rect.left}px`;
+                                                  menu.style.top = `${rect.top}px`;
+                                                  menu.style.bottom = 'auto';
+                                                  menu.style.right = 'auto';
+                                                }
+                                                const handleEnd = () => {
+                                                  window.removeEventListener('touchend', handleEnd);
+                                                  if (menu) {
+                                                    menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                                    menu.style.left = menu.dataset.oldLeft || '4px';
+                                                    menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                                    menu.style.top = 'auto';
+                                                    menu.style.right = 'auto';
+                                                  }
+                                                  setWidth(parseInt(inputEl.value));
+                                                  forceRepaginate?.();
+                                                };
+                                                window.addEventListener('touchend', handleEnd);
                                               }}
                                               onChange={(e) => {
                                                 const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
@@ -618,41 +660,9 @@ export function PageContent({
                                                   groupEl.style.maxWidth = 'none';
                                                 }
                                               }}
-                                              onMouseUp={(e) => {
+                                              onBlur={(e) => {
                                                 setWidth(parseInt(e.currentTarget.value));
-                                                const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                                if (menu) {
-                                                  menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                                  menu.style.left = menu.dataset.oldLeft || '4px';
-                                                  menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                                  menu.style.top = 'auto';
-                                                  menu.style.right = 'auto';
-                                                }
-                                              }}
-                                              onTouchStart={(e) => {
-                                                const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                                if (menu) {
-                                                  const rect = menu.getBoundingClientRect();
-                                                  menu.dataset.oldLeft = menu.style.left;
-                                                  menu.dataset.oldBottom = menu.style.bottom;
-                                                  menu.dataset.oldPosition = menu.style.position;
-                                                  menu.style.position = 'fixed';
-                                                  menu.style.left = `${rect.left}px`;
-                                                  menu.style.top = `${rect.top}px`;
-                                                  menu.style.bottom = 'auto';
-                                                  menu.style.right = 'auto';
-                                                }
-                                              }}
-                                              onTouchEnd={(e) => {
-                                                setWidth(parseInt(e.currentTarget.value));
-                                                const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                                if (menu) {
-                                                  menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                                  menu.style.left = menu.dataset.oldLeft || '4px';
-                                                  menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                                  menu.style.top = 'auto';
-                                                  menu.style.right = 'auto';
-                                                }
+                                                forceRepaginate?.();
                                               }}
                                               style={{ width: 80, cursor: 'ew-resize' }}
                                             />
@@ -854,87 +864,99 @@ export function PageContent({
                                   }}>
                                     {a.letra}
                                   </div>
-                                  <div style={{ flex: 1, position: 'relative', maxWidth: effectiveWidth ? `${effectiveWidth}px` : '100%' }}>
-                                    {a.imagem_url && (
-                                      <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
-                                        <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : '100%', maxWidth: '100%' }}>
-                                          <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
-                                          {onEditAlternativaImage && !readOnly && (
-                                            <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
-                                              <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
-                                                <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
-                                                <input 
-                                                  type="range" 
-                                                  min="100" 
-                                                  max="800" 
-                                                  step="10"
-                                                  defaultValue={effectiveWidth || 300}
-                                                  onMouseDown={(e) => {
-                                                    const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                                    if (menu) {
-                                                      const rect = menu.getBoundingClientRect();
-                                                      menu.dataset.oldLeft = menu.style.left;
-                                                      menu.dataset.oldBottom = menu.style.bottom;
-                                                      menu.dataset.oldPosition = menu.style.position;
-                                                      menu.style.position = 'fixed';
-                                                      menu.style.left = `${rect.left}px`;
-                                                      menu.style.top = `${rect.top}px`;
-                                                      menu.style.bottom = 'auto';
-                                                      menu.style.right = 'auto';
-                                                    }
-                                                  }}
-                                                  onChange={(e) => {
-                                                    const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
-                                                    if (groupEl) {
-                                                      groupEl.style.width = 'auto';
-                                                      groupEl.style.flex = '0 0 auto';
-                                                    }
-                                                    const wrapperEl = e.currentTarget.closest('.alt-hover-group > div:nth-child(2) > div > div') as HTMLElement;
-                                                    if (wrapperEl) {
-                                                      wrapperEl.style.width = `${e.currentTarget.value}px`;
-                                                    }
-                                                  }}
-                                                  onMouseUp={(e) => {
-                                                    setAltWidth(parseInt(e.currentTarget.value));
-                                                    onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${e.currentTarget.value}`);
-                                                    const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                                    if (menu) {
-                                                      menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                                      menu.style.left = menu.dataset.oldLeft || '4px';
-                                                      menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                                      menu.style.top = 'auto';
-                                                      menu.style.right = 'auto';
-                                                    }
-                                                  }}
-                                                  onTouchStart={(e) => {
-                                                    const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                                    if (menu) {
-                                                      const rect = menu.getBoundingClientRect();
-                                                      menu.dataset.oldLeft = menu.style.left;
-                                                      menu.dataset.oldBottom = menu.style.bottom;
-                                                      menu.dataset.oldPosition = menu.style.position;
-                                                      menu.style.position = 'fixed';
-                                                      menu.style.left = `${rect.left}px`;
-                                                      menu.style.top = `${rect.top}px`;
-                                                      menu.style.bottom = 'auto';
-                                                      menu.style.right = 'auto';
-                                                    }
-                                                  }}
-                                                  onTouchEnd={(e) => {
-                                                    setAltWidth(parseInt(e.currentTarget.value));
-                                                    onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${e.currentTarget.value}`);
-                                                    const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                                    if (menu) {
-                                                      menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                                      menu.style.left = menu.dataset.oldLeft || '4px';
-                                                      menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                                      menu.style.top = 'auto';
-                                                      menu.style.right = 'auto';
-                                                    }
-                                                  }}
-                                                  style={{ width: 80, cursor: 'ew-resize' }}
-                                                />
-                                              </div>
+                                   <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+                                     {a.imagem_url && (
+                                       <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
+                                         <div className="alt-img-wrapper" style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
+                                           <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                                           {onEditAlternativaImage && !readOnly && (
+                                             <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
+                                               <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
+                                                 <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
+                                                 <input 
+                                                   type="range" 
+                                                   min="50" 
+                                                   max="800" 
+                                                   step="5"
+                                                   defaultValue={effectiveWidth || 250}
+                                                   onMouseDown={(e) => {
+                                                     const inputEl = e.currentTarget;
+                                                     const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                                     if (menu) {
+                                                       const rect = menu.getBoundingClientRect();
+                                                       menu.dataset.oldLeft = menu.style.left;
+                                                       menu.dataset.oldBottom = menu.style.bottom;
+                                                       menu.dataset.oldPosition = menu.style.position;
+                                                       menu.style.position = 'fixed';
+                                                       menu.style.left = `${rect.left}px`;
+                                                       menu.style.top = `${rect.top}px`;
+                                                       menu.style.bottom = 'auto';
+                                                       menu.style.right = 'auto';
+                                                     }
+                                                     const handleEnd = () => {
+                                                       window.removeEventListener('mouseup', handleEnd);
+                                                       if (menu) {
+                                                         menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                                         menu.style.left = menu.dataset.oldLeft || '4px';
+                                                         menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                                         menu.style.top = 'auto';
+                                                         menu.style.right = 'auto';
+                                                       }
+                                                       const finalVal = parseInt(inputEl.value);
+                                                       setAltWidth(finalVal);
+                                                       forceRepaginate?.();
+                                                     };
+                                                     window.addEventListener('mouseup', handleEnd);
+                                                   }}
+                                                   onTouchStart={(e) => {
+                                                     const inputEl = e.currentTarget;
+                                                     const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                                     if (menu) {
+                                                       const rect = menu.getBoundingClientRect();
+                                                       menu.dataset.oldLeft = menu.style.left;
+                                                       menu.dataset.oldBottom = menu.style.bottom;
+                                                       menu.dataset.oldPosition = menu.style.position;
+                                                       menu.style.position = 'fixed';
+                                                       menu.style.left = `${rect.left}px`;
+                                                       menu.style.top = `${rect.top}px`;
+                                                       menu.style.bottom = 'auto';
+                                                       menu.style.right = 'auto';
+                                                     }
+                                                     const handleEnd = () => {
+                                                       window.removeEventListener('touchend', handleEnd);
+                                                       if (menu) {
+                                                         menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                                         menu.style.left = menu.dataset.oldLeft || '4px';
+                                                         menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                                         menu.style.top = 'auto';
+                                                         menu.style.right = 'auto';
+                                                       }
+                                                       const finalVal = parseInt(inputEl.value);
+                                                       setAltWidth(finalVal);
+                                                       forceRepaginate?.();
+                                                     };
+                                                     window.addEventListener('touchend', handleEnd);
+                                                   }}
+                                                   onChange={(e) => {
+                                                     const val = e.currentTarget.value;
+                                                     const wrapperEl = e.currentTarget.closest('.alt-img-wrapper') as HTMLElement;
+                                                     if (wrapperEl) {
+                                                       wrapperEl.style.width = `${val}px`;
+                                                       wrapperEl.style.maxWidth = 'none';
+                                                       const imgEl = wrapperEl.querySelector('img') as HTMLElement;
+                                                       if (imgEl) {
+                                                         imgEl.style.width = '100%';
+                                                         imgEl.style.maxWidth = 'none';
+                                                       }
+                                                     }
+                                                   }}
+                                                   onBlur={(e) => {
+                                                     setAltWidth(parseInt(e.currentTarget.value));
+                                                     forceRepaginate?.();
+                                                   }}
+                                                   style={{ width: 80, cursor: 'ew-resize' }}
+                                                 />
+                                               </div>
                                               <button
                                                 onClick={() => onEditAlternativaImage(q.id, a.id, '')}
                                                 style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
@@ -1425,7 +1447,8 @@ export function PageContent({
                                       step="10"
                                       defaultValue={imgWidth || 350}
                                       onMouseDown={(e) => {
-                                        const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                        const inputEl = e.currentTarget;
+                                        const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
                                         if (menu) {
                                           const rect = menu.getBoundingClientRect();
                                           menu.dataset.oldLeft = menu.style.left;
@@ -1437,6 +1460,47 @@ export function PageContent({
                                           menu.style.bottom = 'auto';
                                           menu.style.right = 'auto';
                                         }
+                                        const handleEnd = () => {
+                                          window.removeEventListener('mouseup', handleEnd);
+                                          if (menu) {
+                                            menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                            menu.style.left = menu.dataset.oldLeft || '4px';
+                                            menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                            menu.style.top = 'auto';
+                                            menu.style.right = 'auto';
+                                          }
+                                          setWidth(parseInt(inputEl.value));
+                                          forceRepaginate?.();
+                                        };
+                                        window.addEventListener('mouseup', handleEnd);
+                                      }}
+                                      onTouchStart={(e) => {
+                                        const inputEl = e.currentTarget;
+                                        const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                        if (menu) {
+                                          const rect = menu.getBoundingClientRect();
+                                          menu.dataset.oldLeft = menu.style.left;
+                                          menu.dataset.oldBottom = menu.style.bottom;
+                                          menu.dataset.oldPosition = menu.style.position;
+                                          menu.style.position = 'fixed';
+                                          menu.style.left = `${rect.left}px`;
+                                          menu.style.top = `${rect.top}px`;
+                                          menu.style.bottom = 'auto';
+                                          menu.style.right = 'auto';
+                                        }
+                                        const handleEnd = () => {
+                                          window.removeEventListener('touchend', handleEnd);
+                                          if (menu) {
+                                            menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                            menu.style.left = menu.dataset.oldLeft || '4px';
+                                            menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                            menu.style.top = 'auto';
+                                            menu.style.right = 'auto';
+                                          }
+                                          setWidth(parseInt(inputEl.value));
+                                          forceRepaginate?.();
+                                        };
+                                        window.addEventListener('touchend', handleEnd);
                                       }}
                                       onChange={(e) => {
                                         const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
@@ -1447,41 +1511,9 @@ export function PageContent({
                                           groupEl.style.maxWidth = 'none';
                                         }
                                       }}
-                                      onMouseUp={(e) => {
+                                      onBlur={(e) => {
                                         setWidth(parseInt(e.currentTarget.value));
-                                        const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                        if (menu) {
-                                          menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                          menu.style.left = menu.dataset.oldLeft || '4px';
-                                          menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                          menu.style.top = 'auto';
-                                          menu.style.right = 'auto';
-                                        }
-                                      }}
-                                      onTouchStart={(e) => {
-                                        const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                        if (menu) {
-                                          const rect = menu.getBoundingClientRect();
-                                          menu.dataset.oldLeft = menu.style.left;
-                                          menu.dataset.oldBottom = menu.style.bottom;
-                                          menu.dataset.oldPosition = menu.style.position;
-                                          menu.style.position = 'fixed';
-                                          menu.style.left = `${rect.left}px`;
-                                          menu.style.top = `${rect.top}px`;
-                                          menu.style.bottom = 'auto';
-                                          menu.style.right = 'auto';
-                                        }
-                                      }}
-                                      onTouchEnd={(e) => {
-                                        setWidth(parseInt(e.currentTarget.value));
-                                        const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                        if (menu) {
-                                          menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                          menu.style.left = menu.dataset.oldLeft || '4px';
-                                          menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                          menu.style.top = 'auto';
-                                          menu.style.right = 'auto';
-                                        }
+                                        forceRepaginate?.();
                                       }}
                                       style={{ width: 80, cursor: 'ew-resize' }}
                                     />
@@ -1582,9 +1614,9 @@ export function PageContent({
                           }}>
                             {a.letra}
                           </div>
-                          <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto' }}>
+                          <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', minWidth: 0 }}>
                             {a.imagem_url && (
-                              <div style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
+                              <div className="alt-img-wrapper" style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
                                 <img src={imgBaseUrl || undefined} style={{ width: '100%', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                 {onEditAlternativaImage && !readOnly && (
                                   <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
@@ -1592,12 +1624,13 @@ export function PageContent({
                                       <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
                                       <input 
                                         type="range" 
-                                        min="100" 
+                                        min="50" 
                                         max="800" 
-                                        step="10"
-                                        defaultValue={effectiveWidth || 300}
+                                        step="5"
+                                        defaultValue={effectiveWidth || 250}
                                         onMouseDown={(e) => {
-                                          const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                          const inputEl = e.currentTarget;
+                                          const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
                                           if (menu) {
                                             const rect = menu.getBoundingClientRect();
                                             menu.dataset.oldLeft = menu.style.left;
@@ -1609,53 +1642,75 @@ export function PageContent({
                                             menu.style.bottom = 'auto';
                                             menu.style.right = 'auto';
                                           }
+                                          const handleEnd = () => {
+                                            window.removeEventListener('mouseup', handleEnd);
+                                            if (menu) {
+                                              menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                              menu.style.left = menu.dataset.oldLeft || '4px';
+                                              menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                              menu.style.top = 'auto';
+                                              menu.style.right = 'auto';
+                                            }
+                                            const finalVal = parseInt(inputEl.value);
+                                            setWidth(finalVal);
+                                            forceRepaginate?.();
+                                          };
+                                          window.addEventListener('mouseup', handleEnd);
+                                        }}
+                                        onTouchStart={(e) => {
+                                          const inputEl = e.currentTarget;
+                                          const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
+                                          if (menu) {
+                                            const rect = menu.getBoundingClientRect();
+                                            menu.dataset.oldLeft = menu.style.left;
+                                            menu.dataset.oldBottom = menu.style.bottom;
+                                            menu.dataset.oldPosition = menu.style.position;
+                                            menu.style.position = 'fixed';
+                                            menu.style.left = `${rect.left}px`;
+                                            menu.style.top = `${rect.top}px`;
+                                            menu.style.bottom = 'auto';
+                                            menu.style.right = 'auto';
+                                          }
+                                          const handleEnd = () => {
+                                            window.removeEventListener('touchend', handleEnd);
+                                            if (menu) {
+                                              menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                              menu.style.left = menu.dataset.oldLeft || '4px';
+                                              menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                              menu.style.top = 'auto';
+                                              menu.style.right = 'auto';
+                                            }
+                                            const finalVal = parseInt(inputEl.value);
+                                            setWidth(finalVal);
+                                            forceRepaginate?.();
+                                          };
+                                          window.addEventListener('touchend', handleEnd);
                                         }}
                                         onChange={(e) => {
+                                          const val = e.currentTarget.value;
                                           const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
                                           if (groupEl) {
                                             groupEl.style.width = 'auto';
                                             groupEl.style.flex = '0 0 auto';
                                           }
-                                          const wrapperEl = e.currentTarget.closest('.alt-hover-group > div:nth-child(2)') as HTMLElement;
+                                          const contentCol = e.currentTarget.closest('.alt-hover-group')?.querySelector('div:nth-child(2)') as HTMLElement;
+                                          if (contentCol) {
+                                            contentCol.style.width = `${val}px`;
+                                          }
+                                          const wrapperEl = e.currentTarget.closest('.alt-img-wrapper') as HTMLElement;
                                           if (wrapperEl) {
-                                            wrapperEl.style.width = `${e.currentTarget.value}px`;
+                                            wrapperEl.style.width = `${val}px`;
+                                            wrapperEl.style.maxWidth = 'none';
+                                            const imgEl = wrapperEl.querySelector('img') as HTMLElement;
+                                            if (imgEl) {
+                                              imgEl.style.width = '100%';
+                                              imgEl.style.maxWidth = 'none';
+                                            }
                                           }
                                         }}
-                                        onMouseUp={(e) => {
+                                        onBlur={(e) => {
                                           setWidth(parseInt(e.currentTarget.value));
-                                          const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                          if (menu) {
-                                            menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                            menu.style.left = menu.dataset.oldLeft || '4px';
-                                            menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                            menu.style.top = 'auto';
-                                            menu.style.right = 'auto';
-                                          }
-                                        }}
-                                        onTouchStart={(e) => {
-                                          const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                          if (menu) {
-                                            const rect = menu.getBoundingClientRect();
-                                            menu.dataset.oldLeft = menu.style.left;
-                                            menu.dataset.oldBottom = menu.style.bottom;
-                                            menu.dataset.oldPosition = menu.style.position;
-                                            menu.style.position = 'fixed';
-                                            menu.style.left = `${rect.left}px`;
-                                            menu.style.top = `${rect.top}px`;
-                                            menu.style.bottom = 'auto';
-                                            menu.style.right = 'auto';
-                                          }
-                                        }}
-                                        onTouchEnd={(e) => {
-                                          setWidth(parseInt(e.currentTarget.value));
-                                          const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                          if (menu) {
-                                            menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                            menu.style.left = menu.dataset.oldLeft || '4px';
-                                            menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                            menu.style.top = 'auto';
-                                            menu.style.right = 'auto';
-                                          }
+                                          forceRepaginate?.();
                                         }}
                                         style={{ width: 80, cursor: 'ew-resize' }}
                                       />
@@ -1851,23 +1906,30 @@ export function PageContent({
                           const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
                           const effectiveWidth = imgWidth || maxImgWidth;
 
+                          const setAltWidth = (w: number) => {
+                            const p = new URLSearchParams(hashStr);
+                            p.set('w', w.toString());
+                            onEditAlternativaImage?.(q.id, a.id, `${imgBaseUrl}#${p.toString()}`);
+                          };
+
                           return (
-                            <div style={{ width: effectiveWidth ? `${effectiveWidth}px` : 'auto' }}>
+                            <div style={{ width: '100%', minWidth: 0 }}>
                               {a.imagem_url && (
-                                <div style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
-                                  <img src={imgBaseUrl || undefined} style={{ width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                                <div className="alt-img-wrapper" style={{ position: 'relative', marginBottom: 8, width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
+                                  <img src={imgBaseUrl || undefined} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
                                   {onEditAlternativaImage && !readOnly && (
                                     <div className="no-print alt-img-actions" style={{ position: 'absolute', bottom: 4, left: 4, display: 'flex', gap: 4, zIndex: 10, flexWrap: 'wrap', maxWidth: 280, justifyContent: 'flex-start' }}>
                                       <div style={{ display: 'flex', background: 'rgba(255,255,255,0.95)', borderRadius: 20, padding: '2px 8px', gap: 8, boxShadow: '0 2px 4px rgba(0,0,0,0.1)', alignItems: 'center' }}>
                                         <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>TAMANHO</span>
                                         <input 
                                           type="range" 
-                                          min="100" 
+                                          min="50" 
                                           max="800" 
-                                          step="10"
-                                          defaultValue={effectiveWidth || 300}
+                                          step="5"
+                                          defaultValue={effectiveWidth || 250}
                                           onMouseDown={(e) => {
-                                            const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                            const inputEl = e.currentTarget;
+                                            const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
                                             if (menu) {
                                               const rect = menu.getBoundingClientRect();
                                               menu.dataset.oldLeft = menu.style.left;
@@ -1879,31 +1941,24 @@ export function PageContent({
                                               menu.style.bottom = 'auto';
                                               menu.style.right = 'auto';
                                             }
-                                          }}
-                                          onChange={(e) => {
-                                            const groupEl = e.currentTarget.closest('.alt-hover-group') as HTMLElement;
-                                            if (groupEl) {
-                                              groupEl.style.width = 'auto';
-                                              groupEl.style.flex = '0 0 auto';
-                                            }
-                                            const wrapperEl = e.currentTarget.closest('.alt-hover-group > div:nth-child(2) > div > div') as HTMLElement;
-                                            if (wrapperEl) {
-                                              wrapperEl.style.width = `${e.currentTarget.value}px`;
-                                            }
-                                          }}
-                                          onMouseUp={(e) => {
-                                            onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${e.currentTarget.value}`);
-                                            const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                            if (menu) {
-                                              menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                              menu.style.left = menu.dataset.oldLeft || '4px';
-                                              menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                              menu.style.top = 'auto';
-                                              menu.style.right = 'auto';
-                                            }
+                                            const handleEnd = () => {
+                                              window.removeEventListener('mouseup', handleEnd);
+                                              if (menu) {
+                                                menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                                menu.style.left = menu.dataset.oldLeft || '4px';
+                                                menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                                menu.style.top = 'auto';
+                                                menu.style.right = 'auto';
+                                              }
+                                              const finalVal = parseInt(inputEl.value);
+                                              setAltWidth(finalVal);
+                                              forceRepaginate?.();
+                                            };
+                                            window.addEventListener('mouseup', handleEnd);
                                           }}
                                           onTouchStart={(e) => {
-                                            const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
+                                            const inputEl = e.currentTarget;
+                                            const menu = inputEl.closest('.alt-img-actions') as HTMLElement;
                                             if (menu) {
                                               const rect = menu.getBoundingClientRect();
                                               menu.dataset.oldLeft = menu.style.left;
@@ -1915,17 +1970,37 @@ export function PageContent({
                                               menu.style.bottom = 'auto';
                                               menu.style.right = 'auto';
                                             }
+                                            const handleEnd = () => {
+                                              window.removeEventListener('touchend', handleEnd);
+                                              if (menu) {
+                                                menu.style.position = menu.dataset.oldPosition || 'absolute';
+                                                menu.style.left = menu.dataset.oldLeft || '4px';
+                                                menu.style.bottom = menu.dataset.oldBottom || '4px';
+                                                menu.style.top = 'auto';
+                                                menu.style.right = 'auto';
+                                              }
+                                              const finalVal = parseInt(inputEl.value);
+                                              setAltWidth(finalVal);
+                                              forceRepaginate?.();
+                                            };
+                                            window.addEventListener('touchend', handleEnd);
                                           }}
-                                          onTouchEnd={(e) => {
-                                            onEditAlternativaImage(q.id, a.id, `${imgBaseUrl}#w=${e.currentTarget.value}`);
-                                            const menu = e.currentTarget.closest('.alt-img-actions') as HTMLElement;
-                                            if (menu) {
-                                              menu.style.position = menu.dataset.oldPosition || 'absolute';
-                                              menu.style.left = menu.dataset.oldLeft || '4px';
-                                              menu.style.bottom = menu.dataset.oldBottom || '4px';
-                                              menu.style.top = 'auto';
-                                              menu.style.right = 'auto';
+                                          onChange={(e) => {
+                                            const val = e.currentTarget.value;
+                                            const wrapperEl = e.currentTarget.closest('.alt-img-wrapper') as HTMLElement;
+                                            if (wrapperEl) {
+                                              wrapperEl.style.width = `${val}px`;
+                                              wrapperEl.style.maxWidth = 'none';
+                                              const imgEl = wrapperEl.querySelector('img') as HTMLElement;
+                                              if (imgEl) {
+                                                imgEl.style.width = '100%';
+                                                imgEl.style.maxWidth = 'none';
+                                              }
                                             }
+                                          }}
+                                          onBlur={(e) => {
+                                            setAltWidth(parseInt(e.currentTarget.value));
+                                            forceRepaginate?.();
                                           }}
                                           style={{ width: 80, cursor: 'ew-resize' }}
                                         />
