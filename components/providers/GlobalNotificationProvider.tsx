@@ -117,6 +117,21 @@ export function GlobalNotificationProvider() {
     currentUserRef.current = currentUser
   }, [currentUser])
 
+  // Limpa rota pendente apenas quando o usuário efetivamente entra na tela de destino
+  useEffect(() => {
+    if (pathname && (pathname.startsWith('/agenda-digital/') || pathname.includes('/comunicados') || pathname.includes('/momentos') || pathname.includes('/calendario'))) {
+      if (typeof window !== 'undefined') {
+        delete (window as any).__EDU_PENDING_PUSH_ROUTE__
+      }
+      try {
+        localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+        if (Capacitor.isNativePlatform()) {
+          Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
+        }
+      } catch {}
+    }
+  }, [pathname])
+
   // Função central para executar ou salvar a navegação de push
   const handlePushClick = (data: any) => {
     console.log('[GlobalPush] Notificação clicada com dados:', data)
@@ -128,14 +143,12 @@ export function GlobalNotificationProvider() {
 
     console.log(`[GlobalPush] Destino resolvido → ${destination}`)
 
-    // Se houver item_id de comunicado, dispara evento personalizado
-    if (data.item_id && (data.type === 'comunicados' || data.type === 'comunicado' || data.rota === 'comunicados')) {
-      try {
-        window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: String(data.item_id) } }))
-      } catch {}
+    // 1. Armazenar em memória global síncrona
+    if (typeof window !== 'undefined') {
+      (window as any).__EDU_PENDING_PUSH_ROUTE__ = destination
     }
 
-    // Salvar como rota pendente para resiliência (ex: se o app ainda estiver carregando a rota atual)
+    // 2. Salvar como rota pendente resiliente em localStorage e Preferences
     try {
       localStorage.setItem(PENDING_PUSH_ROUTE_KEY, destination)
       if (Capacitor.isNativePlatform()) {
@@ -143,22 +156,25 @@ export function GlobalNotificationProvider() {
       }
     } catch {}
 
+    // 3. Notificar qualquer listener ativo na janela
+    try {
+      window.dispatchEvent(new CustomEvent('edu:navigate-push', { detail: { destination } }))
+    } catch {}
+
+    // 4. Se houver item_id de comunicado, dispara evento personalizado
+    if (data.item_id && (data.type === 'comunicados' || data.type === 'comunicado' || data.rota === 'comunicados')) {
+      try {
+        window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: String(data.item_id) } }))
+      } catch {}
+    }
+
     const user = currentUserRef.current
     if (user) {
-      // Usuário logado: navega direto!
       console.log(`[GlobalPush] Usuário autenticado. Navegando diretamente para ${destination}`)
-      try {
-        localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
-        if (Capacitor.isNativePlatform()) {
-          Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
-        }
-      } catch {}
-
-      router.push(destination)
+      router.replace(destination)
     } else {
-      // Usuário não logado: direciona para /login preservando redirect
       console.log(`[GlobalPush] Usuário não logado. Redirecionando para login com redirect pendente.`)
-      router.push(`/login?redirect=${encodeURIComponent(destination)}`)
+      router.replace(`/login?redirect=${encodeURIComponent(destination)}`)
     }
   }
 
@@ -195,9 +211,14 @@ export function GlobalNotificationProvider() {
 
               // Listener global de clique na notificação
               OneSignalNative.Notifications.addEventListener('click', (event: any) => {
+                const notif = event?.notification || {}
+                const addData = notif.additionalData || {}
+                const launchURL = notif.launchURL || event?.result?.url
                 const data = {
-                  ...(event?.notification?.additionalData || {}),
-                  launchURL: event?.notification?.launchURL || event?.result?.url,
+                  ...addData,
+                  launchURL,
+                  url: addData.url || addData.targetUrl || launchURL,
+                  targetUrl: addData.targetUrl || addData.url || launchURL,
                 }
                 handlePushClick(data)
               })

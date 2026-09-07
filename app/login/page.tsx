@@ -86,16 +86,37 @@ export default function LoginPage() {
   }, [step, pendingAuth])
 
   useEffect(() => {
-    if (step === 'choose_system' && typeof window !== 'undefined') {
-      const p = new URLSearchParams(window.location.search).get('redirect') || localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
-      if (p) {
-        localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
-        if (Capacitor.isNativePlatform()) {
-          Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
-        }
-        console.log('[Login] Encaminhando automaticamente da escolha de módulos para rota de push:', p)
-        router.replace(p)
+    const handlePushEvent = (e: any) => {
+      const dest = e?.detail?.destination
+      if (dest) {
+        console.log('[Login] Evento edu:navigate-push recebido no login:', dest)
+        router.replace(dest)
       }
+    }
+    window.addEventListener('edu:navigate-push', handlePushEvent)
+
+    if (step === 'choose_system' && typeof window !== 'undefined') {
+      const checkAndForward = async () => {
+        let p = (window as any).__EDU_PENDING_PUSH_ROUTE__ ||
+          new URLSearchParams(window.location.search).get('redirect') ||
+          localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
+
+        if (!p && Capacitor.isNativePlatform()) {
+          try {
+            const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
+            p = value
+          } catch {}
+        }
+        if (p) {
+          console.log('[Login] Encaminhando automaticamente da escolha de módulos para rota de push:', p)
+          router.replace(p)
+        }
+      }
+      checkAndForward()
+    }
+
+    return () => {
+      window.removeEventListener('edu:navigate-push', handlePushEvent)
     }
   }, [step, router])
   const [hasDualRole, setHasDualRole] = useState(false)
@@ -264,15 +285,19 @@ export default function LoginPage() {
             const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
             
             // Se houver redirect pendente (ex: notificação clicada), redireciona direto sem parar na escolha de módulos
-            const pendingRoute = params.get('redirect') || (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
+            let pendingRoute = (typeof window !== 'undefined' ? (window as any).__EDU_PENDING_PUSH_ROUTE__ : null) ||
+              params.get('redirect') ||
+              (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
+
+            if (!pendingRoute && Capacitor.isNativePlatform()) {
+              try {
+                const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
+                pendingRoute = value
+              } catch {}
+            }
+
             if (pendingRoute) {
               console.log('[Login] Usuário já logado e notificação pendente detectada:', pendingRoute)
-              try {
-                localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
-                if (Capacitor.isNativePlatform()) {
-                  Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
-                }
-              } catch {}
               router.replace(pendingRoute)
               return
             }

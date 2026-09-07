@@ -18,30 +18,30 @@ export default function Root() {
     if (!hydrated) return
 
     const checkPendingPushAndRoute = async () => {
-      // Se estiver em ambiente nativo, concede uma pequena janela (180ms)
-      // para o OneSignal descarregar a fila de clique de notificação (cold start)
-      if (Capacitor.isNativePlatform()) {
-        await new Promise(r => setTimeout(r, 180))
-      }
+      // Se estiver em ambiente nativo, concede janela de espera ativa (até 500ms)
+      // para o OneSignal descarregar o clique de notificação em cold start
+      let pendingPushRoute = typeof window !== 'undefined'
+        ? ((window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY))
+        : null
 
-      let pendingPushRoute = typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null
       if (!pendingPushRoute && Capacitor.isNativePlatform()) {
-        try {
-          const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
-          pendingPushRoute = value
-        } catch {}
+        for (let i = 0; i < 5; i++) {
+          await new Promise(r => setTimeout(r, 100))
+          pendingPushRoute = (window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
+          if (pendingPushRoute) break
+          try {
+            const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
+            if (value) {
+              pendingPushRoute = value
+              break
+            }
+          } catch {}
+        }
       }
 
       // Se houver notificação pendente que o usuário clicou:
       if (pendingPushRoute) {
         console.log('[Root] Notificação pendente detectada:', pendingPushRoute)
-        try {
-          localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
-          if (Capacitor.isNativePlatform()) {
-            await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
-          }
-        } catch {}
-
         if (currentUser) {
           console.log('[Root] Usuário autenticado. Redirecionando direto para o item da notificação:', pendingPushRoute)
           router.replace(pendingPushRoute)

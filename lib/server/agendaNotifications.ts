@@ -110,7 +110,7 @@ function _createSupabaseService() {
  * Constrói URL completa e segura usando URLSearchParams para evitar duplicatas de parâmetros.
  */
 function _buildTargetUrl(targetUrl: string, itemId: string): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu-app.vercel.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://resilient-cuchufli-2b4125.netlify.app'
   const base = targetUrl.startsWith('http') ? targetUrl : `${appUrl}${targetUrl}`
 
   if (!itemId) return base
