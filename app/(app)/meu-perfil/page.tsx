@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, usePathname } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import {
   User, Mail, Shield, Lock, Eye, EyeOff, Check, X,
@@ -71,9 +71,12 @@ function PasswordStrength({ pw }: { pw: string }) {
   )
 }
 
-export default function MeuPerfilPage() {
+export default function MeuPerfilPage(props?: any) {
   const { currentUser, currentUserPerfil, setCurrentUser } = useApp()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
+
+  const isColaboradorProfile = props?.hideAccountInfo || pathname?.includes('/agenda-digital/colaborador')
 
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const isMirroring = !!espelharColabId
@@ -402,24 +405,26 @@ export default function MeuPerfilPage() {
           </div>
 
           {/* Info rápida */}
-          <div className="card" style={{ padding: '16px 20px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 12, letterSpacing: '0.06em' }}>INFORMAÇÕES DA CONTA</div>
-            {[
-              { icon: <Mail size={13} />,      label: 'E-mail',        value: displayEmail },
-              { icon: <BadgeCheck size={13} />, label: 'Perfil',        value: displayPerfil },
-              { icon: <Building2 size={13} />, label: 'Unidade',       value: extra.unidade || '—' },
-              { icon: <Phone size={13} />,     label: 'Telefone',      value: extra.telefone || '—' },
-              { icon: <Clock size={13} />,     label: 'Último acesso', value: 'Agora' },
-            ].map(item => (
-              <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                <div style={{ color: 'hsl(var(--text-muted))', marginTop: 1, flexShrink: 0 }}>{item.icon}</div>
-                <div>
-                  <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{item.label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 600, wordBreak: 'break-all' }}>{item.value}</div>
+          {!isColaboradorProfile && (
+            <div className="card" style={{ padding: '16px 20px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 12, letterSpacing: '0.06em' }}>INFORMAÇÕES DA CONTA</div>
+              {[
+                { icon: <Mail size={13} />,      label: 'E-mail',        value: displayEmail },
+                { icon: <BadgeCheck size={13} />, label: 'Perfil',        value: displayPerfil },
+                { icon: <Building2 size={13} />, label: 'Unidade',       value: extra.unidade || '—' },
+                { icon: <Phone size={13} />,     label: 'Telefone',      value: extra.telefone || '—' },
+                { icon: <Clock size={13} />,     label: 'Último acesso', value: 'Agora' },
+              ].map(item => (
+                <div key={item.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, paddingBottom: 10, marginBottom: 10, borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                  <div style={{ color: 'hsl(var(--text-muted))', marginTop: 1, flexShrink: 0 }}>{item.icon}</div>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>{item.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, wordBreak: 'break-all' }}>{item.value}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── CONTEÚDO PRINCIPAL ── */}

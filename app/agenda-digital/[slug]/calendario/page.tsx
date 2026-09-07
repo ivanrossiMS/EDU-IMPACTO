@@ -439,53 +439,147 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   }
 
   return (
-    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 100, fontFamily: 'Outfit, sans-serif' }}>
+    <div className="ad-admin-page-container ad-mobile-optimized ad-calendar-mobile-container" style={{ minHeight: '100vh', paddingBottom: 130, fontFamily: 'Outfit, sans-serif' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @media (max-width: 992px) {
           .ad-calendar-main-grid { grid-template-columns: 1fr !important; }
         }
+        @media (max-width: 640px) {
+          .ad-calendar-header-main {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
+          }
+          .ad-calendar-date-card {
+            width: 72px !important;
+            min-width: 72px !important;
+            padding: 12px 4px !important;
+          }
+          .ad-calendar-event-card {
+            padding: 14px 16px !important;
+          }
+          .ad-calendar-day-num {
+            font-size: 24px !important;
+          }
+        }
       `}} />
 
       {/* Standard Header */}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div>
-          <h1 className="page-title" style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 900, fontSize: 28, color: '#1e293b', margin: 0 }}>Calendário Escolar</h1>
-          <p className="page-subtitle" style={{ color: '#64748b', fontSize: 13, margin: '4px 0 0 0' }}>{meventosNoMes.length} evento(s) no mês • {year}</p>
-        </div>
-        <div className="ad-calendar-badge" style={{ padding: '8px 16px', background: 'rgba(99,102,241,0.1)', color: '#6366f1', borderRadius: 20, fontSize: 13, fontWeight: 800, border: '1px solid rgba(99,102,241,0.15)' }}>
-          Turma: {turmaDoAluno}
+      <div className="ad-calendar-header" style={{ marginBottom: 20 }}>
+        <div className="ad-calendar-header-main" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+          <div>
+            <h1 className="page-title" style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 800, fontSize: 'clamp(22px, 3.5vw, 28px)', color: '#0f172a', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+              Calendário Escolar
+            </h1>
+            <p className="page-subtitle" style={{ color: '#64748b', fontSize: 13, fontWeight: 500, margin: '4px 0 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', display: 'inline-block' }} />
+              <span>{meventosNoMes.length} evento(s) no mês • {year}</span>
+            </p>
+          </div>
+          <div className="ad-calendar-badge" style={{ padding: '8px 16px', background: 'rgba(99,102,241,0.08)', color: '#4f46e5', borderRadius: 16, fontSize: 13, fontWeight: 700, border: '1px solid rgba(99,102,241,0.15)' }}>
+            Turma: {turmaDoAluno}
+          </div>
         </div>
       </div>
 
-      {/* 📅 FILTRO DO MÊS ALINHADO À ESQUERDA */}
+      {/* 📅 BARRA DO MÊS CENTRALIZADA */}
       <div style={{
         background: '#fff',
         borderRadius: 20,
-        padding: '12px 20px',
-        marginBottom: 24,
-        boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+        padding: '10px 16px',
+        marginBottom: 20,
+        boxShadow: '0 2px 12px rgba(15, 23, 42, 0.03)',
         border: '1px solid #f1f5f9',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'flex-start'
+        justifyContent: 'center',
+        position: 'relative'
       }}>
         {/* Month Switcher Controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f8fafc', padding: '6px 10px', borderRadius: 16, border: '1px solid #e2e8f0' }}>
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          background: '#f8fafc',
+          padding: '5px 8px',
+          borderRadius: 16,
+          border: '1px solid #e2e8f0'
+        }}>
           <button
             onClick={() => setViewDate(new Date(year, month - 1, 1))}
-            style={{ border: 'none', background: '#fff', width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', color: '#475569' }}
+            style={{
+              border: 'none',
+              background: '#fff',
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              color: '#475569',
+              transition: 'all 0.15s ease'
+            }}
+            title="Mês anterior"
           >
             <ChevronLeft size={16} />
           </button>
-          <div style={{ padding: '0 16px', fontSize: 15, fontWeight: 900, color: '#1e293b', minWidth: 140, textAlign: 'center' }}>
+          
+          <div style={{
+            padding: '0 14px',
+            fontSize: 15,
+            fontWeight: 700,
+            color: '#0f172a',
+            minWidth: 140,
+            textAlign: 'center',
+            letterSpacing: '-0.01em',
+            fontFamily: 'Outfit, sans-serif'
+          }}>
             {MESES[month]} {year}
           </div>
+
           <button
             onClick={() => setViewDate(new Date(year, month + 1, 1))}
-            style={{ border: 'none', background: '#fff', width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.04)', color: '#475569' }}
+            style={{
+              border: 'none',
+              background: '#fff',
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              color: '#475569',
+              transition: 'all 0.15s ease'
+            }}
+            title="Próximo mês"
           >
             <ChevronRight size={16} />
           </button>
+
+          {(hoje.getFullYear() !== year || hoje.getMonth() !== month) && (
+            <button
+              onClick={() => setViewDate(new Date(hoje.getFullYear(), hoje.getMonth(), 1))}
+              style={{
+                marginLeft: 4,
+                padding: '4px 10px',
+                borderRadius: 10,
+                background: '#e0e7ff',
+                color: '#4338ca',
+                fontSize: 11.5,
+                fontWeight: 700,
+                border: '1px solid #c7d2fe',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              title="Voltar para o mês atual"
+            >
+              Hoje
+            </button>
+          )}
         </div>
       </div>
 
@@ -550,7 +644,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
               const [y, m, d] = dateStr.split('-')
               const isToday = dateStr === today
               const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d))
-              const weekDayFull = dateObj.toLocaleDateString('pt-BR', { weekday: 'long' })
+              const weekDayShort = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase()
               const monthAbbr = MESES[parseInt(m) - 1].slice(0, 3).toUpperCase()
 
               return (
@@ -558,131 +652,179 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   key={dateStr}
-                  style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}
+                  style={{ display: 'flex', gap: 14, alignItems: 'stretch' }}
                 >
                   {/* 🗓️ LEFT DATE CARD */}
-                  <div style={{
-                    width: 100,
-                    minWidth: 100,
-                    background: '#fff',
-                    borderRadius: 22,
-                    padding: '18px 10px',
-                    border: isToday ? '2px solid #6366f1' : '1px solid #e2e8f0',
-                    boxShadow: isToday ? '0 8px 24px rgba(99,102,241,0.12)' : '0 4px 16px rgba(0,0,0,0.02)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                    position: 'relative'
-                  }}>
-                    <span style={{ fontSize: 32, fontWeight: 900, color: isToday ? '#6366f1' : '#1e293b', lineHeight: 1 }}>
-                      {String(parseInt(d)).padStart(2, '0')}
-                    </span>
-                    <span style={{ fontSize: 13, fontWeight: 900, color: isToday ? '#6366f1' : '#1e293b', marginTop: 4, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                      {monthAbbr}
-                    </span>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', marginTop: 2, textTransform: 'uppercase' }}>
-                      {weekDayFull}
-                    </span>
+                  <div 
+                    className="ad-calendar-date-card"
+                    style={{
+                      width: 82,
+                      minWidth: 82,
+                      background: '#fff',
+                      borderRadius: 20,
+                      padding: '16px 8px',
+                      border: isToday ? '1.5px solid #6366f1' : '1px solid #eef2f6',
+                      boxShadow: isToday ? '0 6px 20px rgba(99,102,241,0.12)' : '0 2px 10px rgba(15, 23, 42, 0.02)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      position: 'relative'
+                    }}
+                  >
                     {isToday && (
-                      <span style={{ position: 'absolute', top: -10, padding: '2px 8px', background: '#6366f1', color: '#fff', borderRadius: 10, fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      <span style={{
+                        position: 'absolute',
+                        top: -9,
+                        padding: '2px 8px',
+                        background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                        color: '#fff',
+                        borderRadius: 10,
+                        fontSize: 9,
+                        fontWeight: 800,
+                        letterSpacing: '0.04em',
+                        boxShadow: '0 2px 6px rgba(99,102,241,0.3)'
+                      }}>
                         HOJE
                       </span>
                     )}
+                    <span 
+                      className="ad-calendar-day-num"
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 800,
+                        color: isToday ? '#4f46e5' : '#0f172a',
+                        lineHeight: 1,
+                        letterSpacing: '-0.02em',
+                        fontFamily: 'Outfit, sans-serif'
+                      }}
+                    >
+                      {String(parseInt(d)).padStart(2, '0')}
+                    </span>
+                    <span style={{
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      color: isToday ? '#6366f1' : '#64748b',
+                      marginTop: 4,
+                      letterSpacing: '0.05em',
+                      textTransform: 'uppercase'
+                    }}>
+                      {monthAbbr}
+                    </span>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: '#94a3b8',
+                      marginTop: 2,
+                      textTransform: 'uppercase'
+                    }}>
+                      {weekDayShort}
+                    </span>
                   </div>
 
-                  {/* 📋 RIGHT CONTENT CONTAINER WITH VERTICAL TIMELINE */}
-                  <div style={{
-                    flex: 1,
-                    minWidth: 0,
-                    background: '#fff',
-                    borderRadius: 22,
-                    padding: '20px 24px',
-                    border: '1px solid #e2e8f0',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.02)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    position: 'relative'
-                  }}>
-                    {/* Vertical Timeline Line for multiple events */}
-                    {eventsList.length > 1 && (
-                      <div style={{
-                        position: 'absolute',
-                        left: 28,
-                        top: 32,
-                        bottom: 32,
-                        width: 3,
-                        background: 'linear-gradient(180deg, #f97316 0%, #6366f1 100%)',
-                        borderRadius: 2,
-                        zIndex: 1
-                      }} />
-                    )}
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* 📋 RIGHT CONTENT CONTAINER */}
+                  <div 
+                    className="ad-calendar-event-card"
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      background: '#fff',
+                      borderRadius: 20,
+                      padding: '16px 20px',
+                      border: '1px solid #eef2f6',
+                      boxShadow: '0 2px 10px rgba(15, 23, 42, 0.02)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      position: 'relative'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                       {eventsList.map((ev, idx) => {
-                        const color = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#f97316'
+                        const color = ev.cor ?? TIPO_CORES[ev.tipo] ?? '#6366f1'
                         return (
                           <div
                             key={ev.id}
                             style={{
                               display: 'flex',
-                              alignItems: 'center',
-                              gap: 14,
+                              flexDirection: 'column',
+                              gap: 6,
                               paddingBottom: idx < eventsList.length - 1 ? 14 : 0,
-                              borderBottom: idx < eventsList.length - 1 ? '1px solid #f8fafc' : 'none',
+                              borderBottom: idx < eventsList.length - 1 ? '1px solid #f1f5f9' : 'none',
                               position: 'relative',
-                              zIndex: 2,
-                              flexWrap: 'wrap'
+                              zIndex: 2
                             }}
                           >
-                            {/* Vertical Line Node Circle */}
-                            {eventsList.length > 1 && (
-                              <div style={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                background: '#fff',
-                                border: `3px solid ${color}`,
-                                flexShrink: 0,
-                                margin: '0 4px 0 -2px'
-                              }} />
-                            )}
+                            {/* Top Row: Time Badge */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                {eventsList.length > 1 && (
+                                  <div style={{
+                                    width: 7,
+                                    height: 7,
+                                    borderRadius: '50%',
+                                    background: color,
+                                    flexShrink: 0
+                                  }} />
+                                )}
 
-                            {/* Time Pill */}
-                            <div style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              padding: '6px 14px',
-                              borderRadius: 14,
-                              background: color + '15',
-                              color: color,
-                              fontSize: 12,
-                              fontWeight: 900,
-                              flexShrink: 0
-                            }}>
-                              <Clock size={13} />
-                              <span>{(ev as any).diaTodo ? 'Dia Todo' : ev.horaInicio || '08:00'}</span>
-                              {!((ev as any).diaTodo) && ev.horaFim && (
-                                <span style={{ opacity: 0.8 }}> - {ev.horaFim}</span>
-                              )}
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  padding: '4px 10px',
+                                  borderRadius: 10,
+                                  background: color + '15',
+                                  color: color,
+                                  fontSize: 11.5,
+                                  fontWeight: 700,
+                                  letterSpacing: '0.01em'
+                                }}>
+                                  <Clock size={12} strokeWidth={2.2} />
+                                  <span>{(ev as any).diaTodo ? 'Dia Todo' : ev.horaInicio || '08:00'}</span>
+                                  {!((ev as any).diaTodo) && ev.horaFim && (
+                                    <span style={{ opacity: 0.8 }}> - {ev.horaFim}</span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
 
-                            {/* Title & Description */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <h4 style={{ fontSize: 14, fontWeight: 900, color: '#1e293b', margin: 0, lineHeight: 1.3 }}>
+                            {/* Title & Description: Full width for fluid readability */}
+                            <div>
+                              <h4 style={{
+                                fontSize: 14.5,
+                                fontWeight: 700,
+                                color: '#0f172a',
+                                margin: 0,
+                                lineHeight: 1.4,
+                                letterSpacing: '-0.01em',
+                                wordBreak: 'break-word'
+                              }}>
                                 {ev.titulo}
                               </h4>
                               {ev.descricao && (
-                                <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0 0', lineHeight: 1.3 }}>
+                                <p style={{
+                                  fontSize: 12.5,
+                                  color: '#64748b',
+                                  margin: '3px 0 0 0',
+                                  lineHeight: 1.45,
+                                  fontWeight: 400
+                                }}>
                                   {ev.descricao}
                                 </p>
                               )}
                               {ev.local && (
-                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 2 }}>
-                                  <MapPin size={11} color={color} />
+                                <div style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  fontSize: 11.5,
+                                  fontWeight: 600,
+                                  color: '#64748b',
+                                  marginTop: 4
+                                }}>
+                                  <MapPin size={12} color={color} />
                                   <span>{ev.local}</span>
                                 </div>
                               )}
