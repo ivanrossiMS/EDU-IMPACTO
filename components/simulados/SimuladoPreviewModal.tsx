@@ -391,11 +391,29 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   }, [leftMarginOffset, rightMarginOffset, topMarginOffset, bottomMarginOffset, pageMargins, enunciadoFontSize, alternativasFontSize, columns, alternativasLayout, adicionarPaginaRedacao, headerLayout, mounted]);
 
   const mappedQuestoes = localQuestoes.map((q, idx) => {
-    let enunciadoHtml = q.enunciado
+    let enunciadoHtml = q.enunciado || ''
 
     // Clean up excessive newlines
     enunciadoHtml = enunciadoHtml.replace(/(?:<br\s*\/?>\s*){3,}/gi, '<br><br>')
     enunciadoHtml = enunciadoHtml.replace(/(?:\r\n|\r|\n){3,}/g, '\n\n')
+
+    const reqs = simulado?.simulados_upload_requisicoes || []
+    let matchedReq: any = null
+    if (q.id_requisicao) {
+      matchedReq = reqs.find((r: any) => r.id === q.id_requisicao)
+    }
+    if (!matchedReq && q.id_disciplina) {
+      matchedReq = reqs.find((r: any) => r.id_disciplina === q.id_disciplina)
+    }
+    if (!matchedReq && q.id_professor) {
+      matchedReq = reqs.find((r: any) => r.id_professor === q.id_professor)
+    }
+    if (!matchedReq && reqs.length === 1) {
+      matchedReq = reqs[0]
+    }
+
+    const discName = q.disciplina_nome || q.disciplina || matchedReq?.disciplina_nome || matchedReq?.simulados_disciplinas?.nome || ''
+    const discId = q.id_disciplina || q.disciplina_id || matchedReq?.id_disciplina || null
 
     return {
       id: q._internalId,
@@ -403,15 +421,17 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
       tipo_questao: q.tipo_questao || 'multipla_escolha',
       enunciado: `<div style="white-space: pre-wrap;">${enunciadoHtml.trim()}</div>`,
       imagens: q.imagens?.map((img: any) => img.src) || [],
-      simulados_alternativas: q.alternativas.map((alt: any, i: number) => ({
+      simulados_alternativas: (q.alternativas || []).map((alt: any, i: number) => ({
         id: `alt-preview-${i}`,
         letra: alt.letter,
         texto: alt.text,
         eh_correta: alt.correct,
         imagem_url: (alt as any).imagem_url
       })),
-      id_disciplina: q.id_professor && simulado?.simulados_upload_requisicoes ? simulado.simulados_upload_requisicoes.find((r: any) => r.id_professor === q.id_professor)?.id_disciplina : null,
-      simulados_disciplinas: q.id_professor && simulado?.simulados_upload_requisicoes ? { nome: simulado.simulados_upload_requisicoes.find((r: any) => r.id_professor === q.id_professor)?.simulados_disciplinas?.nome || simulado.simulados_upload_requisicoes.find((r: any) => r.id_professor === q.id_professor)?.disciplina_nome } : null
+      id_disciplina: discId,
+      disciplina_nome: discName,
+      disciplina: discName,
+      simulados_disciplinas: discName ? { nome: discName } : null
     }
   })
 

@@ -240,7 +240,7 @@ export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redaca
 /**
  * Determina com precisão e robustez se uma questão pertence a uma requisição específica.
  * Suporta simulados adaptados/duplicados onde os IDs das requisições mudaram,
- * itens com requisição única, e correspondência por disciplina e professor.
+ * itens com requisição única, correspondência por professor único, e disciplina.
  */
 export function isQuestionForRequisicao(
   q: any,
@@ -258,7 +258,7 @@ export function isQuestionForRequisicao(
   }
 
   // 1. Match direto e exato pelo ID da requisição
-  if (q.id_requisicao && q.id_requisicao === req.id) {
+  if (q.id_requisicao && req.id && q.id_requisicao === req.id) {
     return true
   }
 
@@ -302,39 +302,89 @@ export function isQuestionForRequisicao(
   )
 
   const discMatch = discIdMatch || discNameMatch
+  const hasDiscOnQuestion = Boolean(qDiscId || qDiscName)
 
   // 5. Correspondência por Professor (ID ou Nome normalizado)
   const qProfId = q.id_professor
   const reqProfId = req.id_professor
-  const profIdMatch = !qProfId || !reqProfId || qProfId === reqProfId
+  const profIdMatch = Boolean(qProfId && reqProfId && qProfId === reqProfId)
 
   const qProfName = normalizeStr(q.professor_nome)
   const reqProfName = normalizeStr(req.professor_nome)
 
-  const profNameMatch =
-    !qProfName ||
-    !reqProfName ||
-    qProfName === reqProfName ||
-    qProfName.includes(reqProfName) ||
-    reqProfName.includes(qProfName)
+  const profNameMatch = Boolean(
+    qProfName &&
+    reqProfName &&
+    (qProfName === reqProfName ||
+      qProfName.includes(reqProfName) ||
+      reqProfName.includes(qProfName))
+  )
 
   const profMatch = profIdMatch || profNameMatch
+  const hasProfOnQuestion = Boolean(qProfId || qProfName)
 
-  // Se disciplina e professor batem
+  // Se disciplina e professor batem com precisão
   if (discMatch && profMatch) {
     return true
   }
 
-  // Se apenas a disciplina bate e não há outra requisição concorrente para esta disciplina
-  if (discMatch && Array.isArray(allReqs)) {
-    const otherReqsSameDisc = allReqs.filter((r: any) => {
-      if (r.id === req.id) return false
-      const rName = normalizeStr(r.disciplina_nome)
-      return (reqDiscId && r.id_disciplina === reqDiscId) || (qDiscName && rName === qDiscName)
-    })
+  // Se a questão possui professor e bate com esta requisição:
+  if (profMatch) {
+    // Se a questão também possui disciplina explícita que bate com outra requisição deste mesmo simulado:
+    if (hasDiscOnQuestion && !discMatch) {
+      const matchesAnotherReqDisc = Array.isArray(allReqs) && allReqs.some((r: any) => {
+        if (r.id === req.id) return false
+        const rDId = r.id_disciplina
+        const rDName = normalizeStr(r.disciplina_nome)
+        return (qDiscId && rDId && qDiscId === rDId) || (qDiscName && rDName && (qDiscName === rDName || qDiscName.includes(rDName) || rDName.includes(qDiscName)))
+      })
+      if (matchesAnotherReqDisc) return false
+    }
+
+    // Se este professor não possui outra requisição concorrente neste simulado:
+    const otherReqsSameProf = Array.isArray(allReqs)
+      ? allReqs.filter((r: any) => {
+          if (r.id === req.id) return false
+          const rPId = r.id_professor
+          const rPName = normalizeStr(r.professor_nome)
+          return (qProfId && rPId && qProfId === rPId) || (qProfName && rPName && (qProfName === rPName || qProfName.includes(rPName) || rPName.includes(qProfName)))
+        })
+      : []
+
+    if (otherReqsSameProf.length === 0) {
+      return true
+    }
+  }
+
+  // Se a questão possui disciplina e bate com esta requisição:
+  if (discMatch) {
+    if (hasProfOnQuestion && !profMatch) {
+      const matchesAnotherReqProf = Array.isArray(allReqs) && allReqs.some((r: any) => {
+        if (r.id === req.id) return false
+        const rPId = r.id_professor
+        const rPName = normalizeStr(r.professor_nome)
+        return (qProfId && rPId && qProfId === rPId) || (qProfName && rPName && (qProfName === rPName || qProfName.includes(rPName) || rPName.includes(qProfName)))
+      })
+      if (matchesAnotherReqProf) return false
+    }
+
+    const otherReqsSameDisc = Array.isArray(allReqs)
+      ? allReqs.filter((r: any) => {
+          if (r.id === req.id) return false
+          const rDId = r.id_disciplina
+          const rDName = normalizeStr(r.disciplina_nome)
+          return (reqDiscId && rDId === reqDiscId) || (qDiscName && rDName === qDiscName)
+        })
+      : []
+
     if (otherReqsSameDisc.length === 0) {
       return true
     }
+  }
+
+  // Se a questão aponta explicitamente para outro professor válido:
+  if (qProfId && Array.isArray(allReqs) && allReqs.some((r: any) => r.id !== req.id && r.id_professor === qProfId)) {
+    return false
   }
 
   return false
@@ -370,8 +420,26 @@ export function isFileForRequisicao(a: any, req: any, allReqs: any[] = []): bool
     (normalizeStr(a.disciplina_nome) && normalizeStr(req.disciplina_nome) &&
       normalizeStr(a.disciplina_nome) === normalizeStr(req.disciplina_nome))
 
-  const profMatch = !a.id_professor || !req.id_professor || a.id_professor === req.id_professor
-  return Boolean(discMatch && profMatch)
+  const profMatch = Boolean(
+    (!a.id_professor && !a.professor_nome) ||
+    (a.id_professor && req.id_professor && a.id_professor === req.id_professor) ||
+    (normalizeStr(a.professor_nome) && normalizeStr(req.professor_nome) &&
+      normalizeStr(a.professor_nome) === normalizeStr(req.professor_nome))
+  )
+
+  if (discMatch && profMatch) return true
+
+  if (a.id_professor && req.id_professor && a.id_professor === req.id_professor) {
+    const otherSameProf = Array.isArray(allReqs) && allReqs.some((r: any) => r.id !== req.id && r.id_professor === a.id_professor)
+    if (!otherSameProf) return true
+  }
+
+  if (discMatch && Array.isArray(allReqs)) {
+    const otherSameDisc = allReqs.some((r: any) => r.id !== req.id && ((req.id_disciplina && r.id_disciplina === req.id_disciplina) || normalizeStr(r.disciplina_nome) === normalizeStr(req.disciplina_nome)))
+    if (!otherSameDisc) return true
+  }
+
+  return false
 }
 
 /**

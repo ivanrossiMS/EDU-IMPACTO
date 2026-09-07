@@ -321,6 +321,18 @@ export default function UploadSimuladosGerenciamentoPage() {
                 }
                 return { ...r, status: 'pendente', enviado_em: null }
               }
+              if (qCount > 0 && r.status === 'pendente') {
+                const envDate = r.enviado_em || new Date().toISOString()
+                if (r.id) {
+                  (supabase as any)
+                    .from('simulados_upload_requisicoes')
+                    .update({ status: 'enviado', enviado_em: envDate })
+                    .eq('id', r.id)
+                    .then(() => {})
+                    .catch(() => {})
+                }
+                return { ...r, status: 'enviado', enviado_em: envDate }
+              }
               return r
             })
 

@@ -435,16 +435,16 @@ export default function UploadSimuladoPage() {
           }
         }
 
-        const profId = reqForQ?.id_professor || targetProfId || (currentUser?.perfil === 'Professor' ? currentUser.id : q.id_professor)
-        const profNome = reqForQ?.professor_nome || q.professor_nome || (currentUser?.perfil === 'Professor' ? currentUser.nome : '')
-        const discId = reqForQ?.id_disciplina || targetDiscId || q.id_disciplina
-        const discNome = reqForQ?.disciplina_nome || reqForQ?.simulados_disciplinas?.nome || q.disciplina_nome || q.disciplina || ''
+        const profId = reqForQ?.id_professor || q.id_professor || targetProfId || (currentUser?.perfil === 'Professor' ? currentUser.id : undefined)
+        const profNome = reqForQ?.professor_nome || q.professor_nome || (currentUser?.perfil === 'Professor' ? currentUser.nome : undefined)
+        const discId = reqForQ?.id_disciplina || q.id_disciplina || q.disciplina_id || targetDiscId || undefined
+        const discNome = reqForQ?.disciplina_nome || reqForQ?.simulados_disciplinas?.nome || q.disciplina_nome || q.disciplina || undefined
 
         return {
           ...q,
           id_professor: profId,
           professor_nome: profNome,
-          id_requisicao: reqForQ?.id || targetReqId || q.id_requisicao,
+          id_requisicao: reqForQ?.id || q.id_requisicao || targetReqId || undefined,
           id_disciplina: discId,
           disciplina_id: discId,
           disciplina_nome: discNome,
@@ -514,6 +514,23 @@ export default function UploadSimuladoPage() {
         } else if (activeRequisicao) {
           await (supabase as any).from('simulados_upload_requisicoes').update({
             status: 'aprovado'
+          }).eq('id', activeRequisicao.id)
+        }
+      } else {
+        if (showAll) {
+          for (const r of allReqs) {
+            const countForR = finalQToSave.filter((q: any) => isQuestionForRequisicao(q, r, allReqs, true)).length
+            if (countForR > 0 && r.status === 'pendente') {
+              await (supabase as any).from('simulados_upload_requisicoes').update({
+                status: 'enviado',
+                enviado_em: r.enviado_em || new Date().toISOString()
+              }).eq('id', r.id)
+            }
+          }
+        } else if (activeRequisicao && activeRequisicao.status === 'pendente' && currentQs.length > 0) {
+          await (supabase as any).from('simulados_upload_requisicoes').update({
+            status: 'enviado',
+            enviado_em: activeRequisicao.enviado_em || new Date().toISOString()
           }).eq('id', activeRequisicao.id)
         }
       }
@@ -1065,12 +1082,16 @@ export default function UploadSimuladoPage() {
             ...simulado, 
             isSimulado: true,
             formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',
-            formattedSeries: simulado?.series?.join(', ') || '',
-            formattedDisciplinas: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
-            formattedProfessors: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {
-              const nome = r.professores?.nome || r.professor_nome || '';
-              return nome ? formatProfessorHeaderName(nome) : '';
-            }))).filter(Boolean).join(', ')
+            formattedSeries: Array.isArray(simulado?.series) ? simulado.series.join(', ') : (simulado?.series || ''),
+            formattedDisciplinas: activeRequisicao
+              ? (activeRequisicao.disciplina_nome || activeRequisicao.simulados_disciplinas?.nome || '')
+              : Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
+            formattedProfessors: activeRequisicao
+              ? (activeRequisicao.professor_nome ? formatProfessorHeaderName(activeRequisicao.professor_nome) : '')
+              : Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {
+                  const nome = r.professores?.nome || r.professor_nome || '';
+                  return nome ? formatProfessorHeaderName(nome) : '';
+                }))).filter(Boolean).join(', ')
           }}
           config={simConfig}
           onClose={() => {
@@ -1092,12 +1113,16 @@ export default function UploadSimuladoPage() {
               ...simulado, 
               isSimulado: true,
               formattedDate: simulado?.data_aplicacao ? simulado.data_aplicacao.split('-').reverse().join('/') : '____ / ____ / ________',
-              formattedSeries: simulado?.series?.join(', ') || '',
-              formattedDisciplinas: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
-              formattedProfessors: Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {
-                const nome = r.professores?.nome || r.professor_nome || '';
-                return nome ? formatProfessorHeaderName(nome) : '';
-              }))).filter(Boolean).join(', ')
+              formattedSeries: Array.isArray(simulado?.series) ? simulado.series.join(', ') : (simulado?.series || ''),
+              formattedDisciplinas: activeRequisicao
+                ? (activeRequisicao.disciplina_nome || activeRequisicao.simulados_disciplinas?.nome || '')
+                : Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', '),
+              formattedProfessors: activeRequisicao
+                ? (activeRequisicao.professor_nome ? formatProfessorHeaderName(activeRequisicao.professor_nome) : '')
+                : Array.from(new Set(simulado?.simulados_upload_requisicoes?.map((r: any) => {
+                    const nome = r.professores?.nome || r.professor_nome || '';
+                    return nome ? formatProfessorHeaderName(nome) : '';
+                  }))).filter(Boolean).join(', ')
             }}
             config={simConfig}
             onClose={() => setShowPreview(false)}
