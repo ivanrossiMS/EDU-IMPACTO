@@ -286,11 +286,21 @@ export async function GET(request: Request) {
       if (uniqueTurmaRefs.length > 0) {
         const cleanRefs = uniqueTurmaRefs.map(r => String(r).trim()).filter(Boolean)
         if (cleanRefs.length > 0) {
-          const formattedRefs = cleanRefs.map(r => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r).join(',')
+          const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+          const uuidRefs = cleanRefs.filter(isUuid)
+          const safeRefs = cleanRefs.map(r => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r).join(',')
+
+          const orClauses: string[] = []
+          if (uuidRefs.length > 0) {
+            orClauses.push(`id.in.(${uuidRefs.join(',')})`)
+          }
+          orClauses.push(`codigo.in.(${safeRefs})`)
+          orClauses.push(`nome.in.(${safeRefs})`)
+
           const { data: tData } = await supabase
             .from('turmas')
             .select('id, codigo, nome, ano')
-            .or(`id.in.(${formattedRefs}),codigo.in.(${formattedRefs}),nome.in.(${formattedRefs})`)
+            .or(orClauses.join(','))
           turmasData = tData || []
         }
       }
@@ -615,17 +625,21 @@ export async function GET(request: Request) {
       // Formata referências limpando caracteres especiais que quebram cláusula PostgREST IN
       const cleanRefs = uniqueTurmaRefs.map(r => String(r).trim()).filter(Boolean)
       if (cleanRefs.length > 0) {
-        const formattedRefs = cleanRefs.map(r => {
-          if (/[ ,()\/]/.test(r)) {
-            return `"${r.replace(/"/g, '\\"')}"`
-          }
-          return r
-        }).join(',')
+        const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+        const uuidRefs = cleanRefs.filter(isUuid)
+        const safeRefs = cleanRefs.map(r => /[ ,()\/]/.test(r) ? `"${r.replace(/"/g, '\\"')}"` : r).join(',')
+
+        const orClauses: string[] = []
+        if (uuidRefs.length > 0) {
+          orClauses.push(`id.in.(${uuidRefs.join(',')})`)
+        }
+        orClauses.push(`codigo.in.(${safeRefs})`)
+        orClauses.push(`nome.in.(${safeRefs})`)
 
         const { data: tData, error: turmasError } = await supabase
           .from('turmas')
           .select('id, codigo, nome, ano, dados')
-          .or(`id.in.(${formattedRefs}),codigo.in.(${formattedRefs}),nome.in.(${formattedRefs})`)
+          .or(orClauses.join(','))
 
         if (turmasError) {
           console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Turmas): ${turmasError.message}\n`)
