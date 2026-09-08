@@ -1,8 +1,8 @@
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export async function deleteStorageFilesByUrls(urls: string[]) {
   if (!urls || urls.length === 0) return;
-  const supabase = await createProtectedClient();
+  const supabase = getAdminClient();
   
   // Agrupar paths por bucket
   const bucketPaths: Record<string, string[]> = {};

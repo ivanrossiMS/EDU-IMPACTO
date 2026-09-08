@@ -53,89 +53,114 @@ export interface ValoresWhatsAppTemplate {
 const DEFAULT_VALORES_TEMPLATES: ValoresWhatsAppTemplate[] = [
   {
     id: 'completo',
-    titulo: 'Proposta Completa',
+    titulo: 'Proposta NOVOS ALUNOS',
     descricao: 'Orçamento detalhado com mensalidade, matrícula, economia anual e adicionais.',
-    conteudo: `🏫 *COLÉGIO IMPACTO – ANO LETIVO {ano_letivo}*
-📋 *Proposta de Matrícula & Valores*
+    conteudo: `🏫 *COLÉGIO IMPACTO • ANO LETIVO {ano_letivo}*
+📋 *Proposta de Matrícula & Valores*{ref_aluno}
 
 {saudacao}
-Conforme conversamos, segue o orçamento detalhado{ref_aluno}:
+Seguem os valores detalhados para *{serie}* {detalhe_serie}:
 
-📚 *Série/Modalidade:* *{serie}* {detalhe_serie}
+💰 *MENSALIDADE ({desconto_pct}% OFF):*
+• Tabela: ~{mensalidade_tabela}~
+• Com desconto: *{mensalidade_liquida}* / mês
+✨ Economia anual: {economia_anual}
 
-💰 *MENSALIDADE:*
-• Valor original de tabela: ~{mensalidade_tabela}~
-• *Mensalidade com desconto ({desconto_pct}%):* *{mensalidade_liquida}* / mês
-✨ *Economia anual na mensalidade:* {economia_anual}
-
-🎁 *CONDIÇÃO ESPECIAL DE MATRÍCULA ({mes_antecipacao}):*
+🎁 *MATRÍCULA ({mes_antecipacao}):*
 {detalhe_matricula}
-*(Economia de {economia_matricula} na matrícula)*
 
 {linha_material}
 {linha_extracurricular}
 
-🌟 *Economia Total para {ano_letivo}:* *{economia_total}*
+🌟 *Economia Total ({ano_letivo}):* *{economia_total}*
 
-Para garantir esta condição e reservar a vaga, estamos à disposição para agendar uma visita e formalizar a matrícula!
-
+Estamos à disposição para agendar uma visita e formalizar a matrícula!
 📍 *Colégio Impacto* – Educação que transforma!`
   },
   {
-    id: 'antecipacao',
-    titulo: 'Antecipação',
-    descricao: 'Foco na campanha de matrículas antecipadas com descontos exclusivos.',
-    conteudo: `🚀 *CAMPANHA DE ANTECIPAÇÃO {ano_letivo} – COLÉGIO IMPACTO*
+    id: 'rematriculas',
+    titulo: 'REMATRÍCULAS',
+    descricao: 'Foco na renovação de matrícula para alunos veteranos com condições prioritárias.',
+    conteudo: `🎒 *COLÉGIO IMPACTO • REMATRÍCULAS {ano_letivo}*
+🌟 *Condições Exclusivas para Alunos Veteranos*
 
 {saudacao}
-Aproveite a melhor condição de matrícula do ano{ref_aluno}!
+Apresentamos as condições especiais de *Rematrícula {ano_letivo}*{ref_aluno} para *{serie}* {detalhe_serie}:
 
-🎯 *Modalidade:* *{serie}*
-📅 *Condição de {mes_antecipacao}:*
+💰 *MENSALIDADE ({desconto_pct}% OFF):*
+• Tabela: ~{mensalidade_tabela}~
+• Com desconto: *{mensalidade_liquida}* / mês
+✨ Economia anual: {economia_anual}
 
-1️⃣ *Matrícula com {desconto_matricula_pct}% OFF:*
-👉 {detalhe_matricula}
+🎁 *REMATRÍCULA ANTECIPADA ({mes_antecipacao}):*
+{detalhe_matricula}
 
-2️⃣ *Mensalidade com {desconto_pct}% de desconto:*
-👉 *{mensalidade_liquida}* / mês
+{linha_material}
+{linha_extracurricular}
 
-💡 *Economia garantida:* *{economia_total}* no ano!
+🌟 *Economia Total ({ano_letivo}):* *{economia_total}*
 
-⚠️ *Atenção:* Vagas limitadas por turma com essa tabela promocional.
-Posso já preparar o seu link de matrícula ou agendamos um horário hoje?`
+As condições promocionais e vagas no turno atual são garantidas apenas durante esta campanha. Vamos já garantir a vaga para {ano_letivo}?
+📍 *Colégio Impacto* – Onde o futuro começa hoje.`
   },
   {
     id: 'convenio',
     titulo: 'Convênio',
     descricao: 'Mensagem com ênfase no convênio e parceria institucional.',
-    conteudo: `🤝 *CONVÊNIO ESPECIAL PARCEIRO – COLÉGIO IMPACTO {ano_letivo}*
+    conteudo: `🤝 *COLÉGIO IMPACTO • PARCERIA {convenio} ({ano_letivo})*
 
 {saudacao}
-Temos uma condição exclusiva pelo convênio *{convenio}*{ref_aluno}:
+Condição especial pelo convênio *{convenio}*{ref_aluno} para *{serie}* {detalhe_serie}:
 
-🎓 *Série:* *{serie}*
-🏷️ *Desconto de Convênio:* *{desconto_pct}%*
-💵 *Mensalidade de:* ~{mensalidade_tabela}~
-➡️ *Por apenas:* *{mensalidade_liquida}* mensais
+💰 *MENSALIDADE ({desconto_pct}% OFF):*
+• De ~{mensalidade_tabela}~ por *{mensalidade_liquida}* / mês
+✨ Economia anual: {economia_anual}
 
-📝 *Matrícula com Desconto de Antecipação ({mes_antecipacao}):*
+🎁 *MATRÍCULA ({mes_antecipacao}):*
 {detalhe_matricula}
 
-Será uma honra ter a sua família conosco neste ano letivo! Como prefere dar início ao cadastro?`
+{linha_material}
+{linha_extracurricular}
+
+🌟 *Economia Total:* *{economia_total}*
+
+Ficamos à disposição para receber sua família e formalizar a matrícula!`
   },
   {
     id: 'direto',
     titulo: 'Curto e Direto',
     descricao: 'Mensagem objetiva e rápida para envio ágil.',
-    conteudo: `Olá{nome_destinatario}! Seguem os valores do *Colégio Impacto* para *{serie}* ({ano_letivo}){ref_aluno}:
+    conteudo: `{saudacao} Seguem os valores do *Colégio Impacto* ({ano_letivo}){ref_aluno}:
 
-• *Mensalidade:* *{mensalidade_liquida}* (com {desconto_pct}% desc.)
-• *Matrícula ({mes_antecipacao}):* {detalhe_matricula}
-• *Economia total:* *{economia_total}*
+📚 *Série:* *{serie}* {detalhe_serie}
+💰 *Mensalidade ({desconto_pct}% OFF):* de ~{mensalidade_tabela}~ por *{mensalidade_liquida}* / mês
+🎁 *Matrícula ({mes_antecipacao}):*
+{detalhe_matricula}
+🌟 *Economia Total:* *{economia_total}*
 
-Qualquer dúvida estou à disposição para ajudar com a documentação!`
+Qualquer dúvida, estamos à disposição para ajudar!`
+  },
+  {
+    id: 'documentacao',
+    titulo: 'DOCUMENTAÇÃO',
+    descricao: 'Lista de documentos necessários para efetivação de matrícula.',
+    conteudo: `📋 *COLÉGIO IMPACTO • DOCUMENTAÇÃO DE MATRÍCULA {ano_letivo}*
+
+{saudacao}
+Para efetivar a matrícula para *{serie}*{ref_aluno}, segue a relação de documentos:
+
+👤 *Aluno:* Certidão de Nascimento/RG, foto 3x4, histórico escolar/declaração e vacinação
+👥 *Responsáveis:* RG, CPF, comprovante de residência e renda atualizados
+
+💰 *CONDIÇÕES CONFIRMADAS ({desconto_pct}% OFF):*
+• *Mensalidade:* *{mensalidade_liquida}* / mês (tabela ~{mensalidade_tabela}~)
+• *Matrícula ({mes_antecipacao}):*
+{detalhe_matricula}
+
+📍 Aguardamos a documentação para formalização do contrato e reserva da vaga!`
   }
 ]
+
 
 const TEMPLATE_VARIABLES = [
   { tag: '{saudacao}', desc: 'Saudação (ex: Olá, Patrícia! Tudo bem?)' },
@@ -299,6 +324,18 @@ const ANTECIPACAO_REGRAS = [
     corBorder: '#e2e8f0',
     corText: '#475569',
     descricao: 'Valor integral'
+  },
+  {
+    mes: 'Todas',
+    tag: 'Cronograma Geral',
+    aVistaPct: 20,
+    parceladoPct: 15,
+    maxParcelas: 5,
+    destaque: 'Todas as Opções',
+    corBg: '#fdf4ff',
+    corBorder: '#f0abfc',
+    corText: '#86198f',
+    descricao: 'Out, Nov, Dez e Regular'
   }
 ]
 
@@ -351,10 +388,26 @@ export default function ValoresPage() {
 
   // Sincronização e Persistência no Banco de Dados (Supabase) via useConfigDb
   const { data: dbTemplates = [], setData: setDbTemplates, loading: loadingTemplates } = useConfigDb<ValoresWhatsAppTemplate>('cfgWhatsAppValores', DEFAULT_VALORES_TEMPLATES)
-  const templates = dbTemplates.length > 0 ? dbTemplates : DEFAULT_VALORES_TEMPLATES
+  const templates = useMemo(() => {
+    if (!dbTemplates || dbTemplates.length === 0) return DEFAULT_VALORES_TEMPLATES
+    return dbTemplates.map(t => {
+      const def = DEFAULT_VALORES_TEMPLATES.find(d => d.id === t.id)
+      if (def) {
+        const isOldVerbose =
+          t.conteudo.includes('*(Economia de {economia_matricula} na matrícula)*') ||
+          t.conteudo.includes('• Valor original de tabela: ~{mensalidade_tabela}~') ||
+          t.conteudo.includes('• Certidão de Nascimento ou RG') ||
+          (t.id === 'direto' && (!t.conteudo.includes('{mensalidade_tabela}') || t.conteudo.startsWith('Olá{nome_destinatario}!')))
+        if (isOldVerbose) {
+          return { ...t, conteudo: def.conteudo, titulo: def.titulo, descricao: def.descricao }
+        }
+      }
+      return t
+    })
+  }, [dbTemplates])
 
   // Estados do Simulador
-  const [selectedSerieId, setSelectedSerieId] = useState<string>('integral')
+  const [selectedSerieIds, setSelectedSerieIds] = useState<string[]>(['integral'])
   const [descontoPercent, setDescontoPercent] = useState<number>(10)
   const [convenioSelecionado, setConvenioSelecionado] = useState<string>('')
   const [mesAntecipacao, setMesAntecipacao] = useState<string>('Outubro')
@@ -573,7 +626,7 @@ export default function ValoresPage() {
     setAvailableResponsaveis(student.responsaveis)
 
     const detectedSerie = detectSerieIdFromTurma(student.turma)
-    if (detectedSerie) setSelectedSerieId(detectedSerie)
+    if (detectedSerie) setSelectedSerieIds([detectedSerie])
 
     const targetResp = specificResp || student.responsaveis.find(r => !!r.telefone) || student.responsaveis[0]
     if (targetResp) {
@@ -637,60 +690,195 @@ export default function ValoresPage() {
     setStudentSearchInput('')
     setAvailableResponsaveis([])
     setSelectedResponsavelId(null)
+    setSelectedSerieIds(['integral'])
   }
 
-  const currentSerie = useMemo(() => {
-    return seriesList.find(s => s.id === selectedSerieId || (selectedSerieId === 'em-2' && s.id === 'em-1-2') || (selectedSerieId === 'em-1' && s.id === 'em-1-2')) || seriesList[0]
-  }, [seriesList, selectedSerieId])
+  const selectedSeries = useMemo(() => {
+    const list = seriesList.filter(s =>
+      selectedSerieIds.includes(s.id) ||
+      (selectedSerieIds.includes('em-2') && s.id === 'em-1-2') ||
+      (selectedSerieIds.includes('em-1') && s.id === 'em-1-2')
+    )
+    return list.length > 0 ? list : [seriesList[0]]
+  }, [seriesList, selectedSerieIds])
+
+  const currentSerie = selectedSeries[0]
+  const isMultiSerie = selectedSeries.length > 1
+
+  const handleToggleSerie = (id: string) => {
+    setSelectedSerieIds(prev => {
+      if (prev.includes(id)) {
+        if (prev.length <= 1) return prev
+        return prev.filter(x => x !== id)
+      } else {
+        return [...prev, id]
+      }
+    })
+  }
+
+  const handleSelectAllSeries = () => {
+    setSelectedSerieIds(seriesList.map(s => s.id))
+  }
 
   const currentAntecipacao = useMemo(() => {
     return ANTECIPACAO_REGRAS.find(r => r.mes === mesAntecipacao) || ANTECIPACAO_REGRAS[0]
   }, [mesAntecipacao])
 
+  const fmt = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
+  }
+
   const calculations = useMemo(() => {
-    const mensalidadeOriginal = currentSerie.mensalidadeBase
-    const valorDescontoMensal = mensalidadeOriginal * (descontoPercent / 100)
-    const mensalidadeComDesconto = mensalidadeOriginal - valorDescontoMensal
+    // Cálculos por série individual
+    const seriesCalc = selectedSeries.map(serie => {
+      const mensalidadeOrig = serie.mensalidadeBase
+      const descMensal = mensalidadeOrig * (descontoPercent / 100)
+      const mensalidadeLiq = mensalidadeOrig - descMensal
+      const anuidadeOrig = mensalidadeOrig * 12
+      const anuidadeLiq = mensalidadeLiq * 12
+      const econAnualMensalidades = descMensal * 12
 
-    const anuidadeOriginal = mensalidadeOriginal * 12
-    const anuidadeComDesconto = mensalidadeComDesconto * 12
-    const economiaAnualMensalidades = valorDescontoMensal * 12
+      const matOrig = mensalidadeOrig
 
-    const valorMatriculaOriginal = mensalidadeOriginal
+      // Matrícula por mês da campanha
+      const matCampanha = ANTECIPACAO_REGRAS.filter(r => r.mes !== 'Todas').map(regra => {
+        const descAVista = matOrig * (regra.aVistaPct / 100)
+        const finalAVista = matOrig - descAVista
+        const descParc = matOrig * (regra.parceladoPct / 100)
+        const finalParc = matOrig - descParc
+        const parcela = numParcelasMatricula > 0 ? (finalParc / numParcelasMatricula) : finalParc
+        return {
+          mes: regra.mes,
+          aVistaPct: regra.aVistaPct,
+          parceladoPct: regra.parceladoPct,
+          descAVista,
+          finalAVista,
+          descParc,
+          finalParc,
+          parcela
+        }
+      })
 
-    // Condição À Vista
-    const aVistaPct = currentAntecipacao.aVistaPct
-    const valorDescontoMatriculaAVista = valorMatriculaOriginal * (aVistaPct / 100)
-    const valorMatriculaFinalAVista = valorMatriculaOriginal - valorDescontoMatriculaAVista
+      // Regra de referência para o mês selecionado
+      const regraRef = mesAntecipacao === 'Todas'
+        ? (ANTECIPACAO_REGRAS.find(r => r.mes === 'Outubro') || ANTECIPACAO_REGRAS[0])
+        : currentAntecipacao
 
-    // Condição Parcelada
-    const parceladoPct = currentAntecipacao.parceladoPct
-    const valorDescontoMatriculaParcelado = valorMatriculaOriginal * (parceladoPct / 100)
-    const valorMatriculaFinalParcelado = valorMatriculaOriginal - valorDescontoMatriculaParcelado
+      const aVistaPct = regraRef.aVistaPct
+      const descMatAVista = matOrig * (aVistaPct / 100)
+      const finalMatAVista = matOrig - descMatAVista
+
+      const parceladoPct = regraRef.parceladoPct
+      const descMatParcelado = matOrig * (parceladoPct / 100)
+      const finalMatParcelado = matOrig - descMatParcelado
+      const parcelaMat = numParcelasMatricula > 0 ? (finalMatParcelado / numParcelasMatricula) : finalMatParcelado
+
+      let descMatriculaPct = aVistaPct
+      let valorDescMatricula = descMatAVista
+      let valorMatFinal = finalMatAVista
+
+      if (formaMatricula === 'parcelado') {
+        descMatriculaPct = parceladoPct
+        valorDescMatricula = descMatParcelado
+        valorMatFinal = finalMatParcelado
+      }
+
+      const material = incluirMaterial ? (serie.taxaMaterial || 0) : 0
+
+      return {
+        serie,
+        mensalidadeOrig,
+        descMensal,
+        mensalidadeLiq,
+        anuidadeOrig,
+        anuidadeLiq,
+        econAnualMensalidades,
+        matOrig,
+        matCampanha,
+        aVistaPct,
+        descMatAVista,
+        finalMatAVista,
+        parceladoPct,
+        descMatParcelado,
+        finalMatParcelado,
+        parcelaMat,
+        descMatriculaPct,
+        valorDescMatricula,
+        valorMatFinal,
+        material
+      }
+    })
+
+    // Totais consolidados
+    const mensalidadeOriginal = seriesCalc.reduce((acc, c) => acc + c.mensalidadeOrig, 0)
+    const valorDescontoMensal = seriesCalc.reduce((acc, c) => acc + c.descMensal, 0)
+    const mensalidadeComDesconto = seriesCalc.reduce((acc, c) => acc + c.mensalidadeLiq, 0)
+
+    const anuidadeOriginal = seriesCalc.reduce((acc, c) => acc + c.anuidadeOrig, 0)
+    const anuidadeComDesconto = seriesCalc.reduce((acc, c) => acc + c.anuidadeLiq, 0)
+    const economiaAnualMensalidades = seriesCalc.reduce((acc, c) => acc + c.econAnualMensalidades, 0)
+
+    const valorMatriculaOriginal = seriesCalc.reduce((acc, c) => acc + c.matOrig, 0)
+    const valorDescontoMatriculaAVista = seriesCalc.reduce((acc, c) => acc + c.descMatAVista, 0)
+    const valorMatriculaFinalAVista = seriesCalc.reduce((acc, c) => acc + c.finalMatAVista, 0)
+
+    const valorDescontoMatriculaParcelado = seriesCalc.reduce((acc, c) => acc + c.descMatParcelado, 0)
+    const valorMatriculaFinalParcelado = seriesCalc.reduce((acc, c) => acc + c.finalMatParcelado, 0)
     const valorParcelaMatricula = numParcelasMatricula > 0 ? (valorMatriculaFinalParcelado / numParcelasMatricula) : valorMatriculaFinalParcelado
 
-    let descontoMatriculaPct = aVistaPct
+    let descontoMatriculaPct = currentAntecipacao.aVistaPct
     let valorDescontoMatricula = valorDescontoMatriculaAVista
     let valorMatriculaFinal = valorMatriculaFinalAVista
 
     if (formaMatricula === 'parcelado') {
-      descontoMatriculaPct = parceladoPct
+      descontoMatriculaPct = currentAntecipacao.parceladoPct
       valorDescontoMatricula = valorDescontoMatriculaParcelado
       valorMatriculaFinal = valorMatriculaFinalParcelado
-    } else if (formaMatricula === 'ambos') {
-      descontoMatriculaPct = aVistaPct
-      valorDescontoMatricula = valorDescontoMatriculaAVista
-      valorMatriculaFinal = valorMatriculaFinalAVista
     }
 
-    const valorMaterial = incluirMaterial ? (currentSerie.taxaMaterial || 0) : 0
-    const valorExtracurricular = incluirExtracurricular ? SERVICOS_ADICIONAIS.extracurricularMensal : 0
+    // Totais por etapa da campanha de antecipação (Outubro, Novembro, Dezembro, Regular)
+    const campanhaEtapasTotais = ANTECIPACAO_REGRAS.filter(r => r.mes !== 'Todas').map(regra => {
+      const aVistaTot = seriesCalc.reduce((acc, c) => {
+        const item = c.matCampanha.find(m => m.mes === regra.mes)
+        return acc + (item ? item.finalAVista : 0)
+      }, 0)
+      const descAVistaTot = seriesCalc.reduce((acc, c) => {
+        const item = c.matCampanha.find(m => m.mes === regra.mes)
+        return acc + (item ? item.descAVista : 0)
+      }, 0)
+      const parcTot = seriesCalc.reduce((acc, c) => {
+        const item = c.matCampanha.find(m => m.mes === regra.mes)
+        return acc + (item ? item.finalParc : 0)
+      }, 0)
+      const descParcTot = seriesCalc.reduce((acc, c) => {
+        const item = c.matCampanha.find(m => m.mes === regra.mes)
+        return acc + (item ? item.descParc : 0)
+      }, 0)
+      const parcelaTot = numParcelasMatricula > 0 ? (parcTot / numParcelasMatricula) : parcTot
+
+      return {
+        mes: regra.mes,
+        destaque: regra.destaque,
+        descricao: regra.descricao,
+        aVistaPct: regra.aVistaPct,
+        parceladoPct: regra.parceladoPct,
+        aVistaTot,
+        descAVistaTot,
+        parcTot,
+        descParcTot,
+        parcelaTot
+      }
+    })
+
+    const valorMaterial = seriesCalc.reduce((acc, c) => acc + c.material, 0)
+    const valorExtracurricular = incluirExtracurricular ? (SERVICOS_ADICIONAIS.extracurricularMensal * selectedSeries.length) : 0
 
     const mensalidadeTotalFinal = mensalidadeComDesconto + valorExtracurricular
     const economiaTotalGeral = economiaAnualMensalidades + valorDescontoMatricula
     const investimentoAnualTotal = anuidadeComDesconto + valorMatriculaFinal + valorMaterial + (valorExtracurricular * 12)
 
     return {
+      seriesCalc,
       mensalidadeOriginal,
       valorDescontoMensal,
       mensalidadeComDesconto,
@@ -702,20 +890,21 @@ export default function ValoresPage() {
       valorDescontoMatricula,
       valorMatriculaFinal,
       valorParcelaMatricula,
-      aVistaPct,
+      aVistaPct: currentAntecipacao.aVistaPct,
       valorDescontoMatriculaAVista,
       valorMatriculaFinalAVista,
-      parceladoPct,
+      parceladoPct: currentAntecipacao.parceladoPct,
       valorDescontoMatriculaParcelado,
       valorMatriculaFinalParcelado,
       valorMaterial,
       valorExtracurricular,
       mensalidadeTotalFinal,
       economiaTotalGeral,
-      investimentoAnualTotal
+      investimentoAnualTotal,
+      campanhaEtapasTotais
     }
   }, [
-    currentSerie,
+    selectedSeries,
     descontoPercent,
     mesAntecipacao,
     formaMatricula,
@@ -724,10 +913,6 @@ export default function ValoresPage() {
     incluirExtracurricular,
     currentAntecipacao
   ])
-
-  const fmt = (val: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
-  }
 
   const handleSelectConvenio = (nome: string) => {
     setConvenioSelecionado(nome)
@@ -744,25 +929,211 @@ export default function ValoresPage() {
     const refAluno = nomeAluno.trim() ? ` para o(a) aluno(a) *${nomeAluno.trim()}*` : ''
     const nomeDest = nomeResponsavel.trim() ? ` ${nomeResponsavel.trim()}` : ''
 
-    let detalheMatricula = ''
-    if (formaMatricula === 'ambos') {
-      detalheMatricula = `• *Opção 1 (À VISTA - ${calculations.aVistaPct}% OFF):* *${fmt(calculations.valorMatriculaFinalAVista)}* _(Economia de ${fmt(calculations.valorDescontoMatriculaAVista)})_\n• *Opção 2 (PARCELADO em até ${numParcelasMatricula}x - ${calculations.parceladoPct}% OFF):* Total de *${fmt(calculations.valorMatriculaFinalParcelado)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}*`
-    } else if (formaMatricula === 'avista') {
-      detalheMatricula = `• *À VISTA (${calculations.descontoMatriculaPct}% de desconto):* *${fmt(calculations.valorMatriculaFinal)}*`
-    } else {
-      detalheMatricula = `• *PARCELADO EM ATÉ ${numParcelasMatricula}x (${calculations.descontoMatriculaPct}% de desconto):* Total de *${fmt(calculations.valorMatriculaFinal)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}*`
+    const isMulti = selectedSeries.length > 1
+    const isTodas = mesAntecipacao === 'Todas'
+
+    // Formatação de Série e Detalhe
+    let serieStr = ''
+    let detalheSerieStr = ''
+
+    const formatListWithAnd = (items: string[]) => {
+      if (items.length === 0) return ''
+      if (items.length === 1) return items[0]
+      if (items.length === 2) return `${items[0]} e ${items[1]}`
+      return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`
     }
 
-    const descontoMatriculaPctDesc = formaMatricula === 'ambos'
-      ? `${calculations.aVistaPct}% (à vista) / ${calculations.parceladoPct}% (parcelado)`
-      : String(calculations.descontoMatriculaPct)
+    if (!isMulti) {
+      serieStr = currentSerie.nome
+      detalheSerieStr = currentSerie.detalhe ? `(${currentSerie.detalhe})` : ''
+    } else {
+      serieStr = formatListWithAnd(selectedSeries.map(s => s.nome))
+      const seriesDetails = calculations.seriesCalc
+        .filter(sc => sc.serie.detalhe)
+        .map(sc => `${sc.serie.nome}: ${sc.serie.detalhe}`)
+      detalheSerieStr = seriesDetails.length > 0 ? `(${seriesDetails.join(' • ')})` : ''
+    }
 
-    const economiaMatriculaDesc = formaMatricula === 'ambos'
-      ? `até ${fmt(calculations.valorDescontoMatriculaAVista)}`
-      : fmt(calculations.valorDescontoMatricula)
+    // Formatação de Mensalidade (INDIVIDUAL EM TODAS AS MENSAGENS - NUNCA SOMA QUANDO MÚLTIPLAS SÉRIES)
+    let mensalidadeTabelaStr = fmt(calculations.mensalidadeOriginal)
+    let mensalidadeLiquidaStr = fmt(calculations.mensalidadeComDesconto)
+    let economiaAnualStr = fmt(calculations.economiaAnualMensalidades)
 
-    const linhaMaterial = incluirMaterial ? `📦 *Material Didático:* ${fmt(calculations.valorMaterial)} (anual)` : ''
-    const linhaExtracurricular = incluirExtracurricular ? `⚽ *Atividade Extracurricular (${atividadeSelecionada}):* ${fmt(calculations.valorExtracurricular)} / mês (2 aulas por semana)` : ''
+    if (isMulti) {
+      mensalidadeTabelaStr = calculations.seriesCalc.map(sc => `${sc.serie.nome}: ${fmt(sc.mensalidadeOrig)}`).join(' | ')
+      mensalidadeLiquidaStr = calculations.seriesCalc.map(sc => `${sc.serie.nome}: ${fmt(sc.mensalidadeLiq)}`).join(' | ')
+      economiaAnualStr = calculations.seriesCalc.map(sc => `${sc.serie.nome}: ${fmt(sc.econAnualMensalidades)}`).join(' | ')
+    }
+
+    // Formatação da Matrícula
+    let detalheMatricula = ''
+
+    if (isTodas) {
+      // Opção "Todas" selecionada na Campanha de Matrícula
+      const mesIcons: Record<string, string> = {
+        'Outubro': '🟢',
+        'Novembro': '🔵',
+        'Dezembro': '🟡',
+        'Regular': '⚪'
+      }
+
+      if (!isMulti) {
+        // 1 série + Todas as etapas
+        if (formaMatricula === 'ambos') {
+          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+            const icone = mesIcons[etapa.mes] || '🔹'
+            if (etapa.mes === 'Regular') {
+              return `${icone} *${etapa.mes.toUpperCase()} (Jan em diante):* *${fmt(etapa.aVistaTot)}* _(tabela integral)_`
+            }
+            return `${icone} *${etapa.mes.toUpperCase()} (${etapa.destaque}):* à vista *${fmt(etapa.aVistaTot)}* (${etapa.aVistaPct}% OFF) ou *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* (${etapa.parceladoPct}% OFF)`
+          }).join('\n')
+        } else if (formaMatricula === 'avista') {
+          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+            const icone = mesIcons[etapa.mes] || '🔹'
+            if (etapa.mes === 'Regular') {
+              return `${icone} *${etapa.mes.toUpperCase()}:* *${fmt(etapa.aVistaTot)}* _(tabela integral)_`
+            }
+            return `${icone} *${etapa.mes.toUpperCase()}:* *${fmt(etapa.aVistaTot)}* (${etapa.aVistaPct}% OFF • econ. ${fmt(etapa.descAVistaTot)})`
+          }).join('\n')
+        } else {
+          // parcelado
+          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+            const icone = mesIcons[etapa.mes] || '🔹'
+            if (etapa.mes === 'Regular') {
+              return `${icone} *${etapa.mes.toUpperCase()}:* *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* _(total ${fmt(etapa.parcTot)})_`
+            }
+            return `${icone} *${etapa.mes.toUpperCase()}:* *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* (${etapa.parceladoPct}% OFF • total ${fmt(etapa.parcTot)})`
+          }).join('\n')
+        }
+      } else {
+        // Múltiplas séries + Todas as etapas (NÃO DEVE SOMAR: APRESENTA VALORES E ECONOMIA INDIVIDUAIS DE CADA SÉRIE)
+        if (formaMatricula === 'ambos') {
+          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+            const icone = mesIcons[etapa.mes] || '🔹'
+            if (etapa.mes === 'Regular') {
+              const regLines = calculations.seriesCalc.map(sc => `${sc.serie.nome}: *${fmt(sc.mensalidadeOrig)}*`).join(' | ')
+              return `${icone} *${etapa.mes.toUpperCase()} (Jan em diante):* ${regLines}`
+            }
+
+            const lines = calculations.seriesCalc.map(sc => {
+              const item = sc.matCampanha.find(m => m.mes === etapa.mes)
+              const valV = item ? item.finalAVista : (sc.mensalidadeOrig * (1 - etapa.aVistaPct / 100))
+              const finalP = item ? item.finalParc : (sc.mensalidadeOrig * (1 - etapa.parceladoPct / 100))
+              const parc = numParcelasMatricula > 0 ? (finalP / numParcelasMatricula) : finalP
+              return `  • *${sc.serie.nome}:* à vista *${fmt(valV)}* ou *${numParcelasMatricula}x de ${fmt(parc)}*`
+            }).join('\n')
+
+            return `${icone} *${etapa.mes.toUpperCase()} (${etapa.destaque}):*\n${lines}`
+          }).join('\n')
+        } else if (formaMatricula === 'avista') {
+          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+            const icone = mesIcons[etapa.mes] || '🔹'
+            if (etapa.mes === 'Regular') {
+              const lines = calculations.seriesCalc.map(sc => `${sc.serie.nome}: *${fmt(sc.mensalidadeOrig)}*`).join(' | ')
+              return `${icone} *${etapa.mes.toUpperCase()} (Jan em diante):* ${lines}`
+            }
+            const lines = calculations.seriesCalc.map(sc => {
+              const item = sc.matCampanha.find(m => m.mes === etapa.mes)
+              const valV = item ? item.finalAVista : (sc.mensalidadeOrig * (1 - etapa.aVistaPct / 100))
+              return `${sc.serie.nome}: *${fmt(valV)}*`
+            }).join(' | ')
+            return `${icone} *${etapa.mes.toUpperCase()} (${etapa.aVistaPct}% OFF):* ${lines}`
+          }).join('\n')
+        } else {
+          // parcelado
+          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+            const icone = mesIcons[etapa.mes] || '🔹'
+            if (etapa.mes === 'Regular') {
+              const lines = calculations.seriesCalc.map(sc => {
+                const parc = numParcelasMatricula > 0 ? (sc.mensalidadeOrig / numParcelasMatricula) : sc.mensalidadeOrig
+                return `${sc.serie.nome}: *${numParcelasMatricula}x de ${fmt(parc)}*`
+              }).join(' | ')
+              return `${icone} *${etapa.mes.toUpperCase()} (Jan em diante):* ${lines}`
+            }
+            const lines = calculations.seriesCalc.map(sc => {
+              const item = sc.matCampanha.find(m => m.mes === etapa.mes)
+              const finalP = item ? item.finalParc : (sc.mensalidadeOrig * (1 - etapa.parceladoPct / 100))
+              const parc = numParcelasMatricula > 0 ? (finalP / numParcelasMatricula) : finalP
+              return `${sc.serie.nome}: *${numParcelasMatricula}x de ${fmt(parc)}*`
+            }).join(' | ')
+            return `${icone} *${etapa.mes.toUpperCase()} (${etapa.parceladoPct}% OFF):* ${lines}`
+          }).join('\n')
+        }
+      }
+    } else {
+      // Mês Específico (Outubro, Novembro, Dezembro ou Regular)
+      if (!isMulti) {
+        if (formaMatricula === 'ambos') {
+          detalheMatricula = `• *À Vista (${calculations.aVistaPct}% OFF):* *${fmt(calculations.valorMatriculaFinalAVista)}* (econ. ${fmt(calculations.valorDescontoMatriculaAVista)})\n• *Parcelado (${calculations.parceladoPct}% OFF):* até *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}* (total ${fmt(calculations.valorMatriculaFinalParcelado)})`
+        } else if (formaMatricula === 'avista') {
+          detalheMatricula = `• *À Vista (${calculations.descontoMatriculaPct}% OFF):* *${fmt(calculations.valorMatriculaFinal)}* (de ~${fmt(calculations.mensalidadeOriginal)}~ • econ. ${fmt(calculations.valorDescontoMatricula)})`
+        } else {
+          detalheMatricula = `• *Parcelado em até ${numParcelasMatricula}x (${calculations.descontoMatriculaPct}% OFF):* Total de *${fmt(calculations.valorMatriculaFinal)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}*`
+        }
+      } else {
+        // Múltiplas séries com mês específico (NÃO DEVE SOMAR: APRESENTA VALORES E ECONOMIA INDIVIDUAIS DE CADA SÉRIE)
+        if (formaMatricula === 'ambos') {
+          const lines = calculations.seriesCalc.map(sc =>
+            `  • *${sc.serie.nome}:* à vista *${fmt(sc.finalMatAVista)}* (econ. ${fmt(sc.descMatAVista)}) ou *${numParcelasMatricula}x de ${fmt(sc.parcelaMat)}*`
+          ).join('\n')
+          detalheMatricula = `• *Condições por Série (${calculations.aVistaPct}% à vista ou ${calculations.parceladoPct}% parcelado):*\n${lines}`
+        } else if (formaMatricula === 'avista') {
+          const lines = calculations.seriesCalc.map(sc =>
+            `  • *${sc.serie.nome}:* *${fmt(sc.finalMatAVista)}* (de ~${fmt(sc.matOrig)}~ • econ. ${fmt(sc.descMatAVista)})`
+          ).join('\n')
+          detalheMatricula = `• *À Vista (${calculations.descontoMatriculaPct}% OFF):*\n${lines}`
+        } else {
+          const lines = calculations.seriesCalc.map(sc =>
+            `  • *${sc.serie.nome}:* *${numParcelasMatricula}x de ${fmt(sc.parcelaMat)}* (total ${fmt(sc.finalMatParcelado)})`
+          ).join('\n')
+          detalheMatricula = `• *Parcelado em até ${numParcelasMatricula}x (${calculations.descontoMatriculaPct}% OFF):*\n${lines}`
+        }
+      }
+    }
+
+    const mesAntecipacaoDesc = isTodas ? 'CRONOGRAMA COMPLETO' : mesAntecipacao.toUpperCase()
+
+    const descontoMatriculaPctDesc = isTodas
+      ? 'até 20% (conforme o mês)'
+      : (formaMatricula === 'ambos'
+        ? `${calculations.aVistaPct}% (à vista) / ${calculations.parceladoPct}% (parcelado)`
+        : String(calculations.descontoMatriculaPct))
+
+    const economiaMatriculaDesc = isTodas
+      ? (isMulti
+          ? `até ${formatListWithAnd(calculations.seriesCalc.map(sc => `${sc.serie.nome} (${fmt(sc.mensalidadeOrig * 0.20)})`))} (antecipando em Outubro)`
+          : `até ${fmt(calculations.campanhaEtapasTotais[0]?.descAVistaTot || 0)} (antecipando em Outubro)`)
+      : (isMulti
+          ? formatListWithAnd(calculations.seriesCalc.map(sc => `${sc.serie.nome} (${fmt(sc.descMatAVista)})`))
+          : (formaMatricula === 'ambos'
+            ? `até ${fmt(calculations.valorDescontoMatriculaAVista)}`
+            : fmt(calculations.valorDescontoMatricula)))
+
+    // Material e Extracurricular (INDIVIDUAL - NUNCA SOMA QUANDO MÚLTIPLAS SÉRIES)
+    let linhaMaterial = ''
+    if (incluirMaterial) {
+      if (!isMulti) {
+        linhaMaterial = `📦 *Material Didático:* ${fmt(calculations.valorMaterial)} (anual)`
+      } else {
+        const matLines = calculations.seriesCalc.map(sc => `${sc.serie.nome}: ${fmt(sc.material)}`).join(' | ')
+        linhaMaterial = `📦 *Material Didático:* ${matLines} (anual)`
+      }
+    }
+
+    const linhaExtracurricular = incluirExtracurricular
+      ? (isMulti
+          ? `⚽ *Atividade Extracurricular (${atividadeSelecionada}):* ${fmt(SERVICOS_ADICIONAIS.extracurricularMensal)} / mês por aluno`
+          : `⚽ *Atividade Extracurricular (${atividadeSelecionada}):* ${fmt(SERVICOS_ADICIONAIS.extracurricularMensal)} / mês`)
+      : ''
+
+    const economiaTotalDesc = isMulti
+      ? `${calculations.seriesCalc.map(sc => {
+          const econMat = isTodas ? (sc.mensalidadeOrig * 0.20) : sc.descMatAVista
+          return `${sc.serie.nome}: até ${fmt(sc.econAnualMensalidades + econMat)}`
+        }).join(' | ')} ${isTodas ? '(antecipando em Outubro)' : ''}`.trim()
+      : (isTodas
+          ? `até ${fmt(calculations.economiaAnualMensalidades + (calculations.campanhaEtapasTotais[0]?.descAVistaTot || 0))} (antecipando em Outubro)`
+          : fmt(calculations.economiaTotalGeral))
 
     let content = activeTemplate.conteudo
 
@@ -770,20 +1141,20 @@ export default function ValoresPage() {
       saudacao,
       ref_aluno: refAluno,
       nome_destinatario: nomeDest,
-      serie: currentSerie.nome,
-      detalhe_serie: currentSerie.detalhe ? `(${currentSerie.detalhe})` : '',
+      serie: serieStr,
+      detalhe_serie: detalheSerieStr,
       ano_letivo: anoLetivo,
-      mensalidade_tabela: fmt(calculations.mensalidadeOriginal),
+      mensalidade_tabela: mensalidadeTabelaStr,
       desconto_pct: String(descontoPercent),
-      mensalidade_liquida: fmt(calculations.mensalidadeComDesconto),
-      economia_anual: fmt(calculations.economiaAnualMensalidades),
-      mes_antecipacao: mesAntecipacao.toUpperCase(),
+      mensalidade_liquida: mensalidadeLiquidaStr,
+      economia_anual: economiaAnualStr,
+      mes_antecipacao: mesAntecipacaoDesc,
       desconto_matricula_pct: descontoMatriculaPctDesc,
       detalhe_matricula: detalheMatricula,
       economia_matricula: economiaMatriculaDesc,
       linha_material: linhaMaterial,
       linha_extracurricular: linhaExtracurricular,
-      economia_total: fmt(calculations.economiaTotalGeral),
+      economia_total: economiaTotalDesc,
       convenio: convenioSelecionado || 'Institucional'
     }
 
@@ -792,12 +1163,17 @@ export default function ValoresPage() {
       content = content.replace(regex, v)
     }
 
-    return content.replace(/\n\n\n+/g, '\n\n').trim()
+    return content
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/ {2,}/g, ' ')
+      .trim()
   }, [
     activeTemplate,
     anoLetivo,
     nomeResponsavel,
     nomeAluno,
+    selectedSeries,
     currentSerie,
     descontoPercent,
     calculations,
@@ -1351,39 +1727,135 @@ export default function ValoresPage() {
                   borderBottom: '1px solid #1e1b4b',
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'center'
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 8
                 }}>
-                  <h2 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
-                    <GraduationCap size={18} color="#a5b4fc" />
-                    2. Escolha a Série & Defina o Desconto
-                  </h2>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#e0e7ff', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-                    Tabela Oficial {anoLetivo}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <h2 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                      <GraduationCap size={18} color="#a5b4fc" />
+                      2. Escolha a Série & Defina o Desconto
+                    </h2>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      color: '#ffffff',
+                      background: selectedSerieIds.length > 1 ? '#2563eb' : 'rgba(255, 255, 255, 0.15)',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      padding: '2px 8px',
+                      borderRadius: 12
+                    }}>
+                      {selectedSerieIds.length === 1 ? '1 série' : `${selectedSerieIds.length} séries`}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllSeries}
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: '#e0e7ff',
+                        background: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        padding: '3px 8px',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      Todas as Séries
+                    </button>
+                    {selectedSerieIds.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSerieIds([selectedSerieIds[0]])}
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#fca5a5',
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        Limpar Múltiplas
+                      </button>
+                    )}
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#e0e7ff', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
+                      Tabela Oficial {anoLetivo}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ padding: 22, display: 'flex', flexDirection: 'column' }}>
-                  {/* Grade de Séries */}
+                  {/* Dica de seleção múltipla */}
+                  <div style={{
+                    fontSize: 11,
+                    color: '#475569',
+                    marginBottom: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: '#f8fafc',
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Sparkles size={13} color="#2563eb" />
+                      <strong>Seleção Múltipla Ativa:</strong> Clique nos cards para marcar ou desmarcar mais de uma série.
+                    </span>
+                    {selectedSerieIds.length > 1 && (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#2563eb' }}>
+                        Valores individuais e totais incluídos no WhatsApp
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Grade de Séries com Checkbox */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, maxHeight: 250, overflowY: 'auto', paddingRight: 4 }}>
                     {seriesList.map(serie => {
-                      const isSelected = serie.id === selectedSerieId
+                      const isSelected = selectedSerieIds.includes(serie.id)
                       return (
                         <div
                           key={serie.id}
-                          onClick={() => setSelectedSerieId(serie.id)}
+                          onClick={() => handleToggleSerie(serie.id)}
                           style={{
-                            padding: 12, borderRadius: 12, border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                            background: isSelected ? '#eff6ff' : '#ffffff', cursor: 'pointer',
+                            padding: 12, borderRadius: 12,
+                            border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                            background: isSelected ? '#eff6ff' : '#ffffff',
+                            cursor: 'pointer',
                             display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
                             minHeight: 88,
                             boxShadow: isSelected ? '0 2px 8px rgba(37, 99, 235, 0.12)' : 'none',
-                            transition: 'all 0.15s ease'
+                            transition: 'all 0.15s ease',
+                            position: 'relative'
                           }}
                         >
                           <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: 13, fontWeight: 900, color: isSelected ? '#1e3a8a' : '#1e293b' }}>{serie.nome}</span>
-                              {isSelected && <CheckCircle2 size={16} color="#2563eb" />}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 13, fontWeight: 900, color: isSelected ? '#1e3a8a' : '#1e293b' }}>
+                                {serie.nome}
+                              </span>
+                              <div style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 6,
+                                background: isSelected ? '#2563eb' : '#f8fafc',
+                                border: isSelected ? 'none' : '1.5px solid #cbd5e1',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                transition: 'all 0.15s ease'
+                              }}>
+                                {isSelected && <Check size={12} color="#ffffff" strokeWidth={3} />}
+                              </div>
                             </div>
                             {serie.detalhe && (
                               <span style={{ fontSize: 10, color: '#64748b', display: 'block', marginTop: 2 }}>{serie.detalhe}</span>
@@ -1391,7 +1863,7 @@ export default function ValoresPage() {
                           </div>
                           <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                             <span style={{ fontSize: 10, color: '#94a3b8' }}>Mensalidade:</span>
-                            <span style={{ fontSize: 12, fontWeight: 900, color: '#2563eb' }}>{fmt(serie.mensalidadeBase)}</span>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: isSelected ? '#1d4ed8' : '#2563eb' }}>{fmt(serie.mensalidadeBase)}</span>
                           </div>
                         </div>
                       )
@@ -1531,7 +2003,7 @@ export default function ValoresPage() {
                 </div>
               </div>
 
-              {/* Card 3: Campanha de Matrícula */}
+              {/* Card 3: Campanha de Matrícula Antecipada com Opção "Todas" */}
               <div style={{
                 background: '#ffffff',
                 borderRadius: 20,
@@ -1559,26 +2031,41 @@ export default function ValoresPage() {
                 </div>
 
                 <div style={{ padding: 22, display: 'flex', flexDirection: 'column' }}>
-                  {/* Meses de Antecipação */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                  {/* Meses de Antecipação incluindo o botão TODAS */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
                     {ANTECIPACAO_REGRAS.map(regra => {
                       const isSelected = mesAntecipacao === regra.mes
+                      const isTodas = regra.mes === 'Todas'
                       return (
                         <div
                           key={regra.mes}
                           onClick={() => setMesAntecipacao(regra.mes)}
                           style={{
-                            padding: 12, borderRadius: 12, border: isSelected ? `2px solid #059669` : '1px solid #e2e8f0',
-                            background: isSelected ? '#ecfdf5' : '#ffffff', cursor: 'pointer',
-                            boxShadow: isSelected ? '0 2px 8px rgba(5, 150, 105, 0.15)' : 'none',
+                            padding: 12, borderRadius: 12,
+                            border: isSelected
+                              ? (isTodas ? '2px solid #8b5cf6' : '2px solid #059669')
+                              : (isTodas ? '1px solid #e9d5ff' : '1px solid #e2e8f0'),
+                            background: isSelected
+                              ? (isTodas ? '#f5f3ff' : '#ecfdf5')
+                              : (isTodas ? '#faf5ff' : '#ffffff'),
+                            cursor: 'pointer',
+                            boxShadow: isSelected
+                              ? (isTodas ? '0 2px 10px rgba(139, 92, 246, 0.25)' : '0 2px 8px rgba(5, 150, 105, 0.15)')
+                              : 'none',
                             transition: 'all 0.15s ease'
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>{regra.mes}</span>
-                            {isSelected && <Check size={14} color="#059669" />}
+                            <span style={{ fontSize: 12, fontWeight: 800, color: isTodas ? '#6b21a8' : '#0f172a' }}>
+                              {regra.mes === 'Todas' ? 'Todas' : regra.mes}
+                            </span>
+                            {isSelected && (
+                              <Check size={14} color={isTodas ? '#7c3aed' : '#059669'} strokeWidth={3} />
+                            )}
                           </div>
-                          <div style={{ fontSize: 11, fontWeight: 900, color: '#047857', marginTop: 4 }}>{regra.destaque}</div>
+                          <div style={{ fontSize: 11, fontWeight: 900, color: isTodas ? '#7c3aed' : '#047857', marginTop: 4 }}>
+                            {regra.destaque}
+                          </div>
                           <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{regra.descricao}</div>
                         </div>
                       )
@@ -1600,7 +2087,7 @@ export default function ValoresPage() {
                             transition: 'all 0.15s ease'
                           }}
                         >
-                          À Vista ({currentAntecipacao.aVistaPct}% desc.)
+                          À Vista {mesAntecipacao === 'Todas' ? '(até 20% desc.)' : `(${currentAntecipacao.aVistaPct}% desc.)`}
                         </button>
                         <button
                           onClick={() => setFormaMatricula('parcelado')}
@@ -1612,7 +2099,7 @@ export default function ValoresPage() {
                             transition: 'all 0.15s ease'
                           }}
                         >
-                          Parcelado ({currentAntecipacao.parceladoPct}% desc.)
+                          Parcelado {mesAntecipacao === 'Todas' ? '(até 15% desc.)' : `(${currentAntecipacao.parceladoPct}% desc.)`}
                         </button>
                         <button
                           onClick={() => setFormaMatricula('ambos')}
@@ -1651,8 +2138,79 @@ export default function ValoresPage() {
                       </div>
                     )}
 
-                    {/* Valor Calculado */}
-                    {formaMatricula === 'ambos' ? (
+                    {/* Valor Calculado - Exibição para "Todas" ou para Mês Específico */}
+                    {mesAntecipacao === 'Todas' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          background: '#f5f3ff',
+                          border: '1px solid #ddd6fe'
+                        }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Calendar size={14} /> Cronograma Completo da Campanha ({anoLetivo}):
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
+                            Todas as etapas e descontos incluídos no WhatsApp
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
+                          {calculations.campanhaEtapasTotais.map(etapa => {
+                            const isOutubro = etapa.mes === 'Outubro'
+                            return (
+                              <div
+                                key={etapa.mes}
+                                style={{
+                                  background: '#ffffff',
+                                  borderRadius: 10,
+                                  padding: '10px 12px',
+                                  border: isOutubro ? '1.5px solid #059669' : '1px solid #e2e8f0',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 4
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: 11, fontWeight: 800, color: '#0f172a' }}>{etapa.mes}</span>
+                                  <span style={{
+                                    fontSize: 9,
+                                    fontWeight: 800,
+                                    color: isOutubro ? '#047857' : '#475569',
+                                    background: isOutubro ? '#ecfdf5' : '#f1f5f9',
+                                    padding: '1px 5px',
+                                    borderRadius: 4
+                                  }}>
+                                    {etapa.destaque}
+                                  </span>
+                                </div>
+
+                                {(formaMatricula === 'avista' || formaMatricula === 'ambos') && (
+                                  <div>
+                                    <span style={{ fontSize: 9, color: '#64748b', display: 'block' }}>À Vista:</span>
+                                    <span style={{ fontSize: 13, fontWeight: 900, color: '#047857' }}>
+                                      {fmt(etapa.aVistaTot)}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {(formaMatricula === 'parcelado' || formaMatricula === 'ambos') && (
+                                  <div>
+                                    <span style={{ fontSize: 9, color: '#64748b', display: 'block' }}>Parcelado ({numParcelasMatricula}x):</span>
+                                    <span style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8' }}>
+                                      {numParcelasMatricula}x {fmt(etapa.parcelaTot)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ) : formaMatricula === 'ambos' ? (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
                         {/* Opção 1: À Vista */}
                         <div style={{ background: '#ffffff', borderRadius: 10, padding: '10px 12px', border: '1px solid #a7f3d0', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1743,10 +2301,14 @@ export default function ValoresPage() {
                       />
                       <div>
                         <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', display: 'block' }}>Taxa de Material Didático / Livros</span>
-                        <span style={{ fontSize: 10, color: '#64748b' }}>{currentSerie.taxaMaterialDesc || 'Material pedagógico anual'}</span>
+                        <span style={{ fontSize: 10, color: '#64748b' }}>
+                          {selectedSeries.length === 1
+                            ? (currentSerie.taxaMaterialDesc || 'Material pedagógico anual')
+                            : `Total para ${selectedSeries.length} séries (${selectedSeries.map(s => `${s.nome}: ${fmt(s.taxaMaterial || 0)}`).join(', ')})`}
+                        </span>
                       </div>
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9' }}>{fmt(currentSerie.taxaMaterial || 0)}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9' }}>{fmt(calculations.valorMaterial)}</span>
                   </label>
 
                   {/* Extracurricular */}
@@ -1764,7 +2326,7 @@ export default function ValoresPage() {
                           <span style={{ fontSize: 10, color: '#64748b' }}>Ballet, Jazz, Futsal, Ginástica Rítmica</span>
                         </div>
                       </div>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9' }}>R$ 180,00 / mês</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9' }}>{fmt(calculations.valorExtracurricular)} / mês</span>
                     </label>
 
                     {incluirExtracurricular && (
@@ -1819,7 +2381,14 @@ export default function ValoresPage() {
                     <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#93c5fd', display: 'block' }}>
                       Orçamento Comercial
                     </span>
-                    <h3 style={{ fontSize: 18, fontWeight: 900, color: '#ffffff', margin: 0 }}>{currentSerie.nome}</h3>
+                    <h3 style={{ fontSize: 18, fontWeight: 900, color: '#ffffff', margin: 0 }}>
+                      {selectedSeries.length === 1 ? currentSerie.nome : `${selectedSeries.length} Séries Selecionadas`}
+                    </h3>
+                    {selectedSeries.length > 1 && (
+                      <span style={{ fontSize: 11, color: '#bfdbfe', display: 'block', marginTop: 2, fontWeight: 600 }}>
+                        {selectedSeries.map(s => s.nome).join(' • ')}
+                      </span>
+                    )}
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 800, color: '#ffffff', background: 'rgba(255, 255, 255, 0.15)', border: '1px solid rgba(255, 255, 255, 0.25)', padding: '4px 12px', borderRadius: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.15)' }}>
                     Ano {anoLetivo}
@@ -1830,7 +2399,9 @@ export default function ValoresPage() {
                   {/* Métricas Principais */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                     <div style={{ padding: '12px 14px', borderRadius: 14, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#1e40af', display: 'block', marginBottom: 2 }}>Mensalidade Líquida</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#1e40af', display: 'block', marginBottom: 2 }}>
+                        {selectedSeries.length > 1 ? 'Mensalidade Total Líquida' : 'Mensalidade Líquida'}
+                      </span>
                       <span style={{ fontSize: 20, fontWeight: 900, color: '#1d4ed8', display: 'block' }}>{fmt(calculations.mensalidadeComDesconto)}</span>
                       <span style={{ fontSize: 10, fontWeight: 800, color: '#059669', display: 'block', marginTop: 2 }}>
                         -{fmt(calculations.valorDescontoMensal)}/mês
@@ -1838,22 +2409,50 @@ export default function ValoresPage() {
                     </div>
 
                     <div style={{ padding: '12px 14px', borderRadius: 14, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: '#065f46', display: 'block', marginBottom: 2 }}>Matrícula ({mesAntecipacao})</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: '#065f46', display: 'block', marginBottom: 2 }}>
+                        {mesAntecipacao === 'Todas' ? 'Matrícula (Todas as Etapas)' : `Matrícula (${mesAntecipacao})`}
+                      </span>
                       <span style={{ fontSize: 20, fontWeight: 900, color: '#047857', display: 'block' }}>
-                        {formaMatricula === 'ambos' ? fmt(calculations.valorMatriculaFinalAVista) : fmt(calculations.valorMatriculaFinal)}
+                        {mesAntecipacao === 'Todas'
+                          ? `A partir de ${fmt(calculations.campanhaEtapasTotais[0]?.aVistaTot || calculations.valorMatriculaFinalAVista)}`
+                          : (formaMatricula === 'ambos' ? fmt(calculations.valorMatriculaFinalAVista) : fmt(calculations.valorMatriculaFinal))}
                       </span>
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginTop: 2 }}>
-                        {formaMatricula === 'ambos'
-                          ? `À vista ou ${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`
-                          : (formaMatricula === 'avista' ? 'À vista' : `${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`)}
+                        {mesAntecipacao === 'Todas'
+                          ? 'Out (20% OFF) a Dez (10% OFF)'
+                          : (formaMatricula === 'ambos'
+                              ? `À vista ou ${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`
+                              : (formaMatricula === 'avista' ? 'À vista' : `${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`))}
                       </span>
                     </div>
                   </div>
 
+                  {/* Se múltiplas séries, exibir lista compacta por série */}
+                  {selectedSeries.length > 1 && (
+                    <div style={{ marginBottom: 14, padding: '10px 12px', background: '#f8fafc', borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: '#64748b', display: 'block', marginBottom: 6 }}>
+                        Detalhamento por Série ({selectedSeries.length})
+                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {calculations.seriesCalc.map(sc => (
+                          <div key={sc.serie.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
+                            <span style={{ fontWeight: 600, color: '#334155' }}>{sc.serie.nome}:</span>
+                            <span style={{ fontWeight: 700, color: '#1d4ed8' }}>
+                              {fmt(sc.mensalidadeLiq)}/mês
+                              {descontoPercent > 0 && (
+                                <span style={{ fontSize: 9, color: '#059669', marginLeft: 4 }}>(-{descontoPercent}%)</span>
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Linhas de Detalhamento */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12, borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-                      <span>Mensalidade de Tabela:</span>
+                      <span>{selectedSeries.length > 1 ? 'Soma Mensalidades Tabela:' : 'Mensalidade de Tabela:'}</span>
                       <span style={{ fontWeight: 700, color: '#0f172a' }}>{fmt(calculations.mensalidadeOriginal)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#059669', fontWeight: 700 }}>
@@ -1861,12 +2460,12 @@ export default function ValoresPage() {
                       <span>- {fmt(calculations.valorDescontoMensal)} / mês</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
-                      <span>Anuidade Líquida (12x):</span>
+                      <span>{selectedSeries.length > 1 ? 'Anuidade Líquida Total (12x):' : 'Anuidade Líquida (12x):'}</span>
                       <span style={{ fontWeight: 700, color: '#0f172a' }}>{fmt(calculations.anuidadeComDesconto)}</span>
                     </div>
                     {incluirMaterial && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6d28d9', fontWeight: 700 }}>
-                        <span>Material Didático:</span>
+                        <span>Material Didático {selectedSeries.length > 1 ? `(${selectedSeries.length} séries)` : ''}:</span>
                         <span>+ {fmt(calculations.valorMaterial)}</span>
                       </div>
                     )}
@@ -2149,7 +2748,7 @@ export default function ValoresPage() {
                           <td style={{ padding: '12px', textAlign: 'center' }}>
                             <button
                               onClick={() => {
-                                setSelectedSerieId(serie.id)
+                                setSelectedSerieIds([serie.id])
                                 setActiveTab('simulador')
                               }}
                               style={{
@@ -2282,7 +2881,7 @@ export default function ValoresPage() {
                           <td style={{ padding: '12px', textAlign: 'center' }}>
                             <button
                               onClick={() => {
-                                setSelectedSerieId(serie.id)
+                                setSelectedSerieIds([serie.id])
                                 setActiveTab('simulador')
                               }}
                               style={{

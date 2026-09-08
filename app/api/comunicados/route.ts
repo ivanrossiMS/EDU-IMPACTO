@@ -1,6 +1,7 @@
 import { NextResponse, after } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { requireAuth } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
@@ -8,6 +9,7 @@ import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResp
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 export const maxDuration = 30
 
 function normalizeRow(row: any) {
@@ -427,9 +429,9 @@ export async function GET(request: Request) {
 
   return NextResponse.json(filtered, {
     headers: {
-      // Cache privado de 30s — seguro pois é autenticado (private).
-      // Reduz o impacto de recarregamentos rápidos da página (comunicados mudam raramente em segundos)
-      'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
     },
   })
 }
@@ -685,9 +687,6 @@ export async function DELETE(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const authClient = await createProtectedClient();
-  const supabase = authClient;
-
   const perfil = user.user_metadata?.perfil || '';
   const cargo = user.user_metadata?.cargo || '';
   if (perfil === 'Família' || perfil === 'Responsável' || cargo === 'Responsável' || cargo === 'Aluno' || perfil === 'Aluno') {
@@ -700,16 +699,26 @@ export async function DELETE(request: Request) {
 
   let initialIds: string[] = []
   if (idsParam) {
-    initialIds = idsParam.split(',').filter(Boolean)
+    initialIds = idsParam.split(',').map(s => s.trim()).filter(Boolean)
   } else if (id) {
-    initialIds = [id]
+    initialIds = [id.trim()]
   }
 
   if (initialIds.length === 0) {
     return NextResponse.json({ error: 'id or ids required' }, { status: 400 })
   }
 
-  const { data: comunicados } = await supabase.from('comunicados').select('id, dados, created_at, titulo').in('id', initialIds)
+  const adminClient = getAdminClient()
+
+  const { data: comunicados, error: fetchError } = await adminClient
+    .from('comunicados')
+    .select('id, dados, created_at, titulo')
+    .in('id', initialIds)
+
+  if (fetchError) {
+    console.error('Erro ao buscar comunicados para exclusão:', fetchError)
+  }
+
   const urlsToDelete: string[] = []
   const idsToDelete = new Set<string>(initialIds)
 
@@ -720,56 +729,94 @@ export async function DELETE(request: Request) {
       }
 
       if (com.id && String(com.id).startsWith('AD-COM-REL-COLAB-')) {
-         const autorId = com.dados?.autorId;
-         const dateStr = com.created_at || com.dados?.dataEnvio;
-         if (autorId && dateStr) {
-            const createdDate = new Date(dateStr);
-            if (!isNaN(createdDate.getTime())) {
-                const minDate = new Date(createdDate.getTime() - 2 * 60000).toISOString();
-                const maxDate = new Date(createdDate.getTime() + 2 * 60000).toISOString();
-                
-                const { data: stus } = await supabaseServer.from('comunicados')
-                  .select('id, dados, titulo')
-                  .ilike('id', 'AD-COM-REL-STU-%')
-                  .gte('created_at', minDate)
-                  .lte('created_at', maxDate);
-                
-                if (stus) {
-                    const colabTitulo = (com.titulo || '').replace('Relatório: ', '');
-                    
-                    const relatedStus = stus.filter((s: any) => {
-                      if (!s.dados || s.dados.autorId !== autorId) return false;
-                      // Tentar garantir que seja do mesmo lote verificando prefixo
-                      if (colabTitulo && s.titulo) {
-                        // Verifica se o titulo do STU contém ou inicia com partes do titulo do COLAB
-                        if (!s.titulo.includes(colabTitulo)) return false;
-                      }
-                      return true;
-                    });
-
-                    for (const stu of relatedStus) {
-                        idsToDelete.add(stu.id);
-                        if (stu.dados?.anexos && Array.isArray(stu.dados.anexos)) {
-                            urlsToDelete.push(...stu.dados.anexos);
-                        }
-                    }
+        const autorId = com.dados?.autorId;
+        const dateStr = com.created_at || com.dados?.dataEnvio;
+        if (autorId && dateStr) {
+          const createdDate = new Date(dateStr);
+          if (!isNaN(createdDate.getTime())) {
+            const minDate = new Date(createdDate.getTime() - 2 * 60000).toISOString();
+            const maxDate = new Date(createdDate.getTime() + 2 * 60000).toISOString();
+            
+            const { data: stus } = await adminClient.from('comunicados')
+              .select('id, dados, titulo')
+              .ilike('id', 'AD-COM-REL-STU-%')
+              .gte('created_at', minDate)
+              .lte('created_at', maxDate);
+            
+            if (stus) {
+              const colabTitulo = (com.titulo || '').replace('Relatório: ', '');
+              
+              const relatedStus = stus.filter((s: any) => {
+                if (!s.dados || s.dados.autorId !== autorId) return false;
+                // Tentar garantir que seja do mesmo lote verificando prefixo
+                if (colabTitulo && s.titulo) {
+                  if (!s.titulo.includes(colabTitulo)) return false;
                 }
+                return true;
+              });
+
+              for (const stu of relatedStus) {
+                idsToDelete.add(stu.id);
+                if (stu.dados?.anexos && Array.isArray(stu.dados.anexos)) {
+                  urlsToDelete.push(...stu.dados.anexos);
+                }
+              }
             }
-         }
+          }
+        }
       }
     }
   }
 
   const finalIdsToDelete = Array.from(idsToDelete)
 
-  const { error } = await supabaseServer.from('comunicados').delete().in('id', finalIdsToDelete)
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-
-  if (urlsToDelete.length > 0) {
-    deleteStorageFilesByUrls(urlsToDelete).catch(console.error)
+  // 1. Buscar eventuais anexos em respostas de comunicados antes de deletar
+  try {
+    const { data: respostas } = await adminClient
+      .from('comunicados_respostas')
+      .select('arquivo_url, audio_url')
+      .in('comunicado_id', finalIdsToDelete);
+    if (respostas) {
+      for (const resp of respostas) {
+        if (resp.arquivo_url) urlsToDelete.push(resp.arquivo_url);
+        if (resp.audio_url) urlsToDelete.push(resp.audio_url);
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao verificar anexos de comunicados_respostas:', err);
   }
 
-  return NextResponse.json({ ok: true })
+  // 2. Cascata: remover registros em tabelas filhas/associadas
+  await Promise.allSettled([
+    adminClient.from('comunicados_respostas').delete().in('comunicado_id', finalIdsToDelete),
+    adminClient.from('agenda_notification_reads').delete().in('content_id', finalIdsToDelete),
+    adminClient.from('agenda_ciencias').delete().in('content_id', finalIdsToDelete),
+    adminClient.from('agenda_cobrancas').delete().in('comunicado_id', finalIdsToDelete),
+  ]);
+
+  // 3. Excluir comunicados do banco com privilégio de admin
+  const { error: deleteError, count } = await adminClient
+    .from('comunicados')
+    .delete({ count: 'exact' })
+    .in('id', finalIdsToDelete);
+
+  if (deleteError) {
+    console.error('Erro ao deletar comunicados do banco:', deleteError);
+    return NextResponse.json({ error: deleteError.message }, { status: 400 });
+  }
+
+  // 4. Limpeza assíncrona de arquivos do Storage
+  if (urlsToDelete.length > 0) {
+    deleteStorageFilesByUrls(urlsToDelete).catch(err => console.error('Erro ao deletar arquivos do storage:', err));
+  }
+
+  return NextResponse.json({ ok: true, deletedCount: count ?? finalIdsToDelete.length }, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    },
+  })
 }
 
 // Removed deprecated config export

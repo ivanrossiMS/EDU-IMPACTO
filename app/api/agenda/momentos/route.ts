@@ -2,6 +2,7 @@ import { NextResponse, after } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
@@ -9,6 +10,7 @@ import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { getAlunoTodasTurmasEGrupos } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
+export const revalidate = 0
 export const maxDuration = 30
 
 export async function GET(request: Request) {
@@ -317,7 +319,13 @@ export async function GET(request: Request) {
       }
       return merged;
     })
-    return NextResponse.json(result)
+    return NextResponse.json(result, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
@@ -540,27 +548,75 @@ export async function DELETE(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    if (!id) return NextResponse.json({ error: 'ID não informado' }, { status: 400 })
+    const idsParam = searchParams.get('ids')
 
-    const supabase = await createProtectedClient()
+    let initialIds: string[] = []
+    if (idsParam) {
+      initialIds = idsParam.split(',').map(s => s.trim()).filter(Boolean)
+    } else if (id) {
+      initialIds = [id.trim()]
+    }
 
-    const { data: mom } = await supabase.from('momentos').select('dados').eq('id', id).single()
+    if (initialIds.length === 0) {
+      return NextResponse.json({ error: 'ID não informado' }, { status: 400 })
+    }
+
+    const adminClient = getAdminClient()
+
+    const { data: momentosList, error: fetchErr } = await adminClient
+      .from('momentos')
+      .select('id, dados')
+      .in('id', initialIds)
+
+    if (fetchErr) {
+      console.error('Erro ao buscar momentos para exclusão:', fetchErr)
+    }
+
     const urlsToDelete: string[] = []
-    if (mom && mom.dados?.midia && Array.isArray(mom.dados.midia)) {
-      for (const media of mom.dados.midia) {
-        if (media.url) urlsToDelete.push(media.url)
+    if (momentosList && momentosList.length > 0) {
+      for (const mom of momentosList) {
+        const midias = mom.dados?.midia || mom.dados?.midias
+        if (Array.isArray(midias)) {
+          for (const media of midias) {
+            if (media.url) urlsToDelete.push(media.url)
+            if (media.thumbnail_url) urlsToDelete.push(media.thumbnail_url)
+          }
+        }
       }
     }
 
-    const { error } = await supabase.from('momentos').delete().eq('id', id)
-    
-    if (error) throw new Error(error.message)
-    
-    if (urlsToDelete.length > 0) {
-      deleteStorageFilesByUrls(urlsToDelete).catch(console.error)
+    // Cascata: excluir leituras associadas a estes momentos
+    try {
+      await adminClient
+        .from('agenda_notification_reads')
+        .delete()
+        .in('content_id', initialIds);
+    } catch (err: any) {
+      console.error('Erro ao deletar leituras dos momentos:', err);
     }
 
-    return NextResponse.json({ ok: true })
+    // Excluir os momentos usando adminClient (bypass RLS)
+    const { error: deleteError, count } = await adminClient
+      .from('momentos')
+      .delete({ count: 'exact' })
+      .in('id', initialIds)
+
+    if (deleteError) {
+      console.error('Erro ao excluir momentos do banco:', deleteError)
+      throw new Error(deleteError.message)
+    }
+
+    if (urlsToDelete.length > 0) {
+      deleteStorageFilesByUrls(urlsToDelete).catch(err => console.error('Erro ao deletar arquivos de mídia do storage:', err))
+    }
+
+    return NextResponse.json({ ok: true, deletedCount: count ?? initialIds.length }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 400 })
   }

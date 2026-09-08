@@ -29,10 +29,10 @@ export function useQueryComunicados(
     getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === pageSize ? allPages.length : undefined
     },
-    staleTime: 1000 * 60 * 5, // 5 min de cache fresco
+    staleTime: 1000 * 30, // 30s de cache antes de considerar obsoleto
     gcTime: 1000 * 60 * 10, // 10 min na memória
     refetchOnWindowFocus: false, 
-    refetchOnMount: false,
+    refetchOnMount: true,
     enabled: isEnabled
   })
 
@@ -64,10 +64,10 @@ export function useQueryMomentos(
     getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === pageSize ? allPages.length : undefined
     },
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 10,
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
+    refetchOnMount: true,
     enabled: isEnabled
   })
 

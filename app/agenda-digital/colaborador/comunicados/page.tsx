@@ -130,6 +130,20 @@ function ColaboradorComunicadosContent() {
   const [showRelsModal, setShowRelsModal] = useState(false)
   const [openedReportTaskStr, setOpenedReportTaskStr] = useState<string | null>(null)
 
+  useEffect(() => {
+    const handleSync = () => {
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+    };
+    window.addEventListener('ad:comunicados-insert', handleSync);
+    window.addEventListener('ad:comunicados-update', handleSync);
+    window.addEventListener('ad:comunicados-delete', handleSync);
+    return () => {
+      window.removeEventListener('ad:comunicados-insert', handleSync);
+      window.removeEventListener('ad:comunicados-update', handleSync);
+      window.removeEventListener('ad:comunicados-delete', handleSync);
+    };
+  }, [queryClient]);
+
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const espelharPerfil = searchParams?.get('espelhar_perfil')
   const isMirroring = !!espelharColabId
@@ -508,9 +522,16 @@ function ColaboradorComunicadosContent() {
     if (selectedComunicado?.id === cId) setSelectedComunicado(null);
 
     try {
-      fetch(`/api/comunicados?id=${cId}`, { method: 'DELETE' }).catch(console.error);
+      const res = await fetch(`/api/comunicados?id=${cId}`, { method: 'DELETE' });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+        window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { id: cId, old: { id: cId } } }));
+      } else {
+        const data = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
+        console.error("Erro ao deletar comunicado:", data.error);
+      }
     } catch (e) {
-      console.error(e);
+      console.error("Erro na requisição DELETE comunicado:", e);
     }
     
     setComunicadoToDelete(null);

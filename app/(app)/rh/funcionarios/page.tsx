@@ -343,7 +343,7 @@ export default function FuncionariosPage() {
             <div key={c.label} className="kpi-card">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontSize: 18 }}>{c.icon}</span>
-                <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{c.label}</span>
+                <span style={{ fontSize: 11, color: '#0f172a', fontWeight: 600 }}>{c.label}</span>
               </div>
               <div style={{ fontSize: typeof c.value === 'number' ? 26 : 18, fontWeight: 800, color: c.color, fontFamily: 'Outfit, sans-serif' }}>{c.value}</div>
             </div>
@@ -355,18 +355,18 @@ export default function FuncionariosPage() {
       <div className="card" style={{ padding: '12px 16px', marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-            <input className="form-input" style={{ paddingLeft: 32 }} placeholder="Buscar nome, cargo, CPF..." value={search} onChange={e => setSearch(e.target.value)} />
+            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+            <input className="form-input" style={{ paddingLeft: 32, color: '#0f172a' }} placeholder="Buscar nome, cargo, CPF..." value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          <select className="form-input" style={{ width: 150 }} value={filtroSt} onChange={e => setFiltroSt(e.target.value)}>
+          <select className="form-input" style={{ width: 150, color: '#0f172a' }} value={filtroSt} onChange={e => setFiltroSt(e.target.value)}>
             <option value="Todos">Todos os status</option>
             {STATUS_OPTS.map(s => <option key={s}>{s}</option>)}
           </select>
-          <select className="form-input" style={{ width: 170 }} value={filtroDep} onChange={e => setFiltroDep(e.target.value)}>
+          <select className="form-input" style={{ width: 170, color: '#0f172a' }} value={filtroDep} onChange={e => setFiltroDep(e.target.value)}>
             <option value="Todos">Todos departamentos</option>
             {departamentosAtivos.map(d => <option key={d}>{d}</option>)}
           </select>
-          <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>{filtered.length} resultado(s)</span>
+          <span style={{ fontSize: 12, color: '#0f172a', fontWeight: 600 }}>{filtered.length} resultado(s)</span>
         </div>
       </div>
 
@@ -420,18 +420,18 @@ export default function FuncionariosPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div className="avatar" style={{ width: 36, height: 36, fontSize: 12, background: 'rgba(59,130,246,0.15)', color: '#60a5fa', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>{getInitials(f.nome)}</div>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>{f.nome}</div>
-                        <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{f.email}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{f.nome}</div>
+                        <div style={{ fontSize: 11, color: '#475569' }}>{f.email}</div>
                       </div>
                     </div>
                   </td>
                   <td>
-                    <div style={{ fontSize: 13 }}>{f.cargo}</div>
+                    <div style={{ fontSize: 13, color: '#0f172a', fontWeight: 600 }}>{f.cargo}</div>
                     <span className="badge badge-neutral" style={{ fontSize: 10, marginTop: 2 }}>{f.departamento}</span>
                   </td>
-                  <td style={{ fontWeight: 800, color: '#34d399', fontFamily: 'Outfit, sans-serif' }}>{formatCurrency(f.salario)}</td>
-                  <td style={{ fontSize: 12 }}>{f.admissao}</td>
-                  <td style={{ fontSize: 12 }}>{f.unidade || '—'}</td>
+                  <td style={{ fontWeight: 800, color: '#059669', fontFamily: 'Outfit, sans-serif' }}>{formatCurrency(f.salario)}</td>
+                  <td style={{ fontSize: 12, color: '#0f172a' }}>{f.admissao}</td>
+                  <td style={{ fontSize: 12, color: '#0f172a' }}>{f.unidade || '—'}</td>
                   <td>
                     {(() => {
                       const pMatch = (perfis || []).find((p: any) => p.nome === (f as any).perfilSistema)
@@ -442,7 +442,7 @@ export default function FuncionariosPage() {
                         }}>
                           <Shield size={9} />{(f as any).perfilSistema}
                         </span>
-                      ) : <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>—</span>
+                      ) : <span style={{ fontSize: 11, color: '#64748b' }}>—</span>
                     })()}
                   </td>
                   <td>
@@ -466,103 +466,112 @@ export default function FuncionariosPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div style={{ background: 'hsl(var(--bg-base))', borderRadius: 20, width: '100%', maxWidth: 780, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 40px 120px rgba(0,0,0,0.7)' }}>
             {/* Header */}
-            <div style={{ padding: '20px 28px', background: 'linear-gradient(135deg, rgba(59,130,246,0.1) 0%, rgba(139,92,246,0.05) 100%)', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <div style={{ padding: '20px 28px', background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, rgba(139,92,246,0.04) 100%)', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BadgeCheck size={24} color="#60a5fa" />
+                  <BadgeCheck size={24} color="#2563eb" />
                 </div>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>{modal === 'add' ? 'Novo Funcionário' : 'Editar Funcionário'}</div>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a' }}>{modal === 'add' ? 'Novo Funcionário' : 'Editar Funcionário'}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                    <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>Código:</span>
-                    <code style={{ fontSize: 12, fontWeight: 900, color: '#60a5fa', background: 'rgba(59,130,246,0.1)', padding: '1px 8px', borderRadius: 4 }}>{form.codigo}</code>
+                    <span style={{ fontSize: 11, color: '#334155', fontWeight: 600 }}>Código:</span>
+                    <code style={{ fontSize: 12, fontWeight: 900, color: '#1d4ed8', background: 'rgba(59,130,246,0.1)', padding: '1px 8px', borderRadius: 4 }}>{form.codigo}</code>
                   </div>
                 </div>
               </div>
-              <button onClick={closeModal} className="btn btn-ghost btn-icon"><X size={18} /></button>
+              <button onClick={closeModal} className="btn btn-ghost btn-icon" style={{ color: '#0f172a' }}><X size={18} /></button>
             </div>
 
             {/* Tabs */}
             <div style={{ display: 'flex', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-elevated))', flexShrink: 0 }}>
               {ABAs.map(a => (
                 <button key={a.id} onClick={() => setAba(a.id as typeof aba)}
-                  style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, border: 'none', background: 'transparent', cursor: 'pointer', borderBottom: aba === a.id ? '2px solid #60a5fa' : '2px solid transparent', color: aba === a.id ? '#60a5fa' : 'hsl(var(--text-muted))', transition: 'all 0.15s' }}>
+                  style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, border: 'none', background: 'transparent', cursor: 'pointer', borderBottom: aba === a.id ? '2px solid #2563eb' : '2px solid transparent', color: aba === a.id ? '#2563eb' : '#0f172a', transition: 'all 0.15s' }}>
                   {a.icon}{a.label}
                 </button>
               ))}
             </div>
 
             {/* Body */}
-            <div style={{ padding: '24px 28px', overflowY: 'auto', flex: 1 }}>
+            <div style={{ padding: '24px 28px', overflowY: 'auto', overflowX: 'hidden', flex: 1 }}>
               {aba === 'pessoal' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div style={{ gridColumn: '1/-1' }}>
-                    <label className="form-label">Nome Completo *</label>
-                    <input className="form-input" value={form.nome} onChange={e => set('nome', e.target.value)} placeholder="Ex: Prof. Ricardo Faria" style={{ fontSize: 15, fontWeight: 600 }} />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Nome Completo *</label>
+                    <input className="form-input" value={form.nome} onChange={e => set('nome', e.target.value)} placeholder="Ex: Prof. Ricardo Faria" style={{ fontSize: 15, fontWeight: 600, color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">Data de Nascimento</label>
-                    <input type="date" className="form-input" value={form.dataNascimento} onChange={e => set('dataNascimento', e.target.value)} />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Data de Nascimento</label>
+                    <input type="date" className="form-input" value={form.dataNascimento} onChange={e => set('dataNascimento', e.target.value)} style={{ color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">Status</label>
-                    <select className="form-input" value={form.status} onChange={e => set('status', e.target.value)}>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Status</label>
+                    <select className="form-input" value={form.status} onChange={e => set('status', e.target.value)} style={{ color: '#0f172a' }}>
                       {STATUS_OPTS.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">E-mail *</label>
-                    <input type="email" className="form-input" value={form.email} onChange={e => set('email', e.target.value)} placeholder="funcionario@escola.com" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>E-mail *</label>
+                    <input type="email" className="form-input" value={form.email} onChange={e => set('email', e.target.value)} placeholder="funcionario@escola.com" style={{ color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">Escolaridade</label>
-                    <select className="form-input" value={form.escolaridade} onChange={e => set('escolaridade', e.target.value)}>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Escolaridade</label>
+                    <select className="form-input" value={form.escolaridade} onChange={e => set('escolaridade', e.target.value)} style={{ color: '#0f172a' }}>
                       {ESCOLARIDADES.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </div>
 
                   {/* Perfil de acesso ao sistema */}
                   <div style={{ gridColumn: '1/-1' }}>
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Shield size={13} style={{ color: '#8b5cf6' }} />
-                      Perfil de Acesso ao Sistema
-                      <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', fontWeight: 400 }}>(Configurações → Usuários → Perfis)</span>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#0f172a' }}>
+                      <Shield size={14} style={{ color: '#6366f1' }} />
+                      <span>Perfil de Acesso ao Sistema</span>
+                      <span style={{ fontSize: 11, color: '#475569', fontWeight: 500, textTransform: 'none', letterSpacing: 'normal' }}>(Configurações → Usuários → Perfis)</span>
                     </label>
                     {(perfis || []).length === 0 ? (
-                      <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px dashed rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.04)', fontSize: 12, color: '#f59e0b' }}>
+                      <div style={{ padding: '12px 16px', borderRadius: 8, border: '1px dashed rgba(245,158,11,0.5)', background: 'rgba(245,158,11,0.06)', fontSize: 12, color: '#b45309', fontWeight: 600 }}>
                         ⚠ Nenhum perfil cadastrado. Acesse <strong>Configurações → Usuários → Perfis</strong> para criar.
                       </div>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, marginTop: 4 }}>
                         {/* Option: sem perfil */}
                         <label style={{
-                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
-                          border: `1px solid ${!(form as any).perfilSistema ? 'rgba(99,102,241,0.4)' : 'hsl(var(--border-subtle))'}`,
-                          background: !(form as any).perfilSistema ? 'rgba(99,102,241,0.04)' : 'transparent',
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                          border: !(form as any).perfilSistema ? '2px solid #6366f1' : '1px solid hsl(var(--border-subtle))',
+                          background: !(form as any).perfilSistema ? 'rgba(99,102,241,0.08)' : 'hsl(var(--bg-elevated))',
+                          transition: 'all 0.15s ease',
                         }}>
                           <input type="radio" name="perfilSistema" checked={!(form as any).perfilSistema}
                             onChange={() => set('perfilSistema', '')}
-                            style={{ accentColor: '#6366f1' }} />
-                          <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Sem acesso ao sistema</span>
+                            style={{ accentColor: '#6366f1', width: 16, height: 16, cursor: 'pointer', flexShrink: 0, margin: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a', lineHeight: 1.2 }}>Sem acesso ao sistema</div>
+                            <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>Sem login de usuário</div>
+                          </div>
+                          {!(form as any).perfilSistema && <Check size={14} color="#6366f1" style={{ flexShrink: 0 }} />}
                         </label>
-                        {(perfis || []).map((p: any) => (
-                          <label key={p.id} style={{
-                            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
-                            border: `1px solid ${(form as any).perfilSistema === p.nome ? (p.cor || '#8b5cf6') + '60' : 'hsl(var(--border-subtle))'}`,
-                            background: (form as any).perfilSistema === p.nome ? (p.cor || '#8b5cf6') + '10' : 'transparent',
-                            transition: 'all 0.15s',
-                          }}>
-                            <input type="radio" name="perfilSistema" checked={(form as any).perfilSistema === p.nome}
-                              onChange={() => set('perfilSistema', p.nome)}
-                              style={{ accentColor: p.cor || '#8b5cf6' }} />
-                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: p.cor || '#8b5cf6', flexShrink: 0 }} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: (form as any).perfilSistema === p.nome ? (p.cor || '#8b5cf6') : 'hsl(var(--text-primary))' }}>{p.nome}</div>
-                              {p.descricao && <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{p.descricao}</div>}
-                            </div>
-                            {(form as any).perfilSistema === p.nome && <Check size={13} color={p.cor || '#8b5cf6'} />}
-                          </label>
-                        ))}
+                        {(perfis || []).map((p: any) => {
+                          const isSelected = (form as any).perfilSistema === p.nome
+                          const cor = p.cor || '#8b5cf6'
+                          return (
+                            <label key={p.id} style={{
+                              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                              border: isSelected ? `2px solid ${cor}` : '1px solid hsl(var(--border-subtle))',
+                              background: isSelected ? `${cor}15` : 'hsl(var(--bg-elevated))',
+                              transition: 'all 0.15s ease',
+                            }}>
+                              <input type="radio" name="perfilSistema" checked={isSelected}
+                                onChange={() => set('perfilSistema', p.nome)}
+                                style={{ accentColor: cor, width: 16, height: 16, cursor: 'pointer', flexShrink: 0, margin: 0 }} />
+                              <div style={{ width: 10, height: 10, borderRadius: '50%', background: cor, flexShrink: 0 }} />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.2 }}>{p.nome}</div>
+                                {p.descricao && <div style={{ fontSize: 11, color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{p.descricao}</div>}
+                              </div>
+                              {isSelected && <Check size={14} color={cor} style={{ flexShrink: 0 }} />}
+                            </label>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
@@ -572,86 +581,86 @@ export default function FuncionariosPage() {
               {aba === 'profissional' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div>
-                    <label className="form-label">Cargo *</label>
-                    <select className="form-input" value={form.cargo} onChange={e => set('cargo', e.target.value)}>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Cargo *</label>
+                    <select className="form-input" value={form.cargo} onChange={e => set('cargo', e.target.value)} style={{ color: '#0f172a' }}>
                       {CARGOS.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">Departamento</label>
-                    <select className="form-input" value={form.departamento} onChange={e => set('departamento', e.target.value)}>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Departamento</label>
+                    <select className="form-input" value={form.departamento} onChange={e => set('departamento', e.target.value)} style={{ color: '#0f172a' }}>
                       {DEPARTAMENTOS.map(d => <option key={d}>{d}</option>)}
                     </select>
                   </div>
                   <div style={{ gridColumn: '1/-1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                     <div>
-                      <label className="form-label">Salário (R$) *</label>
-                      <input type="number" className="form-input" value={form.salario || ''} onChange={e => set('salario', +e.target.value)} style={{ fontWeight: 800, color: '#34d399' }} min={0} step={100} />
+                      <label className="form-label" style={{ color: '#0f172a' }}>Salário (R$) *</label>
+                      <input type="number" className="form-input" value={form.salario || ''} onChange={e => set('salario', +e.target.value)} style={{ fontWeight: 800, color: '#059669' }} min={0} step={100} />
                     </div>
                     <div>
-                      <label className="form-label">Bônus / Gratificação (R$)</label>
-                      <input type="number" className="form-input" value={(form as any).bonus || ''} onChange={e => set('bonus', +e.target.value)} style={{ fontWeight: 800, color: '#f59e0b' }} min={0} step={50} placeholder="0,00" />
+                      <label className="form-label" style={{ color: '#0f172a' }}>Bônus / Gratificação (R$)</label>
+                      <input type="number" className="form-input" value={(form as any).bonus || ''} onChange={e => set('bonus', +e.target.value)} style={{ fontWeight: 800, color: '#d97706' }} min={0} step={50} placeholder="0,00" />
                     </div>
                   </div>
                   <div>
-                    <label className="form-label">Tipo de Contrato</label>
-                    <select className="form-input" value={form.tipoContrato} onChange={e => set('tipoContrato', e.target.value)}>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Tipo de Contrato</label>
+                    <select className="form-input" value={form.tipoContrato} onChange={e => set('tipoContrato', e.target.value)} style={{ color: '#0f172a' }}>
                       {TIPOS_CONTRATO.map(t => <option key={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="form-label">Data de Admissão</label>
-                    <input type="date" className="form-input" value={form.admissao} onChange={e => set('admissao', e.target.value)} />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Data de Admissão</label>
+                    <input type="date" className="form-input" value={form.admissao} onChange={e => set('admissao', e.target.value)} style={{ color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">Carga Horária (h/semana)</label>
-                    <input type="number" className="form-input" value={form.cargaHoraria} onChange={e => set('cargaHoraria', +e.target.value)} min={1} max={60} />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Carga Horária (h/semana)</label>
+                    <input type="number" className="form-input" value={form.cargaHoraria} onChange={e => set('cargaHoraria', +e.target.value)} min={1} max={60} style={{ color: '#0f172a' }} />
                   </div>
                   <div style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                     <div>
                       <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>Vale Transporte</div>
-                      <div style={{ fontSize: '11px', color: '#64748b' }}>Habilitar desconto padrão de 6% sobre o salário base.</div>
+                      <div style={{ fontSize: '11px', color: '#475569' }}>Habilitar desconto padrão de 6% sobre o salário base.</div>
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button 
                         onClick={() => set('valeTransporte', false)}
-                        style={{ height: '32px', padding: '0 16px', background: !form.valeTransporte ? '#e2e8f0' : '#fff', color: !form.valeTransporte ? '#475569' : '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '6px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                        style={{ height: '32px', padding: '0 16px', background: !form.valeTransporte ? '#e2e8f0' : '#fff', color: !form.valeTransporte ? '#0f172a' : '#64748b', border: '1px solid #cbd5e1', borderRadius: '6px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
                       >
                         Não
                       </button>
                       <button 
                         onClick={() => set('valeTransporte', true)}
-                        style={{ height: '32px', padding: '0 16px', background: form.valeTransporte ? '#2563eb' : '#fff', color: form.valeTransporte ? '#fff' : '#94a3b8', border: 'none', borderRadius: '6px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
+                        style={{ height: '32px', padding: '0 16px', background: form.valeTransporte ? '#2563eb' : '#fff', color: form.valeTransporte ? '#fff' : '#64748b', border: form.valeTransporte ? 'none' : '1px solid #cbd5e1', borderRadius: '6px', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}
                       >
                         Sim
                       </button>
                     </div>
                   </div>
                   <div style={{ gridColumn: '1/-1' }}>
-                    <label className="form-label">Unidade</label>
+                    <label className="form-label" style={{ color: '#0f172a' }}>Unidade</label>
                     {unidades.length > 0 ? (
-                      <select className="form-input" value={form.unidade} onChange={e => set('unidade', e.target.value)}>
+                      <select className="form-input" value={form.unidade} onChange={e => set('unidade', e.target.value)} style={{ color: '#0f172a' }}>
                         <option value="">Selecionar unidade</option>
                         {unidades.map(u => <option key={u}>{u}</option>)}
                       </select>
                     ) : (
-                      <input className="form-input" value={form.unidade} onChange={e => set('unidade', e.target.value)} placeholder="Unidade (configure em Administrativo)" />
+                      <input className="form-input" value={form.unidade} onChange={e => set('unidade', e.target.value)} placeholder="Unidade (configure em Administrativo)" style={{ color: '#0f172a' }} />
                     )}
                   </div>
 
                   {/* Horário de Trabalho */}
                   <div style={{ gridColumn: '1/-1', marginTop: 16 }}>
-                    <label className="form-label" style={{ fontWeight: 700 }}>Horário de Trabalho</label>
+                    <label className="form-label" style={{ fontWeight: 700, color: '#0f172a' }}>Horário de Trabalho</label>
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                            <th style={{ textAlign: 'left', padding: '6px' }}>Dia</th>
-                            <th style={{ textAlign: 'left', padding: '6px' }}>Início</th>
-                            <th style={{ textAlign: 'left', padding: '6px' }}>Almoço</th>
-                            <th style={{ textAlign: 'left', padding: '6px' }}>Retorno</th>
-                            <th style={{ textAlign: 'left', padding: '6px' }}>Saída</th>
-                            <th style={{ textAlign: 'right', padding: '6px' }}>Total</th>
+                            <th style={{ textAlign: 'left', padding: '6px', color: '#0f172a' }}>Dia</th>
+                            <th style={{ textAlign: 'left', padding: '6px', color: '#0f172a' }}>Início</th>
+                            <th style={{ textAlign: 'left', padding: '6px', color: '#0f172a' }}>Almoço</th>
+                            <th style={{ textAlign: 'left', padding: '6px', color: '#0f172a' }}>Retorno</th>
+                            <th style={{ textAlign: 'left', padding: '6px', color: '#0f172a' }}>Saída</th>
+                            <th style={{ textAlign: 'right', padding: '6px', color: '#0f172a' }}>Total</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -660,19 +669,19 @@ export default function FuncionariosPage() {
                             const totalDia = calcularHorasDia(h)
                             return (
                               <tr key={dia} style={{ borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                                <td style={{ padding: '6px', fontWeight: 700 }}>{dia}</td>
-                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28 }} value={h.in} onChange={e => handleHorarioChange(dia, 'in', e.target.value)} /></td>
-                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28 }} value={h.out1} onChange={e => handleHorarioChange(dia, 'out1', e.target.value)} /></td>
-                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28 }} value={h.in2} onChange={e => handleHorarioChange(dia, 'in2', e.target.value)} /></td>
-                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28 }} value={h.out} onChange={e => handleHorarioChange(dia, 'out', e.target.value)} /></td>
-                                <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: totalDia > 0 ? '#34d399' : 'hsl(var(--text-muted))' }}>{totalDia.toFixed(2)}h</td>
+                                <td style={{ padding: '6px', fontWeight: 700, color: '#0f172a' }}>{dia}</td>
+                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28, color: '#0f172a' }} value={h.in} onChange={e => handleHorarioChange(dia, 'in', e.target.value)} /></td>
+                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28, color: '#0f172a' }} value={h.out1} onChange={e => handleHorarioChange(dia, 'out1', e.target.value)} /></td>
+                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28, color: '#0f172a' }} value={h.in2} onChange={e => handleHorarioChange(dia, 'in2', e.target.value)} /></td>
+                                <td style={{ padding: '6px' }}><input type="time" className="form-input" style={{ padding: 4, height: 28, color: '#0f172a' }} value={h.out} onChange={e => handleHorarioChange(dia, 'out', e.target.value)} /></td>
+                                <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: totalDia > 0 ? '#059669' : '#475569' }}>{totalDia.toFixed(2)}h</td>
                               </tr>
                             )
                           })}
                         </tbody>
                       </table>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 13 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 13, color: '#0f172a' }}>
                       <div>
                         <strong>Total Semana:</strong> {totalSemana.toFixed(2)}h
                       </div>
@@ -687,20 +696,20 @@ export default function FuncionariosPage() {
               {aba === 'documentos' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div>
-                    <label className="form-label">CPF</label>
-                    <input className="form-input" value={form.cpf} onChange={e => set('cpf', e.target.value)} placeholder="000.000.000-00" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>CPF</label>
+                    <input className="form-input" value={form.cpf} onChange={e => set('cpf', e.target.value)} placeholder="000.000.000-00" style={{ color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">RG</label>
-                    <input className="form-input" value={form.rg} onChange={e => set('rg', e.target.value)} placeholder="00.000.000-0" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>RG</label>
+                    <input className="form-input" value={form.rg} onChange={e => set('rg', e.target.value)} placeholder="00.000.000-0" style={{ color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">PIS / PASEP</label>
-                    <input className="form-input" value={form.pis} onChange={e => set('pis', e.target.value)} placeholder="000.00000.00-0" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>PIS / PASEP</label>
+                    <input className="form-input" value={form.pis} onChange={e => set('pis', e.target.value)} placeholder="000.00000.00-0" style={{ color: '#0f172a' }} />
                   </div>
                   <div style={{ gridColumn: '1/-1' }}>
-                    <label className="form-label">Observações internas</label>
-                    <textarea className="form-input" style={{ minHeight: 80, resize: 'vertical' }} value={form.observacoes} onChange={e => set('observacoes', e.target.value)} placeholder="Histórico relevante, restrições, etc." />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Observações internas</label>
+                    <textarea className="form-input" style={{ minHeight: 80, resize: 'vertical', color: '#0f172a' }} value={form.observacoes} onChange={e => set('observacoes', e.target.value)} placeholder="Histórico relevante, restrições, etc." />
                   </div>
                 </div>
               )}
@@ -708,26 +717,26 @@ export default function FuncionariosPage() {
               {aba === 'contato' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div>
-                    <label className="form-label">Telefone</label>
-                    <input className="form-input" value={form.telefone} onChange={e => set('telefone', e.target.value)} placeholder="(11) 3000-0000" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Telefone</label>
+                    <input className="form-input" value={form.telefone} onChange={e => set('telefone', e.target.value)} placeholder="(11) 3000-0000" style={{ color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">Celular / WhatsApp</label>
-                    <input className="form-input" value={form.celular} onChange={e => set('celular', e.target.value)} placeholder="(11) 99000-0000" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Celular / WhatsApp</label>
+                    <input className="form-input" value={form.celular} onChange={e => set('celular', e.target.value)} placeholder="(11) 99000-0000" style={{ color: '#0f172a' }} />
                   </div>
                   <div style={{ gridColumn: '1/-1', height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
-                  <div style={{ gridColumn: '1/-1', fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dados Bancários (para pagamento)</div>
+                  <div style={{ gridColumn: '1/-1', fontSize: 12, fontWeight: 700, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dados Bancários (para pagamento)</div>
                   <div>
-                    <label className="form-label">Banco</label>
-                    <input className="form-input" value={form.banco} onChange={e => set('banco', e.target.value)} placeholder="001 — Banco do Brasil" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Banco</label>
+                    <input className="form-input" value={form.banco} onChange={e => set('banco', e.target.value)} placeholder="001 — Banco do Brasil" style={{ color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">Agência</label>
-                    <input className="form-input" value={form.agencia} onChange={e => set('agencia', e.target.value)} placeholder="0001-5" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Agência</label>
+                    <input className="form-input" value={form.agencia} onChange={e => set('agencia', e.target.value)} placeholder="0001-5" style={{ color: '#0f172a' }} />
                   </div>
                   <div>
-                    <label className="form-label">Conta Corrente</label>
-                    <input className="form-input" value={form.conta} onChange={e => set('conta', e.target.value)} placeholder="12345-6" />
+                    <label className="form-label" style={{ color: '#0f172a' }}>Conta Corrente</label>
+                    <input className="form-input" value={form.conta} onChange={e => set('conta', e.target.value)} placeholder="12345-6" style={{ color: '#0f172a' }} />
                   </div>
                 </div>
               )}
@@ -760,7 +769,7 @@ export default function FuncionariosPage() {
                 </button>
               ) : (
                 <>
-                  <button className="btn btn-secondary" onClick={closeModal} disabled={isSaving}>Cancelar</button>
+                  <button className="btn btn-secondary" onClick={closeModal} disabled={isSaving} style={{ color: '#0f172a' }}>Cancelar</button>
                   <button className="btn btn-primary" onClick={handleSave} disabled={!form.nome.trim() || isSaving}
                     style={{ opacity: isSaving ? 0.7 : 1 }}>
                     {isSaving

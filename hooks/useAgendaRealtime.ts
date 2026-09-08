@@ -41,18 +41,28 @@ export function useAgendaRealtime<T = any>({
   useEffect(() => {
     // 1. Manter eventos locais para Optimistic UI
     const handleLocalInsert = (e: any) => {
-      const payload = e.detail;
-      if (onInsertRef.current) onInsertRef.current({ new: payload.new as T, old: null })
+      const payload = e?.detail || {};
+      if (onInsertRef.current) {
+        const newItem = payload.new !== undefined ? payload.new : payload;
+        onInsertRef.current({ new: newItem as T, old: null });
+      }
     }
 
     const handleLocalUpdate = (e: any) => {
-      const payload = e.detail;
-      if (onUpdateRef.current) onUpdateRef.current({ new: payload.new as T, old: payload.old as T })
+      const payload = e?.detail || {};
+      if (onUpdateRef.current) {
+        const newItem = payload.new !== undefined ? payload.new : payload;
+        const oldItem = payload.old !== undefined ? payload.old : null;
+        onUpdateRef.current({ new: newItem as T, old: oldItem as T });
+      }
     }
 
     const handleLocalDelete = (e: any) => {
-      const payload = e.detail;
-      if (onDeleteRef.current) onDeleteRef.current({ new: null, old: payload.old as T })
+      const payload = e?.detail || {};
+      if (onDeleteRef.current) {
+        const oldItem = payload.old !== undefined ? payload.old : (payload.id !== undefined ? payload : payload);
+        onDeleteRef.current({ new: null, old: oldItem as T });
+      }
     }
 
     const eventPrefix = `ad:${table}-`

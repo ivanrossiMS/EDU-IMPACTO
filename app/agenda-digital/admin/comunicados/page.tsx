@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { useState, useRef, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import Image from 'next/image'
 import { useAgendaDigital, ADComunicado } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
@@ -69,6 +70,7 @@ const MediaLabel = ({ name, url, initialSize }: { name: string, url: string, ini
 };
 
 export default function ADAdminComunicados() {
+  const queryClient = useQueryClient()
   const { currentUser } = useApp()
   const { comunicados, setComunicados, setComunicadosLocally, adAlert, adConfirm, isDataLoading, fetchNextPageComunicados, hasNextPageComunicados, chatGroups } = useAgendaDigital()
   const { turmas = [] } = useData();
@@ -77,6 +79,20 @@ export default function ADAdminComunicados() {
   const { templates: relatoriosTemplates } = useRelatorios()
   
   const alunosAtivos = (alunos || []).filter(a => a.status === 'matriculado' || a.status === 'ativo')
+
+  useEffect(() => {
+    const handleSync = () => {
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+    };
+    window.addEventListener('ad:comunicados-insert', handleSync);
+    window.addEventListener('ad:comunicados-update', handleSync);
+    window.addEventListener('ad:comunicados-delete', handleSync);
+    return () => {
+      window.removeEventListener('ad:comunicados-insert', handleSync);
+      window.removeEventListener('ad:comunicados-update', handleSync);
+      window.removeEventListener('ad:comunicados-delete', handleSync);
+    };
+  }, [queryClient]);
 
   const renderConteudo = (text: string) => {
     if (!text) return null;
@@ -371,10 +387,12 @@ export default function ADAdminComunicados() {
             setComunicados(prev => prev.filter(c => !selectedComs.includes(c.id)));
           }
           setSelectedComs([]);
+          queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+          window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { ids: selectedComs, old: selectedComs.map(id => ({ id })) } }));
           adAlert('Comunicados excluídos com sucesso.', 'Sucesso');
         } else {
-          const data = await res.json();
-          adAlert(`Erro ao excluir: ${data.error}`, 'Erro');
+          const data = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
+          adAlert(`Erro ao excluir: ${data.error || res.statusText}`, 'Erro');
         }
       } catch (err: any) {
         adAlert(`Erro ao excluir: ${err.message}`, 'Erro');
@@ -1124,12 +1142,25 @@ export default function ADAdminComunicados() {
                 <button className="btn" style={{ flex: 1, minWidth: 0, gap: 6, height: 44, padding: '0 8px', fontSize: 14, whiteSpace: 'nowrap', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }} onClick={() => {
                   adConfirm('Excluir este comunicado permanentemente?', 'Apagar', async () => {
                     try {
-                      await fetch(`/api/comunicados?id=${viewingCom.id}`, { method: 'DELETE' });
-                    } catch (err) {
+                      const res = await fetch(`/api/comunicados?id=${viewingCom.id}`, { method: 'DELETE' });
+                      if (res.ok) {
+                        if (setComunicadosLocally) {
+                          setComunicadosLocally(prev => prev.filter(x => x.id !== viewingCom.id));
+                        } else {
+                          setComunicados(prev => prev.filter(x => x.id !== viewingCom.id));
+                        }
+                        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
+                        window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { id: viewingCom.id, old: { id: viewingCom.id } } }));
+                        setViewingCom(null);
+                        adAlert('Comunicado excluído com sucesso.', 'Sucesso');
+                      } else {
+                        const data = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
+                        adAlert(`Erro ao excluir: ${data.error || res.statusText}`, 'Erro');
+                      }
+                    } catch (err: any) {
                       console.error("Erro ao deletar comunicado:", err);
+                      adAlert(`Erro ao excluir: ${err.message}`, 'Erro');
                     }
-                    setComunicados(prev => prev.filter(x => x.id !== viewingCom.id));
-                    setViewingCom(null);
                   });
                 }}>
                   <XCircle size={17} style={{ flexShrink: 0 }} /> Apagar

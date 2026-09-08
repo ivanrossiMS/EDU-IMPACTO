@@ -146,10 +146,28 @@
   color: hsl(var(--text-muted));
 }
 
-[data-theme='light'] .form-input {
+[data-theme='light'] .form-input,
+[data-theme='light'] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme='light'] select,
+[data-theme='light'] textarea {
   background: white !important;
   border-color: hsl(var(--border-default)) !important;
-  color: hsl(var(--text-primary)) !important;
+  color: #0f172a !important;
+}
+[data-theme='light'] .form-label {
+  color: #0f172a !important;
+}
+[data-theme='light'] th {
+  color: #0f172a !important;
+}
+[data-theme='light'] td {
+  color: #0f172a;
+}
+[data-theme='light'] .btn-ghost {
+  color: #0f172a;
+}
+[data-theme='light'] .btn-secondary {
+  color: #0f172a;
 }
 [data-theme='light'] .table-container table thead tr {
   background: hsl(var(--bg-elevated)) !important;
@@ -455,7 +473,10 @@ td.num {
 tr:hover td { background: hsl(var(--bg-elevated)); }
 
 /* --- Forms --- */
-.form-input, input, select, textarea {
+.form-input, 
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="button"]):not([type="submit"]):not([type="reset"]), 
+select, 
+textarea {
   background: hsl(var(--bg-elevated));
   border: 1px solid hsl(var(--border-default));
   border-radius: var(--radius-md);
@@ -468,8 +489,25 @@ tr:hover td { background: hsl(var(--bg-elevated)); }
   letter-spacing: -0.01em;
 }
 
+/* Checkbox & Radio specific reset */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  cursor: pointer;
+  flex-shrink: 0;
+  accent-color: hsl(var(--brand-primary));
+}
+
 .form-input::placeholder, input::placeholder, textarea::placeholder { color: #94a3b8; }
-.form-input:focus, input:focus, select:focus, textarea:focus { border-color: hsl(var(--brand-primary)); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); outline: none; }
+.form-input:focus, input:not([type="checkbox"]):not([type="radio"]):focus, select:focus, textarea:focus { border-color: hsl(var(--brand-primary)); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); outline: none; }
 
 select option {
   color: #0f172a !important;
@@ -480,10 +518,14 @@ select option {
   display: block;
   font-size: 11px;
   font-weight: 700;
-  color: hsl(var(--text-muted));
+  color: #0f172a;
   margin-bottom: 6px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
+}
+
+[data-theme='dark'] .form-label {
+  color: hsl(var(--text-secondary));
 }
 
 /* --- Sidebar Layout --- */

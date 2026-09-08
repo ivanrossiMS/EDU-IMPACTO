@@ -726,6 +726,7 @@ export default function ADMomentosPage() {
       if (res.ok) {
         setMomentosFeedLocally?.(prev => prev.filter(m => String(m.id) !== String(id)));
         queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] });
+        window.dispatchEvent(new CustomEvent('ad:momentos-delete', { detail: { id, old: { id } } }));
         adAlert('Momento excluído com sucesso!', 'Sucesso');
       } else {
         throw new Error('Erro ao excluir momento');

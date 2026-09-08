@@ -101,6 +101,7 @@ export default function ADAdminMomentos() {
         setFeed(prev => prev.filter(p => String(p.id) !== String(id)));
         setMomentosFeedLocally?.((prev: any) => prev.filter((p: any) => String(p.id) !== String(id)));
         queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] });
+        window.dispatchEvent(new CustomEvent('ad:momentos-delete', { detail: { id, old: { id } } }));
         adAlert('Momento excluído com sucesso!', 'Sucesso');
       } else {
         throw new Error('Erro ao excluir momento na API');
