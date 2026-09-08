@@ -14,18 +14,35 @@ export default function Root() {
   const { currentUser, hydrated } = useApp()
 
   useEffect(() => {
+    // Escuta evento de navegação por push disparado pelo OneSignal durante o cold start
+    const handlePushEvent = (e: any) => {
+      const dest = e?.detail?.destination
+      if (dest) {
+        console.log('[Root] Evento edu:navigate-push recebido em cold start:', dest)
+        router.replace(dest)
+      }
+    }
+    window.addEventListener('edu:navigate-push', handlePushEvent)
+
     // Wait for AppProvider to hydrate the session from localStorage/Capacitor Preferences
-    if (!hydrated) return
+    if (!hydrated) {
+      return () => {
+        window.removeEventListener('edu:navigate-push', handlePushEvent)
+      }
+    }
+
+    let isSubscribed = true
 
     const checkPendingPushAndRoute = async () => {
-      // Se estiver em ambiente nativo, concede janela de espera ativa (até 500ms)
+      // Se estiver em ambiente nativo, concede janela de espera ativa (até 1000ms)
       // para o OneSignal descarregar o clique de notificação em cold start
       let pendingPushRoute = typeof window !== 'undefined'
         ? ((window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY))
         : null
 
       if (!pendingPushRoute && Capacitor.isNativePlatform()) {
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 10; i++) {
+          if (!isSubscribed) return
           await new Promise(r => setTimeout(r, 100))
           pendingPushRoute = (window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
           if (pendingPushRoute) break
@@ -38,6 +55,8 @@ export default function Root() {
           } catch {}
         }
       }
+
+      if (!isSubscribed) return
 
       // Se houver notificação pendente que o usuário clicou:
       if (pendingPushRoute) {
@@ -76,11 +95,23 @@ export default function Root() {
         }
         router.replace('/agenda-digital/selecionar-aluno')
       } else {
-        router.replace('/login?step=choose_system')
+        // Colaborador / Administrador:
+        // No app móvel nativo (celular), vai direto para a Agenda Digital!
+        if (Capacitor.isNativePlatform()) {
+          console.log('[Root] Colaborador em app mobile nativo. Abrindo diretamente a Agenda Digital.')
+          router.replace('/agenda-digital')
+        } else {
+          router.replace('/login?step=choose_system')
+        }
       }
     }
 
     checkPendingPushAndRoute()
+
+    return () => {
+      isSubscribed = false
+      window.removeEventListener('edu:navigate-push', handlePushEvent)
+    }
   }, [hydrated, currentUser, router])
 
   // Fallback de segurança para liberar a splash screen se a navegação demorar mais que 1.2s

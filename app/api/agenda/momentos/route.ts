@@ -368,19 +368,38 @@ export async function POST(request: Request) {
           const targetParams = normalizeMomentoParams(row.dados);
           const { students, directColaboradores } = await getStudentTargetsForComunicados(targetParams);
           
-          for (const student of students) {
-            if (student.responsaveis_ids.length > 0) {
+          if (students.length <= 5) {
+            for (const student of students) {
+              if (student.responsaveis_ids.length > 0) {
+                allPushPromises.push(
+                  sendAgendaPushNotification({
+                    type: 'momentos',
+                    itemId: String(row.id),
+                    title: '📸 Novo Momento Publicado!',
+                    message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
+                    targetUserIds: student.responsaveis_ids,
+                    targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
+                    metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}` }
+                  }).catch(err => console.error('Momento Push Error:', err))
+                )
+              }
+            }
+          } else {
+            const allResponsaveis = Array.from(
+              new Set(students.flatMap(s => s.responsaveis_ids))
+            ).filter(Boolean);
+            if (allResponsaveis.length > 0) {
               allPushPromises.push(
                 sendAgendaPushNotification({
                   type: 'momentos',
                   itemId: String(row.id),
                   title: '📸 Novo Momento Publicado!',
-                  message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
-                  targetUserIds: student.responsaveis_ids,
-                  targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}` }
-                }).catch(err => console.error('Momento Push Error:', err))
-              )
+                  message: 'Novas fotos e atividades foram compartilhadas na turma. Confira!',
+                  targetUserIds: allResponsaveis,
+                  targetUrl: `/agenda-digital?redirect=momentos&id=${row.id}`,
+                  metadata: { perfil_destino: 'familia', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital?redirect=momentos&id=${row.id}` }
+                }).catch(err => console.error('Momento Push Error Batch:', err))
+              );
             }
           }
 
@@ -422,19 +441,38 @@ export async function POST(request: Request) {
         const { students, directColaboradores } = await getStudentTargetsForComunicados(targetParams);
         const pushPromises = [];
         
-        for (const student of students) {
-          if (student.responsaveis_ids.length > 0) {
+        if (students.length <= 5) {
+          for (const student of students) {
+            if (student.responsaveis_ids.length > 0) {
+              pushPromises.push(
+                sendAgendaPushNotification({
+                  type: 'momentos',
+                  itemId: String(data.id),
+                  title: '📸 Novo Momento Publicado!',
+                  message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
+                  targetUserIds: student.responsaveis_ids,
+                  targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}` }
+                }).catch(err => console.error('Momento Push Error:', err))
+              )
+            }
+          }
+        } else {
+          const allResponsaveis = Array.from(
+            new Set(students.flatMap(s => s.responsaveis_ids))
+          ).filter(Boolean);
+          if (allResponsaveis.length > 0) {
             pushPromises.push(
               sendAgendaPushNotification({
                 type: 'momentos',
                 itemId: String(data.id),
                 title: '📸 Novo Momento Publicado!',
-                message: `Um novo conteúdo para ${student.aluno_nome} foi compartilhado. Confira!`,
-                targetUserIds: student.responsaveis_ids,
-                targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}`,
-                metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}` }
-              }).catch(err => console.error('Momento Push Error:', err))
-            )
+                message: 'Novas fotos e atividades foram compartilhadas na turma. Confira!',
+                targetUserIds: allResponsaveis,
+                targetUrl: `/agenda-digital?redirect=momentos&id=${data.id}`,
+                metadata: { perfil_destino: 'familia', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital?redirect=momentos&id=${data.id}` }
+              }).catch(err => console.error('Momento Push Error Batch:', err))
+            );
           }
         }
 

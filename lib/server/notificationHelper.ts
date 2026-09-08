@@ -322,7 +322,7 @@ export async function getColaboradorIds(colaboradoresIds: string[]): Promise<str
     const supabase = supabaseServer
     const [sysRes, funcRes] = await Promise.allSettled([
       supabase.from('system_users').select('id, auth_id, email, dados, status').or('status.neq.inativo,status.is.null').limit(3000),
-      supabase.from('funcionarios').select('id, user_id, email').limit(3000),
+      supabase.from('funcionarios').select('id, codigo, email, dados, status').limit(3000),
     ])
 
     const sysColabs = sysRes.status === 'fulfilled' && sysRes.value.data ? sysRes.value.data : []
@@ -333,11 +333,18 @@ export async function getColaboradorIds(colaboradoresIds: string[]): Promise<str
 
     funcRows.forEach((f: any) => {
       const fId = String(f.id).trim()
-      const fUserId = f.user_id ? String(f.user_id).trim() : ''
+      const fCodigo = f.codigo ? String(f.codigo).trim() : ''
+      const fUserId = String(f.dados?.auth_id || f.dados?.user_id || '').trim()
       const fEmail = (f.email || '').toLowerCase().trim()
 
-      if (finalIds.has(fId) || (fUserId && finalIds.has(fUserId)) || (fEmail && finalIds.has(fEmail))) {
+      if (
+        finalIds.has(fId) ||
+        (fCodigo && finalIds.has(fCodigo)) ||
+        (fUserId && finalIds.has(fUserId)) ||
+        (fEmail && finalIds.has(fEmail))
+      ) {
         finalIds.add(fId)
+        if (fCodigo) finalIds.add(fCodigo)
         if (fUserId) {
           finalIds.add(fUserId)
           matchedUserIds.add(fUserId)
@@ -786,7 +793,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       try {
         const [sysRes, funcRes] = await Promise.allSettled([
           supabase.from('system_users').select('id, auth_id, email, dados, status').or('status.neq.inativo,status.is.null').limit(3000),
-          supabase.from('funcionarios').select('id, user_id, email').limit(3000),
+          supabase.from('funcionarios').select('id, codigo, email, dados, status').limit(3000),
         ])
 
         const sysColabs = sysRes.status === 'fulfilled' && sysRes.value.data ? sysRes.value.data : []
@@ -795,14 +802,21 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         const matchedEmails = new Set<string>()
         const matchedUserIds = new Set<string>()
 
-        // 1. Mapear de funcionarios para user_id e email
+        // 1. Mapear de funcionarios para user_id, auth_id, codigo e email
         funcRows.forEach((f: any) => {
           const fId = String(f.id).trim()
-          const fUserId = f.user_id ? String(f.user_id).trim() : ''
+          const fCodigo = f.codigo ? String(f.codigo).trim() : ''
+          const fUserId = String(f.dados?.auth_id || f.dados?.user_id || '').trim()
           const fEmail = (f.email || '').toLowerCase().trim()
 
-          if (finalColabIds.has(fId) || (fUserId && finalColabIds.has(fUserId))) {
+          if (
+            finalColabIds.has(fId) ||
+            (fCodigo && finalColabIds.has(fCodigo)) ||
+            (fUserId && finalColabIds.has(fUserId)) ||
+            (fEmail && finalColabIds.has(fEmail))
+          ) {
             finalColabIds.add(fId)
+            if (fCodigo) finalColabIds.add(fCodigo)
             if (fUserId) {
               finalColabIds.add(fUserId)
               matchedUserIds.add(fUserId)

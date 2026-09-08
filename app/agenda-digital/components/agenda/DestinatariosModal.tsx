@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Search, Users, Check, Building2, GraduationCap, Calendar, ArrowLeft, ChevronRight } from 'lucide-react'
+import { X, Search, Users, Check, Building2, GraduationCap, Calendar, ArrowLeft, ChevronRight, Shield } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '@/lib/dataContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -40,36 +40,31 @@ const DEST_MODAL_STYLES = `
       backdrop-filter: blur(8px);
     }
     .dest-modal-container {
-      position: relative;
-      inset: auto;
-      max-width: 700px;
+      width: 90%;
+      max-width: 680px;
       height: 90vh;
+      max-height: 820px;
+      position: relative;
       border-radius: 28px;
-      box-shadow: 0 40px 100px rgba(0,0,0,0.2);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.2);
     }
+  }
+  .dest-spinner-ring {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 3px solid #E2E8F0;
+    border-top-color: #6D5DF6;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
   @keyframes waveAnimation {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
-  }
-  @keyframes dest-spin {
-    to { transform: rotate(360deg); }
-  }
-  @keyframes dest-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-  @keyframes dest-pulse-dot {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.7); }
-  }
-  .dest-spinner-ring {
-    width: 56px; height: 56px;
-    border-radius: 50%;
-    border: 4px solid rgba(99,102,241,0.15);
-    border-top-color: #6366f1;
-    animation: dest-spin 0.9s linear infinite;
   }
 `;
 
@@ -87,7 +82,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
   }, [data?.turmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
   const [gruposManuais = [], _setG, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
   const [alunos, _setA, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores, _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [colaboradores, _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
 
   const isLoadingData = loadingGrupos || loadingAlunos || loadingColabs
 
@@ -320,6 +315,9 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
              gAlunos.forEach((a:any) => map[`a_${a.id}`] = { id: `a_${a.id}`, name: a.nome, type: 'aluno' })
              gColabs.forEach((c:any) => map[`f_${c.id}`] = { id: `f_${c.id}`, name: c.nome, type: 'funcionario' })
            }
+        } else if (type === 'funcionario') {
+          const key = s.id.startsWith('f_') ? s.id : `f_${s.id}`
+          map[key] = { id: key, name: s.name, type: 'funcionario' }
         } else {
           map[s.id] = { id: s.id, name: s.name, type: type as any }
         }
@@ -468,6 +466,88 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       })
     })
 
+    // ── Categoria: Equipe Escolar (Professores, Direção, Coordenação, Secretaria, etc.) ──
+    const validColabs = (colaboradores || []).filter((c: any) => {
+      if (!c || !c.nome) return false
+      const p = String(c.perfil || '').toLowerCase()
+      const cg = String(c.cargo || '').toLowerCase()
+      return !p.includes('família') && !p.includes('aluno') && !cg.includes('aluno') && !cg.includes('responsável')
+    })
+
+    if (validColabs.length > 0) {
+      const equipePeopleIds = new Set<string>()
+      const equipeAllPayloads: any[] = []
+
+      // Agrupar colaboradores por departamento/cargo
+      const roleGroups: Record<string, any[]> = {}
+      validColabs.forEach((c: any) => {
+        let role = String(c.perfil || c.cargo || 'Outros').trim()
+        if (/professo/i.test(role) || /professo/i.test(c.cargo || '')) role = 'Professores'
+        else if (/coordena/i.test(role) || /coordena/i.test(c.cargo || '')) role = 'Coordenação'
+        else if (/dire/i.test(role) || /dire/i.test(c.cargo || '')) role = 'Direção'
+        else if (/secretar/i.test(role) || /secretar/i.test(c.cargo || '')) role = 'Secretaria'
+        else if (/financ/i.test(role) || /financ/i.test(c.cargo || '')) role = 'Financeiro'
+        else if (/portaria|seguran/i.test(role) || /portaria|seguran/i.test(c.cargo || '')) role = 'Portaria & Segurança'
+        else role = 'Outros Colaboradores'
+
+        if (!roleGroups[role]) roleGroups[role] = []
+        roleGroups[role].push(c)
+      })
+
+      const equipeSubItems: any[] = []
+      const roleOrder = ['Direção', 'Coordenação', 'Professores', 'Secretaria', 'Financeiro', 'Portaria & Segurança', 'Outros Colaboradores']
+      const sortedRoles = Object.keys(roleGroups).sort((a, b) => {
+        const idxA = roleOrder.indexOf(a)
+        const idxB = roleOrder.indexOf(b)
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB
+        if (idxA !== -1) return -1
+        if (idxB !== -1) return 1
+        return a.localeCompare(b, 'pt-BR')
+      })
+
+      sortedRoles.forEach(roleName => {
+        const members = roleGroups[roleName]
+        const mPayloads = members.map((c: any) => ({
+          id: `f_${c.id}`,
+          name: c.nome,
+          type: 'funcionario' as const,
+          funcao: c.cargo || c.perfil || 'Colaborador',
+          email: c.email
+        }))
+
+        mPayloads.forEach(p => {
+          leafIds.add(p.id)
+          equipePeopleIds.add(p.id)
+          equipeAllPayloads.push(p)
+        })
+
+        equipeSubItems.push({
+          id: `eq_role_${roleName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+          title: roleName,
+          subtitle: `${members.length} colaborador${members.length > 1 ? 'es' : ''}`,
+          countBadge: `${members.length} pessoa${members.length > 1 ? 's' : ''}`,
+          type: 'equipe_role',
+          icon: Shield,
+          leafIds: mPayloads.map(p => p.id),
+          payloads: mPayloads,
+          people: mPayloads
+        })
+      })
+
+      items.push({
+        id: 'cat_equipe_escolar',
+        title: 'Equipe Escolar',
+        subtitle: `Todos os ${validColabs.length} colaboradores`,
+        countBadge: isLoadingData ? 'Carregando...' : `${validColabs.length} pessoas`,
+        type: 'category',
+        icon: Shield,
+        leafIds: Array.from(equipePeopleIds),
+        payloads: equipeAllPayloads,
+        people: equipeAllPayloads,
+        children: equipeSubItems
+      })
+    }
+
     return { listItems: items, allLeafIds: Array.from(leafIds) }
   }, [filteredTurmas, filteredGrupos, alunosByTurmaRef, alunosById, colaboradoresById, colaboradoresByTurmaId, isLoadingData])
 
@@ -477,14 +557,17 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
 
   const flatPeopleList = useMemo(() => {
     if (!searchQuery.trim()) return []
-    const q = searchQuery.toLowerCase()
+    const q = searchQuery.toLowerCase().trim()
     const peopleMap = new Map<string, any>()
 
     const extractPeople = (items: any[]) => {
       items.forEach(item => {
          if (item.people) {
             item.people.forEach((p: any) => {
-               if (p.name.toLowerCase().includes(q)) {
+               const matchName = p.name && p.name.toLowerCase().includes(q)
+               const matchFuncao = p.funcao && p.funcao.toLowerCase().includes(q)
+               const matchEmail = p.email && p.email.toLowerCase().includes(q)
+               if (matchName || matchFuncao || matchEmail) {
                  peopleMap.set(p.id, p)
                }
             })

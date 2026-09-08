@@ -472,18 +472,37 @@ export async function POST(request: Request) {
           const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
           
           if (!isInterno) {
-            for (const student of students) {
-              if (student.responsaveis_ids.length > 0) {
+            if (students.length <= 5) {
+              for (const student of students) {
+                if (student.responsaveis_ids.length > 0) {
+                  allPushPromises.push(
+                    sendAgendaPushNotification({
+                      type: 'comunicados',
+                      itemId: String(row.id),
+                      title: `📢 Comunicado: ${row.titulo}`,
+                      message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
+                      targetUserIds: student.responsaveis_ids,
+                      targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
+                      metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
+                    }).catch(err => console.error("Push Error:", err))
+                  );
+                }
+              }
+            } else {
+              const allResponsaveis = Array.from(
+                new Set(students.flatMap(s => s.responsaveis_ids))
+              ).filter(Boolean);
+              if (allResponsaveis.length > 0) {
                 allPushPromises.push(
                   sendAgendaPushNotification({
                     type: 'comunicados',
                     itemId: String(row.id),
                     title: `📢 Comunicado: ${row.titulo}`,
-                    message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
-                    targetUserIds: student.responsaveis_ids,
-                    targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
-                    metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
-                  }).catch(err => console.error("Push Error:", err))
+                    message: `${row.autor} enviou um novo comunicado escolar. Confira!`,
+                    targetUserIds: allResponsaveis,
+                    targetUrl: `/agenda-digital?redirect=comunicados&id=${row.id}`,
+                    metadata: { perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
+                  }).catch(err => console.error("Push Error Batch:", err))
                 );
               }
             }
@@ -572,18 +591,37 @@ export async function POST(request: Request) {
       const pushPromises = [];
       
       if (!isInterno) {
-        for (const student of students) {
-          if (student.responsaveis_ids.length > 0) {
+        if (students.length <= 5) {
+          for (const student of students) {
+            if (student.responsaveis_ids.length > 0) {
+              pushPromises.push(
+                sendAgendaPushNotification({
+                  type: 'comunicados',
+                  itemId: String(data.id),
+                  title: `📢 Comunicado: ${data.titulo}`,
+                  message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
+                  targetUserIds: student.responsaveis_ids,
+                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
+                }).catch(err => console.error("Push Error:", err))
+              );
+            }
+          }
+        } else {
+          const allResponsaveis = Array.from(
+            new Set(students.flatMap(s => s.responsaveis_ids))
+          ).filter(Boolean);
+          if (allResponsaveis.length > 0) {
             pushPromises.push(
               sendAgendaPushNotification({
                 type: 'comunicados',
                 itemId: String(data.id),
                 title: `📢 Comunicado: ${data.titulo}`,
-                message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
-                targetUserIds: student.responsaveis_ids,
-                targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
-                metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
-              }).catch(err => console.error("Push Error:", err))
+                message: `${data.autor} enviou um novo comunicado escolar. Confira!`,
+                targetUserIds: allResponsaveis,
+                targetUrl: `/agenda-digital?redirect=comunicados&id=${data.id}`,
+                metadata: { perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
+              }).catch(err => console.error("Push Error Batch:", err))
             );
           }
         }

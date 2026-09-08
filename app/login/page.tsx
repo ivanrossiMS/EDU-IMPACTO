@@ -424,17 +424,29 @@ export default function LoginPage() {
 
       // Se houver notificação pendente ou redirect especificado, vai direto para ele!
       const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-      const pendingRedirect = urlParams?.get('redirect') || (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
+      let pendingRedirect = urlParams?.get('redirect') ||
+        (typeof window !== 'undefined' ? ((window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY)) : null)
+
+      if (!pendingRedirect && Capacitor.isNativePlatform()) {
+        try {
+          const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
+          if (value) pendingRedirect = value
+        } catch {}
+      }
+
       if (pendingRedirect) {
         console.log('[Login] Login com sucesso. Redirecionando direto para notificação pendente:', pendingRedirect)
         try {
           localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+          if (typeof window !== 'undefined') {
+            delete (window as any).__EDU_PENDING_PUSH_ROUTE__
+          }
           if (Capacitor.isNativePlatform()) {
             Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
           }
         } catch {}
         setLoginLoading(false)
-        router.push(pendingRedirect)
+        router.replace(pendingRedirect)
         return
       }
 
@@ -456,6 +468,14 @@ export default function LoginPage() {
            perfil: perfilReal
         })
         setHasDualRole(isAlsoFamily)
+
+        // Se estiver no aplicativo nativo (celular), vai direto para a Agenda Digital!
+        if (Capacitor.isNativePlatform()) {
+          console.log('[Login] Ambiente nativo mobile detectado. Direcionando colaborador direto para a Agenda Digital.')
+          setLoginLoading(false)
+          router.replace('/agenda-digital')
+          return
+        }
 
         setStep('choose_system')
         

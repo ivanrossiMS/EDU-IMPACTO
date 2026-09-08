@@ -198,7 +198,7 @@ export function GlobalNotificationProvider() {
         import('@onesignal/capacitor-plugin')
           .then(async ({ default: OneSignalNative }) => {
             try {
-              OneSignalNative.initialize(appId)
+              await OneSignalNative.initialize(appId)
               window.__OS_NATIVE_READY__ = true
               ;(window as any).__OS_INIT__ = true
 
@@ -372,6 +372,10 @@ export function GlobalNotificationProvider() {
                     OS.User.addAlias('colaborador_id', String(colabId)).catch(() => {})
                     OS.User.addAlias('system_user_id', String(colabId)).catch(() => {})
                   }
+                  const cod = (currentUser as any).codigo || currentUser.user_metadata?.codigo
+                  if (cod) {
+                    OS.User.addAlias('codigo', String(cod)).catch(() => {})
+                  }
                   if (currentUser.email) {
                     OS.User.addAlias('email', String(currentUser.email).toLowerCase().trim()).catch(() => {})
                   }
@@ -395,6 +399,8 @@ export function GlobalNotificationProvider() {
               currentUser.system_user_id ||
               currentUser.user_metadata?.colaborador_id
             if (staffId) tags['colaborador_id'] = String(staffId)
+            const codTag = (currentUser as any).codigo || currentUser.user_metadata?.codigo
+            if (codTag) tags['codigo'] = String(codTag)
 
             if (OS.User && typeof OS.User.addTags === 'function') {
               await OS.User.addTags(tags)
@@ -432,6 +438,17 @@ export function GlobalNotificationProvider() {
     }
 
     sincronizarUsuarioOneSignal()
+
+    // Re-sincronizar quando o app volta para o foreground
+    const handleForegroundSync = () => {
+      window.__OS_GLOBAL_USER_ID__ = undefined
+      sincronizarUsuarioOneSignal()
+    }
+    window.addEventListener('ad:app-foreground', handleForegroundSync)
+
+    return () => {
+      window.removeEventListener('ad:app-foreground', handleForegroundSync)
+    }
   }, [currentUser?.id, currentUser?.perfil, currentUser?.cargo])
 
   // Componente invisível
