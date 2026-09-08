@@ -39,23 +39,31 @@ async function fetchInChunks<T>(
 }
 
 
-interface TargetParams {
+export interface TargetParams {
   /** Nomes ou IDs das turmas destinatárias */
   turmas?: string[]
   /** Alias para turmas */
   targetClasses?: string[]
+  /** IDs das turmas */
+  turmasIds?: string[]
   /** IDs dos alunos destinatários */
   alunosIds?: string[]
   /** Alias para alunosIds */
   targetStudents?: string[]
-  /** Destino geral: "todos", "selecionados", etc. */
+  /** Destino geral: "todos", "selecionados", "interno", etc. */
   destino?: string
   /** IDs diretos de colaboradores/funcionários a incluir */
   colaboradoresIds?: string[]
   /** Nomes ou IDs de grupos manuais a incluir */
   grupos?: string[]
+  /** Alias para grupos */
+  targetGrupos?: string[]
+  /** IDs dos grupos */
+  gruposIds?: string[]
   /** IDs de funcionários enviados pelo frontend */
   funcionariosIds?: string[]
+  /** Dados internos aninhados */
+  dados?: any
 }
 
 /**
@@ -296,51 +304,126 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
 
 /**
  * Resolve os IDs de colaboradores para push direto.
- * Mapeia tanto system_users.id quanto auth_id (Auth UUID) para entrega OneSignal.
+ * Mapeia tanto system_users.id, auth_id (Auth UUID), email quanto funcionarios.id/user_id para entrega OneSignal.
  */
 export async function getColaboradorIds(colaboradoresIds: string[]): Promise<string[]> {
   if (!colaboradoresIds || colaboradoresIds.length === 0) return []
   const finalIds = new Set<string>()
   colaboradoresIds.forEach(id => {
-    const clean = String(id).replace(/^f_?/, '').trim()
-    if (clean) finalIds.add(clean)
+    const idAny = id as any
+    const val = typeof idAny === 'object' && idAny !== null
+      ? (idAny.id || idAny.colaboradorId || idAny.usuarioId || idAny.funcionarioId || idAny.user_id)
+      : idAny
+    const clean = String(val || '').replace(/^[feq_]+/, '').trim()
+    if (clean && clean !== '[object Object]') finalIds.add(clean)
   })
 
   try {
     const supabase = supabaseServer
-    const { data: sysColabs } = await supabase
-      .from('system_users')
-      .select('id, auth_id, email, dados')
-      .limit(2000)
+    const [sysRes, funcRes] = await Promise.allSettled([
+      supabase.from('system_users').select('id, auth_id, email, dados, status').or('status.neq.inativo,status.is.null').limit(3000),
+      supabase.from('funcionarios').select('id, user_id, email').limit(3000),
+    ])
 
-    if (sysColabs && sysColabs.length > 0) {
-      sysColabs.forEach((su: any) => {
-        const suId = String(su.id)
-        const suAuthId = su.auth_id ? String(su.auth_id) : ''
-        const suEmail = (su.email || '').toLowerCase().trim()
-        const dadosAuthId = su.dados?.auth_id ? String(su.dados.auth_id) : ''
-        const dadosColabId = su.dados?.colaborador_id ? String(su.dados.colaborador_id) : ''
+    const sysColabs = sysRes.status === 'fulfilled' && sysRes.value.data ? sysRes.value.data : []
+    const funcRows = funcRes.status === 'fulfilled' && funcRes.value.data ? funcRes.value.data : []
 
-        const matches = 
-          finalIds.has(suId) || 
-          (suAuthId && finalIds.has(suAuthId)) || 
-          (suEmail && finalIds.has(suEmail)) ||
-          (dadosAuthId && finalIds.has(dadosAuthId)) ||
-          (dadosColabId && finalIds.has(dadosColabId))
+    const matchedEmails = new Set<string>()
+    const matchedUserIds = new Set<string>()
 
-        if (matches) {
-          finalIds.add(suId)
-          if (suAuthId) finalIds.add(suAuthId)
-          if (dadosAuthId) finalIds.add(dadosAuthId)
-          if (dadosColabId) finalIds.add(dadosColabId)
+    funcRows.forEach((f: any) => {
+      const fId = String(f.id).trim()
+      const fUserId = f.user_id ? String(f.user_id).trim() : ''
+      const fEmail = (f.email || '').toLowerCase().trim()
+
+      if (finalIds.has(fId) || (fUserId && finalIds.has(fUserId)) || (fEmail && finalIds.has(fEmail))) {
+        finalIds.add(fId)
+        if (fUserId) {
+          finalIds.add(fUserId)
+          matchedUserIds.add(fUserId)
         }
-      })
-    }
+        if (fEmail) {
+          finalIds.add(fEmail)
+          matchedEmails.add(fEmail)
+        }
+      }
+    })
+
+    sysColabs.forEach((su: any) => {
+      const suId = String(su.id).trim()
+      const suAuthId = su.auth_id ? String(su.auth_id).trim() : ''
+      const suEmail = (su.email || '').toLowerCase().trim()
+      const dadosAuthId = su.dados?.auth_id ? String(su.dados.auth_id).trim() : ''
+      const dadosColabId = su.dados?.colaborador_id ? String(su.dados.colaborador_id).trim() : ''
+
+      const matches = 
+        finalIds.has(suId) || 
+        (suAuthId && finalIds.has(suAuthId)) || 
+        (suEmail && finalIds.has(suEmail)) ||
+        (dadosAuthId && finalIds.has(dadosAuthId)) ||
+        (dadosColabId && finalIds.has(dadosColabId)) ||
+        (suEmail && matchedEmails.has(suEmail)) ||
+        (suId && matchedUserIds.has(suId)) ||
+        (suAuthId && matchedUserIds.has(suAuthId))
+
+      if (matches) {
+        finalIds.add(suId)
+        if (suAuthId) finalIds.add(suAuthId)
+        if (dadosAuthId) finalIds.add(dadosAuthId)
+        if (dadosColabId) finalIds.add(dadosColabId)
+        if (suEmail) finalIds.add(suEmail)
+      }
+    })
   } catch (e) {
     console.warn('[NotifHelper] Erro ao expandir getColaboradorIds:', e)
   }
 
   return Array.from(finalIds)
+}
+
+function extractCleanTerms(arr: any): string[] {
+  if (!arr) return []
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr) } catch { return [arr.trim()].filter(Boolean) }
+  }
+  if (!Array.isArray(arr)) return []
+  const terms: string[] = []
+  arr.forEach(item => {
+    if (!item) return
+    if (typeof item === 'string' || typeof item === 'number') {
+      const s = String(item).trim()
+      if (s && s !== '[object Object]') terms.push(s)
+    } else if (typeof item === 'object') {
+      if (item.name) terms.push(String(item.name).trim())
+      if (item.nome) terms.push(String(item.nome).trim())
+      if (item.id) terms.push(String(item.id).trim())
+      if (item.title) terms.push(String(item.title).trim())
+    }
+  })
+  return Array.from(new Set(terms.filter(Boolean)))
+}
+
+function extractCleanIds(arr: any, prefixRegex = /^[feqag_]+/): string[] {
+  if (!arr) return []
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr) } catch { return [arr.replace(prefixRegex, '').trim()].filter(Boolean) }
+  }
+  if (!Array.isArray(arr)) return []
+  const ids: string[] = []
+  arr.forEach(item => {
+    if (!item) return
+    if (typeof item === 'string' || typeof item === 'number') {
+      const s = String(item).replace(prefixRegex, '').trim()
+      if (s && s !== '[object Object]') ids.push(s)
+    } else if (typeof item === 'object') {
+      const val = item.id || item.colaboradorId || item.usuarioId || item.funcionarioId || item.user_id || item.alunoId
+      if (val) {
+        const s = String(val).replace(prefixRegex, '').trim()
+        if (s && s !== '[object Object]') ids.push(s)
+      }
+    }
+  })
+  return Array.from(new Set(ids.filter(Boolean)))
 }
 
 /**
@@ -356,19 +439,51 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
   try {
     const supabase = supabaseServer
+    const innerDados = (dados as any)?.dados || {}
 
-    const turmas = (dados.turmas || dados.targetClasses || []).map(String).filter(Boolean)
-    const grupos = (dados.grupos || []).map(String).filter(Boolean)
+    const rawTurmas = [
+      ...(dados.turmas || []),
+      ...(dados.targetClasses || []),
+      ...(dados.turmasIds || []),
+      ...(innerDados.turmas || []),
+      ...(innerDados.targetClasses || []),
+      ...(innerDados.turmasIds || []),
+    ]
+    const rawGrupos = [
+      ...(dados.grupos || []),
+      ...(dados.targetGrupos || []),
+      ...(dados.gruposIds || []),
+      ...(innerDados.grupos || []),
+      ...(innerDados.targetGrupos || []),
+      ...(innerDados.gruposIds || []),
+    ]
+    const turmas = extractCleanTerms(rawTurmas)
+    const grupos = extractCleanTerms(rawGrupos)
     const allGroupTerms = Array.from(new Set([...turmas, ...grupos]))
-    const alunosIds = (dados.alunosIds || dados.targetStudents || []).map(String).filter(Boolean)
-    const colaboradoresIds = [...(dados.colaboradoresIds || []), ...(dados.funcionariosIds || [])].map(String).filter(Boolean)
-    const destino = String(dados.destino || '').toLowerCase().trim()
+
+    const alunosIds = extractCleanIds([
+      ...(dados.alunosIds || []),
+      ...(dados.targetStudents || []),
+      ...(innerDados.alunosIds || []),
+      ...(innerDados.targetStudents || []),
+    ], /^(a_|_ALU)/)
+
+    const colaboradoresIds = extractCleanIds([
+      ...(dados.colaboradoresIds || []),
+      ...(dados.funcionariosIds || []),
+      ...(innerDados.colaboradoresIds || []),
+      ...(innerDados.funcionariosIds || []),
+    ], /^[feq_]+/)
+
+    const rawDestino = String(dados.destino || innerDados.destino || '').toLowerCase().trim()
+    const isInterno = rawDestino === 'interno'
 
     const todosAnoMatch = allGroupTerms.find(t => t.toLowerCase().trim().startsWith('todos:'))
     const isTodos =
-      destino === 'todos' ||
-      destino === 'toda a escola' ||
-      destino === 'all' ||
+      rawDestino === 'todos' ||
+      rawDestino === 'toda a escola' ||
+      rawDestino === 'all' ||
+      rawDestino === 'todas' ||
       allGroupTerms.some(t => {
         const tl = t.toLowerCase().trim()
         return tl === 'todos' || tl === 'toda a escola' || tl === 'all' || tl === 'todas'
@@ -376,27 +491,77 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
     let alunosToProcess: { id: string, nome: string }[] = []
 
-    if (isTodos && !todosAnoMatch) {
+    if (isInterno) {
+      // Comunicados internos são exclusivamente para a equipe escolar/colaboradores!
+      // Alunos e responsáveis NÃO devem receber push de comunicado interno.
+      alunosToProcess = []
+
+      // Se nenhum colaborador ou grupo específico foi selecionado, envia para toda a equipe
+      if (colaboradoresIds.length === 0 && allGroupTerms.length === 0) {
+        try {
+          const { data: allSysUsers } = await supabase
+            .from('system_users')
+            .select('id, auth_id, email, status')
+            .or('status.neq.inativo,status.is.null')
+            .limit(3000)
+
+          if (allSysUsers) {
+            allSysUsers.forEach((u: any) => {
+              if (u.id) colaboradoresIds.push(String(u.id))
+              if (u.auth_id) colaboradoresIds.push(String(u.auth_id))
+              if (u.email) colaboradoresIds.push(String(u.email).toLowerCase().trim())
+            })
+          }
+        } catch (sysAllErr) {
+          console.warn('[NotifHelper] Erro ao buscar todos colaboradores para destino interno:', sysAllErr)
+        }
+      }
+    } else if (isTodos && !todosAnoMatch) {
       // Busca TODOS os alunos (limit alto para escolas grandes, mas evita full scan sem limite)
       const { data, error } = await supabase.from('alunos').select('id, nome').limit(5000)
       if (!error && data) {
         alunosToProcess = data.map((d: any) => ({ id: String(d.id), nome: d.nome || '' }))
       }
+
+      // Toda a Escola / Todos também inclui todos os colaboradores ativos!
+      try {
+        const { data: allSysUsers } = await supabase
+          .from('system_users')
+          .select('id, auth_id, email, status')
+          .or('status.neq.inativo,status.is.null')
+          .limit(3000)
+
+        if (allSysUsers) {
+          allSysUsers.forEach((u: any) => {
+            if (u.id) colaboradoresIds.push(String(u.id))
+            if (u.auth_id) colaboradoresIds.push(String(u.auth_id))
+            if (u.email) colaboradoresIds.push(String(u.email).toLowerCase().trim())
+          })
+        }
+      } catch (sysAllErr) {
+        console.warn('[NotifHelper] Erro ao buscar todos colaboradores para isTodos:', sysAllErr)
+      }
     } else {
       let targetAlunosSet = new Map<string, string>() // id -> nome
 
       // Adicionar alunos explicitamente listados
-      const cleanAlunosIds = alunosIds.map(id => id.replace(/^(a_|_ALU)/, '')).filter(Boolean)
-      if (cleanAlunosIds.length > 0) {
-        const data = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'id', cleanAlunosIds)
+      if (alunosIds.length > 0) {
+        const data = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'id', alunosIds)
         data.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
       }
 
-      // Adicionar turmas e grupos
+      // Adicionar turmas, grupos e equipes
       if (allGroupTerms.length > 0) {
-        // 1. Resolver grupos na tabela agenda_grupos
-        const { data: allGrupos, error: gruposError } = await supabase.from('agenda_grupos').select('id, dados')
-        if (!gruposError && allGrupos) {
+        // 1. Resolver grupos na tabela agenda_grupos e agenda_equipes
+        const [gruposRes, equipesRes] = await Promise.allSettled([
+          supabase.from('agenda_grupos').select('id, nome, dados'),
+          supabase.from('agenda_equipes').select('id, nome, dados')
+        ])
+
+        const allGrupos = gruposRes.status === 'fulfilled' && gruposRes.value.data ? gruposRes.value.data : []
+        const allEquipes = equipesRes.status === 'fulfilled' && equipesRes.value.data ? equipesRes.value.data : []
+
+        if (allGrupos.length > 0) {
           const matchedGrupos = allGrupos.filter((g: any) => {
             const gId = String(g.id || '').toLowerCase()
             const gNome = String(g.dados?.nome || g.nome || '').toLowerCase()
@@ -409,19 +574,25 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           let grupoAlunosIds: string[] = []
           matchedGrupos.forEach((g: any) => {
             const list = g.dados?.alunosIds || g.alunosIds || [];
-            list.forEach((aId: string) => {
-              const cleanId = aId.replace(/^(a_|_ALU)/, '')
-              if (cleanId) grupoAlunosIds.push(cleanId)
-            })
+            let parsedList = list
+            if (typeof list === 'string') {
+              try { parsedList = JSON.parse(list) } catch { parsedList = [] }
+            }
+            if (Array.isArray(parsedList)) {
+              parsedList.forEach((aId: string) => {
+                const cleanId = String(aId).replace(/^(a_|_ALU)/, '')
+                if (cleanId) grupoAlunosIds.push(cleanId)
+              })
+            }
 
-            let colabs = g.dados?.colaboradoresIds || g.colaboradoresIds || [];
+            let colabs = g.dados?.colaboradoresIds || g.dados?.funcionariosIds || g.colaboradoresIds || g.funcionariosIds || [];
             if (typeof colabs === 'string') {
               try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
             }
             if (Array.isArray(colabs)) {
               colabs.forEach((c: any) => {
-                const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId) : c;
-                const clean = String(val || '').replace(/^f_?/, '').trim()
+                const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId || c.user_id) : c;
+                const clean = String(val || '').replace(/^[feq_]+/, '').trim()
                 if (clean && clean !== '[object Object]') colaboradoresIds.push(clean)
               });
             }
@@ -431,6 +602,32 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             const data = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'id', grupoAlunosIds)
             data.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
           }
+        }
+
+        // Resolver em agenda_equipes (equipes pedagógicas e escolares)
+        if (allEquipes.length > 0) {
+          const matchedEquipes = allEquipes.filter((e: any) => {
+            const eId = String(e.id || '').toLowerCase()
+            const eNome = String(e.dados?.nome || e.nome || '').toLowerCase()
+            return allGroupTerms.some(term => {
+              const tl = term.toLowerCase().trim()
+              return tl === eId || tl === eNome || eNome.includes(tl) || tl.includes(eNome) || tl === `eq_${eId}` || tl === `g_${eId}`
+            })
+          })
+
+          matchedEquipes.forEach((e: any) => {
+            let membros = e.dados?.membrosIds || e.dados?.colaboradoresIds || e.dados?.funcionariosIds || e.membrosIds || e.colaboradoresIds || [];
+            if (typeof membros === 'string') {
+              try { membros = JSON.parse(membros); } catch(err) { membros = []; }
+            }
+            if (Array.isArray(membros)) {
+              membros.forEach((c: any) => {
+                const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId || c.user_id) : c;
+                const clean = String(val || '').replace(/^[feq_]+/, '').trim()
+                if (clean && clean !== '[object Object]') colaboradoresIds.push(clean)
+              })
+            }
+          })
         }
 
         // 2. Resolver nomes/IDs de turmas para IDs reais no banco
@@ -455,24 +652,24 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           const matchedTurmaIds = matchedTurmas.map(t => String(t.id))
 
           // Extrair colaboradores dessas turmas (através dos agenda_grupos correspondentes)
-          if (!gruposError && allGrupos) {
+          if (allGrupos && allGrupos.length > 0) {
              matchedTurmas.forEach(t => {
                 const tId = String(t.id);
                 const tNome = String(t.nome || '').trim().toLowerCase();
-                const relatedGroup = allGrupos.find(g => {
+                const relatedGroup = allGrupos.find((g: any) => {
                   const sId = String(g.dados?.syncId || '');
                   const gId = String(g.id || '');
-                  return sId === `sync-${tId}` || gId === `sync-${tId}` || String(g.dados?.nome || '').trim().toLowerCase() === tNome;
+                  return sId === `sync-${tId}` || gId === `sync-${tId}` || String(g.dados?.nome || g.nome || '').trim().toLowerCase() === tNome;
                 });
                 if (relatedGroup) {
-                  let colabs = relatedGroup.dados?.colaboradoresIds || [];
+                  let colabs = (relatedGroup as any).dados?.colaboradoresIds || (relatedGroup as any).colaboradoresIds || [];
                   if (typeof colabs === 'string') {
                     try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
                   }
                   if (Array.isArray(colabs)) {
                     colabs.forEach((c: any) => {
-                      const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId) : c;
-                      const clean = String(val || '').replace(/^f_?/, '').trim()
+                      const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId || c.user_id) : c;
+                      const clean = String(val || '').replace(/^[feq_]+/, '').trim()
                       if (clean && clean !== '[object Object]') colaboradoresIds.push(clean)
                     });
                   }
@@ -580,15 +777,15 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     const finalColabIds = new Set<string>()
     colaboradoresIds.forEach(id => {
       const idAny = id as any
-      const val = typeof idAny === 'object' && idAny !== null ? (idAny.id || idAny.colaboradorId || idAny.usuarioId || idAny.funcionarioId) : idAny;
-      const clean = String(val || '').replace(/^f_?/, '').trim()
+      const val = typeof idAny === 'object' && idAny !== null ? (idAny.id || idAny.colaboradorId || idAny.usuarioId || idAny.funcionarioId || idAny.user_id) : idAny;
+      const clean = String(val || '').replace(/^[feq_]+/, '').trim()
       if (clean && clean !== '[object Object]') finalColabIds.add(clean)
     })
 
     if (finalColabIds.size > 0) {
       try {
         const [sysRes, funcRes] = await Promise.allSettled([
-          supabase.from('system_users').select('id, auth_id, email, dados').limit(3000),
+          supabase.from('system_users').select('id, auth_id, email, dados, status').or('status.neq.inativo,status.is.null').limit(3000),
           supabase.from('funcionarios').select('id, user_id, email').limit(3000),
         ])
 

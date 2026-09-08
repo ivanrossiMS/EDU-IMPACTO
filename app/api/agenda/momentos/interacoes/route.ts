@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
+import { getColaboradorIds } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,18 +71,29 @@ export async function POST(request: Request) {
 
     // 4. Dispatch Push Notification EXCLUSIVELY to authorId (if they are not the one interacting)
     if (!isRemoval && dados.authorId && String(dados.authorId) !== String(user.id)) {
-      const isColab = String(dados.authorId).startsWith('COLAB-') || String(dados.authorId).startsWith('AD-')
+      const rawAuthorId = String(dados.authorId)
+      const isColab = rawAuthorId.startsWith('COLAB-') || rawAuthorId.startsWith('AD-')
       const message = action === 'like' 
         ? `${authorName} curtiu sua publicação.` 
         : `${authorName} comentou na sua publicação: "${value}"`
-        
+      
+      const resolvedIds = await getColaboradorIds([rawAuthorId])
+      const targetUserIds = resolvedIds.length > 0 ? resolvedIds : [rawAuthorId]
+      const targetUrl = isColab ? '/agenda-digital/colaborador/momentos' : '/agenda-digital/momentos'
+
       sendAgendaPushNotification({
         type: 'momentos',
         itemId: String(momentId),
         title: action === 'like' ? '❤️ Nova Curtida' : '💬 Novo Comentário',
         message,
-        targetUserIds: [dados.authorId],
-        targetUrl: isColab ? '/agenda-digital/colaborador/momentos' : '/agenda-digital/momentos'
+        targetUserIds,
+        targetUrl,
+        metadata: {
+          perfil_destino: isColab ? 'colaborador' : 'familia',
+          item_id: String(momentId),
+          rota: 'momentos',
+          targetUrl
+        }
       }).catch(err => console.error('[Push Dispatch Error] Interacoes Momento:', err))
     }
 

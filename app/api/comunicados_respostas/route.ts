@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
+import { getColaboradorIds } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -197,18 +198,22 @@ export async function POST(request: Request) {
           .single();
         
         if (comData && comData.dados && comData.dados.autorId) {
-          const targetUserId = comData.dados.autorId;
+          const rawAutorId = comData.dados.autorId;
+          const resolvedIds = await getColaboradorIds([rawAutorId]);
+          const targetUserIds = resolvedIds.length > 0 ? resolvedIds : [rawAutorId];
           
           try {
-            await supabase.from('notificacoes').insert({
-              user_id: targetUserId,
-              titulo: `Nova resposta: ${comData.titulo}`,
-              mensagem: `${remetenteNome} comentou: "${msgTexto}"`,
-              link: `/agenda-digital/comunicados`,
-              lida: false,
-              tipo: 'comunicado',
-              created_at: new Date().toISOString()
-            });
+            for (const uid of targetUserIds) {
+              await supabase.from('notificacoes').insert({
+                user_id: uid,
+                titulo: `Nova resposta: ${comData.titulo}`,
+                mensagem: `${remetenteNome} comentou: "${msgTexto}"`,
+                link: `/agenda-digital/comunicados`,
+                lida: false,
+                tipo: 'comunicado',
+                created_at: new Date().toISOString()
+              });
+            }
           } catch (err) {
             console.error("Notificacao DB erro:", err);
           }
@@ -219,7 +224,7 @@ export async function POST(request: Request) {
               itemId: String(data.id), // ID único do comentário evita deduplicação indevida
               title: `💬 Resposta de ${remetenteNome}`,
               message: `No comunicado "${comData.titulo}": ${msgTexto}`,
-              targetUserIds: [targetUserId],
+              targetUserIds,
               targetUrl: `/agenda-digital/colaborador/comunicados?id=${body.comunicado_id}`,
               metadata: { perfil_destino: 'colaborador', item_id: String(body.comunicado_id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${body.comunicado_id}` }
             });

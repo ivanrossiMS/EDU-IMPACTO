@@ -148,8 +148,11 @@ export async function sendAgendaPushNotification({
   metadata,
   sendAfter,
 }: SendAgendaPushParams): Promise<PushResult> {
-  const dedupKey = metadata?.aluno_id ? `${itemId}_${metadata.aluno_id}` : itemId
-  const logPrefix = `[Push Central][${type}][${itemId}]`
+  const audienceKey = metadata?.aluno_id 
+    ? `aluno_${metadata.aluno_id}` 
+    : (metadata?.perfil_destino ? `perfil_${metadata.perfil_destino}` : '')
+  const dedupKey = audienceKey ? `${itemId}_${audienceKey}` : itemId
+  const logPrefix = `[Push Central][${type}][${itemId}${audienceKey ? `:${audienceKey}` : ''}]`
 
   try {
     // ── Validação básica ────────────────────────────────────────────────────

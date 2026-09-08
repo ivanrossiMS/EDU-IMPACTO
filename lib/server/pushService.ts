@@ -289,6 +289,37 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return resultResp
   }
 
+  // ── Tentativa 5 (Fallback): Custom Alias system_user_id ──
+  const sysUserPayload: Record<string, any> = {
+    ...commonFields,
+    include_aliases: {
+      system_user_id: uniqueTargetUserIds,
+    },
+    target_channel: 'push',
+  }
+  const resultSysUser = await attemptSend(sysUserPayload, ONESIGNAL_REST_API_KEY)
+  if (resultSysUser.success && (resultSysUser.recipients ?? 0) > 0) {
+    console.log(`✅ [PushService] Custom alias system_user_id entregou com sucesso para ${resultSysUser.recipients} dispositivo(s)!`)
+    return resultSysUser
+  }
+
+  // ── Tentativa 6 (Fallback): Custom Alias email ──
+  const emailTargets = uniqueTargetUserIds.filter(id => id.includes('@'))
+  if (emailTargets.length > 0) {
+    const emailPayload: Record<string, any> = {
+      ...commonFields,
+      include_aliases: {
+        email: emailTargets,
+      },
+      target_channel: 'push',
+    }
+    const resultEmail = await attemptSend(emailPayload, ONESIGNAL_REST_API_KEY)
+    if (resultEmail.success && (resultEmail.recipients ?? 0) > 0) {
+      console.log(`✅ [PushService] Custom alias email entregou com sucesso para ${resultEmail.recipients} dispositivo(s)!`)
+      return resultEmail
+    }
+  }
+
   // Retornar o resultado com o erro mais informativo
   return resultExternalId.error ? resultExternalId : resultLegacy
 }

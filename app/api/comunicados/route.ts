@@ -468,22 +468,24 @@ export async function POST(request: Request) {
       after(async () => {
         const allPushPromises = [];
         for (const row of rows) {
-          if (row.destino === 'interno') continue;
+          const isInterno = row.destino === 'interno';
           const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
           
-          for (const student of students) {
-            if (student.responsaveis_ids.length > 0) {
-              allPushPromises.push(
-                sendAgendaPushNotification({
-                  type: 'comunicados',
-                  itemId: String(row.id),
-                  title: `📢 Comunicado: ${row.titulo}`,
-                  message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
-                  targetUserIds: student.responsaveis_ids,
-                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
-                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
-                }).catch(err => console.error("Push Error:", err))
-              );
+          if (!isInterno) {
+            for (const student of students) {
+              if (student.responsaveis_ids.length > 0) {
+                allPushPromises.push(
+                  sendAgendaPushNotification({
+                    type: 'comunicados',
+                    itemId: String(row.id),
+                    title: `📢 Comunicado: ${row.titulo}`,
+                    message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
+                    targetUserIds: student.responsaveis_ids,
+                    targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
+                    metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
+                  }).catch(err => console.error("Push Error:", err))
+                );
+              }
             }
           }
 
@@ -564,11 +566,12 @@ export async function POST(request: Request) {
     }
 
     // 3. Disparar Push em background apenas se tudo deu certo
-    if (data.destino !== 'interno') {
-      after(async () => {
-        const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
-        const pushPromises = [];
-        
+    after(async () => {
+      const isInterno = data.destino === 'interno';
+      const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+      const pushPromises = [];
+      
+      if (!isInterno) {
         for (const student of students) {
           if (student.responsaveis_ids.length > 0) {
             pushPromises.push(
@@ -584,24 +587,24 @@ export async function POST(request: Request) {
             );
           }
         }
+      }
 
-        if (directColaboradores.length > 0) {
-          pushPromises.push(
-            sendAgendaPushNotification({
-              type: 'comunicados',
-              itemId: String(data.id),
-              title: `📢 Comunicado: ${data.titulo}`,
-              message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
-              targetUserIds: directColaboradores,
-              targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
-              metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}` }
-            }).catch(err => console.error("Push Error Colab:", err))
-          );
-        }
-        
-        await Promise.allSettled(pushPromises);
-      });
-    }
+      if (directColaboradores.length > 0) {
+        pushPromises.push(
+          sendAgendaPushNotification({
+            type: 'comunicados',
+            itemId: String(data.id),
+            title: `📢 Comunicado: ${data.titulo}`,
+            message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
+            targetUserIds: directColaboradores,
+            targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,
+            metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}` }
+          }).catch(err => console.error("Push Error Colab:", err))
+        );
+      }
+      
+      await Promise.allSettled(pushPromises);
+    });
 
     return NextResponse.json(normalizeRow(data), { status: 201 })
   } catch (e: any) {
@@ -734,8 +737,14 @@ async function enrichGruposRecipients(row: any) {
     return row;
   }
   try {
-    const { data: allGrupos } = await supabaseServer.from('agenda_grupos').select('id, dados');
-    if (!allGrupos || allGrupos.length === 0) return row;
+    const [gruposRes, equipesRes] = await Promise.allSettled([
+      supabaseServer.from('agenda_grupos').select('id, dados, nome'),
+      supabaseServer.from('agenda_equipes').select('id, dados, nome'),
+    ]);
+    const allGrupos = gruposRes.status === 'fulfilled' && gruposRes.value.data ? gruposRes.value.data : [];
+    const allEquipes = equipesRes.status === 'fulfilled' && equipesRes.value.data ? equipesRes.value.data : [];
+
+    if (allGrupos.length === 0 && allEquipes.length === 0) return row;
 
     const grupoNames = row.dados.grupos.map((g: string) => String(g).trim().toLowerCase());
     const extraColabs = new Set<string>();
@@ -746,13 +755,13 @@ async function enrichGruposRecipients(row: any) {
       const gNome = String(gDados.nome || g.nome || '').trim().toLowerCase();
       const gId = String(g.id || '').trim().toLowerCase();
       if (grupoNames.includes(gNome) || grupoNames.includes(gId) || grupoNames.includes(`g_${gId}`)) {
-        let cIds = gDados.colaboradoresIds || g.colaboradoresIds || [];
+        let cIds = gDados.colaboradoresIds || gDados.funcionariosIds || g.colaboradoresIds || g.funcionariosIds || [];
         if (typeof cIds === 'string') {
           try { cIds = JSON.parse(cIds); } catch { cIds = []; }
         }
         if (Array.isArray(cIds)) {
           cIds.forEach((id: any) => {
-            const clean = String(id).replace(/^f_?/, '').trim();
+            const clean = String(id).replace(/^[feq_]+/, '').trim();
             if (clean) extraColabs.add(clean);
           });
         }
@@ -765,6 +774,24 @@ async function enrichGruposRecipients(row: any) {
           aIds.forEach((id: any) => {
             const clean = String(id).replace(/^(a_|_ALU)/, '').trim();
             if (clean) extraAlunos.add(clean);
+          });
+        }
+      }
+    });
+
+    allEquipes.forEach((e: any) => {
+      const eDados = e.dados || {};
+      const eNome = String(eDados.nome || e.nome || '').trim().toLowerCase();
+      const eId = String(e.id || '').trim().toLowerCase();
+      if (grupoNames.includes(eNome) || grupoNames.includes(eId) || grupoNames.includes(`eq_${eId}`) || grupoNames.includes(`g_${eId}`)) {
+        let mIds = eDados.membrosIds || eDados.colaboradoresIds || eDados.funcionariosIds || e.membrosIds || e.colaboradoresIds || [];
+        if (typeof mIds === 'string') {
+          try { mIds = JSON.parse(mIds); } catch { mIds = []; }
+        }
+        if (Array.isArray(mIds)) {
+          mIds.forEach((id: any) => {
+            const clean = String(id).replace(/^[feq_]+/, '').trim();
+            if (clean) extraColabs.add(clean);
           });
         }
       }

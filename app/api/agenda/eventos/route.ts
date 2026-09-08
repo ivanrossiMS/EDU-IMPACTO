@@ -107,7 +107,21 @@ export async function GET(request: Request) {
 }
 
 async function dispatchPushNotifications(supabase: any, row: any) {
-  const { students, directColaboradores } = await getStudentTargetsForComunicados({ targetClasses: row.turmas })
+  const rowDados = row.dados || {}
+  const turmasList = Array.isArray(row.turmas) ? row.turmas : (Array.isArray(rowDados.turmas) ? rowDados.turmas : [])
+  const isTodos = turmasList.length === 0 || turmasList.some((t: any) => typeof t === 'string' && (t.toLowerCase().includes('todos') || t.toLowerCase().includes('toda a escola')))
+
+  const targetParams = {
+    turmas: turmasList,
+    targetClasses: turmasList,
+    grupos: rowDados.grupos || rowDados.targetGrupos || [],
+    colaboradoresIds: rowDados.colaboradoresIds || rowDados.funcionariosIds || [],
+    funcionariosIds: rowDados.funcionariosIds || rowDados.colaboradoresIds || [],
+    alunosIds: rowDados.alunosIds || rowDados.targetStudents || [],
+    destino: isTodos ? 'todos' : (rowDados.destino || 'selecionados')
+  }
+
+  const { students, directColaboradores } = await getStudentTargetsForComunicados(targetParams)
   
   // Handle visibilidadeUsuario
   const visibilidadeUsuario = row.dados?.visibilidadeUsuario || row.visibilidadeUsuario;

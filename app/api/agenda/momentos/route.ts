@@ -365,7 +365,8 @@ export async function POST(request: Request) {
       after(async () => {
         const allPushPromises: Promise<any>[] = [];
         for (const row of newRows) {
-          const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
+          const targetParams = normalizeMomentoParams(row.dados);
+          const { students, directColaboradores } = await getStudentTargetsForComunicados(targetParams);
           
           for (const student of students) {
             if (student.responsaveis_ids.length > 0) {
@@ -417,7 +418,8 @@ export async function POST(request: Request) {
 
     if (isNew) {
       after(async () => {
-        const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+        const targetParams = normalizeMomentoParams(data.dados);
+        const { students, directColaboradores } = await getStudentTargetsForComunicados(targetParams);
         const pushPromises = [];
         
         for (const student of students) {
@@ -465,6 +467,25 @@ function buildRowAuth(body: any) {
   return {
     id: id || crypto.randomUUID(),
     dados: rest,
+  }
+}
+
+function normalizeMomentoParams(rawDados: any) {
+  const inner = rawDados?.dados || {}
+  const targetClasses = rawDados?.targetClasses || rawDados?.turmas || inner?.targetClasses || inner?.turmas || []
+  const grupos = rawDados?.grupos || inner?.grupos || rawDados?.targetGrupos || inner?.targetGrupos || []
+  const funcionariosIds = rawDados?.funcionariosIds || rawDados?.colaboradoresIds || inner?.funcionariosIds || inner?.colaboradoresIds || []
+  const alunosIds = rawDados?.alunosIds || rawDados?.targetStudents || inner?.alunosIds || inner?.targetStudents || []
+  const isTodos = Array.isArray(targetClasses) && targetClasses.some((t: any) => typeof t === 'string' && (t.toLowerCase().includes('toda a escola') || t.toLowerCase().includes('todos')))
+
+  return {
+    turmas: targetClasses,
+    targetClasses,
+    grupos,
+    alunosIds,
+    funcionariosIds,
+    colaboradoresIds: funcionariosIds,
+    destino: isTodos ? 'todos' : (rawDados?.destino || inner?.destino || 'selecionados')
   }
 }
 
