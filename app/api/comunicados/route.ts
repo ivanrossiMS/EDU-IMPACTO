@@ -588,6 +588,7 @@ export async function POST(request: Request) {
     after(async () => {
       const isInterno = data.destino === 'interno';
       const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+      console.log(`[Push Comunicado][${data.id}] students=${students.length} colaboradores=${directColaboradores.length} destino=${data.destino} funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds || [])}`);
       const pushPromises = [];
       
       if (!isInterno) {
@@ -628,6 +629,7 @@ export async function POST(request: Request) {
       }
 
       if (directColaboradores.length > 0) {
+        console.log(`[Push Comunicado][${data.id}] Enviando push para ${directColaboradores.length} colaboradores:`, directColaboradores.slice(0, 10));
         pushPromises.push(
           sendAgendaPushNotification({
             type: 'comunicados',
@@ -639,6 +641,8 @@ export async function POST(request: Request) {
             metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'comunicados', targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}` }
           }).catch(err => console.error("Push Error Colab:", err))
         );
+      } else {
+        console.log(`[Push Comunicado][${data.id}] Nenhum colaborador para push. dados.funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds)}, dados.colaboradoresIds=${JSON.stringify(data.dados?.colaboradoresIds)}`);
       }
       
       await Promise.allSettled(pushPromises);

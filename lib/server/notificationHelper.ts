@@ -468,19 +468,37 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     const grupos = extractCleanTerms(rawGrupos)
     const allGroupTerms = Array.from(new Set([...turmas, ...grupos]))
 
-    const alunosIds = extractCleanIds([
+    // Separar alunosIds de colaboradoresIds: itens com prefixo f_ são colaboradores
+    // (fallback para dados antigos salvos antes do fix do DestinatariosModal)
+    const rawAlunosIds = [
       ...(dados.alunosIds || []),
       ...(dados.targetStudents || []),
       ...(innerDados.alunosIds || []),
       ...(innerDados.targetStudents || []),
-    ], /^(a_|_ALU)/)
+    ]
+    const colabsFromAlunosIds = rawAlunosIds.filter((id: any) => {
+      const s = typeof id === 'string' ? id : String(id || '')
+      return s.startsWith('f_') || s.startsWith('func_')
+    })
+    const alunosIds = extractCleanIds(
+      rawAlunosIds.filter((id: any) => {
+        const s = typeof id === 'string' ? id : String(id || '')
+        return !s.startsWith('f_') && !s.startsWith('func_')
+      }),
+      /^(a_|_ALU)/
+    )
 
     const colaboradoresIds = extractCleanIds([
       ...(dados.colaboradoresIds || []),
       ...(dados.funcionariosIds || []),
       ...(innerDados.colaboradoresIds || []),
       ...(innerDados.funcionariosIds || []),
+      ...colabsFromAlunosIds, // fallback: colaboradores que foram mal colocados em alunosIds
     ], /^[feq_]+/)
+
+    if (colabsFromAlunosIds.length > 0) {
+      console.log(`[NotifHelper] Fallback: ${colabsFromAlunosIds.length} colaboradores detectados em alunosIds e movidos para colaboradoresIds`)
+    }
 
     const rawDestino = String(dados.destino || innerDados.destino || '').toLowerCase().trim()
     const isInterno = rawDestino === 'interno'

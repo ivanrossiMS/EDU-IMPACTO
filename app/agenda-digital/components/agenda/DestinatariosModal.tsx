@@ -661,6 +661,20 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
         if (item.leafIds.length > 0 && item.leafIds.every((id: string) => selectedLeaves.has(id))) {
            result.push({ id: item.id, name: item.title, type: item.type })
            item.leafIds.forEach((id: string) => coveredLeaves.add(id))
+
+           // CRITICAL FIX: Colaboradores dentro de turmas/grupos são marcados como "cobertos"
+           // mas precisam ser incluídos explicitamente no resultado para que o buildRow
+           // preencha funcionariosIds e eles recebam a notificação push.
+           if (item.payloads) {
+             item.payloads.forEach((p: any) => {
+               if (p.type === 'funcionario') {
+                 const alreadyInResult = result.some(r => r.id === p.id)
+                 if (!alreadyInResult) {
+                   result.push({ id: p.id, name: p.name, type: 'funcionario' })
+                 }
+               }
+             })
+           }
         }
       }
     })
