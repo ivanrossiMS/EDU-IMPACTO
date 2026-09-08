@@ -1,7 +1,11 @@
 'use client'
 import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Search, Users, Check, Building2, GraduationCap, Calendar, ArrowLeft, ChevronRight, Shield } from 'lucide-react'
+import { 
+  X, Search, Users, Check, Building2, GraduationCap, Calendar, ArrowLeft, ChevronRight,
+  Shield, DollarSign, UserCheck, Phone, FileText, Briefcase, BookOpen, ChevronDown, ChevronUp,
+  User, Sparkles
+} from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '@/lib/dataContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -36,74 +40,290 @@ const DEST_MODAL_STYLES = `
       display: block;
       position: absolute;
       inset: 0;
-      background: rgba(15, 23, 42, 0.4);
+      background: rgba(15, 23, 42, 0.45);
       backdrop-filter: blur(8px);
     }
     .dest-modal-container {
       width: 90%;
-      max-width: 680px;
+      max-width: 720px;
       height: 90vh;
-      max-height: 820px;
+      max-height: 850px;
       position: relative;
       border-radius: 28px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.25);
     }
   }
-  .dest-spinner-ring {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 3px solid #E2E8F0;
-    border-top-color: #6D5DF6;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin {
+  @keyframes orbitSpinCW {
+    from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+  @keyframes orbitSpinCCW {
+    from { transform: rotate(360deg); }
+    to { transform: rotate(0deg); }
+  }
+  @keyframes cyberCorePulse {
+    0%, 100% {
+      transform: scale(0.92);
+      filter: drop-shadow(0 0 6px rgba(0, 210, 255, 0.6));
+    }
+    50% {
+      transform: scale(1.15);
+      filter: drop-shadow(0 0 16px rgba(117, 81, 255, 0.8)) drop-shadow(0 0 24px rgba(0, 210, 255, 0.7));
+    }
+  }
+  @keyframes destAuraGlow {
+    0%, 100% {
+      transform: scale(0.92);
+      opacity: 0.35;
+    }
+    50% {
+      transform: scale(1.15);
+      opacity: 0.75;
+    }
+  }
+  @keyframes laserBeamSweep {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(100%); }
+    100% { transform: translateX(250%); }
+  }
+  @keyframes destPulseDot {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+  @keyframes destPulseBadge {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    50% { transform: scale(1.08); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  }
+  @keyframes destShimmerLine {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
   }
   @keyframes waveAnimation {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
   }
-`;
+`
 
 const GlobalDestStyles = React.memo(function GlobalDestStyles() {
   return <style dangerouslySetInnerHTML={{ __html: DEST_MODAL_STYLES }} />
 })
 
-export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [], allowedTurmasIds, allowedGruposIds, currentUserId }: DestinatariosModalProps) {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+// Utilitário para iniciais dos colaboradores
+function getInitials(name: string): string {
+  if (!name) return ''
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+// Paletas de cores harmônicas para avatares
+const AVATAR_PALETTES = [
+  { bg: '#EEF2FF', text: '#4F46E5', border: '#C7D2FE' },
+  { bg: '#FDF2F8', text: '#DB2777', border: '#FBCFE8' },
+  { bg: '#ECFDF5', text: '#059669', border: '#A7F3D0' },
+  { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A' },
+  { bg: '#F5F3FF', text: '#7C3AED', border: '#DDD6FE' },
+  { bg: '#F0F9FF', text: '#0284C7', border: '#BAE6FD' },
+]
+
+function getAvatarPalette(str: string) {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const index = Math.abs(hash) % AVATAR_PALETTES.length
+  return AVATAR_PALETTES[index]
+}
+
+// Helper para obter ícone, cores e informações visuais por departamento
+function getEquipeDepartmentInfo(nome: string, fallbackColor?: string) {
+  const n = (nome || '').toLowerCase()
+  if (n.includes('direção') || n.includes('direcao') || n.includes('diretoria')) {
+    return {
+      icon: Shield,
+      color: fallbackColor || '#EC4899',
+      gradient: 'linear-gradient(135deg, #F43F5E 0%, #E11D48 100%)',
+      bgSoft: '#FFF1F2',
+      borderSoft: '#FFE4E6',
+      badgeBg: 'rgba(244, 63, 94, 0.1)',
+      badgeColor: '#E11D48',
+      tag: 'Direção'
+    }
+  }
+  if (n.includes('coordenação') || n.includes('coordenacao') || n.includes('pedag')) {
+    return {
+      icon: GraduationCap,
+      color: fallbackColor || '#6366F1',
+      gradient: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+      bgSoft: '#EEF2FF',
+      borderSoft: '#E0E7FF',
+      badgeBg: 'rgba(99, 102, 241, 0.1)',
+      badgeColor: '#4F46E5',
+      tag: 'Coordenação'
+    }
+  }
+  if (n.includes('financeiro') || n.includes('cobr') || n.includes('contabil')) {
+    return {
+      icon: DollarSign,
+      color: fallbackColor || '#10B981',
+      gradient: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+      bgSoft: '#ECFDF5',
+      borderSoft: '#D1FAE5',
+      badgeBg: 'rgba(16, 185, 129, 0.1)',
+      badgeColor: '#059669',
+      tag: 'Financeiro'
+    }
+  }
+  if (n.includes('inspetor') || n.includes('patio') || n.includes('disciplina')) {
+    return {
+      icon: UserCheck,
+      color: fallbackColor || '#F59E0B',
+      gradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+      bgSoft: '#FFFBEB',
+      borderSoft: '#FEF3C7',
+      badgeBg: 'rgba(245, 158, 11, 0.1)',
+      badgeColor: '#D97706',
+      tag: 'Inspetoria'
+    }
+  }
+  if (n.includes('recepção') || n.includes('recepcao') || n.includes('atendimento')) {
+    return {
+      icon: Phone,
+      color: fallbackColor || '#8B5CF6',
+      gradient: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
+      bgSoft: '#F5F3FF',
+      borderSoft: '#EDE9FE',
+      badgeBg: 'rgba(139, 92, 246, 0.1)',
+      badgeColor: '#7C3AED',
+      tag: 'Recepção'
+    }
+  }
+  if (n.includes('secretaria') || n.includes('document')) {
+    return {
+      icon: FileText,
+      color: fallbackColor || '#0EA5E9',
+      gradient: 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)',
+      bgSoft: '#F0F9FF',
+      borderSoft: '#E0F2FE',
+      badgeBg: 'rgba(14, 165, 233, 0.1)',
+      badgeColor: '#0284C7',
+      tag: 'Secretaria'
+    }
+  }
+  return {
+    icon: Briefcase,
+    color: fallbackColor || '#6366F1',
+    gradient: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+    bgSoft: '#F8FAFC',
+    borderSoft: '#E2E8F0',
+    badgeBg: 'rgba(99, 102, 241, 0.1)',
+    badgeColor: '#4F46E5',
+    tag: 'Equipe Escolar'
+  }
+}
+
+// Identifica se um grupo pertence à Equipe Escolar
+function isEquipeEscolarGrupo(g: any): boolean {
+  if (!g) return false
+  if (g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1) return true
+  const n = String(g.nome || '').toLowerCase()
+  if (
+    n.includes('coordenação') ||
+    n.includes('coordenacao') ||
+    n.includes('direção') ||
+    n.includes('direcao') ||
+    n.includes('secretaria') ||
+    n.includes('financeiro') ||
+    n.includes('inspetor') ||
+    n.includes('recepção') ||
+    n.includes('recepcao') ||
+    n.includes('portaria') ||
+    n.includes('limpeza') ||
+    n.includes('equipe escolar') ||
+    n.includes('equipe pedagógica') ||
+    n.includes('professores') ||
+    n.includes('docentes') ||
+    n.includes('colaboradores')
+  ) {
+    return true
+  }
+  let cIds = g.colaboradoresIds || []
+  if (typeof cIds === 'string') {
+    try { cIds = JSON.parse(cIds) } catch { cIds = [] }
+  }
+  let aIds = g.alunosIds || []
+  if (typeof aIds === 'string') {
+    try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+  }
+  if (Array.isArray(cIds) && cIds.length > 0 && (!Array.isArray(aIds) || aIds.length === 0)) {
+    return true
+  }
+  return false
+}
+
+export function DestinatariosModal({ 
+  isOpen, 
+  onClose, 
+  onAdd, 
+  initialSelected = [], 
+  allowedTurmasIds, 
+  allowedGruposIds, 
+  currentUserId 
+}: DestinatariosModalProps) {
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => setMounted(true), [])
 
   const data = useData()
+  const [directTurmas = [], _setT, { loading: loadingTurmas }] = useSupabaseArray<any>('turmas')
+
+  const rawTurmas = useMemo(() => {
+    if (data?.turmas && data.turmas.length > 0) return data.turmas
+    return directTurmas
+  }, [data?.turmas, directTurmas])
+
   const turmas = useMemo(() => {
-    return allowedTurmasIds ? (data?.turmas || []).filter((t: any) => allowedTurmasIds.includes(String(t.id))) : (data?.turmas || [])
-  }, [data?.turmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
+    return allowedTurmasIds ? rawTurmas.filter((t: any) => allowedTurmasIds.includes(String(t.id))) : rawTurmas
+  }, [rawTurmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
+
   const [gruposManuais = [], _setG, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
-  const [alunos, _setA, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores, _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
+  const [alunos = [], _setA, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
+  const [colaboradores = [], _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
 
-  const isLoadingData = loadingGrupos || loadingAlunos || loadingColabs
+  // Safety fallback: evita ficar eternamente preso se uma escola não tiver alunos no banco
+  const [loadTimeoutPassed, setLoadTimeoutPassed] = useState(false)
+  useEffect(() => {
+    if (!isOpen) {
+      setLoadTimeoutPassed(false)
+      return
+    }
+    const timer = setTimeout(() => {
+      setLoadTimeoutPassed(true)
+    }, 10000)
+    return () => clearTimeout(timer)
+  }, [isOpen])
 
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Filtro de visualização rápida: 'todos' (exibe ambas as seções juntas), 'turmas' ou 'equipe'
+  const [viewFilter, setViewFilter] = useState<'todos' | 'turmas' | 'equipe'>('todos')
+  
+  // Drill-down para categorias de turmas e expansão de pessoas
   const [currentCatId, setCurrentCatId] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [showAllColabs, setShowAllColabs] = useState(false)
 
   const [selectedAno, setSelectedAno] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Anos letivos disponíveis baseados em turmas
   const availableAnos = useMemo(() => {
     const anos = new Set<string>()
     turmas.forEach((t: any) => {
       const a = t?.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')
       if (a) anos.add(a)
     })
-    ;(gruposManuais || []).forEach((g: any) => {
-      const a = g?.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
-      if (a) anos.add(a)
-    })
-    return Array.from(anos).sort((a,b) => b.localeCompare(a))
-  }, [turmas, gruposManuais])
+    return Array.from(anos).sort((a, b) => b.localeCompare(a))
+  }, [turmas])
 
   const filteredTurmas = useMemo(() => {
     if (availableAnos.length === 0) return turmas
@@ -114,30 +334,15 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     })
   }, [turmas, selectedAno, availableAnos])
 
-  const filteredGrupos = useMemo(() => {
-    if (availableAnos.length === 0) {
-      return gruposManuais.filter((g: any) => {
-        const isEquipe = g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1;
-        return (allowedGruposIds ? allowedGruposIds.includes(String(g.id)) : true) || isEquipe;
-      });
-    }
-    if (selectedAno === '') return []
-    return (gruposManuais || []).filter((g: any) => {
-      const isEquipe = g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1;
-      if (allowedGruposIds && !allowedGruposIds.includes(String(g.id)) && !isEquipe) return false
-      const a = g?.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
-      return a ? a === selectedAno : true
-    })
-  }, [gruposManuais, selectedAno, availableAnos, allowedGruposIds ? JSON.stringify(allowedGruposIds) : null])
-  
-  const [selected, setSelected] = useState<Record<string, {id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo'}>>({})
+  // Estado de itens selecionados
+  const [selected, setSelected] = useState<Record<string, { id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo' }>>({})
   const [hasHydrated, setHasHydrated] = useState(false)
 
+  // Mapas relacionais
   const { alunosByTurmaRef, alunosById, colaboradoresById, colaboradoresByTurmaId } = useMemo(() => {
     const byTurmaRef = new Map<string, any[]>()
     const aById = new Map<string, any>()
     const cById = new Map<string, any>()
-    // Mapa: turmaId (string) -> lista de colaboradores vinculados via grupos sincronizados
     const cByTurmaId = new Map<string, any[]>()
 
     ;(alunos || []).forEach((a: any) => {
@@ -160,8 +365,6 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       cById.set(String(c.id), c)
     })
 
-    // Construir mapa de colaboradores por turma usando grupos sincronizados
-    // Grupos sincronizados têm syncId = 'sync-{turmaId}' ou id = 'sync-{turmaId}'
     ;(gruposManuais || []).forEach((g: any) => {
       const syncId: string = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
       if (!syncId) return
@@ -189,7 +392,6 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     const tAno = t?.ano !== undefined ? String(t.ano) : (t?.anoLetivo || t?.ano_letivo || selectedAno)
     const tIdStr = String(t.id)
 
-    // Buscar grupo sincronizado em agenda/grupos (se existir)
     const syncGroup = (gruposManuais || []).find((g: any) => {
       const gSync = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
       return gSync === `sync-${tIdStr}` || g.id === `sync-${tIdStr}` || (g.nome && g.nome.toLowerCase() === String(t.nome || '').toLowerCase())
@@ -244,10 +446,16 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     return directStudents
   }
 
-  // Retorna colaboradores vinculados à turma via grupos sincronizados
   const getTurmaColaboradores = (t: any): any[] => {
     return colaboradoresByTurmaId.get(String(t.id)) || []
   }
+
+  // Verificação de carregamento
+  const isAnyHookLoading = loadingTurmas || loadingGrupos || loadingAlunos || loadingColabs
+  const isWaitingForAlunos = !loadTimeoutPassed && turmas.length > 0 && alunos.length === 0
+  const isWaitingForYear = !loadTimeoutPassed && turmas.length > 0 && availableAnos.length > 0 && selectedAno === ''
+
+  const isLoadingData = (isAnyHookLoading || isWaitingForAlunos || isWaitingForYear) && !loadTimeoutPassed
 
   useEffect(() => {
     if (isOpen && availableAnos.length > 0 && selectedAno === '') {
@@ -267,8 +475,12 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       setSelected({})
       setSearchQuery('')
       setSelectedAno('')
+      setViewFilter('todos')
+      setExpandedId(null)
+      setShowAllColabs(false)
       return
     }
+    if (isLoadingData) return
     if (hasHydrated) return
 
     if (initialSelected.length > 0) {
@@ -288,50 +500,55 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     }
 
     const map: typeof selected = {}
-      initialSelected.forEach(s => {
-        const type = s.type || (s.id && (s.id.startsWith('f_') || s.id === 'func') ? 'funcionario' : s.id && s.id.startsWith('a_') ? 'aluno' : s.id && s.id.startsWith('g_') ? 'grupo' : 'turma')
-        
-        if (type === 'turma') {
-           const t = turmas.find((x:any) => String(x.id) === String(s.id) || String(x.nome) === String(s.name))
-           if (t) {
-             const tAlunos = getTurmaAlunos(t)
-             tAlunos.forEach((a:any) => {
-               map[`a_${a.id}`] = { id: `a_${a.id}`, name: a.nome, type: 'aluno' }
-             })
+    initialSelected.forEach(s => {
+      const type = s.type || (s.id && (s.id.startsWith('f_') || s.id === 'func') ? 'funcionario' : s.id && s.id.startsWith('a_') ? 'aluno' : s.id && s.id.startsWith('g_') ? 'grupo' : 'turma')
+      
+      if (type === 'turma') {
+         const t = turmas.find((x: any) => String(x.id) === String(s.id) || String(x.nome) === String(s.name))
+         if (t) {
+           const tAlunos = getTurmaAlunos(t)
+           tAlunos.forEach((a: any) => {
+             map[`a_${a.id}`] = { id: `a_${a.id}`, name: a.nome, type: 'aluno' }
+           })
+         }
+      } else if (type === 'grupo') {
+         const g = gruposManuais.find((x: any) => String(x.id) === String(s.id).replace('g_', ''))
+         if (g) {
+           let aIds = g.alunosIds || []
+           if (typeof aIds === 'string') {
+             try { aIds = JSON.parse(aIds) } catch(e) { aIds = [] }
            }
-        } else if (type === 'grupo') {
-           const g = gruposManuais.find((x:any) => String(x.id) === String(s.id).replace('g_',''))
-           if (g) {
-             let aIds = g.alunosIds || []
-             if (typeof aIds === 'string') {
-               try { aIds = JSON.parse(aIds) } catch(e) { aIds = [] }
-             }
-             let cIds = g.colaboradoresIds || []
-             if (typeof cIds === 'string') {
-               try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
-             }
-             const gAlunos = (Array.isArray(aIds) ? aIds : []).map((id:any) => alunosById.get(String(id))).filter(Boolean)
-             const gColabs = (Array.isArray(cIds) ? cIds : []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
-             gAlunos.forEach((a:any) => map[`a_${a.id}`] = { id: `a_${a.id}`, name: a.nome, type: 'aluno' })
-             gColabs.forEach((c:any) => map[`f_${c.id}`] = { id: `f_${c.id}`, name: c.nome, type: 'funcionario' })
+           let cIds = g.colaboradoresIds || []
+           if (typeof cIds === 'string') {
+             try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
            }
-        } else if (type === 'funcionario') {
-          const key = s.id.startsWith('f_') ? s.id : `f_${s.id}`
-          map[key] = { id: key, name: s.name, type: 'funcionario' }
-        } else {
-          map[s.id] = { id: s.id, name: s.name, type: type as any }
-        }
-      })
-      setSelected(map)
-      setHasHydrated(true)
+           const gAlunos = (Array.isArray(aIds) ? aIds : []).map((id: any) => alunosById.get(String(id))).filter(Boolean)
+           const gColabs = (Array.isArray(cIds) ? cIds : []).map((id: any) => colaboradoresById.get(String(id))).filter(Boolean)
+           gAlunos.forEach((a: any) => map[`a_${a.id}`] = { id: `a_${a.id}`, name: a.nome, type: 'aluno' })
+           gColabs.forEach((c: any) => map[`f_${c.id}`] = { id: `f_${c.id}`, name: c.nome, type: 'funcionario' })
+         }
+      } else if (type === 'funcionario') {
+        const key = s.id.startsWith('f_') ? s.id : `f_${s.id}`
+        map[key] = { id: key, name: s.name, type: 'funcionario' }
+      } else {
+        map[s.id] = { id: s.id, name: s.name, type: type as any }
+      }
+    })
+    setSelected(map)
+    setHasHydrated(true)
   }, [isOpen, hasHydrated, initialSelected, turmas, gruposManuais, alunos, colaboradores, alunosByTurmaRef, alunosById, colaboradoresById])
 
-  const { listItems, allLeafIds } = useMemo(() => {
+  // ══════════════════════════════════════════════════════════════════════════
+  // SEPARAÇÃO PRINCIPAL: TURMAS DE ALUNOS & EQUIPE ESCOLAR
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // 1. Segmentos Pedagógicos e Turmas de Alunos
+  const { turmasListItems, turmasLeafIds } = useMemo(() => {
     const categorias = [
-      { name: 'Educação Infantil', match: (t: any) => /NÍVEL|INFANTIL|BERÇÁRIO|MATERNAL|JARDIM|PRÉ-ESCOLA/i.test(`${t.nome} ${t.serie || ''}`) },
-      { name: 'Ensino Fundamental I', match: (t: any) => !/MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) && /(1|2|3|4|5)º?\s*ANO/i.test(`${t.nome} ${t.serie || ''}`) },
-      { name: 'Ensino Fundamental II', match: (t: any) => !/MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) && /(6|7|8|9)º?\s*ANO/i.test(`${t.nome} ${t.serie || ''}`) },
-      { name: 'Ensino Médio', match: (t: any) => /SÉRIE|MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) },
+      { name: 'Educação Infantil', icon: Sparkles, match: (t: any) => /NÍVEL|INFANTIL|BERÇÁRIO|MATERNAL|JARDIM|PRÉ-ESCOLA/i.test(`${t.nome} ${t.serie || ''}`) },
+      { name: 'Ensino Fundamental I', icon: BookOpen, match: (t: any) => !/MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) && /(1|2|3|4|5)º?\s*ANO/i.test(`${t.nome} ${t.serie || ''}`) },
+      { name: 'Ensino Fundamental II', icon: Building2, match: (t: any) => !/MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) && /(6|7|8|9)º?\s*ANO/i.test(`${t.nome} ${t.serie || ''}`) },
+      { name: 'Ensino Médio', icon: GraduationCap, match: (t: any) => /SÉRIE|MÉDIO/i.test(`${t.nome} ${t.serie || ''}`) },
     ]
 
     const items: any[] = []
@@ -345,19 +562,18 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     const catTurmasIds = new Set(mappedCats.flatMap(c => c.turmas.map((t: any) => String(t.id))))
     const restantes = filteredTurmas.filter((t: any) => !catTurmasIds.has(String(t.id)))
     if (restantes.length > 0) {
-      mappedCats.push({ name: 'Outras Turmas', turmas: restantes, match: () => false })
+      mappedCats.push({ name: 'Outras Turmas', icon: Users, turmas: restantes, match: () => false })
     }
 
     mappedCats.forEach(cat => {
       const catPeopleIds = new Set<string>()
       const catPayloads = new Map<string, any>()
-      
       const turmasItems: any[] = []
       
       cat.turmas.forEach((t: any) => {
         const tAlunos = getTurmaAlunos(t)
         const tColabs = getTurmaColaboradores(t)
-        const anoLetivo = t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
+        const anoLetivo = t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')
 
         const alunoPayloads = tAlunos.map((a: any) => ({
           id: `a_${a.id}`,
@@ -375,7 +591,6 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
           funcao: c.cargo || c.perfil || c.dados?.cargo || c.dados?.perfil || 'Colaborador'
         }))
 
-        // Colaboradores primeiro, depois alunos em ordem alfabética
         const payloads = [
           ...colabPayloads.sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR')),
           ...alunoPayloads.sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR'))
@@ -407,13 +622,15 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       })
 
       if (catPeopleIds.size > 0 || cat.turmas.length > 0) {
+        const totalTurmas = cat.turmas.length
+        const totalPessoas = catPeopleIds.size
         items.push({
           id: `cat_${cat.name}`,
           title: cat.name,
-          subtitle: `Categoria com ${cat.turmas.length} turmas`,
-          countBadge: isLoadingData ? 'Carregando...' : `${catPeopleIds.size} pessoas`,
+          subtitle: isLoadingData ? 'Carregando...' : `${totalTurmas} turma${totalTurmas !== 1 ? 's' : ''} com ${totalPessoas} pessoa${totalPessoas !== 1 ? 's' : ''}`,
+          countBadge: null,
           type: 'category',
-          icon: Building2,
+          icon: cat.icon || Building2,
           leafIds: Array.from(catPeopleIds),
           payloads: Array.from(catPayloads.values()),
           people: null,
@@ -422,176 +639,324 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
       }
     })
 
-    const visibleGrupos = (filteredGrupos || []).filter((g: any) => {
+    // Grupos Manuais voltados aos alunos (não-equipe escolar)
+    const manualStudentGroups = (gruposManuais || []).filter((g: any) => {
+      if (isEquipeEscolarGrupo(g)) return false
       const isSyncedTurma = g.syncId || String(g.id).startsWith('sync-')
       const isGlobal = g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1
-      if (isSyncedTurma) return isGlobal
+      if (isSyncedTurma && !isGlobal) return false
+      if (allowedGruposIds && !allowedGruposIds.includes(String(g.id))) return false
+      if (selectedAno) {
+        const a = g?.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
+        if (a && a !== selectedAno) return false
+      }
       return true
     })
 
-    const sortedGrupos = [...visibleGrupos].sort((a, b) => a.nome.localeCompare(b.nome))
-    sortedGrupos.forEach((g: any) => {
-      let aIds = g.alunosIds || []
-      if (typeof aIds === 'string') {
-        try { aIds = JSON.parse(aIds) } catch(e) { aIds = [] }
-      }
+    if (manualStudentGroups.length > 0) {
+      const studentGroupsItems: any[] = []
+      const groupCatLeaves = new Set<string>()
+      const groupCatPayloads = new Map<string, any>()
+
+      manualStudentGroups.sort((a, b) => a.nome.localeCompare(b.nome)).forEach((g: any) => {
+        let cIds = g.colaboradoresIds || []
+        if (typeof cIds === 'string') {
+          try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
+        }
+        const gAlunos = getGrupoAlunos(g)
+        const gColabs = (Array.isArray(cIds) ? cIds : []).map((id: any) => colaboradoresById.get(String(id))).filter(Boolean)
+        
+        const payloads = [
+          ...gAlunos.map((a: any) => {
+            const t = turmas.find((tx: any) => String(tx.id) === String(a.turma) || String(tx.codigo) === String(a.turma) || String(tx.nome) === String(a.turma)) as any
+            const anoLetivo = t ? (t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')) : ''
+            return { id: `a_${a.id}`, name: a.nome, type: 'aluno', turmaNome: t?.nome || '', anoLetivo }
+          }),
+          ...gColabs.map((c: any) => ({ id: `f_${c.id}`, name: c.nome, type: 'funcionario', funcao: c.funcao || c.cargo || c.perfil || c.dados?.funcao || c.dados?.cargo || c.dados?.perfil || '' }))
+        ]
+        
+        payloads.forEach(p => {
+          leafIds.add(p.id)
+          groupCatLeaves.add(p.id)
+          groupCatPayloads.set(p.id, p)
+        })
+
+        studentGroupsItems.push({
+          id: `g_${g.id}`,
+          title: g.nome,
+          subtitle: `${payloads.length} pessoas`,
+          countBadge: isLoadingData ? 'Carregando...' : `${payloads.length} pessoas`,
+          type: 'grupo',
+          icon: Users,
+          leafIds: payloads.map(p => p.id),
+          payloads: payloads,
+          people: payloads
+        })
+      })
+
+      const totalGrupos = studentGroupsItems.length
+      const totalPessoasGrupos = groupCatLeaves.size
+      items.push({
+        id: 'cat_grupos_alunos',
+        title: 'Grupos Extracurriculares',
+        subtitle: `${totalGrupos} grupo${totalGrupos !== 1 ? 's' : ''} com ${totalPessoasGrupos} pessoa${totalPessoasGrupos !== 1 ? 's' : ''}`,
+        countBadge: null,
+        type: 'category',
+        icon: Users,
+        leafIds: Array.from(groupCatLeaves),
+        payloads: Array.from(groupCatPayloads.values()),
+        people: null,
+        children: studentGroupsItems
+      })
+    }
+
+    return { turmasListItems: items, turmasLeafIds: leafIds }
+  }, [filteredTurmas, gruposManuais, allowedGruposIds, selectedAno, alunosByTurmaRef, alunosById, colaboradoresById, colaboradoresByTurmaId, isLoadingData])
+
+  // 2. Grupos Exclusivos da Equipe Escolar
+  const { equipeListItems, equipeLeafIds, allSchoolColabs } = useMemo(() => {
+    const items: any[] = []
+    const leafIds = new Set<string>()
+
+    const equipeGroups = (gruposManuais || []).filter((g: any) => {
+      const isEquipe = isEquipeEscolarGrupo(g)
+      if (!isEquipe) return false
+      if (allowedGruposIds && !allowedGruposIds.includes(String(g.id))) return false
+      return true
+    })
+
+    const sortedEquipe = [...equipeGroups].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+
+    sortedEquipe.forEach((g: any) => {
       let cIds = g.colaboradoresIds || []
       if (typeof cIds === 'string') {
         try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
       }
       
-      const gAlunos = getGrupoAlunos(g)
-      const gColabs = (Array.isArray(cIds) ? cIds : []).map((id:any) => colaboradoresById.get(String(id))).filter(Boolean)
-      
-      const payloads = [
-        ...gAlunos.map((a: any) => {
-          const t = turmas.find((tx: any) => String(tx.id) === String(a.turma) || String(tx.codigo) === String(a.turma) || String(tx.nome) === String(a.turma)) as any;
-          const anoLetivo = t ? (t.ano !== undefined ? t.ano : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')) : '';
-          return { id: `a_${a.id}`, name: a.nome, type: 'aluno', turmaNome: t?.nome || '', anoLetivo };
-        }),
-        ...gColabs.map((c: any) => ({ id: `f_${c.id}`, name: c.nome, type: 'funcionario', funcao: c.funcao || c.cargo || c.perfil || c.dados?.funcao || c.dados?.cargo || c.dados?.perfil || '' }))
-      ]
-      
+      const gColabs = (Array.isArray(cIds) ? cIds : []).map((id: any) => colaboradoresById.get(String(id))).filter(Boolean)
+      const deptInfo = getEquipeDepartmentInfo(g.nome, g.cor)
+
+      const payloads = gColabs.map((c: any) => ({
+        id: `f_${c.id}`,
+        name: c.nome,
+        type: 'funcionario' as const,
+        funcao: c.funcao || c.cargo || c.perfil || c.dados?.funcao || c.dados?.cargo || c.dados?.perfil || 'Colaborador',
+        email: c.email || '',
+        foto: c.foto || c.avatar || null
+      }))
+
       payloads.forEach(p => leafIds.add(p.id))
 
       items.push({
         id: `g_${g.id}`,
         title: g.nome,
-        countBadge: isLoadingData ? 'Carregando...' : `${payloads.length} pessoas`,
+        subtitle: `${payloads.length} colaborador${payloads.length !== 1 ? 'es' : ''}`,
+        countBadge: isLoadingData ? 'Carregando...' : `${payloads.length} colaborador${payloads.length !== 1 ? 'es' : ''}`,
         type: 'grupo',
-        icon: GraduationCap,
+        isEquipeEscolar: true,
+        deptInfo,
+        icon: deptInfo.icon,
+        cor: g.cor || deptInfo.color,
         leafIds: payloads.map(p => p.id),
         payloads: payloads,
-        people: payloads
+        people: payloads,
+        colaboradores: gColabs
       })
     })
 
-    // ── Categoria: Equipe Escolar (Professores, Direção, Coordenação, Secretaria, etc.) ──
+    // Lista de todos os colaboradores ativos da escola
     const validColabs = (colaboradores || []).filter((c: any) => {
       if (!c || !c.nome) return false
       const p = String(c.perfil || '').toLowerCase()
       const cg = String(c.cargo || '').toLowerCase()
-      return !p.includes('família') && !p.includes('aluno') && !cg.includes('aluno') && !cg.includes('responsável')
+      if (p.includes('família') || p.includes('aluno') || cg.includes('aluno') || cg.includes('responsável')) return false
+      return true
+    }).map((c: any) => ({
+      id: `f_${c.id}`,
+      name: c.nome,
+      type: 'funcionario' as const,
+      funcao: c.cargo || c.perfil || c.dados?.cargo || c.dados?.perfil || 'Colaborador',
+      email: c.email || '',
+      foto: c.foto || c.avatar || null
+    })).sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR'))
+
+    return { equipeListItems: items, equipeLeafIds: leafIds, allSchoolColabs: validColabs }
+  }, [gruposManuais, allowedGruposIds, colaboradores, colaboradoresById, isLoadingData])
+
+  // Contadores selecionados
+  const selectedTurmasCount = useMemo(() => {
+    return Object.keys(selected).filter(id => turmasLeafIds.has(id)).length
+  }, [selected, turmasLeafIds])
+
+  const selectedEquipeCount = useMemo(() => {
+    return Object.keys(selected).filter(id => equipeLeafIds.has(id) || id.startsWith('f_')).length
+  }, [selected, equipeLeafIds])
+
+  // Itens ativos no contexto atual
+  const activeItems = useMemo(() => {
+    if (currentCatId) {
+      return turmasListItems.find(i => i.id === currentCatId)?.children || []
+    }
+    if (viewFilter === 'turmas') {
+      return turmasListItems
+    }
+    if (viewFilter === 'equipe') {
+      return equipeListItems
+    }
+    return [...turmasListItems, ...equipeListItems]
+  }, [viewFilter, currentCatId, turmasListItems, equipeListItems])
+
+  // Busca Inteligente Categorizada
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return { equipe: [], turmasEAlunos: [] }
+    const q = searchQuery.toLowerCase().trim()
+
+    const equipeMap = new Map<string, any>()
+    const turmasMap = new Map<string, any>()
+
+    // Busca colaboradores da escola
+    allSchoolColabs.forEach(c => {
+      if (
+        c.name.toLowerCase().includes(q) ||
+        (c.funcao && c.funcao.toLowerCase().includes(q)) ||
+        (c.email && c.email.toLowerCase().includes(q))
+      ) {
+        equipeMap.set(c.id, c)
+      }
     })
 
-    if (validColabs.length > 0) {
-      const equipePeopleIds = new Set<string>()
-      const equipeAllPayloads: any[] = []
-
-      // Agrupar colaboradores por departamento/cargo
-      const roleGroups: Record<string, any[]> = {}
-      validColabs.forEach((c: any) => {
-        let role = String(c.perfil || c.cargo || 'Outros').trim()
-        if (/professo/i.test(role) || /professo/i.test(c.cargo || '')) role = 'Professores'
-        else if (/coordena/i.test(role) || /coordena/i.test(c.cargo || '')) role = 'Coordenação'
-        else if (/dire/i.test(role) || /dire/i.test(c.cargo || '')) role = 'Direção'
-        else if (/secretar/i.test(role) || /secretar/i.test(c.cargo || '')) role = 'Secretaria'
-        else if (/financ/i.test(role) || /financ/i.test(c.cargo || '')) role = 'Financeiro'
-        else if (/portaria|seguran/i.test(role) || /portaria|seguran/i.test(c.cargo || '')) role = 'Portaria & Segurança'
-        else role = 'Outros Colaboradores'
-
-        if (!roleGroups[role]) roleGroups[role] = []
-        roleGroups[role].push(c)
-      })
-
-      const equipeSubItems: any[] = []
-      const roleOrder = ['Direção', 'Coordenação', 'Professores', 'Secretaria', 'Financeiro', 'Portaria & Segurança', 'Outros Colaboradores']
-      const sortedRoles = Object.keys(roleGroups).sort((a, b) => {
-        const idxA = roleOrder.indexOf(a)
-        const idxB = roleOrder.indexOf(b)
-        if (idxA !== -1 && idxB !== -1) return idxA - idxB
-        if (idxA !== -1) return -1
-        if (idxB !== -1) return 1
-        return a.localeCompare(b, 'pt-BR')
-      })
-
-      sortedRoles.forEach(roleName => {
-        const members = roleGroups[roleName]
-        const mPayloads = members.map((c: any) => ({
-          id: `f_${c.id}`,
-          name: c.nome,
-          type: 'funcionario' as const,
-          funcao: c.cargo || c.perfil || 'Colaborador',
-          email: c.email
-        }))
-
-        mPayloads.forEach(p => {
-          leafIds.add(p.id)
-          equipePeopleIds.add(p.id)
-          equipeAllPayloads.push(p)
+    // Busca grupos da equipe escolar
+    equipeListItems.forEach(g => {
+      if (g.title.toLowerCase().includes(q)) {
+        if (!equipeMap.has(g.id)) {
+          equipeMap.set(g.id, g)
+        }
+      }
+      if (g.people) {
+        g.people.forEach((p: any) => {
+          if (p.name.toLowerCase().includes(q) || (p.funcao && p.funcao.toLowerCase().includes(q))) {
+            equipeMap.set(p.id, p)
+          }
         })
+      }
+    })
 
-        equipeSubItems.push({
-          id: `eq_role_${roleName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-          title: roleName,
-          subtitle: `${members.length} colaborador${members.length > 1 ? 'es' : ''}`,
-          countBadge: `${members.length} pessoa${members.length > 1 ? 's' : ''}`,
-          type: 'equipe_role',
-          icon: Shield,
-          leafIds: mPayloads.map(p => p.id),
-          payloads: mPayloads,
-          people: mPayloads
-        })
-      })
-
-      items.push({
-        id: 'cat_equipe_escolar',
-        title: 'Equipe Escolar',
-        subtitle: `Todos os ${validColabs.length} colaboradores`,
-        countBadge: isLoadingData ? 'Carregando...' : `${validColabs.length} pessoas`,
-        type: 'category',
-        icon: Shield,
-        leafIds: Array.from(equipePeopleIds),
-        payloads: equipeAllPayloads,
-        people: equipeAllPayloads,
-        children: equipeSubItems
-      })
-    }
-
-    return { listItems: items, allLeafIds: Array.from(leafIds) }
-  }, [filteredTurmas, filteredGrupos, alunosByTurmaRef, alunosById, colaboradoresById, colaboradoresByTurmaId, isLoadingData])
-
-  const activeItems = currentCatId 
-    ? (listItems.find(i => i.id === currentCatId)?.children || [])
-    : listItems
-
-  const flatPeopleList = useMemo(() => {
-    if (!searchQuery.trim()) return []
-    const q = searchQuery.toLowerCase().trim()
-    const peopleMap = new Map<string, any>()
-
-    const extractPeople = (items: any[]) => {
+    // Busca turmas e alunos
+    const extractTurmasAlunos = (items: any[]) => {
       items.forEach(item => {
-         if (item.people) {
-            item.people.forEach((p: any) => {
-               const matchName = p.name && p.name.toLowerCase().includes(q)
-               const matchFuncao = p.funcao && p.funcao.toLowerCase().includes(q)
-               const matchEmail = p.email && p.email.toLowerCase().includes(q)
-               if (matchName || matchFuncao || matchEmail) {
-                 peopleMap.set(p.id, p)
-               }
-            })
-         }
-         if (item.children) {
-            extractPeople(item.children)
-         }
+        if (item.title.toLowerCase().includes(q) && item.type === 'turma') {
+          turmasMap.set(item.id, item)
+        }
+        if (item.people) {
+          item.people.forEach((p: any) => {
+            if (p.type === 'aluno' && p.name.toLowerCase().includes(q)) {
+              turmasMap.set(p.id, p)
+            }
+          })
+        }
+        if (item.children) {
+          extractTurmasAlunos(item.children)
+        }
       })
     }
-    
-    extractPeople(listItems)
-    return Array.from(peopleMap.values()).sort((a,b) => a.name.localeCompare(b.name))
-  }, [listItems, searchQuery])
+    extractTurmasAlunos(turmasListItems)
 
+    return {
+      equipe: Array.from(equipeMap.values()),
+      turmasEAlunos: Array.from(turmasMap.values())
+    }
+  }, [searchQuery, allSchoolColabs, equipeListItems, turmasListItems])
+
+  const hasSearch = searchQuery.trim() !== ''
+  const totalSearchResults = searchResults.equipe.length + searchResults.turmasEAlunos.length
+
+  // Toggle de seleção em grupo ou item
   const toggleSelect = (item: any) => {
     setSelected(prev => {
       const next = { ...prev }
-      const leafIds = (item.leafIds as string[]).filter(id => id !== `f_${currentUserId}`)
+      const leafIds = (item.leafIds as string[] || [item.id]).filter(id => id !== `f_${currentUserId}`)
       const allSelected = leafIds.length > 0 && leafIds.every((id: string) => !!prev[id])
       
       if (allSelected) {
         leafIds.forEach((id: string) => delete next[id])
       } else {
-        item.payloads.forEach((p: any) => {
+        if (item.payloads && Array.isArray(item.payloads)) {
+          item.payloads.forEach((p: any) => {
+            if (p.id !== `f_${currentUserId}`) next[p.id] = p
+          })
+        } else {
+          if (item.id !== `f_${currentUserId}`) next[item.id] = item
+        }
+      }
+      return next
+    })
+  }
+
+  // Toggle selecionar tudo na visualização atual
+  const toggleAllInCurrentView = () => {
+    if (hasSearch) {
+      const allItemsToSelect = [
+        ...searchResults.equipe.flatMap(item => item.payloads || [item]),
+        ...searchResults.turmasEAlunos.flatMap(item => item.payloads || [item])
+      ].filter(p => p.id !== `f_${currentUserId}`)
+
+      const allSelected = allItemsToSelect.length > 0 && allItemsToSelect.every(p => !!selected[p.id])
+
+      setSelected(prev => {
+        const next = { ...prev }
+        if (allSelected) {
+          allItemsToSelect.forEach(p => delete next[p.id])
+        } else {
+          allItemsToSelect.forEach(p => next[p.id] = p)
+        }
+        return next
+      })
+      return
+    }
+
+    if (currentCatId) {
+      const catLeaves = (turmasListItems.find(i => i.id === currentCatId)?.leafIds || []).filter((id: string) => id !== `f_${currentUserId}`)
+      const allCatSelected = catLeaves.length > 0 && catLeaves.every((id: string) => !!selected[id])
+      setSelected(prev => {
+        const next = { ...prev }
+        if (allCatSelected) {
+          catLeaves.forEach((id: string) => delete next[id])
+        } else {
+          const cat = turmasListItems.find(i => i.id === currentCatId)
+          if (cat?.payloads) {
+            cat.payloads.forEach((p: any) => {
+              if (p.id !== `f_${currentUserId}`) next[p.id] = p
+            })
+          }
+        }
+        return next
+      })
+      return
+    }
+
+    let targetLeaves: string[] = []
+    let targetPayloads: any[] = []
+
+    if (viewFilter === 'todos') {
+      targetLeaves = [...Array.from(turmasLeafIds), ...Array.from(equipeLeafIds)].filter(id => id !== `f_${currentUserId}`)
+      turmasListItems.forEach(i => { if (i.payloads) targetPayloads.push(...i.payloads) })
+      equipeListItems.forEach(i => { if (i.payloads) targetPayloads.push(...i.payloads) })
+    } else if (viewFilter === 'turmas') {
+      targetLeaves = Array.from(turmasLeafIds).filter(id => id !== `f_${currentUserId}`)
+      turmasListItems.forEach(i => { if (i.payloads) targetPayloads.push(...i.payloads) })
+    } else {
+      targetLeaves = Array.from(equipeLeafIds).filter(id => id !== `f_${currentUserId}`)
+      equipeListItems.forEach(i => { if (i.payloads) targetPayloads.push(...i.payloads) })
+    }
+
+    const allSelected = targetLeaves.length > 0 && targetLeaves.every(id => !!selected[id])
+
+    setSelected(prev => {
+      const next = { ...prev }
+      if (allSelected) {
+        targetLeaves.forEach(id => delete next[id])
+      } else {
+        targetPayloads.forEach(p => {
           if (p.id !== `f_${currentUserId}`) next[p.id] = p
         })
       }
@@ -599,72 +964,55 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     })
   }
 
-  const toggleAll = () => {
-    if (searchQuery.trim() !== '') {
-       const selectablePeople = flatPeopleList.filter(p => p.id !== `f_${currentUserId}`)
-       const allSelected = selectablePeople.length > 0 && selectablePeople.every(p => !!selected[p.id])
-       if (allSelected) {
-          setSelected(prev => {
-             const next = { ...prev }
-             selectablePeople.forEach(p => delete next[p.id])
-             return next
-          })
-       } else {
-          setSelected(prev => {
-             const next = { ...prev }
-             selectablePeople.forEach(p => next[p.id] = p)
-             return next
-          })
-       }
-       return
+  const isAllActiveSelected = useMemo(() => {
+    if (hasSearch) {
+      const allItems = [
+        ...searchResults.equipe.flatMap(item => item.payloads || [item]),
+        ...searchResults.turmasEAlunos.flatMap(item => item.payloads || [item])
+      ].filter(p => p.id !== `f_${currentUserId}`)
+      return allItems.length > 0 && allItems.every(p => !!selected[p.id])
     }
 
-    const activeLeavesArray = Array.from(new Set<string>(activeItems.flatMap((i: any) => i.leafIds as string[]))).filter(id => id !== `f_${currentUserId}`)
-    const allActiveSelected = activeLeavesArray.length > 0 && activeLeavesArray.every((id: string) => !!selected[id])
+    if (currentCatId) {
+      const catLeaves = (turmasListItems.find(i => i.id === currentCatId)?.leafIds || []).filter((id: string) => id !== `f_${currentUserId}`)
+      return catLeaves.length > 0 && catLeaves.every((id: string) => !!selected[id])
+    }
 
-    if (allActiveSelected) {
-      setSelected(prev => {
-        const next = { ...prev }
-        activeLeavesArray.forEach((id: string) => delete next[id])
-        return next
-      })
+    let targetLeaves: string[] = []
+    if (viewFilter === 'todos') {
+      targetLeaves = [...Array.from(turmasLeafIds), ...Array.from(equipeLeafIds)].filter(id => id !== `f_${currentUserId}`)
+    } else if (viewFilter === 'turmas') {
+      targetLeaves = Array.from(turmasLeafIds).filter(id => id !== `f_${currentUserId}`)
     } else {
-      setSelected(prev => {
-        const next = { ...prev }
-        activeItems.forEach((item: any) => {
-          if (item.payloads) {
-             item.payloads.forEach((p: any) => {
-               if (p.id !== `f_${currentUserId}`) next[p.id] = p
-             })
-          }
-        })
-        return next
-      })
+      targetLeaves = Array.from(equipeLeafIds).filter(id => id !== `f_${currentUserId}`)
     }
-  }
 
+    return targetLeaves.length > 0 && targetLeaves.every(id => !!selected[id])
+  }, [hasSearch, searchResults, currentCatId, turmasListItems, viewFilter, turmasLeafIds, equipeLeafIds, selected, currentUserId])
+
+  // Confirmação com reconstrução elegante de grupos e turmas
   const handleConfirm = () => {
     const result: any[] = []
     const selectedLeaves = new Set(Object.keys(selected))
     const coveredLeaves = new Set<string>()
     
     const allGroupItems: any[] = []
-    listItems.forEach(item => {
+    turmasListItems.forEach(item => {
       allGroupItems.push(item)
       if (item.children) {
         allGroupItems.push(...item.children)
       }
     })
+    equipeListItems.forEach(item => {
+      allGroupItems.push(item)
+    })
 
     allGroupItems.forEach(item => {
       if (item.type === 'turma' || item.type === 'grupo') {
-        if (item.leafIds.length > 0 && item.leafIds.every((id: string) => selectedLeaves.has(id))) {
+        if (item.leafIds && item.leafIds.length > 0 && item.leafIds.every((id: string) => selectedLeaves.has(id))) {
            result.push({ id: item.id, name: item.title, type: item.type })
            item.leafIds.forEach((id: string) => coveredLeaves.add(id))
 
-           // CRITICAL FIX: Colaboradores dentro de turmas/grupos são marcados como "cobertos"
-           // mas precisam ser incluídos explicitamente no resultado para que o buildRow
-           // preencha funcionariosIds e eles recebam a notificação push.
            if (item.payloads) {
              item.payloads.forEach((p: any) => {
                if (p.type === 'funcionario') {
@@ -689,9 +1037,471 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
     onClose()
   }
 
-  const isAllActiveSelected = searchQuery.trim() !== ''
-    ? (flatPeopleList.length > 0 && flatPeopleList.every(p => !!selected[p.id]))
-    : (activeItems.length > 0 && activeItems.flatMap((i:any) => i.leafIds).length > 0 && activeItems.flatMap((i:any) => i.leafIds).every((id:string) => !!selected[id]))
+  // Render do cartão de categoria/segmento
+  const renderSegmentCard = (item: any) => {
+    const isFullySelected = item.leafIds && item.leafIds.length > 0 && item.leafIds.every((id: string) => !!selected[id])
+    const isPartiallySelected = !isFullySelected && item.leafIds && item.leafIds.some((id: string) => !!selected[id])
+    const Icon = item.icon || Building2
+
+    return (
+      <motion.div
+        key={item.id}
+        style={{ 
+          borderRadius: 20, 
+          background: isFullySelected ? '#EEF2FF' : '#FFFFFF',
+          border: isFullySelected ? '2px solid #818CF8' : '1px solid #E2E8F0',
+          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
+          transition: 'all 0.2s',
+          overflow: 'hidden'
+        }}
+      >
+        <div 
+          onClick={() => setCurrentCatId(item.id)}
+          style={{
+            cursor: 'pointer', padding: '14px 18px',
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 14,
+          }}
+        >
+          <div 
+            onClick={(e) => { e.stopPropagation(); toggleSelect(item) }}
+            style={{ 
+              width: 22, height: 22, flexShrink: 0, borderRadius: 6, 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
+              background: isFullySelected ? '#4F46E5' : isPartiallySelected ? '#C4B5FD' : '#FFFFFF',
+              border: isFullySelected || isPartiallySelected ? 'none' : '2px solid #CBD5E1',
+              cursor: 'pointer'
+            }}
+          >
+            {isFullySelected ? <Check size={14} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{ width: 10, height: 3, background: '#fff', borderRadius: 2 }} /> : null}
+          </div>
+
+          <div style={{
+            width: 44, height: 44, flexShrink: 0, borderRadius: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#EEF2FF', color: '#4F46E5'
+          }}>
+            <Icon size={22} />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 2 }}>
+            <span style={{ 
+              fontSize: 15, 
+              fontWeight: 700, 
+              color: isFullySelected ? '#4F46E5' : '#0F172A', 
+              letterSpacing: '-0.2px',
+              lineHeight: 1.2
+            }}>
+              {item.title}
+            </span>
+            {item.subtitle && (
+              <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B', lineHeight: 1.2 }}>
+                {item.subtitle}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <ChevronRight size={20} color="#94A3B8" />
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
+  // Render do cartão de turma no drill-down
+  const renderTurmaCard = (item: any) => {
+    const isFullySelected = item.leafIds && item.leafIds.length > 0 && item.leafIds.every((id: string) => !!selected[id])
+    const isPartiallySelected = !isFullySelected && item.leafIds && item.leafIds.some((id: string) => !!selected[id])
+    const isExpanded = expandedId === item.id
+
+    return (
+      <motion.div
+        key={item.id}
+        style={{ 
+          borderRadius: 20, 
+          background: isFullySelected ? '#F5F3FF' : '#FFFFFF',
+          border: isFullySelected ? '2px solid #C4B5FD' : '1px solid #E2E8F0',
+          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
+          transition: 'all 0.2s',
+          overflow: 'hidden'
+        }}
+      >
+        <div 
+          onClick={() => setExpandedId(isExpanded ? null : item.id)}
+          style={{
+            cursor: 'pointer', padding: '14px 18px',
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 14,
+          }}
+        >
+          <div 
+            onClick={(e) => { e.stopPropagation(); toggleSelect(item) }}
+            style={{ 
+              width: 22, height: 22, flexShrink: 0, borderRadius: 6, 
+              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
+              background: isFullySelected ? '#4F46E5' : isPartiallySelected ? '#C4B5FD' : '#FFFFFF',
+              border: isFullySelected || isPartiallySelected ? 'none' : '2px solid #CBD5E1',
+              cursor: 'pointer'
+            }}
+          >
+            {isFullySelected ? <Check size={14} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{ width: 10, height: 3, background: '#fff', borderRadius: 2 }} /> : null}
+          </div>
+
+          <div style={{
+            width: 44, height: 44, flexShrink: 0, borderRadius: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#F8FAFC', color: '#6366F1'
+          }}>
+            <Users size={22} />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 2 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: isFullySelected ? '#4F46E5' : '#0F172A', lineHeight: 1.2 }}>
+              {item.title}
+            </span>
+            {item.subtitle && (
+              <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B', lineHeight: 1.2 }}>
+                {item.subtitle}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {item.countBadge && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', background: '#F1F5F9', padding: '3px 8px', borderRadius: 10 }}>
+                {item.countBadge}
+              </span>
+            )}
+            {isExpanded ? <ChevronUp size={18} color="#94A3B8" /> : <ChevronDown size={18} color="#94A3B8" />}
+          </div>
+        </div>
+
+        {/* Lista de alunos da turma */}
+        <AnimatePresence>
+          {isExpanded && item.people && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+                {item.people.map((person: any) => {
+                  const isPersonSelected = !!selected[person.id]
+                  const isColab = person.type === 'funcionario'
+                  const isCurrentUser = person.id === `f_${currentUserId}`
+
+                  return (
+                    <div 
+                      key={person.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (isCurrentUser) return
+                        setSelected(prev => {
+                          const next = { ...prev }
+                          if (isPersonSelected) delete next[person.id]
+                          else next[person.id] = person
+                          return next
+                        })
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
+                        borderRadius: 12, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
+                        opacity: isCurrentUser ? 0.6 : 1,
+                        background: isPersonSelected ? (isColab ? 'rgba(124,58,237,0.08)' : '#F1F5F9') : 'transparent',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <div style={{ 
+                        width: 18, height: 18, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        background: isCurrentUser ? '#CBD5E1' : (isPersonSelected ? (isColab ? '#7C3AED' : '#4F46E5') : '#FFFFFF'),
+                        border: (isPersonSelected || isCurrentUser) ? 'none' : '2px solid #CBD5E1'
+                      }}>
+                        {(isPersonSelected || isCurrentUser) && <Check size={12} color="#fff" strokeWidth={3} />}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{person.name}</span>
+                          {isColab && (
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
+                              background: '#F3E8FF', color: '#7C3AED', textTransform: 'uppercase'
+                            }}>Colaborador</span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11, color: '#64748B' }}>
+                          {isColab ? (person.funcao || 'Colaborador') : `Aluno • ${person.turmaNome || ''}`}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    )
+  }
+
+  // Render do cartão de departamento da Equipe Escolar
+  const renderEquipeCard = (item: any) => {
+    const isFullySelected = item.leafIds && item.leafIds.length > 0 && item.leafIds.every((id: string) => !!selected[id])
+    const isPartiallySelected = !isFullySelected && item.leafIds && item.leafIds.some((id: string) => !!selected[id])
+    const dept = item.deptInfo
+    const Icon = item.icon || Shield
+    const isExpanded = expandedId === item.id
+
+    return (
+      <motion.div
+        key={item.id}
+        style={{
+          borderRadius: 20,
+          background: isFullySelected ? dept.bgSoft : '#FFFFFF',
+          border: isFullySelected ? `2px solid ${dept.color}` : '1px solid #E2E8F0',
+          boxShadow: isFullySelected ? `0 8px 20px -4px ${dept.color}25` : '0 2px 8px rgba(15, 23, 42, 0.04)',
+          transition: 'all 0.25s',
+          overflow: 'hidden'
+        }}
+      >
+        <div
+          onClick={() => setExpandedId(isExpanded ? null : item.id)}
+          style={{
+            cursor: 'pointer', padding: '15px 18px',
+            display: 'flex', alignItems: 'center', gap: 14
+          }}
+        >
+          {/* Checkbox do grupo */}
+          <div
+            onClick={(e) => { e.stopPropagation(); toggleSelect(item) }}
+            style={{
+              width: 22, height: 22, flexShrink: 0, borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
+              background: isFullySelected ? dept.color : isPartiallySelected ? dept.borderSoft : '#FFFFFF',
+              border: isFullySelected || isPartiallySelected ? 'none' : '2px solid #CBD5E1',
+              cursor: 'pointer'
+            }}
+          >
+            {isFullySelected ? <Check size={14} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{ width: 10, height: 3, background: dept.color, borderRadius: 2 }} /> : null}
+          </div>
+
+          {/* Ícone do setor */}
+          <div style={{
+            width: 44, height: 44, borderRadius: 14, flexShrink: 0,
+            background: dept.gradient, color: '#FFFFFF',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 4px 12px ${dept.color}35`
+          }}>
+            <Icon size={22} strokeWidth={2.4} />
+          </div>
+
+          {/* Dados do Setor */}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.2px', lineHeight: 1.2 }}>
+                {item.title}
+              </span>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                background: dept.badgeBg, color: dept.badgeColor, textTransform: 'uppercase', letterSpacing: 0.5
+              }}>
+                {dept.tag}
+              </span>
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B', marginTop: 3 }}>
+              {item.subtitle}
+            </span>
+          </div>
+
+          {/* Seta indicativa */}
+          <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, color: '#94A3B8' }}>
+            {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </div>
+        </div>
+
+        {/* Drawer de Colaboradores do Setor */}
+        <AnimatePresence>
+          {isExpanded && item.people && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{
+                padding: '12px 16px 16px 16px',
+                background: isFullySelected ? 'rgba(255,255,255,0.6)' : '#F8FAFC',
+                borderTop: `1px solid ${isFullySelected ? dept.borderSoft : '#EDF2F7'}`,
+                display: 'flex', flexDirection: 'column', gap: 6
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                  Membros do Setor
+                </span>
+
+                {item.people.map((person: any) => {
+                  const isPersonSelected = !!selected[person.id]
+                  const isCurrentUser = person.id === `f_${currentUserId}`
+                  const pal = getAvatarPalette(person.name)
+
+                  return (
+                    <div
+                      key={person.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (isCurrentUser) return
+                        setSelected(prev => {
+                          const next = { ...prev }
+                          if (isPersonSelected) delete next[person.id]
+                          else next[person.id] = person
+                          return next
+                        })
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
+                        borderRadius: 12, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
+                        opacity: isCurrentUser ? 0.6 : 1,
+                        background: isPersonSelected ? '#FFFFFF' : 'transparent',
+                        border: isPersonSelected ? '1px solid #DDD6FE' : '1px solid transparent',
+                        boxShadow: isPersonSelected ? '0 2px 5px rgba(0,0,0,0.03)' : 'none',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <div style={{
+                        width: 18, height: 18, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        background: isCurrentUser ? '#CBD5E1' : (isPersonSelected ? '#7C3AED' : '#FFFFFF'),
+                        border: (isPersonSelected || isCurrentUser) ? 'none' : '2px solid #CBD5E1'
+                      }}>
+                        {(isPersonSelected || isCurrentUser) && <Check size={12} color="#fff" strokeWidth={3} />}
+                      </div>
+
+                      <div style={{
+                        width: 30, height: 30, borderRadius: '50%',
+                        background: pal.bg, color: pal.text, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 800, flexShrink: 0
+                      }}>
+                        {getInitials(person.name)}
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
+                            {person.name}
+                          </span>
+                          {isCurrentUser && (
+                            <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#E2E8F0', color: '#475569' }}>
+                              Você (Autor)
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11, color: '#64748B' }}>
+                          {person.funcao || 'Colaborador'}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    )
+  }
+
+  // Render da seção de todos os colaboradores avulsos
+  const renderAllSchoolColabsSection = () => {
+    return (
+      <div style={{ marginTop: 6 }}>
+        <button
+          type="button"
+          onClick={() => setShowAllColabs(!showAllColabs)}
+          style={{
+            width: '100%', padding: '14px 18px', borderRadius: 18,
+            background: '#FFFFFF', border: '1px dashed #CBD5E1',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            color: '#475569', fontWeight: 700, fontSize: 13, cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <User size={18} color="#7C3AED" />
+            <span>Ver todos os colaboradores individuais ({allSchoolColabs.length})</span>
+          </div>
+          {showAllColabs ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        </button>
+
+        <AnimatePresence>
+          {showAllColabs && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{
+                marginTop: 10, padding: 12, borderRadius: 18,
+                background: '#FFFFFF', border: '1px solid #E2E8F0',
+                display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflowY: 'auto'
+              }}>
+                {allSchoolColabs.map((person: any) => {
+                  const isPersonSelected = !!selected[person.id]
+                  const isCurrentUser = person.id === `f_${currentUserId}`
+                  const pal = getAvatarPalette(person.name)
+
+                  return (
+                    <div
+                      key={person.id}
+                      onClick={() => {
+                        if (isCurrentUser) return
+                        setSelected(prev => {
+                          const next = { ...prev }
+                          if (isPersonSelected) delete next[person.id]
+                          else next[person.id] = person
+                          return next
+                        })
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
+                        borderRadius: 12, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
+                        opacity: isCurrentUser ? 0.6 : 1,
+                        background: isPersonSelected ? '#F5F3FF' : '#FFFFFF',
+                        border: isPersonSelected ? '1px solid #C4B5FD' : '1px solid #F1F5F9'
+                      }}
+                    >
+                      <div style={{
+                        width: 18, height: 18, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        background: isCurrentUser ? '#CBD5E1' : (isPersonSelected ? '#7C3AED' : '#FFFFFF'),
+                        border: (isPersonSelected || isCurrentUser) ? 'none' : '2px solid #CBD5E1'
+                      }}>
+                        {(isPersonSelected || isCurrentUser) && <Check size={12} color="#fff" strokeWidth={3} />}
+                      </div>
+
+                      <div style={{
+                        width: 30, height: 30, borderRadius: '50%',
+                        background: pal.bg, color: pal.text, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 800, flexShrink: 0
+                      }}>
+                        {getInitials(person.name)}
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>{person.name}</span>
+                          {isCurrentUser && (
+                            <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#E2E8F0', color: '#475569' }}>Você</span>
+                          )}
+                        </div>
+                        <span style={{ fontSize: 11, color: '#64748B' }}>{person.funcao}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    )
+  }
 
   const modalContent = (
     <AnimatePresence>
@@ -715,6 +1525,7 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
             className="dest-modal-container"
             style={{ zIndex: 2147483647 }}
           >
+            {/* ── HEADER ULTRA MODERNO COM GRADIENTE ────────────────────── */}
             <header style={{ 
               height: 72, flexShrink: 0, 
               background: 'linear-gradient(120deg, #6D5DF6, #4F46E5, #8B5CF6, #3B82F6)',
@@ -726,394 +1537,654 @@ export function DestinatariosModal({ isOpen, onClose, onAdd, initialSelected = [
               <motion.button 
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 onClick={onClose}
-                style={{ width: 48, height: 48, position: 'absolute', right: 16, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', backdropFilter: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', border: 'none', cursor: 'pointer' }}
+                style={{ 
+                  width: 44, height: 44, position: 'absolute', right: 16, borderRadius: '50%', 
+                  background: 'rgba(255,255,255,0.2)', backdropFilter: 'none', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', 
+                  border: 'none', cursor: 'pointer' 
+                }}
               >
-                <X size={24} />
+                <X size={22} />
               </motion.button>
 
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <h2 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0, lineHeight: 1.2 }}>Destinatários</h2>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>Selecione quem receberá o comunicado</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.88)' }}>Selecione quem receberá o comunicado</span>
               </div>
             </header>
 
-            <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120 }}>
-              {availableAnos.length > 0 && !currentCatId && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '24px 24px 8px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <label style={{ fontSize: 13, fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5 }}>Ano Letivo</label>
-                    <select
-                      value={selectedAno}
-                      onChange={(e) => setSelectedAno(e.target.value)}
+            {/* ── CORPO PRINCIPAL ────────────────────────────────────────── */}
+            <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 120, display: 'flex', flexDirection: 'column' }}>
+              {isLoadingData ? (
+                <div style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '48px 24px',
+                  position: 'relative',
+                  minHeight: 460
+                }}>
+                  {/* Cyber Atmospheric Ambient Glow */}
+                  <div style={{
+                    position: 'absolute',
+                    width: 260,
+                    height: 260,
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(0, 210, 255, 0.22) 0%, rgba(117, 81, 255, 0.18) 45%, rgba(236, 72, 153, 0.08) 70%, transparent 85%)',
+                    filter: 'blur(32px)',
+                    animation: 'destAuraGlow 3s ease-in-out infinite',
+                    pointerEvents: 'none',
+                    zIndex: 0
+                  }} />
+
+                  {/* Multi-Ring Ultra-Modern Gyroscope */}
+                  <div style={{ position: 'relative', width: 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, marginBottom: 24 }}>
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: '50%',
+                      border: '3px solid transparent',
+                      borderTopColor: '#00D2FF',
+                      borderRightColor: '#7551FF',
+                      filter: 'drop-shadow(0 0 8px rgba(0, 210, 255, 0.6))',
+                      animation: 'orbitSpinCW 1.3s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite'
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      inset: 10,
+                      borderRadius: '50%',
+                      border: '2px dashed rgba(236, 72, 153, 0.75)',
+                      borderBottomColor: '#00D2FF',
+                      animation: 'orbitSpinCCW 1.9s linear infinite'
+                    }} />
+                    <div style={{
+                      position: 'relative',
+                      width: 52,
+                      height: 52,
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 244, 255, 0.9) 100%)',
+                      border: '1.5px solid rgba(255, 255, 255, 0.95)',
+                      boxShadow: '0 10px 25px -4px rgba(79, 70, 229, 0.25)',
+                    }}>
+                      <Users size={22} style={{
+                        color: '#6D5DF6',
+                        filter: 'drop-shadow(0 0 6px rgba(109, 93, 246, 0.5))',
+                        animation: 'cyberCorePulse 2s ease-in-out infinite'
+                      }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center', zIndex: 1, maxWidth: 360 }}>
+                    <h3 style={{
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: '#0F172A',
+                      letterSpacing: '-0.3px',
+                      margin: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}>
+                      Carregando Destinatários
+                      <span style={{ display: 'inline-flex', gap: 4, marginLeft: 2 }}>
+                        {[0, 1, 2].map(i => (
+                          <span key={i} style={{
+                            display: 'inline-block',
+                            width: 4,
+                            height: 4,
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #00D2FF, #7551FF)',
+                            animation: `destPulseDot 1.2s ease-in-out ${i * 0.2}s infinite`
+                          }} />
+                        ))}
+                      </span>
+                    </h3>
+
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 14px',
+                      borderRadius: 99,
+                      background: 'rgba(255, 255, 255, 0.85)',
+                      border: '1px solid #E2E8F0',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                    }}>
+                      <span style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: '50%',
+                        background: '#10B981',
+                        boxShadow: '0 0 8px #10B981',
+                        display: 'inline-block',
+                        animation: 'destPulseBadge 1.8s ease-in-out infinite'
+                      }} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                        Sincronizando turmas, alunos e colaboradores...
+                      </span>
+                    </div>
+
+                    <div style={{
+                      width: 200,
+                      height: 4,
+                      borderRadius: 99,
+                      background: '#E2E8F0',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      marginTop: 4
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        width: '50%',
+                        borderRadius: 99,
+                        background: 'linear-gradient(90deg, transparent, #00D2FF, #7551FF, #EC4899, transparent)',
+                        animation: 'laserBeamSweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite'
+                      }} />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <motion.div
+                  key="dest-loaded-content"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.25 }}
+                  style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+                >
+                  {/* ── BARRA DE FILTRO RÁPIDO (TODOS / TURMAS / EQUIPE) ──────── */}
+                  <div style={{
+                    display: 'flex',
+                    padding: 4,
+                    background: '#EDF2F7',
+                    borderRadius: 18,
+                    gap: 6,
+                    margin: '16px 24px 8px 24px',
+                    border: '1px solid #E2E8F0',
+                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.03)'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => { setViewFilter('todos'); setCurrentCatId(null); }}
                       style={{
-                        width: '100%', height: 48, borderRadius: 16, border: '1px solid #E2E8F0', background: '#fff',
-                        padding: '0 16px', fontSize: 15, fontWeight: 600, color: '#0F172A', outline: 'none',
-                        cursor: 'pointer', appearance: 'none', backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3Csvg width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748B%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E")',
-                        backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center', backgroundSize: '20px'
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '9px 12px',
+                        borderRadius: 14,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: 13,
+                        transition: 'all 0.2s',
+                        background: viewFilter === 'todos' ? '#FFFFFF' : 'transparent',
+                        color: viewFilter === 'todos' ? '#0F172A' : '#64748B',
+                        boxShadow: viewFilter === 'todos' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none'
                       }}
                     >
-                      <option value="" disabled>Selecione o ano letivo...</option>
-                      {availableAnos.map(ano => (
-                        <option key={ano} value={ano}>{ano}</option>
-                      ))}
-                    </select>
+                      <span>Todos</span>
+                      {Object.keys(selected).length > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#F1F5F9', color: '#475569' }}>
+                          {Object.keys(selected).length}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setViewFilter('turmas'); setCurrentCatId(null); }}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '9px 12px',
+                        borderRadius: 14,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: 13,
+                        transition: 'all 0.2s',
+                        background: viewFilter === 'turmas' ? '#FFFFFF' : 'transparent',
+                        color: viewFilter === 'turmas' ? '#4F46E5' : '#64748B',
+                        boxShadow: viewFilter === 'turmas' ? '0 2px 8px rgba(79, 70, 229, 0.12)' : 'none'
+                      }}
+                    >
+                      <GraduationCap size={15} />
+                      <span>Turmas</span>
+                      {selectedTurmasCount > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#EEF2FF', color: '#4F46E5' }}>
+                          {selectedTurmasCount}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setViewFilter('equipe'); setCurrentCatId(null); }}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 6,
+                        padding: '9px 12px',
+                        borderRadius: 14,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        fontSize: 13,
+                        transition: 'all 0.2s',
+                        background: viewFilter === 'equipe' ? '#FFFFFF' : 'transparent',
+                        color: viewFilter === 'equipe' ? '#7C3AED' : '#64748B',
+                        boxShadow: viewFilter === 'equipe' ? '0 2px 8px rgba(124, 58, 237, 0.12)' : 'none'
+                      }}
+                    >
+                      <Shield size={15} />
+                      <span>Equipe</span>
+                      {selectedEquipeCount > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#F5F3FF', color: '#7C3AED' }}>
+                          {selectedEquipeCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* ── BARRA DE PESQUISA & SELECIONAR TUDO ─────────────────── */}
+                  <div style={{ padding: '12px 24px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div style={{ display: 'flex', flex: 1, position: 'relative' }}>
+                        <Search size={18} color="#94A3B8" style={{ position: 'absolute', left: 14, top: 12 }} />
+                        <input
+                          placeholder="Buscar por turma, aluno, setor ou colaborador..."
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                          style={{
+                            width: '100%', height: 42, borderRadius: 14, border: '1px solid #E2E8F0',
+                            padding: '0 16px 0 40px', fontSize: 14, outline: 'none', background: '#FFFFFF',
+                            transition: 'border 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                          }}
+                          onFocus={e => e.currentTarget.style.borderColor = '#6D5DF6'}
+                          onBlur={e => e.currentTarget.style.borderColor = '#E2E8F0'}
+                        />
+                        {searchQuery && (
+                          <button
+                            onClick={() => setSearchQuery('')}
+                            style={{ position: 'absolute', right: 12, top: 11, background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}
+                          >
+                            <X size={18} />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={toggleAllInCurrentView}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700,
+                          color: '#4F46E5',
+                          background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '6px 8px'
+                        }}
+                      >
+                        <span>Selecionar tudo</span>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          transition: 'all 0.2s',
+                          background: isAllActiveSelected ? '#4F46E5' : 'transparent',
+                          border: isAllActiveSelected ? 'none' : '2px solid #CBD5E1'
+                        }}>
+                          {isAllActiveSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ── CONTEÚDO PRINCIPAL ──────────────────────────────────── */}
+                  <div style={{ padding: '0 24px 24px' }}>
+                    
+                    {/* CASO: BUSCA ATIVA COM RESULTADOS CATEGORIZADOS */}
+                    {hasSearch ? (
+                      totalSearchResults === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '50px 0', color: '#64748B' }}>
+                          <Search size={36} color="#CBD5E1" style={{ margin: '0 auto 12px' }} />
+                          <p style={{ fontSize: 16, fontWeight: 600, color: '#0F172A', margin: '0 0 4px' }}>Nenhum resultado encontrado</p>
+                          <span style={{ fontSize: 13, color: '#94A3B8' }}>Não encontramos destinatários para "{searchQuery}"</span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                          
+                          {/* Seção 1: Equipe Escolar encontrada */}
+                          {searchResults.equipe.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 4 }}>
+                                <Shield size={16} color="#7C3AED" />
+                                <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, color: '#7C3AED' }}>
+                                  Equipe Escolar & Colaboradores ({searchResults.equipe.length})
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {searchResults.equipe.map((item: any) => {
+                                  const isColab = item.type === 'funcionario'
+                                  const isPersonSelected = isColab ? !!selected[item.id] : (item.leafIds && item.leafIds.length > 0 && item.leafIds.every((id: string) => !!selected[id]))
+                                  const dept = !isColab ? item.deptInfo : getEquipeDepartmentInfo(item.funcao || 'Colaborador')
+
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => toggleSelect(item)}
+                                      style={{
+                                        display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px',
+                                        borderRadius: 16, cursor: 'pointer',
+                                        background: isPersonSelected ? '#F5F3FF' : '#FFFFFF',
+                                        border: isPersonSelected ? '2px solid #C4B5FD' : '1px solid #E2E8F0',
+                                        boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+                                        transition: 'all 0.2s'
+                                      }}
+                                    >
+                                      <div style={{
+                                        width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                        background: isPersonSelected ? '#7C3AED' : '#FFFFFF',
+                                        border: isPersonSelected ? 'none' : '2px solid #CBD5E1'
+                                      }}>
+                                        {isPersonSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                                      </div>
+
+                                      <div style={{
+                                        width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        background: dept.bgSoft, color: dept.color, flexShrink: 0
+                                      }}>
+                                        <dept.icon size={18} />
+                                      </div>
+
+                                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                          <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{item.title || item.name}</span>
+                                          <span style={{
+                                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                                            background: dept.badgeBg, color: dept.badgeColor, textTransform: 'uppercase'
+                                          }}>
+                                            {isColab ? (item.funcao || 'Colaborador') : 'Setor da Equipe'}
+                                          </span>
+                                        </div>
+                                        <span style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                                          {isColab ? (item.email || 'Colaborador da Escola') : `${item.payloads?.length || 0} membros`}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Seção 2: Turmas e Alunos encontrados */}
+                          {searchResults.turmasEAlunos.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 4 }}>
+                                <GraduationCap size={16} color="#4F46E5" />
+                                <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, color: '#4F46E5' }}>
+                                  Turmas & Alunos ({searchResults.turmasEAlunos.length})
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                {searchResults.turmasEAlunos.map((item: any) => {
+                                  const isAluno = item.type === 'aluno'
+                                  const isSelected = isAluno ? !!selected[item.id] : (item.leafIds && item.leafIds.length > 0 && item.leafIds.every((id: string) => !!selected[id]))
+
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => toggleSelect(item)}
+                                      style={{
+                                        display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px',
+                                        borderRadius: 16, cursor: 'pointer',
+                                        background: isSelected ? '#EEF2FF' : '#FFFFFF',
+                                        border: isSelected ? '2px solid #A5B4FC' : '1px solid #E2E8F0',
+                                        boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
+                                        transition: 'all 0.2s'
+                                      }}
+                                    >
+                                      <div style={{
+                                        width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                        background: isSelected ? '#4F46E5' : '#FFFFFF',
+                                        border: isSelected ? 'none' : '2px solid #CBD5E1'
+                                      }}>
+                                        {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                                      </div>
+
+                                      <div style={{
+                                        width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        background: '#EEF2FF', color: '#4F46E5', flexShrink: 0
+                                      }}>
+                                        {isAluno ? <User size={18} /> : <Users size={18} />}
+                                      </div>
+
+                                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                          <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{item.title || item.name}</span>
+                                          <span style={{
+                                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                                            background: '#F1F5F9', color: '#475569', textTransform: 'uppercase'
+                                          }}>
+                                            {isAluno ? 'Aluno' : 'Turma'}
+                                          </span>
+                                        </div>
+                                        <span style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                                          {isAluno ? `${item.turmaNome || 'Turma'}${item.anoLetivo ? ` • ${item.anoLetivo}` : ''}` : item.subtitle}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                        </div>
+                      )
+                    ) : (
+                      /* ════════════════════════════════════════════════════════
+                         VISUALIZAÇÃO PADRÃO: TURMAS & EQUIPE NA MESMA ABA (SEPARADOS)
+                         ════════════════════════════════════════════════════════ */
+                      <AnimatePresence mode="popLayout">
+                        {currentCatId ? (
+                          /* Drill-down de uma categoria de turmas */
+                          <motion.div
+                            key={currentCatId}
+                            initial={{ opacity: 0, x: 40 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: -40 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14, marginTop: 4 }}>
+                              <button 
+                                onClick={() => setCurrentCatId(null)} 
+                                style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 8, color: '#4F46E5', fontWeight: 700, cursor: 'pointer', padding: '6px 0', fontSize: 14 }}
+                              >
+                                <ArrowLeft size={18} />
+                                Voltar para Todos os Destinatários
+                              </button>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                                  {turmasListItems.find(i => i.id === currentCatId)?.title}
+                                </h3>
+                                <span style={{ background: '#EEF2FF', color: '#4F46E5', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>
+                                  {activeItems.length}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              {activeItems.map((item: any) => renderTurmaCard(item))}
+                            </div>
+                          </motion.div>
+                        ) : (
+                          /* Visualização Principal: Ambas as seções juntas na mesma tela */
+                          <motion.div
+                            key="root_unified"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.2 }}
+                            style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
+                          >
+                            {/* ── SEÇÃO 1: TURMAS DE ALUNOS ──────────────────────── */}
+                            {(viewFilter === 'todos' || viewFilter === 'turmas') && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <GraduationCap size={18} color="#4F46E5" />
+                                    <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.2px' }}>
+                                      Turmas de Alunos
+                                    </h3>
+                                    <span style={{ background: '#EEF2FF', color: '#4F46E5', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>
+                                      {turmasListItems.length} segmentos
+                                    </span>
+                                  </div>
+
+                                  {availableAnos.length > 0 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B' }}>Ano:</span>
+                                      <select
+                                        value={selectedAno}
+                                        onChange={e => setSelectedAno(e.target.value)}
+                                        style={{
+                                          height: 32, borderRadius: 10, border: '1px solid #CBD5E1', background: '#FFFFFF',
+                                          padding: '0 24px 0 8px', fontSize: 12, fontWeight: 700, color: '#0F172A', outline: 'none',
+                                          cursor: 'pointer', appearance: 'none',
+                                          backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3Csvg width=%2216%22 height=%2216%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2364748B%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%3Cpolyline points=%226 9 12 15 18 9%22%3E%3C/polyline%3E%3C/svg%3E")',
+                                          backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center', backgroundSize: '14px'
+                                        }}
+                                      >
+                                        {availableAnos.map(ano => (
+                                          <option key={ano} value={ano}>{ano}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Cartões de Categorias/Segmentos */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                  {turmasListItems.map((item: any) => renderSegmentCard(item))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ── SEPARADOR ELEGANTE QUANDO EXIBINDO TODOS ────────── */}
+                            {viewFilter === 'todos' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '14px 0 2px' }}>
+                                <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
+                                <span style={{ fontSize: 11, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                                  Equipe Escolar
+                                </span>
+                                <div style={{ flex: 1, height: 1, background: '#E2E8F0' }} />
+                              </div>
+                            )}
+
+                            {/* ── SEÇÃO 2: EQUIPE ESCOLAR ────────────────────────── */}
+                            {(viewFilter === 'todos' || viewFilter === 'equipe') && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Shield size={18} color="#7C3AED" />
+                                    <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.2px' }}>
+                                      Equipe Escolar
+                                    </h3>
+                                    <span style={{ background: '#F5F3FF', color: '#7C3AED', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>
+                                      {equipeListItems.length} setores
+                                    </span>
+                                  </div>
+                                  <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B' }}>
+                                    Setores internos da escola
+                                  </span>
+                                </div>
+
+                                {/* Cartões dos setores da Equipe Escolar */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                  {equipeListItems.map((item: any) => renderEquipeCard(item))}
+                                </div>
+
+                                {/* Colaboradores Individuais */}
+                                {renderAllSchoolColabsSection()}
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    )}
+
                   </div>
                 </motion.div>
               )}
-
-              <div style={{ padding: '0 24px 24px' }}>
-                {availableAnos.length > 0 && selectedAno === '' ? (
-                  <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748B' }}>
-                    <div style={{ background: '#F1F5F9', width: 80, height: 80, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-                      <Calendar size={40} color="#94A3B8" />
-                    </div>
-                    <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0F172A', marginBottom: 12 }}>Selecione o Ano Letivo</h3>
-                    <p style={{ fontSize: 15, maxWidth: 320, margin: '0 auto', lineHeight: 1.5 }}>
-                      Por favor, selecione o ano letivo acima para visualizar e selecionar as turmas e grupos correspondentes.
-                    </p>
-                  </div>
-                ) : (
-                  <AnimatePresence mode="popLayout">
-                    <motion.div
-                      key={currentCatId || 'root'}
-                      initial={{ opacity: 0, x: currentCatId ? 50 : -50 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: currentCatId ? -50 : 50 }}
-                      transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                    >
-                      {currentCatId && (
-                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, marginTop: 16 }}>
-                           <button 
-                             onClick={() => setCurrentCatId(null)} 
-                             style={{ background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 8, color: '#4F46E5', fontWeight: 600, cursor: 'pointer', padding: '8px 0', fontSize: 15 }}
-                           >
-                             <ArrowLeft size={20} />
-                             Voltar para Segmentos
-                           </button>
-                        </div>
-                      )}
-
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, marginTop: currentCatId ? 0 : 16 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0 }}>
-                            {currentCatId ? listItems.find(i => i.id === currentCatId)?.title : 'Todos'}
-                          </h3>
-                          <span style={{ background: '#F1F5F9', color: '#64748B', fontSize: 13, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>{activeItems.length}</span>
-                        </div>
-                        
-                        <div style={{ display: 'flex', flex: 1, margin: '0 16px', position: 'relative', opacity: isLoadingData ? 0.4 : 1, pointerEvents: isLoadingData ? 'none' : 'auto' }}>
-                          <Search size={18} color="#94A3B8" style={{ position: 'absolute', left: 12, top: 11 }} />
-                          <input
-                            placeholder="Buscar por nome..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            disabled={isLoadingData}
-                            style={{
-                              width: '100%', height: 40, borderRadius: 12, border: '1px solid #E2E8F0',
-                              padding: '0 16px 0 38px', fontSize: 14, outline: 'none'
-                            }}
-                          />
-                        </div>
-                        <button
-                          onClick={toggleAll}
-                          disabled={isLoadingData}
-                          style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, fontWeight: 600, color: isLoadingData ? '#CBD5E1' : '#4F46E5', background: 'none', border: 'none', cursor: isLoadingData ? 'default' : 'pointer', opacity: isLoadingData ? 0.5 : 1 }}
-                        >
-                          Selecionar tudo
-                          <div style={{ width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', background: isAllActiveSelected ? '#6D5DF6' : 'transparent', border: isAllActiveSelected ? '2px solid #6D5DF6' : '2px solid #CBD5E1' }}>
-                             {isAllActiveSelected && <Check size={16} color="#fff" strokeWidth={3} />}
-                          </div>
-                        </button>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        {isLoadingData ? (
-                          <div style={{
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            padding: '64px 24px', gap: 20
-                          }}>
-                            {/* Spinner ring */}
-                            <div className="dest-spinner-ring" />
-
-                            {/* Texto + dots animados */}
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 15, fontWeight: 600, color: '#4F46E5' }}>
-                                Carregando destinatários
-                                <span style={{ display: 'inline-flex', gap: 3, marginLeft: 4, verticalAlign: 'middle' }}>
-                                  {[0, 1, 2].map(i => (
-                                    <span key={i} style={{
-                                      display: 'inline-block', width: 4, height: 4, borderRadius: '50%',
-                                      background: '#6366f1',
-                                      animation: `dest-pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`
-                                    }} />
-                                  ))}
-                                </span>
-                              </span>
-                              <span style={{ fontSize: 13, color: '#94A3B8', textAlign: 'center', maxWidth: 260, lineHeight: 1.5 }}>
-                                Buscando turmas, alunos e colaboradores. Aguarde um momento.
-                              </span>
-                            </div>
-
-                            {/* Skeleton shimmer cards */}
-                            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
-                              {[70, 50, 65, 45].map((w, i) => (
-                                <div key={i} style={{
-                                  display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
-                                  borderRadius: 16, background: '#f8fafc', border: '1px solid #e2e8f0'
-                                }}>
-                                  <div style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 12, background: 'linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%)', backgroundSize: '400% 100%', animation: `dest-shimmer 1.6s ease-in-out ${i * 0.1}s infinite` }} />
-                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    <div style={{ height: 14, width: `${w}%`, background: 'linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%)', backgroundSize: '400% 100%', borderRadius: 6, animation: `dest-shimmer 1.6s ease-in-out ${i * 0.15}s infinite` }} />
-                                    <div style={{ height: 10, width: `${w - 20}%`, background: 'linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%)', backgroundSize: '400% 100%', borderRadius: 6, animation: `dest-shimmer 1.6s ease-in-out ${i * 0.2}s infinite` }} />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : searchQuery.trim() !== '' ? (
-                           flatPeopleList.length === 0 ? (
-                             <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748B' }}>
-                                Nenhum resultado encontrado para "{searchQuery}"
-                             </div>
-                           ) : (
-                             flatPeopleList.map((person: any) => {
-                               const isPersonSelected = !!selected[person.id]
-                               const isColab = person.type === 'funcionario'
-                               return (
-                                 <div 
-                                    key={person.id}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setSelected(prev => {
-                                        const next = { ...prev }
-                                        if (isPersonSelected) delete next[person.id]
-                                        else next[person.id] = person
-                                        return next
-                                      })
-                                    }}
-                                    style={{
-                                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                                      borderRadius: 16, cursor: 'pointer',
-                                      background: isPersonSelected ? (isColab ? '#F5F0FF' : '#F5F3FF') : (isColab ? '#FAF8FF' : '#fff'),
-                                      border: isPersonSelected ? `2px solid ${isColab ? '#A78BFA' : '#C4B5FD'}` : `1px solid ${isColab ? '#DDD6FE' : '#E2E8F0'}`,
-                                      transition: 'all 0.2s'
-                                    }}
-                                 >
-                                    <div style={{ 
-                                      width: 24, height: 24, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                                      background: isPersonSelected ? (isColab ? '#7C3AED' : '#6D5DF6') : '#fff',
-                                      border: isPersonSelected ? 'none' : `2px solid ${isColab ? '#A78BFA' : '#CBD5E1'}`
-                                    }}>
-                                      {isPersonSelected && <Check size={16} color="#fff" strokeWidth={3} />}
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                        <span style={{ fontSize: 15, fontWeight: 600, color: isColab ? '#5B21B6' : '#0F172A' }}>{person.name}</span>
-                                        {isColab && (
-                                          <span style={{
-                                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                                            background: 'linear-gradient(135deg, #7C3AED, #4F46E5)',
-                                            color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0
-                                          }}>Colaborador</span>
-                                        )}
-                                      </div>
-                                      <span style={{ fontSize: 12, color: isColab ? '#7C3AED' : '#64748B' }}>
-                                        {isColab
-                                          ? `${person.funcao || 'Colaborador'}${person.turmaNome ? ` • ${person.turmaNome}` : ''}`
-                                          : `Aluno${person.turmaNome ? ` • ${person.turmaNome}` : ''}${person.anoLetivo ? ` (${person.anoLetivo})` : ''}`}
-                                      </span>
-                                    </div>
-                                 </div>
-                               )
-                             })
-                           )
-                        ) : (
-                          activeItems.map((item: any) => {
-                            const isFullySelected = item.leafIds.length > 0 && item.leafIds.every((id: string) => !!selected[id])
-                            const Icon = item.icon
-                            const isCategory = item.type === 'category'
-                            
-                            const isPartiallySelected = !isFullySelected && item.leafIds.some((id: string) => !!selected[id])
-                            
-                            return (
-                              <motion.div
-                                key={item.id}
-                                style={{ 
-                                  borderRadius: 20, 
-                                  background: isFullySelected ? '#F5F3FF' : '#fff',
-                                  border: isFullySelected ? '2px solid #C4B5FD' : '2px solid #E2E8F0',
-                                  transition: 'all 0.2s',
-                                  overflow: 'hidden'
-                                }}
-                              >
-                                <div 
-                                  onClick={() => {
-                                    if (isCategory) {
-                                      setCurrentCatId(item.id)
-                                    } else if (item.people) {
-                                      setExpandedId(expandedId === item.id ? null : item.id)
-                                    } else {
-                                      toggleSelect(item)
-                                    }
-                                  }}
-                                  style={{
-                                    cursor: 'pointer', padding: '16px',
-                                    display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 16,
-                                  }}
-                                >
-                                  <div 
-                                    onClick={(e) => { e.stopPropagation(); toggleSelect(item) }}
-                                    style={{ 
-                                      width: 24, height: 24, flexShrink: 0, borderRadius: 6, 
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
-                                      background: isFullySelected ? '#6D5DF6' : isPartiallySelected ? '#C4B5FD' : '#fff',
-                                      border: isFullySelected || isPartiallySelected ? 'none' : '2px solid #CBD5E1',
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    {isFullySelected ? <Check size={16} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{width:10, height:3, background:'#fff', borderRadius:2}} /> : null}
-                                  </div>
-
-                                  <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isCategory ? '#EEF2FF' : '#F8FAFC', color: isCategory ? '#4F46E5' : '#6D5DF6' }}>
-                                    <Icon size={22} />
-                                  </div>
-
-                                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 2 }}>
-                                    <span style={{ fontSize: 16, fontWeight: 700, color: isFullySelected ? '#4F46E5' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {item.title}
-                                    </span>
-                                    {item.subtitle && (
-                                      <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B' }}>
-                                        {item.subtitle}
-                                      </span>
-                                    )}
-                                    {item.countBadge && (
-                                      <span style={{ fontSize: 10, fontWeight: 500, color: '#94A3B8', marginTop: item.subtitle ? 2 : 0 }}>
-                                        {item.countBadge}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                                    {isCategory && (
-                                      <ChevronRight size={20} color="#94A3B8" />
-                                    )}
-                                  </div>
-                                </div>
-
-                                <AnimatePresence>
-                                  {expandedId === item.id && item.people && (
-                                    <motion.div
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      style={{ overflow: 'hidden' }}
-                                    >
-                                      <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: 16 }}>
-                                        {item.people.map((person: any) => {
-                                          const isPersonSelected = !!selected[person.id]
-                                          const isColab = person.type === 'funcionario'
-                                          const isCurrentUser = person.id === `f_${currentUserId}`
-                                          return (
-                                            <div 
-                                              key={person.id}
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                if (isCurrentUser) return
-                                                setSelected(prev => {
-                                                  const next = { ...prev }
-                                                  if (isPersonSelected) delete next[person.id]
-                                                  else next[person.id] = person
-                                                  return next
-                                                })
-                                              }}
-                                              style={{
-                                                display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
-                                                borderRadius: 12, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
-                                                opacity: isCurrentUser ? 0.6 : 1,
-                                                background: isCurrentUser 
-                                                  ? '#F1F5F9' 
-                                                  : (isColab
-                                                    ? (isPersonSelected ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)')
-                                                    : (isPersonSelected ? '#F8FAFC' : 'transparent')),
-                                                border: (isColab && !isCurrentUser) ? '1px solid rgba(124,58,237,0.15)' : 'none',
-                                                marginBottom: isColab ? 2 : 0,
-                                                transition: 'background 0.2s'
-                                              }}
-                                              onMouseEnter={e => {
-                                                if (isCurrentUser) return
-                                                e.currentTarget.style.background = isColab ? 'rgba(124,58,237,0.1)' : '#F8FAFC'
-                                              }}
-                                              onMouseLeave={e => {
-                                                if (isCurrentUser) return
-                                                e.currentTarget.style.background = isColab
-                                                  ? (isPersonSelected ? 'rgba(124,58,237,0.08)' : 'rgba(124,58,237,0.03)')
-                                                  : (isPersonSelected ? '#F8FAFC' : 'transparent')
-                                              }}
-                                            >
-                                              <div style={{ 
-                                                width: 20, height: 20, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                                                background: isCurrentUser ? '#CBD5E1' : (isPersonSelected ? (isColab ? '#7C3AED' : '#4F46E5') : '#fff'),
-                                                border: (isPersonSelected || isCurrentUser) ? 'none' : `2px solid ${isColab ? '#A78BFA' : '#CBD5E1'}`
-                                              }}>
-                                                {(isPersonSelected || isCurrentUser) && <Check size={14} color="#fff" strokeWidth={3} />}
-                                              </div>
-                                              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                                                  <span style={{ fontSize: 14, fontWeight: isColab ? 600 : 500, color: (isColab && !isCurrentUser) ? '#5B21B6' : '#1E293B' }}>{person.name}</span>
-                                                  {isColab && (
-                                                    <span style={{
-                                                      fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 20,
-                                                      background: isCurrentUser ? '#94A3B8' : 'linear-gradient(135deg, #7C3AED, #4F46E5)',
-                                                      color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 0
-                                                    }}>{isCurrentUser ? 'Você (Autor)' : 'Colaborador'}</span>
-                                                  )}
-                                                </div>
-                                                <span style={{ fontSize: 11, color: (isColab && !isCurrentUser) ? '#7C3AED' : '#64748B' }}>
-                                                  {isColab
-                                                    ? `${person.funcao || 'Colaborador'}${person.turmaNome ? ` • ${person.turmaNome}` : ''}`
-                                                    : `Aluno${person.anoLetivo ? ` (${person.anoLetivo})` : ''}`}
-                                                </span>
-                                              </div>
-                                            </div>
-                                          )
-                                        })}
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </motion.div>
-                            )
-                          })
-                        )}
-                      </div>
-                    </motion.div>
-                  </AnimatePresence>
-                )}
-              </div>
             </div>
 
+            {/* ── FOOTER DE CONFIRMAÇÃO ULTRA MODERNO ────────────────────── */}
             <div style={{ 
-              position: 'absolute', bottom: 0, left: 0, right: 0, padding: '24px', 
-              background: 'rgba(255,255,255,0.85)', backdropFilter: 'none',
-              borderTop: '1px solid rgba(0,0,0,0.05)',
-              display: 'flex', justifyContent: 'flex-end', gap: 12, zIndex: 10
+              position: 'absolute', bottom: 0, left: 0, right: 0, padding: '18px 24px', 
+              background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(12px)',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 30
             }}>
-              <button 
-                onClick={onClose}
-                style={{ padding: '0 24px', height: 48, borderRadius: 16, background: '#F1F5F9', color: '#475569', fontSize: 15, fontWeight: 600, border: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
-                onMouseLeave={e => e.currentTarget.style.background = '#F1F5F9'}
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleConfirm}
-                disabled={Object.keys(selected).length === 0}
-                style={{ padding: '0 32px', height: 48, borderRadius: 16, background: Object.keys(selected).length === 0 ? '#CBD5E1' : '#4F46E5', color: '#fff', fontSize: 15, fontWeight: 700, border: 'none', cursor: Object.keys(selected).length === 0 ? 'not-allowed' : 'pointer', boxShadow: Object.keys(selected).length === 0 ? 'none' : '0 10px 25px -5px rgba(79, 70, 229, 0.4)', transition: 'all 0.2s' }}
-              >
-                Confirmar ({Object.keys(selected).length})
-              </button>
+              
+              {/* Resumo da Composição */}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
+                  {Object.keys(selected).length === 0 ? 'Nenhum destinatário selecionado' : `${Object.keys(selected).length} selecionado${Object.keys(selected).length > 1 ? 's' : ''}`}
+                </span>
+                {Object.keys(selected).length > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#64748B', marginTop: 2 }}>
+                    {[
+                      selectedTurmasCount > 0 ? `${selectedTurmasCount} aluno(s)/turma(s)` : null,
+                      selectedEquipeCount > 0 ? `${selectedEquipeCount} equipe escolar` : null
+                    ].filter(Boolean).join(' • ')}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button 
+                  type="button"
+                  onClick={onClose}
+                  style={{ 
+                    padding: '0 20px', height: 46, borderRadius: 14, background: '#F1F5F9', color: '#475569', 
+                    fontSize: 14, fontWeight: 700, border: 'none', cursor: 'pointer', transition: 'background 0.2s' 
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#F1F5F9'}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleConfirm}
+                  disabled={isLoadingData || Object.keys(selected).length === 0}
+                  style={{
+                    padding: '0 28px', height: 46, borderRadius: 14,
+                    background: (isLoadingData || Object.keys(selected).length === 0) 
+                      ? '#CBD5E1' 
+                      : 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                    color: '#fff', fontSize: 14, fontWeight: 800, border: 'none',
+                    cursor: (isLoadingData || Object.keys(selected).length === 0) ? 'not-allowed' : 'pointer',
+                    boxShadow: (isLoadingData || Object.keys(selected).length === 0) 
+                      ? 'none' 
+                      : '0 8px 20px -4px rgba(79, 70, 229, 0.45)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Confirmar ({Object.keys(selected).length})
+                </button>
+              </div>
             </div>
           </motion.div>
         </div>

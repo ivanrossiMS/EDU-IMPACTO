@@ -365,21 +365,22 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
 
   const baseBtnStyle: React.CSSProperties = {
     height: '100%',
-    minHeight: 54,
-    borderRadius: 20,
+    minHeight: 58,
+    borderRadius: 22,
     fontWeight: 800,
-    fontSize: 15,
+    fontSize: 16,
     border: 'none',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    justifyContent: 'flex-start',
+    gap: 10,
+    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
     whiteSpace: 'nowrap',
     width: '100%',
-    padding: '0 18px',
+    padding: '0 16px',
     fontFamily: 'Outfit, Inter, sans-serif',
+    boxSizing: 'border-box',
   }
 
   if (!isActiveState && !isSpecialAuth && !isConfirmed && !isBlocked) {
@@ -393,12 +394,12 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           boxShadow: '0 4px 14px rgba(239, 68, 68, 0.06)',
           cursor: 'not-allowed'
         }} title="Você está proibido de retirar este aluno.">
-          <div style={{ width: 34, height: 34, borderRadius: 12, background: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#ef4444' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#ef4444' }}>
             <AlertTriangle size={18} strokeWidth={2.4} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 14, fontWeight: 800 }}>Retirada Proibida</span>
-              <span style={{ fontSize: 11, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', fontWeight: 600 }}>
+              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800 }}>Retirada Proibida</span>
+              <span style={{ fontSize: 10.5, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', fontWeight: 600 }}>
                 Liberado: {diasPermitidos.length > 0 ? diasPermitidos.join(', ') : 'Nenhum dia'}
               </span>
           </div>
@@ -416,12 +417,12 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           boxShadow: '0 4px 14px rgba(245, 158, 11, 0.06)',
           cursor: 'not-allowed'
         }} title={`Dias permitidos: ${diasPermitidos.join(', ')}`}>
-          <div style={{ width: 34, height: 34, borderRadius: 12, background: 'rgba(245, 158, 11, 0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#d97706' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(245, 158, 11, 0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#d97706' }}>
             <Calendar size={18} strokeWidth={2.4} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 14, fontWeight: 800 }}>Fora do Dia Permitido</span>
-              <span style={{ fontSize: 11, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', fontWeight: 600 }}>
+              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800 }}>Fora do Dia Permitido</span>
+              <span style={{ fontSize: 10.5, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', fontWeight: 600 }}>
                 Liberado: {diasPermitidos.join(', ')}
               </span>
           </div>
@@ -435,34 +436,32 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
         onClick={handleCall}
         style={{
           ...baseBtnStyle,
-          background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #3b82f6 100%)',
+          background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #4f46e5 100%)',
           color: 'white',
-          boxShadow: '0 8px 24px -2px rgba(79, 70, 229, 0.35), 0 2px 6px rgba(0, 0, 0, 0.04)',
-          padding: otherStudentsSummary ? '8px 18px' : '0 18px',
+          boxShadow: '0 6px 18px rgba(37, 99, 235, 0.28)',
+          padding: otherStudentsSummary ? '8px 16px' : '0 16px',
         }}
         onMouseEnter={e => {
-          e.currentTarget.style.transform = 'translateY(-2px)'
-          e.currentTarget.style.boxShadow = '0 12px 30px -2px rgba(79, 70, 229, 0.45)'
+          e.currentTarget.style.transform = 'translateY(-1.5px)'
+          e.currentTarget.style.boxShadow = '0 10px 24px rgba(37, 99, 235, 0.38)'
         }}
         onMouseLeave={e => {
           e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = '0 8px 24px -2px rgba(79, 70, 229, 0.35)'
+          e.currentTarget.style.boxShadow = '0 6px 18px rgba(37, 99, 235, 0.28)'
         }}
       >
-        <div style={{ width: 34, height: 34, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Megaphone size={18} strokeWidth={2.4} />
+        <div className="ad-call-icon-box" style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Megaphone size={20} strokeWidth={2.3} />
         </div>
+        <div className="ad-call-divider" style={{ width: 1.5, height: 26, background: 'rgba(255, 255, 255, 0.25)', flexShrink: 0, margin: '0 2px' }} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Chamar Aluno</span>
+          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 17, fontWeight: 800, letterSpacing: '-0.2px' }}>Chamar aluno</span>
           {otherStudentsSummary && (
-            <span style={{ fontSize: 11, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
+            <span style={{ fontSize: 10.5, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
               {otherStudentsSummary}
             </span>
           )}
         </div>
-        <span className="ad-call-btn-arrow" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', opacity: 0.9, flexShrink: 0 }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-        </span>
       </button>
     )
   }
@@ -502,20 +501,22 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
         ...baseBtnStyle,
         background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
         color: 'white',
-        boxShadow: '0 8px 24px -2px rgba(16, 185, 129, 0.35)',
+        boxShadow: '0 6px 18px rgba(16, 185, 129, 0.35)',
         animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-        padding: '12px 18px',
-        height: 'auto',
-        minHeight: 54,
-        alignItems: 'center'
+        padding: '0 14px',
+        height: '100%',
+        minHeight: 58,
+        alignItems: 'center',
+        justifyContent: 'flex-start',
       }}>
-        <div style={{ width: 34, height: 34, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <CheckCircle2 size={20} strokeWidth={2.6} />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Saída Confirmada!</span>
-          <span style={{ fontSize: 11, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
-            Retirado {confData.by ? `por ${confData.by} ` : ''}às {formatTime(confData.time)}
+        <div style={{ width: 1.5, height: 24, background: 'rgba(255, 255, 255, 0.25)', flexShrink: 0, margin: '0 2px' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 14, fontWeight: 800 }}>Saída Confirmada!</span>
+          <span style={{ fontSize: 10.5, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
+            {confData.by ? `${confData.by.split(' ')[0]} ` : ''}às {formatTime(confData.time)}
           </span>
         </div>
         <style dangerouslySetInnerHTML={{__html: `
@@ -527,14 +528,14 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
 
   if (isSpecialAuth) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 'auto', minHeight: 54 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: '100%', minHeight: 58 }}>
         <button 
           onClick={() => specialAuthCalls.forEach(c => {
              cancelCall(c.id)
           })}
           title="Cancelar autorização"
           style={{
-            width: 54, height: 54, borderRadius: 18, cursor: 'pointer',
+            width: 44, height: '100%', minHeight: 58, borderRadius: 18, cursor: 'pointer',
             background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.25)', color: '#ef4444',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s', flexShrink: 0
@@ -542,22 +543,23 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
         >
-          <X size={22} />
+          <X size={20} />
         </button>
         <div style={{
           ...baseBtnStyle,
           width: 'auto',
           flex: 1,
-          height: 'auto',
-          minHeight: 54,
+          minWidth: 0,
+          height: '100%',
+          minHeight: 58,
           borderRadius: 20,
           background: 'linear-gradient(270deg, #f59e0b, #fbbf24, #f59e0b)',
           backgroundSize: '300% 300%',
           border: 'none',
           color: 'white',
-          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.3)',
+          boxShadow: '0 6px 20px rgba(245, 158, 11, 0.3)',
           cursor: 'default',
-          padding: '12px 18px',
+          padding: '0 12px',
           justifyContent: 'flex-start',
           alignItems: 'center',
         }} className="ad-sab-active">
@@ -567,15 +569,15 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
             boxShadow: '0 0 0 0 rgba(255,255,255,0.7)',
             flexShrink: 0
           }} className="sab-pulse-dot" />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 12 }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8, overflow: 'hidden' }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
               {specialCount > 1 ? 'Autorizações Ativas' : 'Autorização Ativa'}
             </span>
-            <span style={{ fontSize: 11, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', wordBreak: 'break-word', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
+            <span style={{ fontSize: 10, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 1, fontWeight: 600 }}>
               {specialAuthCalls.length > 0 ? (specialAuthCalls[0].guardianName ? specialAuthCalls[0].guardianName.split('—')[0].trim() : 'Aguardando portaria') : 'Aguardando portaria'}
             </span>
           </div>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.95)', fontWeight: 700, flexShrink: 0 }}>
+          <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.95)', fontWeight: 700, flexShrink: 0, marginLeft: 'auto' }}>
             {formatTime(specialAuthCalls.length > 0 ? specialAuthCalls[0].calledAt : undefined)}
           </span>
         </div>
@@ -590,17 +592,16 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
     )
   }
 
-
   if (isActiveState) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 'auto', minHeight: 54 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: '100%', minHeight: 58 }}>
         <button 
           onClick={() => pendingCalls.forEach(c => {
              cancelCall(c.id)
           })}
           title="Cancelar chamada"
           style={{
-            width: 54, height: 54, borderRadius: 18, cursor: 'pointer',
+            width: 44, height: '100%', minHeight: 58, borderRadius: 18, cursor: 'pointer',
             background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.25)', color: '#ef4444',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s', flexShrink: 0
@@ -608,28 +609,30 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
         >
-          <X size={22} />
+          <X size={20} />
         </button>
         <div style={{
           ...baseBtnStyle,
           width: 'auto',
           flex: 1,
-          height: 'auto',
-          minHeight: 54,
+          minWidth: 0,
+          height: '100%',
+          minHeight: 58,
           borderRadius: 20,
           background: 'linear-gradient(45deg, #f59e0b, #fbbf24, #f59e0b)',
           backgroundSize: '200% 200%',
           border: 'none',
           color: 'white',
-          boxShadow: '0 8px 24px rgba(245, 158, 11, 0.3)',
+          boxShadow: '0 6px 20px rgba(245, 158, 11, 0.3)',
           cursor: 'default',
-          padding: '12px 18px',
+          padding: '0 12px',
           alignItems: 'center',
+          justifyContent: 'flex-start',
         }}>
-          <Loader2 size={22} className="spin-anim" style={{ flexShrink: 0 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 10 }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>{callLabel}</span>
-            <span style={{ fontSize: 11, opacity: 0.95, lineHeight: 1.4, whiteSpace: 'normal', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
+          <Loader2 size={20} className="spin-anim" style={{ flexShrink: 0 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8, overflow: 'hidden' }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{callLabel}</span>
+            <span style={{ fontSize: 10, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 1, fontWeight: 600 }}>
               por {myCalls.length > 0 ? myCalls[0].guardianName?.split(' ')[0] : 'Responsável'} às {formatTime(myCalls.length > 0 ? myCalls[0].calledAt : undefined)}
             </span>
           </div>
@@ -1536,97 +1539,150 @@ export default function ADInnerLayout({
           box-shadow: 0 1px 4px rgba(99, 102, 241, 0.35);
         }
 
-        /* Secondary Actions (Trocar aluno / Sair) */
-        .ad-secondary-actions-row {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-          width: 100%;
-        }
-
-        .ad-action-pill-btn {
-          flex: 1;
-          min-height: 44px;
-          padding: 0 16px;
-          border-radius: 16px;
+        /* Actions Row (Chamar aluno, Trocar aluno e Sair - Lado a Lado) */
+        .ad-card-actions-row {
           display: flex;
           flex-direction: row;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          cursor: pointer;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          text-decoration: none;
-          font-family: 'Outfit', sans-serif;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          box-sizing: border-box;
-          border: none;
+          align-items: stretch;
+          gap: 10px;
+          width: 100%;
+          margin-top: 4px;
         }
 
-        .ad-action-pill-icon-box {
-          width: 26px;
-          height: 26px;
-          border-radius: 8px;
+        .ad-call-button-col {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+        }
+
+        .ad-premium-cta-btn {
+          height: 58px;
+          border-radius: 22px;
+          background: linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #4f46e5 100%);
+          color: #ffffff;
+          box-shadow: 0 6px 18px rgba(37, 99, 235, 0.28);
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          gap: 10px;
+          width: 100%;
+          padding: 0 16px;
+          font-family: 'Outfit', sans-serif;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          box-sizing: border-box;
+          user-select: none;
+        }
+
+        .ad-premium-cta-btn:hover {
+          transform: translateY(-1.5px);
+          box-shadow: 0 10px 24px rgba(37, 99, 235, 0.38);
+        }
+
+        .ad-premium-cta-btn:active {
+          transform: scale(0.98);
+        }
+
+        .ad-call-icon-box {
+          width: 38px;
+          height: 38px;
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.2);
           display: flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          transition: all 0.25s ease;
         }
 
-        .ad-action-pill-label {
-          font-size: 13px;
-          font-weight: 700;
-          letter-spacing: -0.1px;
-          white-space: nowrap;
-          transition: all 0.25s ease;
+        .ad-call-divider {
+          width: 1.5px;
+          height: 26px;
+          background: rgba(255, 255, 255, 0.28);
+          flex-shrink: 0;
+          margin: 0 2px;
+        }
+
+        .ad-call-btn-label {
+          font-size: 17px;
+          font-weight: 800;
+          letter-spacing: -0.2px;
+          line-height: 1.2;
+          color: #ffffff;
+          font-family: 'Outfit', sans-serif;
+        }
+
+        /* Action Card Buttons (Trocar Aluno & Sair) */
+        .ad-card-action-btn {
+          height: 58px;
+          border-radius: 22px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          cursor: pointer;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          text-decoration: none;
+          font-family: 'Outfit', sans-serif;
+          box-sizing: border-box;
+          flex-shrink: 0;
+          user-select: none;
+          padding: 0 12px;
+        }
+
+        .ad-card-action-btn:hover {
+          transform: translateY(-1.5px);
+        }
+
+        .ad-card-action-btn:active {
+          transform: scale(0.97);
         }
 
         /* Switch Student Button */
-        .ad-switch-student-btn {
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.06) 0%, rgba(248, 250, 252, 0.9) 100%);
-          border: 1.5px solid rgba(99, 102, 241, 0.16);
+        .ad-card-switch-student {
+          min-width: 84px;
+          background: #ffffff;
+          border: 1.5px solid rgba(224, 231, 255, 0.9);
+          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.05);
           color: #4338ca;
-          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.04);
         }
-        .ad-switch-student-btn .icon-box-indigo {
-          background: rgba(99, 102, 241, 0.12);
-          color: #4f46e5;
+
+        .ad-card-switch-student:hover {
+          border-color: rgba(99, 102, 241, 0.35);
+          background: #f8faff;
+          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.12);
         }
-        .ad-switch-student-btn:hover {
-          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
-          color: #ffffff !important;
-          border-color: transparent !important;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(99, 102, 241, 0.28) !important;
-        }
-        .ad-switch-student-btn:hover .icon-box-indigo {
-          background: rgba(255, 255, 255, 0.25) !important;
-          color: #ffffff !important;
+
+        .ad-card-switch-student .ad-action-card-label {
+          font-size: 11.5px;
+          font-weight: 800;
+          letter-spacing: -0.1px;
+          color: #251c8a;
+          white-space: nowrap;
         }
 
         /* Logout Button */
-        .ad-logout-btn {
-          background: linear-gradient(135deg, rgba(239, 68, 68, 0.06) 0%, rgba(248, 250, 252, 0.9) 100%);
-          border: 1.5px solid rgba(239, 68, 68, 0.16);
-          color: #dc2626;
+        .ad-card-logout {
+          min-width: 76px;
+          background: #fffafa;
+          border: 1.5px solid rgba(254, 202, 202, 0.8);
           box-shadow: 0 2px 8px rgba(239, 68, 68, 0.04);
-        }
-        .ad-logout-btn .icon-box-red {
-          background: rgba(239, 68, 68, 0.12);
           color: #ef4444;
         }
-        .ad-logout-btn:hover {
-          background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-          color: #ffffff !important;
-          border-color: transparent !important;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(239, 68, 68, 0.28) !important;
+
+        .ad-card-logout:hover {
+          border-color: rgba(239, 68, 68, 0.35);
+          background: #fef2f2;
+          box-shadow: 0 6px 16px rgba(239, 68, 68, 0.12);
         }
-        .ad-logout-btn:hover .icon-box-red {
-          background: rgba(255, 255, 255, 0.25) !important;
-          color: #ffffff !important;
+
+        .ad-card-logout .ad-action-card-label {
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: -0.1px;
+          color: #dc2626;
+          white-space: nowrap;
         }
 
         @media (max-width: 1200px) {
@@ -1705,29 +1761,44 @@ export default function ADInnerLayout({
             width: 9px !important;
             height: 9px !important;
           }
-          .ad-action-pill-btn {
-            min-height: 40px !important;
-            padding: 0 10px !important;
-            border-radius: 14px !important;
-          }
-          .ad-action-pill-label {
-            font-size: 12px !important;
-          }
-          .ad-action-pill-icon-box {
-            width: 22px !important;
-            height: 22px !important;
-          }
-          .ad-action-pill-icon-box svg {
-            width: 12px !important;
-            height: 12px !important;
+          .ad-card-actions-row {
+            gap: 8px !important;
           }
           .ad-premium-cta-btn {
-            width: 100% !important;
-            height: 50px !important;
-            font-size: 14px !important;
-            padding: 0 16px !important;
-            border-radius: 16px !important;
-            justify-content: center !important;
+            height: 58px !important;
+            padding: 0 12px !important;
+            border-radius: 20px !important;
+            justify-content: flex-start !important;
+            gap: 8px !important;
+          }
+          .ad-call-icon-box {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 11px !important;
+          }
+          .ad-call-icon-box svg {
+            width: 18px !important;
+            height: 18px !important;
+          }
+          .ad-call-btn-label {
+            font-size: 15.5px !important;
+          }
+          .ad-card-action-btn {
+            height: 58px !important;
+            border-radius: 20px !important;
+            padding: 0 6px !important;
+          }
+          .ad-card-switch-student {
+            min-width: 80px !important;
+          }
+          .ad-card-switch-student .ad-action-card-label {
+            font-size: 11px !important;
+          }
+          .ad-card-logout {
+            min-width: 70px !important;
+          }
+          .ad-card-logout .ad-action-card-label {
+            font-size: 11.5px !important;
           }
           .ad-call-btn-arrow {
             display: none !important;
@@ -2611,11 +2682,11 @@ export default function ADInnerLayout({
             </div>
           </div>
 
-          {/* AREA 2: AÇÕES DO CARD - Botão Chamar Aluno / Status Cobrindo Toda a Linha + Botões Secundários (Trocar Aluno e Sair) Embaixo */}
+          {/* AREA 2: AÇÕES DO CARD - Botão Chamar Aluno, Trocar Aluno e Sair Lado a Lado (Estilo Imagem 1) */}
           {currentUser && currentUser.cargo !== 'Aluno' && (
-            <div className="ad-card-actions-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginTop: 2 }}>
+            <div className="ad-card-actions-row">
               {adConfig?.permissoes?.chamadaAlunoPortaria !== false && (
-                <div className="ad-call-button-full-width" style={{ width: '100%', display: 'flex' }}>
+                <div className="ad-call-button-col">
                   <StudentCallButton 
                     aluno={aluno} 
                     currentUser={currentUser} 
@@ -2648,34 +2719,39 @@ export default function ADInnerLayout({
                 </div>
               )}
               
-              <div className="ad-secondary-actions-row">
-                <Link 
-                  href="/agenda-digital/selecionar-aluno"
-                  title="Trocar de Aluno"
-                  className="ad-action-pill-btn ad-switch-student-btn"
-                >
-                  <div className="ad-action-pill-icon-box icon-box-indigo">
-                    <Users size={14} strokeWidth={2.4} />
-                  </div>
-                  <span className="ad-action-pill-label">Trocar aluno</span>
-                </Link>
+              <Link 
+                href="/agenda-digital/selecionar-aluno"
+                title="Trocar de Aluno"
+                className="ad-card-action-btn ad-card-switch-student"
+              >
+                <div className="ad-action-card-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8.5" cy="7" r="3.5" />
+                    <path d="M2.5 19.5c0-3.3 2.7-6 6-6h2" />
+                    <path d="M17 5a3.5 3.5 0 0 1 3.5 3.5" />
+                    <polyline points="18 10 20.5 8.5 23 10" />
+                    <path d="M20.5 14.5a3.5 3.5 0 0 1-3.5 3.5" />
+                    <polyline points="15 17 17 19 19 17" />
+                  </svg>
+                </div>
+                <span className="ad-action-card-label">Trocar aluno</span>
+              </Link>
 
-                <button 
-                  onClick={() => {
-                    setLoadingPath('logout')
-                    performLogout();
-                    setCurrentUser(null);
-                    window.location.href = '/login';
-                  }}
-                  title="Sair da Conta"
-                  className="ad-action-pill-btn ad-logout-btn"
-                >
-                  <div className="ad-action-pill-icon-box icon-box-red">
-                    <LogOut size={14} strokeWidth={2.4} />
-                  </div>
-                  <span className="ad-action-pill-label">Sair</span>
-                </button>
-              </div>
+              <button 
+                onClick={() => {
+                  setLoadingPath('logout')
+                  performLogout();
+                  setCurrentUser(null);
+                  window.location.href = '/login';
+                }}
+                title="Sair da Conta"
+                className="ad-card-action-btn ad-card-logout"
+              >
+                <div className="ad-action-card-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <LogOut size={22} strokeWidth={2.4} />
+                </div>
+                <span className="ad-action-card-label">Sair</span>
+              </button>
             </div>
           )}
         </div>

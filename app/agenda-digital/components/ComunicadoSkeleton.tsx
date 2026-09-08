@@ -39,6 +39,36 @@ export function ComunicadoSkeleton({
           0% { background-position: 0% 0%; }
           100% { background-position: 0% 200%; }
         }
+        @keyframes orbitSpinCW {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes orbitSpinCCW {
+          from { transform: rotate(360deg); }
+          to { transform: rotate(0deg); }
+        }
+        @keyframes cyberCorePulse {
+          0%, 100% {
+            transform: scale(0.85);
+            opacity: 0.85;
+            filter: drop-shadow(0 0 6px #00d2ff);
+          }
+          50% {
+            transform: scale(1.2);
+            opacity: 1;
+            filter: drop-shadow(0 0 14px #7551FF) drop-shadow(0 0 20px #00d2ff);
+          }
+        }
+        @keyframes auraGlow {
+          0%, 100% {
+            transform: scale(0.92);
+            opacity: 0.35;
+          }
+          50% {
+            transform: scale(1.12);
+            opacity: 0.75;
+          }
+        }
         .ultra-shimmer {
           background: linear-gradient(90deg, rgba(226, 232, 240, 0.5) 0%, rgba(255, 255, 255, 0.95) 50%, rgba(226, 232, 240, 0.5) 100%) !important;
           background-size: 200% 100% !important;
@@ -46,71 +76,80 @@ export function ComunicadoSkeleton({
         }
       `}} />
 
-      {/* Top Ultra-Modern Status Badge */}
+      {/* Top Ultra-Modern Loading Icon */}
       {showHeaderBadge && (
         <motion.div 
-          initial={{ opacity: 0, y: -8, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.3 }}
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
           style={{
-            display: 'inline-flex',
+            display: 'flex',
             alignItems: 'center',
-            gap: 12,
-            padding: '8px 18px',
-            borderRadius: 9999,
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(243,244,255,0.85) 100%)',
-            border: '1px solid rgba(99, 102, 241, 0.22)',
-            boxShadow: '0 8px 24px -4px rgba(67, 24, 255, 0.08), inset 0 0 0 1px rgba(255,255,255,0.9)',
-            backdropFilter: 'blur(16px)',
-            marginBottom: 20
+            justifyContent: 'center',
+            width: '100%',
+            padding: '8px 0 22px 0',
+            position: 'relative'
           }}
         >
-          {/* Glowing Animated Ring Spinner */}
-          <div style={{ position: 'relative', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {/* Subtle Cyber Atmospheric Aura */}
+          <div style={{
+            position: 'absolute',
+            width: 72,
+            height: 72,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(0, 210, 255, 0.28) 0%, rgba(117, 81, 255, 0.22) 50%, transparent 75%)',
+            filter: 'blur(12px)',
+            animation: 'auraGlow 2.4s ease-in-out infinite',
+            pointerEvents: 'none',
+            zIndex: 0
+          }} />
+
+          {/* Frosted Glass Floating Orb */}
+          <div style={{
+            position: 'relative',
+            width: 52,
+            height: 52,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(243, 244, 255, 0.88) 100%)',
+            border: '1.5px solid rgba(99, 102, 241, 0.22)',
+            boxShadow: '0 10px 28px -4px rgba(67, 24, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(16px)',
+            zIndex: 1
+          }}
+          >
+            {/* Outer Spinning Dual-Tone Ring */}
             <div style={{
               position: 'absolute',
-              inset: 0,
+              inset: 7,
               borderRadius: '50%',
-              border: '2px solid rgba(99, 102, 241, 0.18)',
+              border: '2.5px solid rgba(99, 102, 241, 0.14)',
               borderTopColor: '#00d2ff',
               borderRightColor: '#7551FF',
-              animation: 'spinMicro 1.4s linear infinite'
+              animation: 'orbitSpinCW 1.1s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite'
             }} />
+
+            {/* Middle Counter-Rotating Neon Dashed Ring */}
             <div style={{
-              width: 7,
-              height: 7,
+              position: 'absolute',
+              inset: 12,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #00d2ff, #7551FF)',
-              boxShadow: '0 0 8px #00d2ff',
-              animation: 'cyberLaserPulse 1.6s infinite'
+              border: '2px dashed rgba(236, 72, 153, 0.65)',
+              borderBottomColor: '#00d2ff',
+              animation: 'orbitSpinCCW 1.6s linear infinite'
+            }} />
+
+            {/* Inner Cyber Pulsing Core */}
+            <div style={{
+              width: 9,
+              height: 9,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #00d2ff 0%, #7551FF 100%)',
+              animation: 'cyberCorePulse 1.8s ease-in-out infinite'
             }} />
           </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', letterSpacing: -0.2 }}>
-              {title}
-            </span>
-            {subtitle && (
-              <span style={{ fontSize: 11, fontWeight: 500, color: '#64748b' }}>
-                {subtitle}
-              </span>
-            )}
-          </div>
-
-          <span style={{
-            marginLeft: 4,
-            fontSize: 10,
-            fontWeight: 800,
-            textTransform: 'uppercase',
-            letterSpacing: 0.6,
-            color: '#4318FF',
-            background: 'rgba(67, 24, 255, 0.07)',
-            padding: '3px 8px',
-            borderRadius: 6,
-            border: '1px solid rgba(67, 24, 255, 0.12)'
-          }}>
-            Tempo Real
-          </span>
         </motion.div>
       )}
 

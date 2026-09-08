@@ -5,7 +5,7 @@ import {
   X, SendIcon, Clock, FileText, Paperclip, Image as ImageIcon, 
   Bold, Italic, Underline, List, Link as LinkIcon, Smile, 
   ChevronRight, Save, UploadCloud, Users, Trash2, Calendar,
-  Palette, BarChart2, CircleDollarSign
+  Palette, BarChart2, CircleDollarSign, Shield, GraduationCap
 } from 'lucide-react'
 import Image from 'next/image'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -473,6 +473,72 @@ export default function NovoComunicadoModal({
           border-color: #8B5CF6;
           background: #F5F3FF;
         }
+        .ad-nc-attach-grid {
+          display: grid !important;
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          gap: 8px !important;
+          width: 100% !important;
+        }
+        .ad-nc-attach-btn {
+          width: 100% !important;
+          height: 42px !important;
+          min-height: 42px !important;
+          padding: 0 6px !important;
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          border-radius: 14px !important;
+          border: 1.5px solid rgba(99, 102, 241, 0.16) !important;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 248, 255, 0.88) 100%) !important;
+          box-shadow: 0 2px 8px -2px rgba(67, 24, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+          backdrop-filter: blur(12px) !important;
+          cursor: pointer !important;
+          transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-sizing: border-box !important;
+          text-decoration: none !important;
+        }
+        .ad-nc-attach-btn:hover {
+          background: #ffffff !important;
+          border-color: #6366f1 !important;
+          transform: translateY(-1.5px) !important;
+          box-shadow: 0 6px 16px -2px rgba(99, 102, 241, 0.14), inset 0 1px 0 #ffffff !important;
+        }
+        .ad-nc-attach-btn:active {
+          transform: scale(0.96) !important;
+        }
+        .ad-nc-attach-icon-wrap {
+          width: 24px !important;
+          height: 24px !important;
+          border-radius: 8px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          flex-shrink: 0 !important;
+          transition: all 0.2s !important;
+        }
+        .ad-nc-attach-label {
+          font-size: 13px !important;
+          font-weight: 600 !important;
+          color: #334155 !important;
+          letter-spacing: -0.01em !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+        @media (max-width: 380px) {
+          .ad-nc-attach-grid {
+            gap: 6px !important;
+          }
+          .ad-nc-attach-label {
+            font-size: 11.5px !important;
+          }
+          .ad-nc-attach-icon-wrap {
+            width: 20px !important;
+            height: 20px !important;
+          }
+        }
         
         .ad-nc-footer {
           position: absolute;
@@ -588,18 +654,40 @@ export default function NovoComunicadoModal({
               </div>
               
               {selectedDest.length > 0 && (
-                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 120, overflowY: 'auto' }}>
-                  {selectedDest.map((d, i) => (
-                    <div key={d.id || `dest_${i}`} className="ad-nc-chip" onClick={e => e.stopPropagation()}>
-                      {d.type === 'turma' ? <Users size={12} /> : <UserAvatar name={d.name} size={16} />}
-                      {d.name}
-                      {onRemoveDest && (
-                        <button onClick={() => onRemoveDest(d.id)} style={{ background: 'transparent', border: 0, cursor: 'pointer', display: 'flex', color: '#94A3B8', padding: 2 }}>
-                          <X size={12} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: 140, overflowY: 'auto' }}>
+                  {selectedDest.map((d, i) => {
+                    const isEquipe = d.type === 'grupo' || d.type === 'funcionario'
+                    return (
+                      <div 
+                        key={d.id || `dest_${i}`} 
+                        className="ad-nc-chip" 
+                        style={{
+                          background: isEquipe ? '#F5F3FF' : '#EEF2FF',
+                          color: isEquipe ? '#6D28D9' : '#3730A3',
+                          border: isEquipe ? '1px solid #DDD6FE' : '1px solid #C7D2FE',
+                          margin: 0
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      >
+                        {d.type === 'turma' ? (
+                          <GraduationCap size={13} />
+                        ) : d.type === 'grupo' ? (
+                          <Shield size={13} />
+                        ) : (
+                          <UserAvatar name={d.name} size={16} />
+                        )}
+                        <span>{d.name}</span>
+                        {onRemoveDest && (
+                          <button 
+                            onClick={() => onRemoveDest(d.id)} 
+                            style={{ background: 'transparent', border: 0, cursor: 'pointer', display: 'flex', color: isEquipe ? '#8B5CF6' : '#818CF8', padding: 2 }}
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -686,21 +774,40 @@ export default function NovoComunicadoModal({
               Anexos <span style={{ fontWeight: 400 }}>(opcional)</span>
             </div>
             
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: '10px 20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.background = '#F8FAFC'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FFF'; }}>
-                <Paperclip size={18} color="#475569" />
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Anexar</span>
+            <div className="ad-nc-attach-grid">
+              <label 
+                className="ad-nc-attach-btn" 
+                title="Anexar arquivos ou imagens"
+              >
+                <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(99, 102, 241, 0.08)' }}>
+                  <Paperclip size={15} color="#6366F1" style={{ filter: 'drop-shadow(0 1px 2px rgba(99, 102, 241, 0.2))' }} />
+                </div>
+                <span className="ad-nc-attach-label">Anexar</span>
                 <input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" multiple hidden onChange={handleFileUpload} />
               </label>
 
-              <button onClick={(e) => { e.preventDefault(); setShowRelsModal(true); }} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: '10px 20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.background = '#F8FAFC'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FFF'; }}>
-                <BarChart2 size={18} color="#475569" />
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Relatório</span>
+              <button 
+                type="button"
+                className="ad-nc-attach-btn"
+                onClick={(e) => { e.preventDefault(); setShowRelsModal(true); }}
+                title="Anexar relatório"
+              >
+                <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(14, 165, 233, 0.08)' }}>
+                  <BarChart2 size={15} color="#0284C7" style={{ filter: 'drop-shadow(0 1px 2px rgba(2, 132, 199, 0.2))' }} />
+                </div>
+                <span className="ad-nc-attach-label">Relatório</span>
               </button>
 
-              <button onClick={(e) => { e.preventDefault(); setShowCobrancaModal(true); }} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, background: '#FFF', border: '1px solid #E2E8F0', borderRadius: 16, padding: '10px 20px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.borderColor = '#6366F1'; e.currentTarget.style.background = '#F8FAFC'; }} onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.background = '#FFF'; }}>
-                <CircleDollarSign size={18} color="#475569" />
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#475569' }}>Cobrança</span>
+              <button 
+                type="button"
+                className="ad-nc-attach-btn"
+                onClick={(e) => { e.preventDefault(); setShowCobrancaModal(true); }}
+                title="Anexar cobrança Asaas"
+              >
+                <div className="ad-nc-attach-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.08)' }}>
+                  <CircleDollarSign size={15} color="#10B981" style={{ filter: 'drop-shadow(0 1px 2px rgba(16, 185, 129, 0.2))' }} />
+                </div>
+                <span className="ad-nc-attach-label">Cobrança</span>
               </button>
             </div>
 

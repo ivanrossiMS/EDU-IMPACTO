@@ -698,28 +698,50 @@ function ColaboradorComunicadosContent() {
 
   return (
     <>
-      <div className="ad-mobile-only" style={{ marginBottom: 8 }}>
-        <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <Search size={16} style={{ position: 'absolute', left: 14, color: '#6366f1' }} />
+      <div className="ad-mobile-only" style={{ marginBottom: 14, width: '100%' }}>
+        <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+          <div style={{
+            position: 'absolute',
+            left: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            zIndex: 3
+          }}>
+            <Search size={18} style={{ color: '#6366f1', filter: 'drop-shadow(0 2px 4px rgba(99, 102, 241, 0.25))' }} />
+          </div>
           <input 
-            className="form-input" 
-            placeholder="Buscar..." 
-            style={{
-              paddingLeft: 40,
-              width: '100%',
-              height: 44,
-              borderRadius: 14,
-              border: '1px solid rgba(99, 102, 241, 0.15)',
-              background: 'rgba(255, 255, 255, 0.7)',
-              backdropFilter: 'none',
-              boxShadow: '0 8px 32px rgba(99, 102, 241, 0.04)',
-              fontSize: 14,
-              color: '#0f172a',
-              transition: 'all 0.3s'
-            }} 
+            className="ad-search-input-ultra" 
+            placeholder="Buscar comunicados..." 
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              aria-label="Limpar busca"
+              style={{
+                position: 'absolute',
+                right: 14,
+                width: 26,
+                height: 26,
+                borderRadius: '50%',
+                border: 'none',
+                background: 'rgba(99, 102, 241, 0.1)',
+                color: '#6366f1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                zIndex: 3,
+                transition: 'all 0.2s'
+              }}
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
     <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'transparent' }}>
@@ -785,6 +807,35 @@ function ColaboradorComunicadosContent() {
           0%, 100% { opacity: 0.3; transform: scale(1) translate(0, 0); }
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
         }
+        .ad-search-input-ultra {
+          width: 100% !important;
+          height: 48px !important;
+          min-height: 48px !important;
+          padding-left: 48px !important;
+          padding-right: 44px !important;
+          border-radius: 9999px !important;
+          border: 1.5px solid rgba(99, 102, 241, 0.2) !important;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 246, 255, 0.85) 100%) !important;
+          backdrop-filter: blur(16px) !important;
+          box-shadow: 0 4px 18px -2px rgba(67, 24, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+          font-size: 15px !important;
+          font-weight: 500 !important;
+          color: #0f172a !important;
+          letter-spacing: -0.01em !important;
+          outline: none !important;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-sizing: border-box !important;
+        }
+        .ad-search-input-ultra::placeholder {
+          color: #94a3b8 !important;
+          font-weight: 400 !important;
+          font-size: 14.5px !important;
+        }
+        .ad-search-input-ultra:focus {
+          background: #ffffff !important;
+          border-color: #6366f1 !important;
+          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.22), 0 0 0 3px rgba(99, 102, 241, 0.12), inset 0 1px 0 #ffffff !important;
+        }
         .ad-mobile-only { display: none !important; }
         .ad-desktop-only { display: block !important; }
         @media (max-width: 768px) {
@@ -829,11 +880,17 @@ function ColaboradorComunicadosContent() {
           .ad-com-actions > button {
             align-self: center !important;
           }
+          .ad-com-search {
+            width: 100% !important;
+          }
+          .ad-com-search input,
+          .ad-search-input-ultra {
+            padding-left: 48px !important;
+          }
           .ad-com-search svg {
-            width: 14px !important;
-            height: 14px !important;
-            left: 12px !important;
-            color: #94a3b8 !important;
+            width: 18px !important;
+            height: 18px !important;
+            color: #6366f1 !important;
           }
           .ad-com-header-icon-box {
             display: none !important;
@@ -914,27 +971,49 @@ function ColaboradorComunicadosContent() {
           </div>
           
           <div className="ad-com-actions" style={{ display: 'flex', gap: 12 }}>
-            <div className="ad-com-search ad-desktop-only" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Search size={16} style={{ position: 'absolute', left: 14, color: '#6366f1' }} />
+            <div className="ad-com-search ad-desktop-only" style={{ position: 'relative', display: 'flex', alignItems: 'center', width: 260 }}>
+              <div style={{
+                position: 'absolute',
+                left: 16,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+                zIndex: 3
+              }}>
+                <Search size={18} style={{ color: '#6366f1', filter: 'drop-shadow(0 2px 4px rgba(99, 102, 241, 0.25))' }} />
+              </div>
               <input 
-                className="form-input" 
-                placeholder="Buscar..." 
-                style={{
-                  paddingLeft: 40,
-                  width: 260,
-                  height: 44,
-                  borderRadius: 14,
-                  border: '1px solid rgba(99, 102, 241, 0.15)',
-                  background: 'rgba(255, 255, 255, 0.7)',
-                  backdropFilter: 'none',
-                  boxShadow: '0 8px 32px rgba(99, 102, 241, 0.04)',
-                  fontSize: 14,
-                  color: '#0f172a',
-                  transition: 'all 0.3s'
-                }} 
+                className="ad-search-input-ultra" 
+                placeholder="Buscar comunicados..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  aria-label="Limpar busca"
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    color: '#6366f1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    zIndex: 3,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <X size={13} />
+                </button>
+              )}
             </div>
             <button className="btn btn-secondary ad-com-filter-btn" style={{
               height: 44,
@@ -1052,11 +1131,7 @@ function ColaboradorComunicadosContent() {
                 transition={{ duration: 0.25 }}
                 style={{ width: '100%' }}
               >
-                <ComunicadoSkeleton 
-                  count={3} 
-                  title="Carregando comunicados institucionais..." 
-                  subtitle="Sincronizando avisos e circulares em tempo real" 
-                />
+                <ComunicadoSkeleton count={3} />
               </motion.div>
             );
           }

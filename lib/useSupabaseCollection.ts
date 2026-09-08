@@ -118,12 +118,12 @@ export function useSupabaseCollection<T>(
     return () => { isMounted.current = false }
   }, [])
 
-  // Safety timeout: garante que o flag loading nunca fique preso como true por mais de 3 segundos
+  // Safety timeout: garante que o flag loading nunca fique preso como true por mais de 15 segundos
   useEffect(() => {
     if (loading) {
       const timer = setTimeout(() => {
         if (isMounted.current) setLoading(false)
-      }, 3000)
+      }, 15000)
       return () => clearTimeout(timer)
     }
   }, [loading])

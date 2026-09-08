@@ -899,6 +899,10 @@ select option {
     font-size: 16px !important; /* 16px evita o zoom automático no iOS Safari */
     padding: 12px 14px !important;
   }
+  .ad-com-search input,
+  .ad-search-input-ultra {
+    padding-left: 48px !important;
+  }
   .btn { min-height: 46px !important; font-size: 15px !important; }
   .btn-sm { min-height: 38px !important; }
 

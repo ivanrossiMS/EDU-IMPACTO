@@ -412,6 +412,35 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           0%, 100% { opacity: 0.25; transform: scale(1) translate(0px, 0px); }
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
         }
+        .ad-search-input-ultra {
+          width: 220px !important;
+          height: 44px !important;
+          min-height: 44px !important;
+          padding-left: 44px !important;
+          padding-right: 36px !important;
+          border-radius: 9999px !important;
+          border: 1.5px solid rgba(99, 102, 241, 0.2) !important;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 246, 255, 0.85) 100%) !important;
+          backdrop-filter: blur(16px) !important;
+          box-shadow: 0 4px 18px -2px rgba(67, 24, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+          font-size: 14.5px !important;
+          font-weight: 500 !important;
+          color: #0f172a !important;
+          letter-spacing: -0.01em !important;
+          outline: none !important;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          box-sizing: border-box !important;
+        }
+        .ad-search-input-ultra::placeholder {
+          color: #94a3b8 !important;
+          font-weight: 400 !important;
+          font-size: 14px !important;
+        }
+        .ad-search-input-ultra:focus {
+          background: #ffffff !important;
+          border-color: #6366f1 !important;
+          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.22), 0 0 0 3px rgba(99, 102, 241, 0.12), inset 0 1px 0 #ffffff !important;
+        }
         @media (max-width: 768px) {
           .ad-comunicados-wrapper {
             margin-top: 0 !important;
@@ -435,28 +464,32 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           .ad-com-filter-btn { display: none !important; }
           .ad-com-actions { width: auto !important; justify-content: flex-end !important; margin-top: 0 !important; align-self: center !important; }
           .ad-com-search { width: auto !important; justify-content: flex-end !important; }
-          .ad-com-search input { 
-            width: 120px !important; 
+          .ad-com-search input,
+          .ad-search-input-ultra { 
+            width: 140px !important; 
             max-width: 100% !important; 
-            height: 36px !important; 
-            padding-left: 32px !important; 
-            font-size: 13px !important; 
+            height: 40px !important; 
+            min-height: 40px !important;
+            padding-left: 38px !important; 
+            padding-right: 28px !important;
+            font-size: 13.5px !important; 
             border-radius: 9999px !important; 
-            background: #ffffff !important;
-            border: 1px solid #e2e8f0 !important;
-            box-shadow: none !important;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 246, 255, 0.85) 100%) !important;
+            border: 1.5px solid rgba(99, 102, 241, 0.2) !important;
+            box-shadow: 0 4px 14px -2px rgba(67, 24, 255, 0.06) !important;
             color: #0f172a !important;
           }
-          .ad-com-search input:focus {
-            width: 130px !important;
-            border-color: #cbd5e1 !important;
+          .ad-com-search input:focus,
+          .ad-search-input-ultra:focus {
+            width: 165px !important;
+            border-color: #6366f1 !important;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
             background: #ffffff !important;
           }
           .ad-com-search svg {
-            width: 14px !important;
-            height: 14px !important;
-            left: 12px !important;
-            color: #94a3b8 !important;
+            width: 15px !important;
+            height: 15px !important;
+            color: #6366f1 !important;
           }
           .ad-com-header-icon-box {
             width: 40px !important;
@@ -541,26 +574,48 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           
           <div className="ad-com-actions" style={{ display: 'flex', gap: 12 }}>
             <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <Search size={16} style={{ position: 'absolute', left: 14, color: '#6366f1' }} />
+              <div style={{
+                position: 'absolute',
+                left: 14,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+                zIndex: 3
+              }}>
+                <Search size={16} style={{ color: '#6366f1', filter: 'drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2))' }} />
+              </div>
               <input 
-                className="form-input" 
+                className="ad-search-input-ultra" 
                 placeholder="Buscar..." 
-                style={{
-                  paddingLeft: 40,
-                  width: 220,
-                  height: 44,
-                  borderRadius: 14,
-                  border: '1px solid rgba(99, 102, 241, 0.15)',
-                  background: 'rgba(255, 255, 255, 0.7)',
-                  backdropFilter: 'none',
-                  boxShadow: '0 8px 32px rgba(99, 102, 241, 0.04)',
-                  fontSize: 14,
-                  color: '#0f172a',
-                  transition: 'all 0.3s'
-                }} 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  aria-label="Limpar busca"
+                  style={{
+                    position: 'absolute',
+                    right: 10,
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    color: '#6366f1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    zIndex: 3,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
             <button className="btn btn-secondary ad-com-filter-btn" style={{
               height: 44,
