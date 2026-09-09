@@ -1712,4 +1712,44 @@ sup {
   user-select: none;
 }
 
+/* ──────── LIMPEZA GLOBAL PARA IMPRESSÃO ──────── */
+@media print {
+  .sidebar,
+  aside,
+  nav,
+  header,
+  [data-sidebar],
+  .app-wrapper > aside,
+  .main-content > div:first-child,
+  .no-print,
+  .no-export {
+    display: none !important;
+  }
+
+  .app-wrapper {
+    display: block !important;
+    width: 100% !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    display: block !important;
+    padding: 0 !important;
+  }
+
+  .page-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+  }
+}
+
 

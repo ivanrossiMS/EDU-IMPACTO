@@ -325,6 +325,27 @@ export default function CalendarioPage() {
   const [loadingNivers, setLoadingNivers] = useState(false)
   const niversCacheRef = useRef<Record<number, any[]>>({})
 
+  const getAdminTurmaDisplayName = (p: any): string => {
+    if (p.tipo !== 'Aluno') return p.cargo || p.funcao || p.tipo || 'Colaborador'
+    const candidate = String(p.turmaNome || p.turma_nome || '').trim()
+    if (candidate && !/^\d+$/.test(candidate) && !/^[0-9a-fA-F-]{10,}$/.test(candidate) && candidate.toLowerCase() !== 'sync' && candidate.toLowerCase() !== 'aluno') {
+      return candidate
+    }
+    const rawTurma = String(p.turma || '').trim()
+    if (Array.isArray(turmas) && turmas.length > 0) {
+      const tObj: any = turmas.find((t: any) => t && (
+        String(t.id).trim() === rawTurma ||
+        String(t.codigo || '').trim() === rawTurma ||
+        String(t.dados?.codigo || '').trim() === rawTurma ||
+        String(t.id).trim() === candidate ||
+        String(t.codigo || '').trim() === candidate
+      ))
+      if (tObj?.nome && !/^\d+$/.test(String(tObj.nome).trim())) return String(tObj.nome).trim()
+      if (tObj?.dados?.nome && !/^\d+$/.test(String(tObj.dados.nome).trim())) return String(tObj.dados.nome).trim()
+    }
+    return 'Aluno'
+  }
+
   useEffect(() => {
     const mesView = month + 1
 
@@ -1015,7 +1036,7 @@ export default function CalendarioPage() {
                         {p.nome}
                       </div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {p.tipo === 'Aluno' ? (p.turmaNome || (p.turma && !/^\d+$/.test(p.turma) && !/^[0-9a-fA-F-]{10,}$/.test(p.turma) ? p.turma : 'Aluno')) : (p.cargo || p.funcao || p.tipo)}
+                        {getAdminTurmaDisplayName(p)}
                       </div>
                     </div>
 

@@ -8,6 +8,11 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import React, { useState, useMemo, useEffect, useRef, use } from 'react'
 import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Heart, Camera, Clock, MapPin, Loader2 } from 'lucide-react'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
+import { 
+  getAlunoTodasTurmasEGrupos, 
+  getAlunoNomesTurmasEGrupos, 
+  isTurmaOrGroupMatch 
+} from '@/lib/studentTurmaUtils'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -88,41 +93,24 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   const isMirroring = !!(espelharRespId || espelharAluno);
   const showBirthdays = adConfig?.permissoes?.visualizarAniversariantes !== false;
 
-  const rawTurma = aluno?.turma || 'Sem Turma'
-  
-  const turmaDoAluno = (() => {
-    if (!aluno) return 'Sem Turma'
-    if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
-      return String(aluno.turma_nome).split('-')[0].trim()
-    }
-    const turmaObj = turmas.find(t => t && (String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma)))
-    const nomeTurma = turmaObj?.nome || aluno.turma_nome || aluno.turma || 'Sem Turma'
-    return String(nomeTurma).split('-')[0].trim()
-  })()
-
   const { chatGroups = [] } = useAgendaDigital()
-  
-  const studentGroupNames = useMemo(() => {
-    if (!aluno) return []
-    const studentId = String(aluno.id)
-    const studentTurmaObj = turmas.find(t => 
-      String(t.id) === String(aluno.turma) || 
-      String(t.codigo) === String(aluno.turma) || 
-      String(t.nome) === String(aluno.turma)
-    )
 
-    return chatGroups.filter(g => {
-      // 1. Explicitly contains student ID
-      if (g.alunosIds?.some(id => String(id) === studentId)) return true
-      // 2. Synced with student's class/turma
-      if (studentTurmaObj && (
-        String((g as any).syncId || g.id) === `sync-${studentTurmaObj.id}` || 
-        String(g.id) === String(studentTurmaObj.id) ||
-        g.nome === studentTurmaObj.nome
-      )) return true
-      return false
-    }).map(g => String(g.nome || '').toLowerCase())
-  }, [chatGroups, aluno, turmas])
+  // Todas as turmas e grupos aos quais o aluno pertence (IDs, códigos e nomes)
+  const studentTurmasEGrupos = useMemo(() => {
+    if (!aluno) return []
+    return getAlunoTodasTurmasEGrupos(aluno, turmas, chatGroups)
+  }, [aluno, turmas, chatGroups])
+
+  // Nomes legíveis das turmas/grupos ativos do aluno para exibição (ex: NÍVEL 5 - MATUTINO • Nível 5 Integra/Intermediario)
+  const studentNomesTurmas = useMemo(() => {
+    if (!aluno) return ['Sem Turma']
+    const names = getAlunoNomesTurmasEGrupos(aluno, turmas, chatGroups)
+    return names.length > 0 ? names : [aluno.turma_nome || aluno.turma || 'Sem Turma']
+  }, [aluno, turmas, chatGroups])
+
+  const turmaBadgeDisplay = useMemo(() => {
+    return studentNomesTurmas.join(' • ')
+  }, [studentNomesTurmas])
 
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
@@ -145,45 +133,27 @@ export default function ADCalendarioPage({ params }: { params: any }) {
       // 1. Filter by type selector
       if (filtroTipo !== 'todos' && e.tipo !== filtroTipo) return false
 
-      // 2. Visibilidade check
+      // 2. Direcionado ao usuário atual
+      if ((e as any).visibilidadeUsuario && currentUser && (e as any).visibilidadeUsuario === currentUser.nome) {
+        return true
+      }
+
+      // 3. Visibilidade check
       let targets: any = e.turmas || []
       if (typeof targets === 'string') {
         try { targets = JSON.parse(targets) } catch(err) { targets = [targets] }
       }
       if (!Array.isArray(targets)) targets = []
       
-      // Toda a instituição ou Ano Letivo
-      if (targets.length === 0 || targets.includes('TODOS') || targets.includes('Todos')) {
+      // Toda a instituição
+      if (targets.length === 0 || targets.includes('TODOS') || targets.includes('Todos') || targets.includes('todas')) {
         return true
       }
       
-      // Turma do aluno or Groups
-      if (targets.some((t: any) => {
-        if (!t) return false
-        const tLower = String(t).toLowerCase()
-        
-        if (tLower === 'todos' || tLower === 'toda a escola' || tLower === 'todas') return true
-        if (tLower.startsWith('todos:')) {
-          const targetAno = tLower.split(':')[1]?.trim()
-          const currentTurmaObj: any = turmas.find(tObj => tObj && (String(tObj.id) === String(aluno?.turma) || String(tObj.codigo) === String(aluno?.turma) || String(tObj.nome) === String(aluno?.turma)))
-          const studentAno = currentTurmaObj ? (currentTurmaObj.ano !== undefined ? String(currentTurmaObj.ano) : (currentTurmaObj.anoLetivo || currentTurmaObj.ano_letivo || currentTurmaObj.dados?.anoLetivo || '')) : ''
-          if (studentAno === targetAno) return true
-        }
-
-        return (
-          (turmaDoAluno && (tLower === turmaDoAluno.toLowerCase() || turmaDoAluno.toLowerCase().includes(tLower) || tLower.includes(turmaDoAluno.toLowerCase()))) ||
-          studentGroupNames.includes(tLower)
-        )
-      })) {
-        return true
-      }
-      // Direcionado ao usuário atual
-      if ((e as any).visibilidadeUsuario && currentUser && (e as any).visibilidadeUsuario === currentUser.nome) {
-        return true
-      }
-      return false
+      // Checar se algum alvo do evento corresponde às turmas ou grupos da aluna (com bloqueio estrito de turno)
+      return targets.some((t: any) => isTurmaOrGroupMatch(t, aluno, turmas, chatGroups))
     })
-  }, [eventosAgenda, filtroTipo, turmaDoAluno, currentUser, studentGroupNames])
+  }, [eventosAgenda, filtroTipo, aluno, turmas, chatGroups, currentUser])
 
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
 
@@ -226,43 +196,61 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   const [loadingNivers, setLoadingNivers] = useState(false)
   const niversCacheRef = useRef<Record<number, any[]>>({})
 
-  // Conjunto de chaves de identificação da turma do aluno para matching de altíssima precisão
-  const targetTurmaKeys = useMemo(() => {
-    const keys = new Set<string>()
-    if (aluno?.turma) keys.add(String(aluno.turma).trim().toLowerCase())
-    if (aluno?.turma_nome) {
-      const lower = String(aluno.turma_nome).trim().toLowerCase()
-      keys.add(lower)
-      const base = lower.split('-')[0].trim()
-      if (base) keys.add(base)
+  // Helper para obter o NOME legível da turma do aniversariante (nunca exibindo código numérico como 3904)
+  const getAniversarianteTurmaNome = (p: any): string => {
+    if (p.tipo !== 'Aluno') {
+      return p.cargo || p.funcao || p.tipo || 'Colaborador'
     }
-    if (turmaDoAluno && turmaDoAluno !== 'Sem Turma') {
-      keys.add(turmaDoAluno.toLowerCase().trim())
+
+    // 1. Verificar se turmaNome ou turma_nome já é um nome legível (não numérico nem UUID nem 'sync' nem 'Aluno')
+    const candidate = String(p.turmaNome || p.turma_nome || '').trim()
+    if (candidate && !/^\d+$/.test(candidate) && !/^[0-9a-fA-F-]{10,}$/.test(candidate) && candidate.toLowerCase() !== 'sync' && candidate.toLowerCase() !== 'aluno') {
+      return candidate
     }
+
+    const rawTurma = String(p.turma || '').trim()
+
+    // 2. Tentar encontrar na lista de turmas carregadas no ERP
     if (Array.isArray(turmas) && turmas.length > 0) {
-      for (const t of turmas) {
-        if (!t) continue
-        const isMatch = (aluno?.turma && (String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma))) ||
-          (aluno?.turma_nome && String(t.nome).toLowerCase().includes(String(aluno.turma_nome).toLowerCase()))
-        if (isMatch) {
-          if (t.id) keys.add(String(t.id).toLowerCase().trim())
-          if (t.codigo) keys.add(String(t.codigo).toLowerCase().trim())
-          if (t.nome) {
-            const tLower = String(t.nome).toLowerCase().trim()
-            keys.add(tLower)
-            const base = tLower.split('-')[0].trim()
-            if (base) keys.add(base)
-          }
-        }
+      const tObj = turmas.find((t: any) => t && (
+        String(t.id).trim() === rawTurma ||
+        String(t.codigo || '').trim() === rawTurma ||
+        String(t.dados?.codigo || '').trim() === rawTurma ||
+        String(t.id).trim() === candidate ||
+        String(t.codigo || '').trim() === candidate
+      ))
+      if (tObj?.nome && !/^\d+$/.test(String(tObj.nome).trim())) return String(tObj.nome).trim()
+      if (tObj?.dados?.nome && !/^\d+$/.test(String(tObj.dados.nome).trim())) return String(tObj.dados.nome).trim()
+    }
+
+    // 3. Tentar encontrar nos grupos da agenda
+    if (Array.isArray(chatGroups) && chatGroups.length > 0) {
+      const gObj = chatGroups.find((g: any) => g && (
+        String(g.id).trim() === rawTurma ||
+        String(g.syncId || g.dados?.syncId || '').trim() === rawTurma
+      ))
+      if (gObj?.nome && !/^\d+$/.test(String(gObj.nome).trim())) return String(gObj.nome).trim()
+    }
+
+    // 4. Se o aniversariante for colega da mesma turma do aluno logado
+    if (aluno && rawTurma && String(aluno.turma || '').trim() === rawTurma) {
+      if (studentNomesTurmas.length > 0 && studentNomesTurmas[0] !== 'Sem Turma') {
+        return studentNomesTurmas[0]
       }
     }
-    return keys
-  }, [aluno?.turma, aluno?.turma_nome, turmaDoAluno, turmas])
 
-  // Limpar cache de aniversariantes se o aluno ou sua turma mudarem
+    // 5. Fallback para a primeira turma legível da visualização
+    if (studentNomesTurmas.length > 0 && studentNomesTurmas[0] !== 'Sem Turma') {
+      return studentNomesTurmas[0]
+    }
+
+    return 'Aluno'
+  }
+
+  // Limpar cache de aniversariantes se o aluno ou suas turmas mudarem
   useEffect(() => {
     niversCacheRef.current = {}
-  }, [aluno?.id, aluno?.turma])
+  }, [aluno?.id, studentTurmasEGrupos])
 
   useEffect(() => {
     const mesView = month + 1
@@ -278,8 +266,9 @@ export default function ADCalendarioPage({ params }: { params: any }) {
     const fetchNivers = async () => {
       setLoadingNivers(true)
       try {
-        const turmaQueryParam = aluno?.turma ? `&turma=${encodeURIComponent(String(aluno.turma))}` : ''
-        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}${turmaQueryParam}&_t=${Date.now()}`, {
+        const studentTurmaParam = studentTurmasEGrupos.slice(0, 10).map(encodeURIComponent).join(',')
+        const alunoIdParam = aluno?.id ? `&aluno_id=${encodeURIComponent(String(aluno.id))}` : ''
+        const req = await fetch(`/api/agenda/aniversariantes?mes=${mesView}${alunoIdParam}&turmas=${studentTurmaParam}&_t=${Date.now()}`, {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' }
         })
@@ -287,7 +276,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
         const todos = await req.json()
         if (isCancelled) return
         
-        // Filtrar aniversariantes apenas para a mesma turma do aluno ou colaboradores
+        // Filtrar aniversariantes apenas para as turmas/grupos vinculadas à aluna ou colaboradores
         const niversMes = (todos || []).filter((p: any) => {
           const data = p.dataNasc || p.data_nascimento || p.nascimento
           if (!data) return false
@@ -298,31 +287,21 @@ export default function ADCalendarioPage({ params }: { params: any }) {
           if (m !== mesView) return false
           
           if (p.tipo === 'Aluno') {
-            const pId = String(p.turma || '').trim().toLowerCase()
-            const pNome = String(p.turma_nome || '').trim().toLowerCase()
-            const pNomeBase = pNome.split('-')[0].trim()
+            const rawTurma = String(p.turma || '').trim()
+            const turmaNome = String(p.turma_nome || p.turmaNome || '').trim()
 
-            // 1. Match direto por ID da turma
-            if (pId && (targetTurmaKeys.has(pId) || (aluno?.turma && pId === String(aluno.turma).trim().toLowerCase()))) return true
-            // 2. Match direto por nome da turma
-            if (pNome && targetTurmaKeys.has(pNome)) return true
-            // 3. Match por nome base (ex: '4º ano a')
-            if (pNomeBase && targetTurmaKeys.has(pNomeBase)) return true
+            // 1. Checar se corresponde à turma / turno da aluna
+            if (rawTurma && isTurmaOrGroupMatch(rawTurma, aluno, turmas, chatGroups)) return true
+            if (turmaNome && isTurmaOrGroupMatch(turmaNome, aluno, turmas, chatGroups)) return true
 
-            // 4. Match via tabela de turmas se disponível
+            // 2. Se tiver tabela de turmas, checar via objeto turma do colega
             if (Array.isArray(turmas) && turmas.length > 0) {
-              const pTurmaObj = turmas.find((t: any) => t && (String(t.id) === String(p.turma) || String(t.codigo) === String(p.turma) || String(t.nome) === String(p.turma)))
+              const pTurmaObj = turmas.find((t: any) => t && (String(t.id) === rawTurma || String(t.codigo) === rawTurma || String(t.nome) === turmaNome))
               if (pTurmaObj) {
-                if (targetTurmaKeys.has(String(pTurmaObj.id).toLowerCase().trim())) return true
-                if (pTurmaObj.codigo && targetTurmaKeys.has(String(pTurmaObj.codigo).toLowerCase().trim())) return true
-                if (targetTurmaKeys.has(String(pTurmaObj.nome).toLowerCase().trim())) return true
-                const pObjBase = String(pTurmaObj.nome).toLowerCase().split('-')[0].trim()
-                if (targetTurmaKeys.has(pObjBase)) return true
+                if (isTurmaOrGroupMatch(pTurmaObj.id, aluno, turmas, chatGroups)) return true
+                if (pTurmaObj.nome && isTurmaOrGroupMatch(pTurmaObj.nome, aluno, turmas, chatGroups)) return true
               }
             }
-
-            // 5. Se foi retornado pela API já filtrada por turma do aluno
-            if (aluno?.turma && pId === String(aluno.turma).trim().toLowerCase()) return true
 
             return false
           }
@@ -338,7 +317,14 @@ export default function ADCalendarioPage({ params }: { params: any }) {
             const diaHoje = hoje.getDate()
             isProximo = dia === diaHoje
           }
-          return { ...p, dia, isProximo }
+          const resolvedTurmaNome = getAniversarianteTurmaNome(p)
+          return { 
+            ...p, 
+            dia, 
+            isProximo,
+            turmaNome: resolvedTurmaNome,
+            turma_nome: resolvedTurmaNome
+          }
         }).sort((a: any, b: any) => a.dia - b.dia)
 
         if (!isCancelled) {
@@ -354,7 +340,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
 
     fetchNivers()
     return () => { isCancelled = true }
-  }, [month, targetTurmaKeys, turmas, aluno?.turma, aluno?.id])
+  }, [month, studentTurmasEGrupos, turmas, chatGroups, aluno])
 
   useEffect(() => {
     if (!aluno?.id || eventosFiltrados.length === 0) return;
@@ -477,7 +463,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
             </p>
           </div>
           <div className="ad-calendar-badge" style={{ padding: '8px 16px', background: 'rgba(99,102,241,0.08)', color: '#4f46e5', borderRadius: 16, fontSize: 13, fontWeight: 700, border: '1px solid rgba(99,102,241,0.15)' }}>
-            Turma: {turmaDoAluno}
+            Turma: {turmaBadgeDisplay}
           </div>
         </div>
       </div>
@@ -930,7 +916,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                           {p.nome}
                         </div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {p.tipo === 'Aluno' ? (p.turmaNome || (p.turma && !/^\d+$/.test(p.turma) && !/^[0-9a-fA-F-]{10,}$/.test(p.turma) ? p.turma : 'Aluno')) : (p.cargo || p.funcao || p.tipo)}
+                          {getAniversarianteTurmaNome(p)}
                         </div>
                       </div>
 

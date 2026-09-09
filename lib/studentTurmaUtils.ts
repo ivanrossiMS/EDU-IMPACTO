@@ -256,12 +256,16 @@ export function getAlunoTodasTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
   // 1. Direct properties
   if (aluno.turma) result.add(String(aluno.turma).trim())
   if (aluno.turma_nome) result.add(String(aluno.turma_nome).trim())
+  if (aluno.turmaNome) result.add(String(aluno.turmaNome).trim())
+  if (aluno.dados?.turma) result.add(String(aluno.dados.turma).trim())
+  if (aluno.dados?.turma_nome) result.add(String(aluno.dados.turma_nome).trim())
 
   // 2. Matching turmas in ERP (isAlunoCursandoTurma)
   if (Array.isArray(turmas) && turmas.length > 0) {
     for (const t of turmas) {
-      if (isAlunoCursandoTurma(aluno, t, anoLetivo || t.ano)) {
-        if (t.id) result.add(String(t.id).trim())
+      if (!t) continue
+      if (isAlunoCursandoTurma(aluno, t, anoLetivo || t.ano, turmas)) {
+        if (t.id != null) result.add(String(t.id).trim())
         if (t.nome) result.add(String(t.nome).trim())
         if (t.codigo) result.add(String(t.codigo).trim())
       }
@@ -272,6 +276,7 @@ export function getAlunoTodasTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
   if (Array.isArray(grupos) && grupos.length > 0) {
     const cleanStudentId = String(aluno.id || '').replace(/^(a_|_ALU)/, '')
     for (const g of grupos) {
+      if (!g) continue
       let aIds = g.alunosIds || g.dados?.alunosIds || []
       if (typeof aIds === 'string') {
         try { aIds = JSON.parse(aIds) } catch { aIds = [] }
@@ -284,13 +289,13 @@ export function getAlunoTodasTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
       const syncId = g.syncId || g.dados?.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
       const turmaId = syncId ? syncId.replace(/^sync-/, '') : null
       const gTurmaRef = turmaId
-        ? (turmas || []).find((t: any) => String(t.id) === turmaId || t.nome === gNome)
-        : (turmas || []).find((t: any) => t.nome === gNome)
+        ? (turmas || []).find((t: any) => t && (String(t.id) === turmaId || t.nome === gNome))
+        : (turmas || []).find((t: any) => t && t.nome === gNome)
 
-      const isCursandoGrupo = gTurmaRef ? isAlunoCursandoTurma(aluno, gTurmaRef, gTurmaRef.ano || anoLetivo) : false
+      const isCursandoGrupo = gTurmaRef ? isAlunoCursandoTurma(aluno, gTurmaRef, gTurmaRef.ano || anoLetivo, turmas) : false
 
       if (isMember || isCursandoGrupo) {
-        if (g.id) result.add(String(g.id).trim())
+        if (g.id != null) result.add(String(g.id).trim())
         if (gNome) result.add(String(gNome).trim())
       }
     }
@@ -300,18 +305,272 @@ export function getAlunoTodasTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
   const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
   if (Array.isArray(hist)) {
     hist.forEach((ht: any) => {
+      if (!ht || ht.status === 'Inativo') return
       if (ht.serieTurma) result.add(String(ht.serieTurma).trim())
       if (ht.turma) result.add(String(ht.turma).trim())
       if (Array.isArray(ht.turmasAdicionais)) {
         ht.turmasAdicionais.forEach((sub: any) => {
+          if (!sub || sub.status === 'Inativo') return
           if (sub.serieTurma) result.add(String(sub.serieTurma).trim())
           if (sub.turma) result.add(String(sub.turma).trim())
+          if (sub.nome) result.add(String(sub.nome).trim())
         })
       }
     })
   }
 
+  // 5. Direct turmasAdicionais on aluno
+  const directAdic = aluno.turmasAdicionais || aluno.dados?.turmasAdicionais
+  if (Array.isArray(directAdic)) {
+    directAdic.forEach((sub: any) => {
+      if (!sub) return
+      if (typeof sub === 'string') result.add(sub.trim())
+      else {
+        if (sub.serieTurma) result.add(String(sub.serieTurma).trim())
+        if (sub.turma) result.add(String(sub.turma).trim())
+        if (sub.nome) result.add(String(sub.nome).trim())
+      }
+    })
+  }
+
   return Array.from(result).filter(Boolean)
+}
+
+/**
+ * Normalizes turma/group text for precise, accent-insensitive and formatting-insensitive comparison
+ * WITHOUT stripping shift/turno information.
+ */
+export function normalizeTurmaText(str: any): string {
+  if (!str) return ''
+  return String(str)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Returns set of active shifts (turnos) for the student based on all active enrollments and groups.
+ * ('matutino', 'vespertino', 'noturno', 'integral', 'intermediario')
+ */
+export function getAlunoTurnosAtivos(aluno: any, turmas: any[] = [], grupos: any[] = [], anoLetivo?: string | number): Set<string> {
+  const turnos = new Set<string>()
+  if (!aluno) return turnos
+
+  const checkAndAdd = (val: any) => {
+    if (!val) return
+    const s = String(val).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    if (s.includes('matutino') || s.includes('manha')) turnos.add('matutino')
+    if (s.includes('vespertino') || s.includes('tarde')) turnos.add('vespertino')
+    if (s.includes('noturno') || s.includes('noite')) turnos.add('noturno')
+    if (s.includes('integral')) turnos.add('integral')
+    if (s.includes('intermediario')) turnos.add('intermediario')
+  }
+
+  // 1. Direct properties on student
+  checkAndAdd(aluno.turno)
+  checkAndAdd(aluno.turno_nome)
+  checkAndAdd(aluno.dados?.turno)
+  checkAndAdd(aluno.dados?.turno_nome)
+  checkAndAdd(aluno.modalidade)
+  checkAndAdd(aluno.dados?.modalidade)
+  checkAndAdd(aluno.turma_nome)
+  checkAndAdd(aluno.dados?.turma_nome)
+
+  // 2. If student is integral/intermediario
+  if (isAlunoIntegralIntermediario(aluno, turmas, grupos, anoLetivo)) {
+    turnos.add('integral')
+    turnos.add('intermediario')
+  }
+
+  // 3. From cursando turmas in ERP
+  if (Array.isArray(turmas) && turmas.length > 0) {
+    for (const t of turmas) {
+      if (t && isAlunoCursandoTurma(aluno, t, anoLetivo || t.ano, turmas)) {
+        checkAndAdd(t.turno)
+        checkAndAdd(t.dados?.turno)
+        checkAndAdd(t.modalidade)
+        checkAndAdd(t.dados?.modalidade)
+        checkAndAdd(t.nome)
+        checkAndAdd(t.dados?.nome)
+      }
+    }
+  }
+
+  // 4. From historicoTurmas & turmasAdicionais
+  const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
+  if (Array.isArray(hist)) {
+    hist.forEach((ht: any) => {
+      if (!ht || ht.status === 'Inativo') return
+      checkAndAdd(ht.turno)
+      checkAndAdd(ht.modalidade)
+      checkAndAdd(ht.serieTurma)
+      checkAndAdd(ht.turma)
+      if (Array.isArray(ht.turmasAdicionais)) {
+        ht.turmasAdicionais.forEach((sub: any) => {
+          if (!sub || sub.status === 'Inativo') return
+          checkAndAdd(sub.turno)
+          checkAndAdd(sub.modalidade)
+          checkAndAdd(sub.serieTurma)
+          checkAndAdd(sub.turma)
+          checkAndAdd(sub.nome)
+        })
+      }
+    })
+  }
+
+  // 5. From agenda_grupos
+  if (Array.isArray(grupos) && grupos.length > 0) {
+    const cleanStudentId = String(aluno.id || '').replace(/^(a_|_ALU)/, '')
+    for (const g of grupos) {
+      if (!g) continue
+      let aIds = g.alunosIds || g.dados?.alunosIds || []
+      if (typeof aIds === 'string') {
+        try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+      }
+      const isMember = (Array.isArray(aIds) ? aIds : []).some(
+        (id: any) => String(id).replace(/^(a_|_ALU)/, '') === cleanStudentId
+      )
+      if (isMember) {
+        checkAndAdd(g.nome)
+        checkAndAdd(g.dados?.nome)
+      }
+    }
+  }
+
+  return turnos
+}
+
+/**
+ * Checks if an event target or candidate class/group matches the student's active classes/groups.
+ * Enforces strict shift (turno) compatibility so that opposite shifts (e.g. Vespertino vs Matutino)
+ * are NEVER conflated or matched.
+ */
+export function isTurmaOrGroupMatch(
+  target: any,
+  aluno: any,
+  turmas: any[] = [],
+  grupos: any[] = [],
+  anoLetivo?: string | number
+): boolean {
+  if (!aluno || !target) return false
+
+  const rawTarget = String(target).trim()
+  const targetNorm = normalizeTurmaText(rawTarget)
+  if (!targetNorm) return false
+
+  // 1. Universal targets
+  if (
+    targetNorm === 'todos' ||
+    targetNorm === 'toda a escola' ||
+    targetNorm === 'todas' ||
+    targetNorm === 'todos todos'
+  ) {
+    return true
+  }
+
+  // 2. Academic year targets: TODOS:2026
+  if (rawTarget.toLowerCase().startsWith('todos:')) {
+    const targetAno = rawTarget.split(':')[1]?.trim()
+    if (targetAno) {
+      const studentAno = String(anoLetivo || aluno.anoLetivo || aluno.ano_letivo || aluno.dados?.anoLetivo || '').trim()
+      if (studentAno && studentAno === targetAno) return true
+      const studentTurmasList = Array.isArray(turmas)
+        ? turmas.filter(t => t && isAlunoCursandoTurma(aluno, t, t.ano || anoLetivo, turmas))
+        : []
+      if (studentTurmasList.some(t => String(t.ano || t.ano_letivo || t.anoLetivo || '').trim() === targetAno)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  // 3. Shift conflict check!
+  const studentTurnos = getAlunoTurnosAtivos(aluno, turmas, grupos, anoLetivo)
+
+  const isTargetVespertino = targetNorm.includes('vespertino') || targetNorm.includes('tarde')
+  const isTargetMatutino = targetNorm.includes('matutino') || targetNorm.includes('manha')
+  const isTargetNoturno = targetNorm.includes('noturno') || targetNorm.includes('noite')
+
+  // If candidate specifies vespertino and student is NOT vespertino -> STRICT REJECTION
+  if (isTargetVespertino && !studentTurnos.has('vespertino')) {
+    return false
+  }
+  // If candidate specifies matutino and student is NOT matutino -> STRICT REJECTION
+  if (isTargetMatutino && !studentTurnos.has('matutino')) {
+    return false
+  }
+  // If candidate specifies noturno and student is NOT noturno -> STRICT REJECTION
+  if (isTargetNoturno && !studentTurnos.has('noturno')) {
+    return false
+  }
+
+  // 4. Exact ID or Code match or Normalized Name match
+  const studentTurmasEGrupos = getAlunoTodasTurmasEGrupos(aluno, turmas, grupos, anoLetivo)
+  for (const item of studentTurmasEGrupos) {
+    if (rawTarget === item || rawTarget.toLowerCase() === item.toLowerCase()) {
+      return true
+    }
+    const itemNorm = normalizeTurmaText(item)
+    if (targetNorm === itemNorm) {
+      return true
+    }
+  }
+
+  // 5. Matching via turmas list if target is ID, code, or name of a turma
+  if (Array.isArray(turmas) && turmas.length > 0) {
+    const matchedTurma = turmas.find(t => 
+      t && (
+        String(t.id) === rawTarget || 
+        String(t.codigo) === rawTarget || 
+        normalizeTurmaText(t.nome) === targetNorm
+      )
+    )
+    if (matchedTurma) {
+      const tTurnoNorm = normalizeTurmaText(matchedTurma.turno || matchedTurma.dados?.turno)
+      if (tTurnoNorm.includes('vespertino') && !studentTurnos.has('vespertino')) return false
+      if (tTurnoNorm.includes('matutino') && !studentTurnos.has('matutino')) return false
+      if (tTurnoNorm.includes('noturno') && !studentTurnos.has('noturno')) return false
+
+      if (isAlunoCursandoTurma(aluno, matchedTurma, matchedTurma.ano || anoLetivo, turmas)) {
+        return true
+      }
+    }
+  }
+
+  // 6. Matching via agenda_grupos if target is ID or name of a group
+  if (Array.isArray(grupos) && grupos.length > 0) {
+    const cleanStudentId = String(aluno.id || '').replace(/^(a_|_ALU)/, '')
+    const matchedGroup = grupos.find(g => 
+      g && (
+        String(g.id) === rawTarget || 
+        normalizeTurmaText(g.nome || g.dados?.nome) === targetNorm
+      )
+    )
+    if (matchedGroup) {
+      let aIds = matchedGroup.alunosIds || matchedGroup.dados?.alunosIds || []
+      if (typeof aIds === 'string') {
+        try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+      }
+      const isMember = (Array.isArray(aIds) ? aIds : []).some(
+        (id: any) => String(id).replace(/^(a_|_ALU)/, '') === cleanStudentId
+      )
+      if (isMember) return true
+
+      const syncId = matchedGroup.syncId || matchedGroup.dados?.syncId || (String(matchedGroup.id).startsWith('sync-') ? matchedGroup.id : '')
+      const turmaId = syncId ? syncId.replace(/^sync-/, '') : null
+      const gTurmaRef = turmaId
+        ? turmas.find(t => t && (String(t.id) === turmaId || t.nome === matchedGroup.nome))
+        : turmas.find(t => t && t.nome === matchedGroup.nome)
+      if (gTurmaRef && isAlunoCursandoTurma(aluno, gTurmaRef, gTurmaRef.ano || anoLetivo, turmas)) {
+        return true
+      }
+    }
+  }
+
+  return false
 }
 
 /**
@@ -322,10 +581,15 @@ export function getAlunoNomesTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
   if (!aluno) return []
   const namesSet = new Set<string>()
 
-  // 1. Turmas no ERP que o aluno cursa
+  // 1. Turmas no ERP que o aluno cursa ou possui ID/código vinculado
   if (Array.isArray(turmas) && turmas.length > 0) {
+    const rawTurma = String(aluno.turma || aluno.dados?.turma || '').trim()
     turmas.forEach((t: any) => {
-      if (isAlunoCursandoTurma(aluno, t, anoLetivo || t.ano)) {
+      if (!t) return
+      if (isAlunoCursandoTurma(aluno, t, anoLetivo || t.ano, turmas)) {
+        if (t.nome) namesSet.add(String(t.nome).trim())
+      }
+      if (rawTurma && (String(t.id).trim() === rawTurma || String(t.codigo || '').trim() === rawTurma || String(t.dados?.codigo || '').trim() === rawTurma)) {
         if (t.nome) namesSet.add(String(t.nome).trim())
       }
     })
@@ -350,12 +614,48 @@ export function getAlunoNomesTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
   }
 
   // 3. Propriedade direta aluno.turma_nome se for um texto legível
-  if (aluno.turma_nome && isNaN(Number(aluno.turma_nome))) {
+  if (aluno.turma_nome && isNaN(Number(aluno.turma_nome)) && !/^[0-9a-fA-F-]{10,}$/.test(aluno.turma_nome)) {
     namesSet.add(String(aluno.turma_nome).trim())
+  }
+  if (aluno.dados?.turma_nome && isNaN(Number(aluno.dados.turma_nome)) && !/^[0-9a-fA-F-]{10,}$/.test(aluno.dados.turma_nome)) {
+    namesSet.add(String(aluno.dados.turma_nome).trim())
+  }
+
+  // 4. historicoTurmas & turmas adicionais (ex: Integral)
+  const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
+  if (Array.isArray(hist)) {
+    hist.forEach((ht: any) => {
+      if (!ht || ht.status === 'Inativo') return
+      const htName = ht.serieTurma || ht.turma || ht.nome
+      if (htName && isNaN(Number(htName)) && !/^[0-9a-fA-F-]{10,}$/.test(htName)) {
+        namesSet.add(String(htName).trim())
+      }
+      if (Array.isArray(ht.turmasAdicionais)) {
+        ht.turmasAdicionais.forEach((sub: any) => {
+          if (!sub || sub.status === 'Inativo') return
+          const subName = sub.nome || sub.serieTurma || sub.turma
+          if (subName && isNaN(Number(subName)) && !/^[0-9a-fA-F-]{10,}$/.test(subName)) {
+            namesSet.add(String(subName).trim())
+          }
+        })
+      }
+    })
+  }
+
+  // 5. Turmas adicionais diretas
+  const directAdic = aluno.turmasAdicionais || aluno.dados?.turmasAdicionais
+  if (Array.isArray(directAdic)) {
+    directAdic.forEach((sub: any) => {
+      if (!sub) return
+      const subName = typeof sub === 'string' ? sub : (sub.nome || sub.serieTurma || sub.turma)
+      if (subName && isNaN(Number(subName)) && !/^[0-9a-fA-F-]{10,}$/.test(subName)) {
+        namesSet.add(String(subName).trim())
+      }
+    })
   }
 
   // Filtrar e limpar nomes inválidos / IDs técnicos
-  const cleanList = Array.from(namesSet).filter(n => {
+  const rawList = Array.from(namesSet).filter(n => {
     if (!n) return false
     const s = n.toLowerCase().trim()
     if (s.startsWith('sync-') || s === 'sync') return false
@@ -365,7 +665,18 @@ export function getAlunoNomesTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
     return true
   })
 
-  return cleanList
+  // Deduplicar nomes equivalentes mantendo o formato mais informativo
+  const uniqueList: string[] = []
+  const seenNorms = new Set<string>()
+  for (const name of rawList) {
+    const norm = normalizeTurmaText(name)
+    if (!seenNorms.has(norm)) {
+      seenNorms.add(norm)
+      uniqueList.push(name)
+    }
+  }
+
+  return uniqueList
 }
 
 /**
