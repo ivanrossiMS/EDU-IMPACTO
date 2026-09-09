@@ -66,6 +66,7 @@ export default function EsqueciSenha() {
 
         {/* Main Card */}
         <div 
+          className="auth-card"
           style={{ 
             width: '100%', 
             borderRadius: '24px', 
@@ -138,6 +139,7 @@ export default function EsqueciSenha() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  className="login-input"
                   style={{ 
                     width: '100%', 
                     borderRadius: '16px', 
@@ -148,7 +150,8 @@ export default function EsqueciSenha() {
                     backgroundColor: 'rgba(30, 41, 59, 0.9)', 
                     border: '1px solid rgba(255, 255, 255, 0.08)',
                     transition: 'all 0.2s',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    colorScheme: 'dark'
                   }}
                   placeholder="exemplo@escola.com.br"
                 />

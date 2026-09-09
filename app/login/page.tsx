@@ -602,8 +602,8 @@ export default function LoginPage() {
   }
 
   // ── shared styles
-  const cardStyle: React.CSSProperties = { padding:'36px', borderRadius:28, background:'linear-gradient(145deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%)', border:'1px solid rgba(96, 165, 250, 0.2)', backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', boxShadow:'0 32px 80px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.1)' }
-  const baseInputStyle: React.CSSProperties = { width:'100%', padding:'15px 16px 15px 44px', borderRadius:16, background:'rgba(59, 130, 246, 0.08)', border:'1px solid rgba(96, 165, 250, 0.2)', color:'#fff', fontSize:14, outline:'none', transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', fontFamily:"'Inter',sans-serif", boxShadow:'inset 0 2px 6px rgba(0,0,0,0.1)' }
+  const cardStyle: React.CSSProperties = { padding:'36px', borderRadius:28, background:'linear-gradient(145deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%)', border:'1px solid rgba(96, 165, 250, 0.2)', backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', boxShadow:'0 32px 80px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.1)', colorScheme: 'dark' }
+  const baseInputStyle: React.CSSProperties = { width:'100%', padding:'15px 16px 15px 46px', borderRadius:14, background:'rgba(15, 23, 42, 0.65)', border:'1px solid rgba(255, 255, 255, 0.12)', color:'#fff', fontSize:14, outline:'none', transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', fontFamily:"'Inter',sans-serif", boxShadow:'inset 0 2px 4px rgba(0,0,0,0.2)', colorScheme: 'dark' }
   const btnBase = (disabled: boolean): React.CSSProperties => ({
     position:'relative', padding:'16px', borderRadius:16, width:'100%',
     background: disabled ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)',
@@ -612,8 +612,8 @@ export default function LoginPage() {
     fontFamily:"'Outfit',sans-serif", transition:'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
     boxShadow: disabled ? 'none' : '0 8px 30px rgba(99,102,241,0.5), inset 0 1px 0 rgba(255,255,255,0.2)',
   })
-  const focusOn  = (e: React.FocusEvent<HTMLInputElement>) => { e.target.style.borderColor='rgba(96, 165, 250, 0.8)'; e.target.style.boxShadow='0 0 0 4px rgba(96, 165, 250, 0.25), inset 0 2px 6px rgba(0,0,0,0.1)'; e.target.style.background='rgba(59, 130, 246, 0.15)' }
-  const focusOff = (e: React.FocusEvent<HTMLInputElement>) => { e.target.style.borderColor='rgba(96, 165, 250, 0.2)'; e.target.style.boxShadow='inset 0 2px 6px rgba(0,0,0,0.1)'; e.target.style.background='rgba(59, 130, 246, 0.08)' }
+  const focusOn  = (e: React.FocusEvent<HTMLInputElement>) => { e.target.style.borderColor='rgba(96, 165, 250, 0.8)'; e.target.style.boxShadow='0 0 0 4px rgba(96, 165, 250, 0.25), inset 0 2px 4px rgba(0,0,0,0.2)'; e.target.style.background='rgba(15, 23, 42, 0.85)' }
+  const focusOff = (e: React.FocusEvent<HTMLInputElement>) => { e.target.style.borderColor='rgba(255, 255, 255, 0.12)'; e.target.style.boxShadow='inset 0 2px 4px rgba(0,0,0,0.2)'; e.target.style.background='rgba(15, 23, 42, 0.65)' }
   const Spinner = () => <div style={{ width:18, height:18, borderRadius:'50%', border:'2px solid rgba(255,255,255,0.2)', borderTopColor:'#fff', animation:'spin 0.8s linear infinite', display:'inline-block' }} />
   const ErrorBox = ({ msg }: { msg: string }) => msg ? <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.25)', fontSize:13, color:'#f87171', display:'flex', alignItems:'center', gap:8 }}>⚠ {msg}</div> : null
   const ShimmerOverlay = () => <div style={{ position:'absolute', inset:0, background:'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%)', backgroundSize:'200% 100%', animation:'shimmerBtn 2.5s ease-in-out infinite' }} />
@@ -645,7 +645,8 @@ export default function LoginPage() {
               <span style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, color: '#a78bfa', pointerEvents:'none' }}>👤</span>
               <input type="text" value={email} onChange={e=>{setEmail(e.target.value);setLoginError('')}} placeholder="Digite seu e-mail, código ou celular" autoComplete="username"
                 suppressHydrationWarning
-                style={{ ...baseInputStyle, paddingLeft: 46, background: 'rgba(255,255,255,0.03)', borderRadius: 14, borderColor: loginError&&!email?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.06)' }} onFocus={focusOn} onBlur={focusOff} />
+                className="login-input"
+                style={{ ...baseInputStyle, paddingLeft: 46, borderColor: loginError&&!email?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.12)' }} onFocus={focusOn} onBlur={focusOff} />
             </div>
           </div>
           <div>
@@ -656,7 +657,8 @@ export default function LoginPage() {
               <span style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', fontSize:16, color: '#a78bfa', pointerEvents:'none' }}>🔒</span>
               <input type={showPw?'text':'password'} value={password} onChange={e=>{setPassword(e.target.value);setLoginError('')}} placeholder="Digite sua senha" autoComplete="current-password"
                 suppressHydrationWarning
-                style={{ ...baseInputStyle, paddingLeft: 46, paddingRight:46, background: 'rgba(255,255,255,0.03)', borderRadius: 14, borderColor: loginError&&!password?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.06)' }} onFocus={focusOn} onBlur={focusOff} />
+                className="login-input"
+                style={{ ...baseInputStyle, paddingLeft: 46, paddingRight:46, borderColor: loginError&&!password?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.12)' }} onFocus={focusOn} onBlur={focusOff} />
               <button type="button" onClick={()=>setShowPw(p=>!p)} style={{ position:'absolute', right:16, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:16, color:'rgba(255,255,255,0.5)' }}>{showPw?'🙈':'👁'}</button>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -773,6 +775,7 @@ export default function LoginPage() {
             <div style={{ position:'relative' }} suppressHydrationWarning>
               <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>👤</span>
               <input type="text" value={faQuery} onChange={e=>{setFaQuery(e.target.value);setFaError('')}} placeholder="E-mail, Celular, ou Código do Aluno" autoFocus suppressHydrationWarning
+                className="login-input"
                 style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
             </div>
             <p style={{ fontSize:11, color:'rgba(255,255,255,0.2)', marginTop:8 }}>Use o e-mail ou código/login vinculado ao seu cadastro escolar.</p>
@@ -843,6 +846,7 @@ export default function LoginPage() {
               <div style={{ position:'relative' }} suppressHydrationWarning>
                 <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>✉</span>
                 <input type="email" value={faRegEmail} onChange={e=>{setFaRegEmail(e.target.value);setCreateError('')}} placeholder="Preencha seu e-mail principal" required suppressHydrationWarning
+                  className="login-input"
                   style={{ ...baseInputStyle }} onFocus={focusOn} onBlur={focusOff} />
               </div>
               {faUser?.cargo === 'Aluno' && (
@@ -855,6 +859,7 @@ export default function LoginPage() {
               <div style={{ position:'relative' }} suppressHydrationWarning>
                 <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>🔒</span>
                 <input type={showNewPw?'text':'password'} value={newPass} onChange={e=>{setNewPass(e.target.value);setCreateError('')}} placeholder="Mínimo 6 caracteres" suppressHydrationWarning
+                  className="login-input"
                   style={{ ...baseInputStyle, paddingRight:44 }} onFocus={focusOn} onBlur={focusOff} />
                 <button type="button" onClick={()=>setShowNewPw(p=>!p)} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:14, opacity:0.5, color:'#fff' }}>{showNewPw?'🙈':'👁'}</button>
               </div>
@@ -873,7 +878,8 @@ export default function LoginPage() {
               <div style={{ position:'relative' }} suppressHydrationWarning>
                 <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:15, opacity:0.4, pointerEvents:'none' }}>🔒</span>
                 <input type={showConfPw?'text':'password'} value={confirmPass} onChange={e=>{setConfirmPass(e.target.value);setCreateError('')}} placeholder="Repita a senha" suppressHydrationWarning
-                  style={{ ...baseInputStyle, paddingRight:44, borderColor: confirmPass&&confirmPass!==newPass?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.1)' }} onFocus={focusOn} onBlur={focusOff} />
+                  className="login-input"
+                  style={{ ...baseInputStyle, paddingRight:44, borderColor: confirmPass&&confirmPass!==newPass?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.12)' }} onFocus={focusOn} onBlur={focusOff} />
                 <button type="button" onClick={()=>setShowConfPw(p=>!p)} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:14, opacity:0.5, color:'#fff' }}>{showConfPw?'🙈':'👁'}</button>
               </div>
               {confirmPass && (
@@ -945,15 +951,15 @@ export default function LoginPage() {
         <form onSubmit={handleSetupMaster} style={{ display:'flex', flexDirection:'column', gap:18 }}>
           <div suppressHydrationWarning>
             <Label text="Nome Completo do Administrador" />
-            <input type="text" value={setupNome} onChange={e=>setSetupNome(e.target.value)} placeholder="Ex: Administrador Impacto" required suppressHydrationWarning style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
+            <input type="text" value={setupNome} onChange={e=>setSetupNome(e.target.value)} placeholder="Ex: Administrador Impacto" required suppressHydrationWarning className="login-input" style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
           </div>
           <div suppressHydrationWarning>
             <Label text="E-mail de Login Interno" />
-            <input type="email" value={setupEmail} disabled suppressHydrationWarning style={{...baseInputStyle, opacity: 0.6, cursor: 'not-allowed'}} />
+            <input type="email" value={setupEmail} disabled suppressHydrationWarning className="login-input" style={{...baseInputStyle, opacity: 0.6, cursor: 'not-allowed'}} />
           </div>
           <div suppressHydrationWarning>
             <Label text="Definir Senha Mestra" />
-            <input type="password" value={setupPass} onChange={e=>setSetupPass(e.target.value)} placeholder="••••••••" required suppressHydrationWarning style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
+            <input type="password" value={setupPass} onChange={e=>setSetupPass(e.target.value)} placeholder="••••••••" required suppressHydrationWarning className="login-input" style={baseInputStyle} onFocus={focusOn} onBlur={focusOff} />
           </div>
           <button type="submit" disabled={setupLoading||!setupNome||!setupEmail||setupPass.length<6} style={btnBase(setupLoading||!setupNome||!setupEmail||setupPass.length<6)}
             onMouseEnter={e=>{if(!setupLoading){e.currentTarget.style.transform='translateY(-2px)'}}}
@@ -1253,8 +1259,77 @@ export default function LoginPage() {
         @keyframes shimmerBtn { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
         @keyframes progressFill { from{width:0%} to{width:100%} }
         @keyframes gradientBG { 0% { background-position: 0% 50% } 50% { background-position: 100% 50% } 100% { background-position: 0% 50% } }
-        input::placeholder { color:rgba(255,255,255,0.2) !important; }
-        input:-webkit-autofill { -webkit-box-shadow:0 0 0 30px #0d1a3a inset !important; -webkit-text-fill-color:#fff !important; }
+        .login-card input:not([type="checkbox"]):not([type="radio"]),
+        .login-wrapper input:not([type="checkbox"]):not([type="radio"]),
+        .login-input {
+          background: rgba(15, 23, 42, 0.65) !important;
+          border: 1px solid rgba(255, 255, 255, 0.12) !important;
+          color: #ffffff !important;
+          box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25) !important;
+        }
+        .login-card input:not([type="checkbox"]):not([type="radio"]):focus,
+        .login-wrapper input:not([type="checkbox"]):not([type="radio"]):focus,
+        .login-input:focus {
+          background: rgba(15, 23, 42, 0.85) !important;
+          border-color: rgba(96, 165, 250, 0.7) !important;
+          box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25), inset 0 2px 4px rgba(0, 0, 0, 0.25) !important;
+          color: #ffffff !important;
+          outline: none !important;
+        }
+        input::placeholder { color:rgba(255,255,255,0.35) !important; }
+        
+        /* Prevenção de fundo amarelo (Safari) e azul/branco (Chrome) no Autofill */
+        .login-card input:-webkit-autofill,
+        .login-card input:-webkit-autofill:hover,
+        .login-card input:-webkit-autofill:focus,
+        .login-card input:-webkit-autofill:active,
+        .login-wrapper input:-webkit-autofill,
+        .login-wrapper input:-webkit-autofill:hover,
+        .login-wrapper input:-webkit-autofill:focus,
+        .login-wrapper input:-webkit-autofill:active,
+        .login-input:-webkit-autofill,
+        .login-input:-webkit-autofill:hover,
+        .login-input:-webkit-autofill:focus,
+        .login-input:-webkit-autofill:active,
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        input:-webkit-autofill:active {
+          -webkit-box-shadow: 0 0 0 1000px #0b1528 inset !important;
+          box-shadow: 0 0 0 1000px #0b1528 inset !important;
+          -webkit-text-fill-color: #ffffff !important;
+          color: #ffffff !important;
+          caret-color: #ffffff !important;
+          border-color: rgba(255, 255, 255, 0.15) !important;
+          transition: background-color 5000000s ease-in-out 0s !important;
+          color-scheme: dark !important;
+        }
+
+        .login-card input:autofill,
+        .login-card input:autofill:hover,
+        .login-card input:autofill:focus,
+        .login-card input:autofill:active,
+        .login-wrapper input:autofill,
+        .login-wrapper input:autofill:hover,
+        .login-wrapper input:autofill:focus,
+        .login-wrapper input:autofill:active,
+        .login-input:autofill,
+        .login-input:autofill:hover,
+        .login-input:autofill:focus,
+        .login-input:autofill:active,
+        input:autofill,
+        input:autofill:hover,
+        input:autofill:focus,
+        input:autofill:active {
+          -webkit-box-shadow: 0 0 0 1000px #0b1528 inset !important;
+          box-shadow: 0 0 0 1000px #0b1528 inset !important;
+          -webkit-text-fill-color: #ffffff !important;
+          color: #ffffff !important;
+          caret-color: #ffffff !important;
+          border-color: rgba(255, 255, 255, 0.15) !important;
+          transition: background-color 5000000s ease-in-out 0s !important;
+          color-scheme: dark !important;
+        }
         
         /* Mobile Optimizaton for Login */
         @media (max-width: 768px) {

@@ -146,15 +146,105 @@
   color: hsl(var(--text-muted));
 }
 
-[data-theme='light'] .form-input,
-[data-theme='light'] input:not([type="checkbox"]):not([type="radio"]),
-[data-theme='light'] select,
-[data-theme='light'] textarea {
+[data-theme='light'] .form-input:not(.login-wrapper *):not(.login-card *):not(.auth-card *),
+[data-theme='light'] input:not([type="checkbox"]):not([type="radio"]):not(.login-wrapper *):not(.login-card *):not(.auth-card *),
+[data-theme='light'] select:not(.login-wrapper *):not(.login-card *):not(.auth-card *),
+[data-theme='light'] textarea:not(.login-wrapper *):not(.login-card *):not(.auth-card *) {
   background: white !important;
   border-color: hsl(var(--border-default)) !important;
   color: #0f172a !important;
 }
-[data-theme='light'] .form-label {
+
+/* Telas de Login e Autenticação — Manter fundo escuro elegante e legível */
+.login-wrapper,
+.login-card,
+.auth-card {
+  color-scheme: dark !important;
+}
+
+.login-wrapper input:not([type="checkbox"]):not([type="radio"]),
+.login-card input:not([type="checkbox"]):not([type="radio"]),
+.auth-card input:not([type="checkbox"]):not([type="radio"]),
+.login-input {
+  background: rgba(15, 23, 42, 0.65) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25) !important;
+  color-scheme: dark !important;
+}
+
+.login-wrapper input:not([type="checkbox"]):not([type="radio"]):focus,
+.login-card input:not([type="checkbox"]):not([type="radio"]):focus,
+.auth-card input:not([type="checkbox"]):not([type="radio"]):focus,
+.login-input:focus {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border-color: rgba(96, 165, 250, 0.7) !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25), inset 0 2px 4px rgba(0, 0, 0, 0.25) !important;
+  color: #ffffff !important;
+  outline: none !important;
+}
+
+.login-wrapper input::placeholder,
+.login-card input::placeholder,
+.auth-card input::placeholder,
+.login-input::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Prevenção de fundo amarelo (Safari) e azul/branco (Chrome) no Autofill de credenciais salvas */
+.login-wrapper input:-webkit-autofill,
+.login-wrapper input:-webkit-autofill:hover,
+.login-wrapper input:-webkit-autofill:focus,
+.login-wrapper input:-webkit-autofill:active,
+.login-card input:-webkit-autofill,
+.login-card input:-webkit-autofill:hover,
+.login-card input:-webkit-autofill:focus,
+.login-card input:-webkit-autofill:active,
+.auth-card input:-webkit-autofill,
+.auth-card input:-webkit-autofill:hover,
+.auth-card input:-webkit-autofill:focus,
+.auth-card input:-webkit-autofill:active,
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus,
+.login-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0b1528 inset !important;
+  box-shadow: 0 0 0 1000px #0b1528 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  transition: background-color 5000000s ease-in-out 0s !important;
+  color-scheme: dark !important;
+}
+
+.login-wrapper input:autofill,
+.login-wrapper input:autofill:hover,
+.login-wrapper input:autofill:focus,
+.login-wrapper input:autofill:active,
+.login-card input:autofill,
+.login-card input:autofill:hover,
+.login-card input:autofill:focus,
+.login-card input:autofill:active,
+.auth-card input:autofill,
+.auth-card input:autofill:hover,
+.auth-card input:autofill:focus,
+.auth-card input:autofill:active,
+.login-input:autofill,
+.login-input:autofill:hover,
+.login-input:autofill:focus,
+.login-input:autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #0b1528 inset !important;
+  box-shadow: 0 0 0 1000px #0b1528 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  color: #ffffff !important;
+  caret-color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  transition: background-color 5000000s ease-in-out 0s !important;
+  color-scheme: dark !important;
+}
+
+[data-theme='light'] .form-label:not(.login-wrapper *):not(.login-card *):not(.auth-card *) {
   color: #0f172a !important;
 }
 [data-theme='light'] th {
