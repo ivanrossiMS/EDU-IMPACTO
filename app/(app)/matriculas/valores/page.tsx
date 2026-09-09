@@ -381,6 +381,13 @@ function detectSerieIdFromTurma(turmaOrSerie: string): string | null {
   return null
 }
 
+const formatListWithAnd = (items: string[]) => {
+  if (items.length === 0) return ''
+  if (items.length === 1) return items[0]
+  if (items.length === 2) return `${items[0]} e ${items[1]}`
+  return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`
+}
+
 export default function ValoresPage() {
   const [activeTab, setActiveTab] = useState<'simulador' | 'tabela-matriculas' | 'matriz-mensalidades' | 'servicos'>('simulador')
   const [anoLetivo, setAnoLetivo] = useState<string>('2027')
@@ -410,9 +417,14 @@ export default function ValoresPage() {
   const [selectedSerieIds, setSelectedSerieIds] = useState<string[]>(['integral'])
   const [descontoPercent, setDescontoPercent] = useState<number>(10)
   const [convenioSelecionado, setConvenioSelecionado] = useState<string>('')
-  const [mesAntecipacao, setMesAntecipacao] = useState<string>('Outubro')
+  const [selectedMeses, setSelectedMeses] = useState<string[]>(['Outubro'])
   const [formaMatricula, setFormaMatricula] = useState<'avista' | 'parcelado' | 'ambos'>('avista')
   const [numParcelasMatricula, setNumParcelasMatricula] = useState<number>(5)
+
+  // Status de Seleção de Etapas da Campanha
+  const isAllMeses = selectedMeses.length === 4
+  const isMultiMeses = selectedMeses.length > 1
+  const mesAntecipacao = isAllMeses ? 'Todas' : (selectedMeses.length === 1 ? selectedMeses[0] : selectedMeses.join(', '))
 
   // Informações do Aluno / Responsável
   const [nomeAluno, setNomeAluno] = useState<string>('')
@@ -720,9 +732,36 @@ export default function ValoresPage() {
     setSelectedSerieIds(seriesList.map(s => s.id))
   }
 
+  const handleToggleMes = (mes: string) => {
+    if (mes === 'Todas') {
+      if (selectedMeses.length === 4) {
+        setSelectedMeses(['Outubro'])
+      } else {
+        setSelectedMeses(['Outubro', 'Novembro', 'Dezembro', 'Regular'])
+      }
+      return
+    }
+
+    setSelectedMeses(prev => {
+      const order = ['Outubro', 'Novembro', 'Dezembro', 'Regular']
+      if (prev.includes(mes)) {
+        if (prev.length <= 1) {
+          showToast('⚠️ Mantenha ao menos uma etapa selecionada.')
+          return prev
+        }
+        return prev.filter(m => m !== mes)
+      } else {
+        const next = [...prev, mes]
+        return order.filter(m => next.includes(m))
+      }
+    })
+  }
+
   const currentAntecipacao = useMemo(() => {
-    return ANTECIPACAO_REGRAS.find(r => r.mes === mesAntecipacao) || ANTECIPACAO_REGRAS[0]
-  }, [mesAntecipacao])
+    const order = ['Outubro', 'Novembro', 'Dezembro', 'Regular']
+    const firstSelected = order.find(m => selectedMeses.includes(m)) || selectedMeses[0] || 'Outubro'
+    return ANTECIPACAO_REGRAS.find(r => r.mes === firstSelected) || ANTECIPACAO_REGRAS[0]
+  }, [selectedMeses])
 
   const fmt = (val: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
@@ -760,8 +799,8 @@ export default function ValoresPage() {
       })
 
       // Regra de referência para o mês selecionado
-      const regraRef = mesAntecipacao === 'Todas'
-        ? (ANTECIPACAO_REGRAS.find(r => r.mes === 'Outubro') || ANTECIPACAO_REGRAS[0])
+      const regraRef = isMultiMeses
+        ? (ANTECIPACAO_REGRAS.find(r => selectedMeses.includes(r.mes)) || ANTECIPACAO_REGRAS[0])
         : currentAntecipacao
 
       const aVistaPct = regraRef.aVistaPct
@@ -859,7 +898,6 @@ export default function ValoresPage() {
       return {
         mes: regra.mes,
         destaque: regra.destaque,
-        descricao: regra.descricao,
         aVistaPct: regra.aVistaPct,
         parceladoPct: regra.parceladoPct,
         aVistaTot,
@@ -871,7 +909,7 @@ export default function ValoresPage() {
     })
 
     const valorMaterial = seriesCalc.reduce((acc, c) => acc + c.material, 0)
-    const valorExtracurricular = incluirExtracurricular ? (SERVICOS_ADICIONAIS.extracurricularMensal * selectedSeries.length) : 0
+    const valorExtracurricular = incluirExtracurricular ? SERVICOS_ADICIONAIS.extracurricularMensal : 0
 
     const mensalidadeTotalFinal = mensalidadeComDesconto + valorExtracurricular
     const economiaTotalGeral = economiaAnualMensalidades + valorDescontoMatricula
@@ -885,17 +923,17 @@ export default function ValoresPage() {
       anuidadeOriginal,
       anuidadeComDesconto,
       economiaAnualMensalidades,
-      descontoMatriculaPct,
       valorMatriculaOriginal,
-      valorDescontoMatricula,
-      valorMatriculaFinal,
-      valorParcelaMatricula,
-      aVistaPct: currentAntecipacao.aVistaPct,
       valorDescontoMatriculaAVista,
       valorMatriculaFinalAVista,
-      parceladoPct: currentAntecipacao.parceladoPct,
       valorDescontoMatriculaParcelado,
       valorMatriculaFinalParcelado,
+      valorParcelaMatricula,
+      descontoMatriculaPct,
+      valorDescontoMatricula,
+      valorMatriculaFinal,
+      aVistaPct: currentAntecipacao.aVistaPct,
+      parceladoPct: currentAntecipacao.parceladoPct,
       valorMaterial,
       valorExtracurricular,
       mensalidadeTotalFinal,
@@ -906,7 +944,8 @@ export default function ValoresPage() {
   }, [
     selectedSeries,
     descontoPercent,
-    mesAntecipacao,
+    selectedMeses,
+    isMultiMeses,
     formaMatricula,
     numParcelasMatricula,
     incluirMaterial,
@@ -930,18 +969,10 @@ export default function ValoresPage() {
     const nomeDest = nomeResponsavel.trim() ? ` ${nomeResponsavel.trim()}` : ''
 
     const isMulti = selectedSeries.length > 1
-    const isTodas = mesAntecipacao === 'Todas'
 
     // Formatação de Série e Detalhe
     let serieStr = ''
     let detalheSerieStr = ''
-
-    const formatListWithAnd = (items: string[]) => {
-      if (items.length === 0) return ''
-      if (items.length === 1) return items[0]
-      if (items.length === 2) return `${items[0]} e ${items[1]}`
-      return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`
-    }
 
     if (!isMulti) {
       serieStr = currentSerie.nome
@@ -965,11 +996,13 @@ export default function ValoresPage() {
       economiaAnualStr = calculations.seriesCalc.map(sc => `${sc.serie.nome}: ${fmt(sc.econAnualMensalidades)}`).join(' | ')
     }
 
-    // Formatação da Matrícula
+    // Formatação da Matrícula (apenas etapas selecionadas)
     let detalheMatricula = ''
+    const etapasFiltradas = calculations.campanhaEtapasTotais.filter(e => selectedMeses.includes(e.mes))
+    const melhorEtapa = etapasFiltradas[0] || calculations.campanhaEtapasTotais[0]
 
-    if (isTodas) {
-      // Opção "Todas" selecionada na Campanha de Matrícula
+    if (isMultiMeses) {
+      // Múltiplas etapas de campanha selecionadas (ex: Todas, ou seleção personalizada)
       const mesIcons: Record<string, string> = {
         'Outubro': '🟢',
         'Novembro': '🔵',
@@ -978,9 +1011,9 @@ export default function ValoresPage() {
       }
 
       if (!isMulti) {
-        // 1 série + Todas as etapas
+        // 1 série + Etapas Selecionadas
         if (formaMatricula === 'ambos') {
-          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+          detalheMatricula = etapasFiltradas.map(etapa => {
             const icone = mesIcons[etapa.mes] || '🔹'
             if (etapa.mes === 'Regular') {
               return `${icone} *${etapa.mes.toUpperCase()} (Jan em diante):* *${fmt(etapa.aVistaTot)}* _(tabela integral)_`
@@ -988,7 +1021,7 @@ export default function ValoresPage() {
             return `${icone} *${etapa.mes.toUpperCase()} (${etapa.destaque}):* à vista *${fmt(etapa.aVistaTot)}* (${etapa.aVistaPct}% OFF) ou *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* (${etapa.parceladoPct}% OFF)`
           }).join('\n')
         } else if (formaMatricula === 'avista') {
-          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+          detalheMatricula = etapasFiltradas.map(etapa => {
             const icone = mesIcons[etapa.mes] || '🔹'
             if (etapa.mes === 'Regular') {
               return `${icone} *${etapa.mes.toUpperCase()}:* *${fmt(etapa.aVistaTot)}* _(tabela integral)_`
@@ -997,7 +1030,7 @@ export default function ValoresPage() {
           }).join('\n')
         } else {
           // parcelado
-          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+          detalheMatricula = etapasFiltradas.map(etapa => {
             const icone = mesIcons[etapa.mes] || '🔹'
             if (etapa.mes === 'Regular') {
               return `${icone} *${etapa.mes.toUpperCase()}:* *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* _(total ${fmt(etapa.parcTot)})_`
@@ -1006,9 +1039,9 @@ export default function ValoresPage() {
           }).join('\n')
         }
       } else {
-        // Múltiplas séries + Todas as etapas (NÃO DEVE SOMAR: APRESENTA VALORES E ECONOMIA INDIVIDUAIS DE CADA SÉRIE)
+        // Múltiplas séries + Etapas Selecionadas (NÃO DEVE SOMAR: APRESENTA VALORES E ECONOMIA INDIVIDUAIS DE CADA SÉRIE)
         if (formaMatricula === 'ambos') {
-          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+          detalheMatricula = etapasFiltradas.map(etapa => {
             const icone = mesIcons[etapa.mes] || '🔹'
             if (etapa.mes === 'Regular') {
               const regLines = calculations.seriesCalc.map(sc => `${sc.serie.nome}: *${fmt(sc.mensalidadeOrig)}*`).join(' | ')
@@ -1026,7 +1059,7 @@ export default function ValoresPage() {
             return `${icone} *${etapa.mes.toUpperCase()} (${etapa.destaque}):*\n${lines}`
           }).join('\n')
         } else if (formaMatricula === 'avista') {
-          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+          detalheMatricula = etapasFiltradas.map(etapa => {
             const icone = mesIcons[etapa.mes] || '🔹'
             if (etapa.mes === 'Regular') {
               const lines = calculations.seriesCalc.map(sc => `${sc.serie.nome}: *${fmt(sc.mensalidadeOrig)}*`).join(' | ')
@@ -1041,7 +1074,7 @@ export default function ValoresPage() {
           }).join('\n')
         } else {
           // parcelado
-          detalheMatricula = calculations.campanhaEtapasTotais.map(etapa => {
+          detalheMatricula = etapasFiltradas.map(etapa => {
             const icone = mesIcons[etapa.mes] || '🔹'
             if (etapa.mes === 'Regular') {
               const lines = calculations.seriesCalc.map(sc => {
@@ -1061,7 +1094,7 @@ export default function ValoresPage() {
         }
       }
     } else {
-      // Mês Específico (Outubro, Novembro, Dezembro ou Regular)
+      // Mês Específico Único (Outubro, Novembro, Dezembro ou Regular)
       if (!isMulti) {
         if (formaMatricula === 'ambos') {
           detalheMatricula = `• *À Vista (${calculations.aVistaPct}% OFF):* *${fmt(calculations.valorMatriculaFinalAVista)}* (econ. ${fmt(calculations.valorDescontoMatriculaAVista)})\n• *Parcelado (${calculations.parceladoPct}% OFF):* até *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}* (total ${fmt(calculations.valorMatriculaFinalParcelado)})`
@@ -1071,7 +1104,7 @@ export default function ValoresPage() {
           detalheMatricula = `• *Parcelado em até ${numParcelasMatricula}x (${calculations.descontoMatriculaPct}% OFF):* Total de *${fmt(calculations.valorMatriculaFinal)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}*`
         }
       } else {
-        // Múltiplas séries com mês específico (NÃO DEVE SOMAR: APRESENTA VALORES E ECONOMIA INDIVIDUAIS DE CADA SÉRIE)
+        // Múltiplas séries com mês específico
         if (formaMatricula === 'ambos') {
           const lines = calculations.seriesCalc.map(sc =>
             `  • *${sc.serie.nome}:* à vista *${fmt(sc.finalMatAVista)}* (econ. ${fmt(sc.descMatAVista)}) ou *${numParcelasMatricula}x de ${fmt(sc.parcelaMat)}*`
@@ -1091,18 +1124,23 @@ export default function ValoresPage() {
       }
     }
 
-    const mesAntecipacaoDesc = isTodas ? 'CRONOGRAMA COMPLETO' : mesAntecipacao.toUpperCase()
+    const mesAntecipacaoDesc = isAllMeses
+      ? 'CRONOGRAMA COMPLETO'
+      : (isMultiMeses
+          ? formatListWithAnd(selectedMeses).toUpperCase()
+          : selectedMeses[0].toUpperCase())
 
-    const descontoMatriculaPctDesc = isTodas
-      ? 'até 20% (conforme o mês)'
+    const maxAVistaDesc = isMultiMeses ? Math.max(...etapasFiltradas.map(e => e.aVistaPct), 0) : calculations.aVistaPct
+    const descontoMatriculaPctDesc = isMultiMeses
+      ? `até ${maxAVistaDesc}% (conforme o mês)`
       : (formaMatricula === 'ambos'
         ? `${calculations.aVistaPct}% (à vista) / ${calculations.parceladoPct}% (parcelado)`
         : String(calculations.descontoMatriculaPct))
 
-    const economiaMatriculaDesc = isTodas
+    const economiaMatriculaDesc = isMultiMeses
       ? (isMulti
-          ? `até ${formatListWithAnd(calculations.seriesCalc.map(sc => `${sc.serie.nome} (${fmt(sc.mensalidadeOrig * 0.20)})`))} (antecipando em Outubro)`
-          : `até ${fmt(calculations.campanhaEtapasTotais[0]?.descAVistaTot || 0)} (antecipando em Outubro)`)
+          ? `até ${formatListWithAnd(calculations.seriesCalc.map(sc => `${sc.serie.nome} (${fmt(sc.mensalidadeOrig * (melhorEtapa.aVistaPct / 100))})`))} (antecipando em ${melhorEtapa.mes})`
+          : `até ${fmt(melhorEtapa.descAVistaTot)} (antecipando em ${melhorEtapa.mes})`)
       : (isMulti
           ? formatListWithAnd(calculations.seriesCalc.map(sc => `${sc.serie.nome} (${fmt(sc.descMatAVista)})`))
           : (formaMatricula === 'ambos'
@@ -1128,11 +1166,12 @@ export default function ValoresPage() {
 
     const economiaTotalDesc = isMulti
       ? `${calculations.seriesCalc.map(sc => {
-          const econMat = isTodas ? (sc.mensalidadeOrig * 0.20) : sc.descMatAVista
+          const item = sc.matCampanha.find(m => m.mes === melhorEtapa.mes)
+          const econMat = isMultiMeses ? (item ? item.descAVista : 0) : sc.descMatAVista
           return `${sc.serie.nome}: até ${fmt(sc.econAnualMensalidades + econMat)}`
-        }).join(' | ')} ${isTodas ? '(antecipando em Outubro)' : ''}`.trim()
-      : (isTodas
-          ? `até ${fmt(calculations.economiaAnualMensalidades + (calculations.campanhaEtapasTotais[0]?.descAVistaTot || 0))} (antecipando em Outubro)`
+        }).join(' | ')} ${isMultiMeses ? `(antecipando em ${melhorEtapa.mes})` : ''}`.trim()
+      : (isMultiMeses
+          ? `até ${fmt(calculations.economiaAnualMensalidades + (melhorEtapa?.descAVistaTot || 0))} (antecipando em ${melhorEtapa.mes})`
           : fmt(calculations.economiaTotalGeral))
 
     let content = activeTemplate.conteudo
@@ -1177,7 +1216,9 @@ export default function ValoresPage() {
     currentSerie,
     descontoPercent,
     calculations,
-    mesAntecipacao,
+    selectedMeses,
+    isAllMeses,
+    isMultiMeses,
     formaMatricula,
     numParcelasMatricula,
     incluirMaterial,
@@ -2025,21 +2066,33 @@ export default function ValoresPage() {
                     <Calendar size={18} color="#6ee7b7" />
                     3. Campanha de Matrícula Antecipada ({anoLetivo})
                   </h2>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#a7f3d0', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
-                    Base: 1 Mensalidade
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {isMultiMeses && (
+                      <span style={{
+                        fontSize: 11, fontWeight: 800, color: '#a7f3d0',
+                        background: 'rgba(255, 255, 255, 0.15)',
+                        border: '1px solid rgba(255, 255, 255, 0.25)',
+                        padding: '3px 10px', borderRadius: 20
+                      }}>
+                        {isAllMeses ? 'Todas as 4 etapas' : `${selectedMeses.length} etapas selecionadas`}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#a7f3d0', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '3px 10px', borderRadius: 20, boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }}>
+                      Base: 1 Mensalidade
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ padding: 22, display: 'flex', flexDirection: 'column' }}>
                   {/* Meses de Antecipação incluindo o botão TODAS */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }}>
                     {ANTECIPACAO_REGRAS.map(regra => {
-                      const isSelected = mesAntecipacao === regra.mes
                       const isTodas = regra.mes === 'Todas'
+                      const isSelected = isTodas ? isAllMeses : selectedMeses.includes(regra.mes)
                       return (
                         <div
                           key={regra.mes}
-                          onClick={() => setMesAntecipacao(regra.mes)}
+                          onClick={() => handleToggleMes(regra.mes)}
                           style={{
                             padding: 12, borderRadius: 12,
                             border: isSelected
@@ -2052,16 +2105,24 @@ export default function ValoresPage() {
                             boxShadow: isSelected
                               ? (isTodas ? '0 2px 10px rgba(139, 92, 246, 0.25)' : '0 2px 8px rgba(5, 150, 105, 0.15)')
                               : 'none',
-                            transition: 'all 0.15s ease'
+                            transition: 'all 0.15s ease',
+                            userSelect: 'none'
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: 12, fontWeight: 800, color: isTodas ? '#6b21a8' : '#0f172a' }}>
                               {regra.mes === 'Todas' ? 'Todas' : regra.mes}
                             </span>
-                            {isSelected && (
-                              <Check size={14} color={isTodas ? '#7c3aed' : '#059669'} strokeWidth={3} />
-                            )}
+                            <div style={{
+                              width: 18, height: 18, borderRadius: '50%',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: isSelected ? (isTodas ? '#7c3aed' : '#059669') : 'transparent',
+                              border: isSelected ? 'none' : '1.5px solid #cbd5e1'
+                            }}>
+                              {isSelected && (
+                                <Check size={12} color="#ffffff" strokeWidth={3} />
+                              )}
+                            </div>
                           </div>
                           <div style={{ fontSize: 11, fontWeight: 900, color: isTodas ? '#7c3aed' : '#047857', marginTop: 4 }}>
                             {regra.destaque}
@@ -2087,7 +2148,7 @@ export default function ValoresPage() {
                             transition: 'all 0.15s ease'
                           }}
                         >
-                          À Vista {mesAntecipacao === 'Todas' ? '(até 20% desc.)' : `(${currentAntecipacao.aVistaPct}% desc.)`}
+                          À Vista {isMultiMeses ? `(até ${Math.max(...calculations.campanhaEtapasTotais.filter(e => selectedMeses.includes(e.mes)).map(e => e.aVistaPct), 0)}% desc.)` : `(${currentAntecipacao.aVistaPct}% desc.)`}
                         </button>
                         <button
                           onClick={() => setFormaMatricula('parcelado')}
@@ -2099,7 +2160,7 @@ export default function ValoresPage() {
                             transition: 'all 0.15s ease'
                           }}
                         >
-                          Parcelado {mesAntecipacao === 'Todas' ? '(até 15% desc.)' : `(${currentAntecipacao.parceladoPct}% desc.)`}
+                          Parcelado {isMultiMeses ? `(até ${Math.max(...calculations.campanhaEtapasTotais.filter(e => selectedMeses.includes(e.mes)).map(e => e.parceladoPct), 0)}% desc.)` : `(${currentAntecipacao.parceladoPct}% desc.)`}
                         </button>
                         <button
                           onClick={() => setFormaMatricula('ambos')}
@@ -2138,8 +2199,8 @@ export default function ValoresPage() {
                       </div>
                     )}
 
-                    {/* Valor Calculado - Exibição para "Todas" ou para Mês Específico */}
-                    {mesAntecipacao === 'Todas' ? (
+                    {/* Valor Calculado - Exibição para Múltiplos Meses ou para Mês Específico */}
+                    {isMultiMeses ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <div style={{
                           display: 'flex',
@@ -2151,15 +2212,15 @@ export default function ValoresPage() {
                           border: '1px solid #ddd6fe'
                         }}>
                           <span style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Calendar size={14} /> Cronograma Completo da Campanha ({anoLetivo}):
+                            <Calendar size={14} /> {isAllMeses ? `Cronograma Completo da Campanha (${anoLetivo}):` : `Etapas Selecionadas (${selectedMeses.length}):`}
                           </span>
                           <span style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
-                            Todas as etapas e descontos incluídos no WhatsApp
+                            {isAllMeses ? 'Todas as etapas e descontos incluídos no WhatsApp' : formatListWithAnd(selectedMeses)}
                           </span>
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
-                          {calculations.campanhaEtapasTotais.map(etapa => {
+                          {calculations.campanhaEtapasTotais.filter(e => selectedMeses.includes(e.mes)).map(etapa => {
                             const isOutubro = etapa.mes === 'Outubro'
                             return (
                               <div
@@ -2410,16 +2471,21 @@ export default function ValoresPage() {
 
                     <div style={{ padding: '12px 14px', borderRadius: 14, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#065f46', display: 'block', marginBottom: 2 }}>
-                        {mesAntecipacao === 'Todas' ? 'Matrícula (Todas as Etapas)' : `Matrícula (${mesAntecipacao})`}
+                        {isMultiMeses
+                          ? (isAllMeses ? 'Matrícula (Todas as Etapas)' : `Matrícula (${formatListWithAnd(selectedMeses)})`)
+                          : `Matrícula (${selectedMeses[0]})`}
                       </span>
                       <span style={{ fontSize: 20, fontWeight: 900, color: '#047857', display: 'block' }}>
-                        {mesAntecipacao === 'Todas'
-                          ? `A partir de ${fmt(calculations.campanhaEtapasTotais[0]?.aVistaTot || calculations.valorMatriculaFinalAVista)}`
+                        {isMultiMeses
+                          ? `A partir de ${fmt(calculations.campanhaEtapasTotais.find(e => selectedMeses.includes(e.mes))?.aVistaTot || calculations.valorMatriculaFinalAVista)}`
                           : (formaMatricula === 'ambos' ? fmt(calculations.valorMatriculaFinalAVista) : fmt(calculations.valorMatriculaFinal))}
                       </span>
                       <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', display: 'block', marginTop: 2 }}>
-                        {mesAntecipacao === 'Todas'
-                          ? 'Out (20% OFF) a Dez (10% OFF)'
+                        {isMultiMeses
+                          ? calculations.campanhaEtapasTotais
+                              .filter(e => selectedMeses.includes(e.mes))
+                              .map(e => `${e.mes.slice(0, 3)} (${e.aVistaPct}% OFF)`)
+                              .join(' a ')
                           : (formaMatricula === 'ambos'
                               ? `À vista ou ${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`
                               : (formaMatricula === 'avista' ? 'À vista' : `${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}`))}
