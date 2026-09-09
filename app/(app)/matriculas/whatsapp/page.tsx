@@ -57,10 +57,10 @@ const DEFAULT_TEMPLATES: WhatsAppTemplate[] = [
 *INTEGRAL* DIA DA FRUTA E ALMOÇO CORTESIA = *R$ 2.075,00*
 
 🗂*Materiais* _- Parcelamento em até 10x no cartão de crédito._
-Taxa de material anual (Nível 1) = *R$ 520,00*
-Nível 2: LIVROS (ANUAL) = *R$ 600,00*
+Taxa de Material (Nível 1) = *R$ 480,00*
+Livros didáticos (Nível 2) = *R$ 600,00*
 
-*MATRÍCULAS* 📚 _- PARCELAMENTO EM ATÉ 5X._
+*MATRÍCULAS* 📚 _- PARCELAMENTO EM ATÉ 10X._
 
 *À VISTA:*
 OUTUBRO (15%)
@@ -91,10 +91,10 @@ DEZEMBRO (5%)
 *INTERMEDIÁRIO* = *R$ 1.795,00* - ALMOÇO INCLUSO
 *INTEGRAL* = *R$ 2.075,00* - ALMOÇO INCLUSO
 
-🗂 LIVROS (ANUAL) + SOCIOEMOCIONAL = *R$ 1.285,00*
+🗂 LIVROS DIDÁTICOS + LIV (NÍVEL 3 AO NÍVEL 5) = *R$ 1.285,00*
 _Parcelamento em até 10x no cartão de crédito. Ou no boleto com taxa._
 
-*MATRÍCULAS* 📚 _- PARCELAMENTO EM ATÉ 5X._
+*MATRÍCULAS* 📚 _- PARCELAMENTO EM ATÉ 10X._
 
 *À VISTA:*
 OUTUBRO (15%)
@@ -125,7 +125,7 @@ DEZEMBRO (5%)
 *SEMI-INTEGRAL* = *R$ 1.890,00* - ALMOÇO INCLUSO
 *INTEGRAL COMPLETO* = *R$ 2.190,00* - ALMOÇO + LANCHE INCLUSOS
 
-🗂 *SISTEMA DE ENSINO & PLATAFORMA DIGITAL (ANUAL)* = *R$ 1.450,00*
+🗂 *LIVROS DIDÁTICOS + LIV (1º AO 5º ANO)* = *R$ 1.585,00*
 _Parcelamento em até 10x no cartão de crédito sem juros._
 
 *MATRÍCULAS & ANUIDADE* 📚 _- CONDIÇÕES ESPECIAIS:_
@@ -135,7 +135,7 @@ _Parcelamento em até 10x no cartão de crédito sem juros._
 • NOVEMBRO (10% OFF): R$ 1.161,00 (Meio Período)
 • DEZEMBRO (5% OFF): R$ 1.225,50 (Meio Período)
 
-_Parcelamento da Matrícula em até 5x sem juros._`
+_Parcelamento da Matrícula em até 10x sem juros._`
   },
   {
     id: 'tpl-fund2-2026',
@@ -149,7 +149,7 @@ _Parcelamento da Matrícula em até 5x sem juros._`
 *TURNO MANHÃ / TARDE* = *R$ 1.380,00*
 *PROGRAMA INTEGRAL & MONITORIA* = *R$ 2.250,00* - ALMOÇO INCLUSO
 
-🗂 *MATERIAL DIDÁTICO / SISTEMA PEDAGÓGICO (ANUAL)* = *R$ 1.580,00*
+🗂 *APOSTILAS (6º AO 9º ANO)* = *R$ 1.985,00*
 _Parcelamento em até 10x no cartão de crédito._
 
 *CONDIÇÕES DE MATRÍCULA & ANUIDADE 2026:* 📚
@@ -157,7 +157,7 @@ _Parcelamento em até 10x no cartão de crédito._
 • NOVEMBRO (10% OFF à vista): R$ 1.242,00
 • DEZEMBRO (5% OFF à vista): R$ 1.311,00
 
-_Taxa de matrícula facilitada em até 5 parcelas._`
+_Taxa de matrícula facilitada em até 10 parcelas._`
   },
   {
     id: 'tpl-medio-2026',
@@ -171,7 +171,7 @@ _Taxa de matrícula facilitada em até 5 parcelas._`
 *MENSALIDADE REGULAR* = *R$ 1.540,00*
 *ALTA PERFORMANCE / ITINERÁRIOS + ENEM* = *R$ 1.780,00*
 
-🗂 *MATERIAL DIDÁTICO + PLATAFORMA DE REDAÇÃO & SIMULADOS (ANUAL)* = *R$ 1.850,00*
+🗂 *APOSTILAS (1ª A 3ª SÉRIE - ENSINO MÉDIO)* = *R$ 2.150,00*
 _Parcelamento em até 10x no cartão de crédito._
 
 *DESCONTOS ESPECIAIS DE ANTECIPAÇÃO:* 📚
@@ -239,7 +239,7 @@ A jornada do(a) *{nome_aluno}* é motivo de muito orgulho para toda a nossa equi
 🌟 *VANTAGENS EXCLUSIVAS DE RENOVAÇÃO ANTECIPADA:*
 • *Garantia da vaga* no mesmo turno e turma
 • *Desconto especial de pontualidade* (15% OFF até {data_limite_desconto})
-• Parcelamento da matrícula facilitado em até 5x sem juros
+• Parcelamento da matrícula facilitado em até 10x sem juros
 
 Podemos adiantar a renovação por aqui ou preferem agendar um atendimento presencial na secretaria? 💙`
   },
@@ -364,7 +364,7 @@ Para sua comodidade, a efetivação da matrícula para o *Ano Letivo {ano_letivo
 1️⃣ Acesse o link enviado no seu WhatsApp/E-mail
 2️⃣ Confira os dados cadastrais e o plano de pagamento escolhido
 3️⃣ Clique em "Assinar Digitalmente" pelo próprio celular
-4️⃣ Efetue o pagamento da matrícula (PIX, Boleto ou Cartão em até 5x)
+4️⃣ Efetue o pagamento da matrícula (PIX, Boleto ou Cartão em até 10x)
 
 Qualquer dúvida no processo, nossa secretaria está conectada para te auxiliar em tempo real!`
   }

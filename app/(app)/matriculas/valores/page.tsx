@@ -72,6 +72,8 @@ Seguem os valores detalhados para *{serie}* {detalhe_serie}:
 {linha_material}
 {linha_extracurricular}
 
+💳 *Parcelamento facilitado em até 10x no cartão de crédito sem juros.*
+
 🌟 *Economia Total ({ano_letivo}):* *{economia_total}*
 
 Estamos à disposição para agendar uma visita e formalizar a matrícula!
@@ -98,6 +100,8 @@ Apresentamos as condições especiais de *Rematrícula {ano_letivo}*{ref_aluno} 
 {linha_material}
 {linha_extracurricular}
 
+💳 *Parcelamento em até 10x no cartão de crédito sem juros.*
+
 🌟 *Economia Total ({ano_letivo}):* *{economia_total}*
 
 As condições promocionais e vagas no turno atual são garantidas apenas durante esta campanha. Vamos já garantir a vaga para {ano_letivo}?
@@ -122,6 +126,8 @@ Condição especial pelo convênio *{convenio}*{ref_aluno} para *{serie}* {detal
 {linha_material}
 {linha_extracurricular}
 
+💳 *Parcelamento em até 10x no cartão de crédito sem juros.*
+
 🌟 *Economia Total:* *{economia_total}*
 
 Ficamos à disposição para receber sua família e formalizar a matrícula!`
@@ -136,6 +142,8 @@ Ficamos à disposição para receber sua família e formalizar a matrícula!`
 💰 *Mensalidade ({desconto_pct}% OFF):* de ~{mensalidade_tabela}~ por *{mensalidade_liquida}* / mês
 🎁 *Matrícula ({mes_antecipacao}):*
 {detalhe_matricula}
+{linha_material}
+💳 *Parcelamento em até 10x no cartão de crédito sem juros.*
 🌟 *Economia Total:* *{economia_total}*
 
 Qualquer dúvida, estamos à disposição para ajudar!`
@@ -156,6 +164,8 @@ Para efetivar a matrícula para *{serie}*{ref_aluno}, segue a relação de docum
 • *Mensalidade:* *{mensalidade_liquida}* / mês (tabela ~{mensalidade_tabela}~)
 • *Matrícula ({mes_antecipacao}):*
 {detalhe_matricula}
+{linha_material}
+💳 *Parcelamento em até 10x no cartão de crédito sem juros.*
 
 📍 Aguardamos a documentação para formalização do contrato e reserva da vaga!`
   }
@@ -179,6 +189,7 @@ const TEMPLATE_VARIABLES = [
   { tag: '{economia_matricula}', desc: 'Valor economizado na matrícula' },
   { tag: '{linha_material}', desc: 'Linha do material didático (se ativo)' },
   { tag: '{linha_extracurricular}', desc: 'Linha da extracurricular (se ativo)' },
+  { tag: '{linha_dp}', desc: 'Linha de dependência / Progressão Parcial (se ativa)' },
   { tag: '{economia_total}', desc: 'Economia total (mensalidades + matrícula)' },
   { tag: '{convenio}', desc: 'Nome do convênio parceiro selecionado' },
 ]
@@ -192,7 +203,7 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     mensalidadeBase: 2195.00,
     anuidadeBase: 26340.00,
     taxaMaterial: 480.00,
-    taxaMaterialDesc: 'Taxa anual de material'
+    taxaMaterialDesc: 'Taxa de Material (anual)'
   },
   {
     id: 'intermediario',
@@ -202,17 +213,27 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     mensalidadeBase: 1895.00,
     anuidadeBase: 22740.00,
     taxaMaterial: 480.00,
-    taxaMaterialDesc: 'Taxa anual de material'
+    taxaMaterialDesc: 'Taxa de Material (anual)'
   },
   {
-    id: 'villa-baby',
-    nome: 'Villa Baby',
-    detalhe: 'N1 e N2',
+    id: 'villa-baby-n1',
+    nome: 'Villa Baby (Nível 1)',
+    detalhe: 'Berçário • N1',
     segmento: 'Villa Baby',
     mensalidadeBase: 1395.00,
     anuidadeBase: 16740.00,
     taxaMaterial: 480.00,
-    taxaMaterialDesc: 'Taxa de material (N1) R$ 480 / N2 Livros R$ 600'
+    taxaMaterialDesc: 'Taxa de Material (Nível 1)'
+  },
+  {
+    id: 'villa-baby-n2',
+    nome: 'Villa Baby (Nível 2)',
+    detalhe: 'Maternal • N2',
+    segmento: 'Villa Baby',
+    mensalidadeBase: 1395.00,
+    anuidadeBase: 16740.00,
+    taxaMaterial: 600.00,
+    taxaMaterialDesc: 'Livros didáticos (Nível 2)'
   },
   {
     id: 'ed-infantil',
@@ -222,7 +243,7 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     mensalidadeBase: 1230.00,
     anuidadeBase: 14760.00,
     taxaMaterial: 1285.00,
-    taxaMaterialDesc: 'Livros (anual) + Socioemocional'
+    taxaMaterialDesc: 'Livros didáticos + LIV (Nível 3 ao Nível 5)'
   },
   {
     id: 'fund-1',
@@ -231,8 +252,8 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     segmento: 'Fundamental I',
     mensalidadeBase: 1230.00,
     anuidadeBase: 14760.00,
-    taxaMaterial: 1350.00,
-    taxaMaterialDesc: 'Sistema Didático / Livros anuais'
+    taxaMaterial: 1585.00,
+    taxaMaterialDesc: 'Livros didáticos + LIV (1º ao 5º ano)'
   },
   {
     id: 'fund-2',
@@ -241,8 +262,8 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     segmento: 'Fundamental II',
     mensalidadeBase: 1330.00,
     anuidadeBase: 15960.00,
-    taxaMaterial: 1480.00,
-    taxaMaterialDesc: 'Sistema Didático / Livros anuais'
+    taxaMaterial: 1985.00,
+    taxaMaterialDesc: 'Apostilas (6º ao 9º ano)'
   },
   {
     id: 'em-1-2',
@@ -251,8 +272,8 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     segmento: 'Ensino Médio',
     mensalidadeBase: 1545.00,
     anuidadeBase: 18540.00,
-    taxaMaterial: 1620.00,
-    taxaMaterialDesc: 'Material Didático Novo Ensino Médio'
+    taxaMaterial: 2150.00,
+    taxaMaterialDesc: 'Apostilas (1ª a 3ª série - Ensino Médio)'
   },
   {
     id: 'em-3',
@@ -261,8 +282,8 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     segmento: 'Ensino Médio',
     mensalidadeBase: 1625.00,
     anuidadeBase: 19500.00,
-    taxaMaterial: 1750.00,
-    taxaMaterialDesc: 'Material Didático Enem / Pré-Vestibular'
+    taxaMaterial: 2150.00,
+    taxaMaterialDesc: 'Apostilas (1ª a 3ª série - Ensino Médio)'
   }
 ]
 
@@ -282,36 +303,36 @@ const ANTECIPACAO_REGRAS = [
     tag: 'Campanha de Ouro',
     aVistaPct: 20,
     parceladoPct: 15,
-    maxParcelas: 5,
+    maxParcelas: 10,
     destaque: 'Até 20% OFF',
     corBg: '#ecfdf5',
     corBorder: '#a7f3d0',
     corText: '#065f46',
-    descricao: '20% à vista ou 15% em até 5x'
+    descricao: '20% à vista ou 15% em até 10x'
   },
   {
     mes: 'Novembro',
     tag: 'Condição Especial',
     aVistaPct: 15,
     parceladoPct: 10,
-    maxParcelas: 5,
+    maxParcelas: 10,
     destaque: 'Até 15% OFF',
     corBg: '#eff6ff',
     corBorder: '#bfdbfe',
     corText: '#1e40af',
-    descricao: '15% à vista ou 10% em até 5x'
+    descricao: '15% à vista ou 10% em até 10x'
   },
   {
     mes: 'Dezembro',
     tag: 'Última Chance',
     aVistaPct: 10,
     parceladoPct: 5,
-    maxParcelas: 5,
+    maxParcelas: 10,
     destaque: 'Até 10% OFF',
     corBg: '#fffbeb',
     corBorder: '#fde68a',
     corText: '#92400e',
-    descricao: '10% à vista ou 5% em até 5x'
+    descricao: '10% à vista ou 5% em até 10x'
   },
   {
     mes: 'Regular',
@@ -330,7 +351,7 @@ const ANTECIPACAO_REGRAS = [
     tag: 'Cronograma Geral',
     aVistaPct: 20,
     parceladoPct: 15,
-    maxParcelas: 5,
+    maxParcelas: 10,
     destaque: 'Todas as Opções',
     corBg: '#fdf4ff',
     corBorder: '#f0abfc',
@@ -339,13 +360,57 @@ const ANTECIPACAO_REGRAS = [
   }
 ]
 
+export interface MaterialOption {
+  id: string
+  nome: string
+  segmento: string
+  valor: number
+  tipo?: string
+}
+
+const OPCOES_MATERIAIS: MaterialOption[] = [
+  { id: 'mat-n1', nome: 'Taxa de Material (Nível 1)', segmento: 'Villa Baby • Berçário (N1)', valor: 480.00, tipo: 'anual' },
+  { id: 'mat-n2', nome: 'Livros didáticos (Nível 2)', segmento: 'Villa Baby • Maternal (N2)', valor: 600.00, tipo: 'anual' },
+  { id: 'mat-n3-n5', nome: 'Livros didáticos + LIV (Nível 3 ao Nível 5)', segmento: 'Educação Infantil (N3, N4, N5)', valor: 1285.00, tipo: 'anual' },
+  { id: 'mat-fund1', nome: 'Livros didáticos + LIV (1º ao 5º ano)', segmento: 'Ensino Fundamental I (1º ao 5º ano)', valor: 1585.00, tipo: 'anual' },
+  { id: 'mat-fund2', nome: 'Apostilas (6º ao 9º ano)', segmento: 'Ensino Fundamental II (6º ao 9º ano)', valor: 1985.00, tipo: 'anual' },
+  { id: 'mat-medio', nome: 'Apostilas (1ª a 3ª série - Ensino Médio)', segmento: 'Ensino Médio (1ª a 3ª série)', valor: 2150.00, tipo: 'anual' },
+]
+
+function getDefaultMaterialIdsForSeries(series: SeriePricing[]): string[] {
+  const ids: string[] = []
+  for (const s of series) {
+    if (s.id === 'villa-baby-n1' || s.id === 'integral' || s.id === 'intermediario') {
+      if (!ids.includes('mat-n1')) ids.push('mat-n1')
+    } else if (s.id === 'villa-baby-n2') {
+      if (!ids.includes('mat-n2')) ids.push('mat-n2')
+    } else if (s.id === 'ed-infantil') {
+      if (!ids.includes('mat-n3-n5')) ids.push('mat-n3-n5')
+    } else if (s.id === 'fund-1') {
+      if (!ids.includes('mat-fund1')) ids.push('mat-fund1')
+    } else if (s.id === 'fund-2') {
+      if (!ids.includes('mat-fund2')) ids.push('mat-fund2')
+    } else if (s.id === 'em-1-2' || s.id === 'em-3') {
+      if (!ids.includes('mat-medio')) ids.push('mat-medio')
+    }
+  }
+  return ids.length > 0 ? ids : ['mat-n1']
+}
+
 const SERVICOS_ADICIONAIS = {
   diariaComAlmoco: 100.00,
   diariaSemAlmoco: 75.00,
   dpPorMateria: 300.00,
-  taxaMaterialBabyN1: 480.00,
   extracurricularMensal: 180.00,
-  atividadesExtracurriculares: ['Ballet', 'Jazz', 'Futsal', 'Ginástica Rítmica']
+  atividadesExtracurriculares: ['Ballet', 'Jazz', 'Futsal', 'Ginástica Rítmica'],
+  // Serviços de Material e Livros Didáticos Oficiais
+  taxaMaterialNivel1: 480.00,
+  livrosDidaticosNivel2: 600.00,
+  livrosDidaticosLIVNivel3a5: 1285.00,
+  livrosDidaticosLIVFund1: 1585.00,
+  apostilasFund2: 1985.00,
+  apostilasEnsinoMedio: 2150.00,
+  tabelaServicosMateriais: OPCOES_MATERIAIS
 }
 
 const IDADES_POR_NIVEL = [
@@ -370,14 +435,15 @@ function detectSerieIdFromTurma(turmaOrSerie: string): string | null {
   const t = turmaOrSerie.toLowerCase()
   if (t.includes('integral')) return 'integral'
   if (t.includes('intermed')) return 'intermediario'
-  if (t.includes('baby') || t.includes('berçario') || t.includes('bercario') || t.includes('n1') || t.includes('n2') || t.includes('berçário')) return 'villa-baby'
+  if (t.includes('n2') || t.includes('maternal')) return 'villa-baby-n2'
+  if (t.includes('n1') || t.includes('berçario') || t.includes('bercario') || t.includes('baby') || t.includes('berçário')) return 'villa-baby-n1'
   if (t.includes('infantil') || t.includes('n3') || t.includes('n4') || t.includes('n5')) return 'ed-infantil'
   if (t.includes('1º ano') || t.includes('2º ano') || t.includes('3º ano') || t.includes('4º ano') || t.includes('5º ano') || t.includes('fund 1') || t.includes('fundamental 1') || t.includes('fundamental i')) return 'fund-1'
   if (t.includes('6º') || t.includes('7º') || t.includes('8º') || t.includes('9º') || t.includes('fund 2') || t.includes('fundamental 2') || t.includes('fundamental ii')) return 'fund-2'
-  if (t.includes('1ª série') || t.includes('1a serie') || t.includes('1º em') || t.includes('1º médio') || t.includes('1ª serie') ||
-      t.includes('2ª série') || t.includes('2a serie') || t.includes('2º em') || t.includes('2º médio') || t.includes('2ª serie') ||
-      t.includes('1ª e 2ª') || t.includes('1a e 2a')) return 'em-1-2'
-  if (t.includes('3ª série') || t.includes('3a serie') || t.includes('terceir') || t.includes('3º em') || t.includes('3º médio') || t.includes('3ª serie') || t.includes('vestibular')) return 'em-3'
+  if (t.includes('3ª série') || t.includes('3a serie') || t.includes('terceir') || t.includes('3º em') || t.includes('3º médio') || t.includes('vestibular')) return 'em-3'
+  if (t.includes('1ª série') || t.includes('1a serie') || t.includes('1º em') || t.includes('1º médio') ||
+      t.includes('2ª série') || t.includes('2a serie') || t.includes('2º em') || t.includes('2º médio') ||
+      t.includes('1ª e 2ª') || t.includes('1a e 2a') || t.includes('médio') || t.includes('medio')) return 'em-1-2'
   return null
 }
 
@@ -419,7 +485,7 @@ export default function ValoresPage() {
   const [convenioSelecionado, setConvenioSelecionado] = useState<string>('')
   const [selectedMeses, setSelectedMeses] = useState<string[]>(['Outubro'])
   const [formaMatricula, setFormaMatricula] = useState<'avista' | 'parcelado' | 'ambos'>('avista')
-  const [numParcelasMatricula, setNumParcelasMatricula] = useState<number>(5)
+  const [numParcelasMatricula, setNumParcelasMatricula] = useState<number>(10)
 
   // Status de Seleção de Etapas da Campanha
   const isAllMeses = selectedMeses.length === 4
@@ -442,8 +508,28 @@ export default function ValoresPage() {
 
   // Opcionais
   const [incluirMaterial, setIncluirMaterial] = useState<boolean>(false)
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>(['mat-n1'])
   const [incluirExtracurricular, setIncluirExtracurricular] = useState<boolean>(false)
   const [atividadeSelecionada, setAtividadeSelecionada] = useState<string>('Futsal')
+  const [incluirDP, setIncluirDP] = useState<boolean>(false)
+  const [numMateriasDP, setNumMateriasDP] = useState<number>(1)
+
+  const handleToggleMaterial = (matId: string) => {
+    setSelectedMaterialIds(prev => {
+      if (prev.includes(matId)) {
+        return prev.filter(id => id !== matId)
+      } else {
+        return [...prev, matId]
+      }
+    })
+  }
+
+  const handleToggleIncluirMaterial = (checked: boolean) => {
+    setIncluirMaterial(checked)
+    if (checked && selectedMaterialIds.length === 0) {
+      setSelectedMaterialIds(getDefaultMaterialIdsForSeries(selectedSeries))
+    }
+  }
 
   // Modelo de WhatsApp Selecionado
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('completo')
@@ -703,19 +789,30 @@ export default function ValoresPage() {
     setAvailableResponsaveis([])
     setSelectedResponsavelId(null)
     setSelectedSerieIds(['integral'])
+    setIncluirMaterial(false)
+    setSelectedMaterialIds(['mat-n1'])
+    setIncluirDP(false)
+    setNumMateriasDP(1)
   }
 
   const selectedSeries = useMemo(() => {
     const list = seriesList.filter(s =>
       selectedSerieIds.includes(s.id) ||
       (selectedSerieIds.includes('em-2') && s.id === 'em-1-2') ||
-      (selectedSerieIds.includes('em-1') && s.id === 'em-1-2')
+      (selectedSerieIds.includes('em-1') && s.id === 'em-1-2') ||
+      (selectedSerieIds.includes('villa-baby') && (s.id === 'villa-baby-n1' || s.id === 'villa-baby-n2'))
     )
     return list.length > 0 ? list : [seriesList[0]]
   }, [seriesList, selectedSerieIds])
 
   const currentSerie = selectedSeries[0]
   const isMultiSerie = selectedSeries.length > 1
+
+  useEffect(() => {
+    if (!incluirMaterial) {
+      setSelectedMaterialIds(getDefaultMaterialIdsForSeries(selectedSeries))
+    }
+  }, [selectedSeries, incluirMaterial])
 
   const handleToggleSerie = (id: string) => {
     setSelectedSerieIds(prev => {
@@ -908,12 +1005,14 @@ export default function ValoresPage() {
       }
     })
 
-    const valorMaterial = seriesCalc.reduce((acc, c) => acc + c.material, 0)
+    const selectedMats = OPCOES_MATERIAIS.filter(m => selectedMaterialIds.includes(m.id))
+    const valorMaterial = incluirMaterial ? selectedMats.reduce((acc, m) => acc + m.valor, 0) : 0
     const valorExtracurricular = incluirExtracurricular ? SERVICOS_ADICIONAIS.extracurricularMensal : 0
+    const valorDP = incluirDP ? (numMateriasDP * SERVICOS_ADICIONAIS.dpPorMateria) : 0
 
     const mensalidadeTotalFinal = mensalidadeComDesconto + valorExtracurricular
     const economiaTotalGeral = economiaAnualMensalidades + valorDescontoMatricula
-    const investimentoAnualTotal = anuidadeComDesconto + valorMatriculaFinal + valorMaterial + (valorExtracurricular * 12)
+    const investimentoAnualTotal = anuidadeComDesconto + valorMatriculaFinal + valorMaterial + (valorExtracurricular * 12) + valorDP
 
     return {
       seriesCalc,
@@ -935,7 +1034,10 @@ export default function ValoresPage() {
       aVistaPct: currentAntecipacao.aVistaPct,
       parceladoPct: currentAntecipacao.parceladoPct,
       valorMaterial,
+      selectedMats,
       valorExtracurricular,
+      valorDP,
+      numMateriasDP,
       mensalidadeTotalFinal,
       economiaTotalGeral,
       investimentoAnualTotal,
@@ -949,7 +1051,10 @@ export default function ValoresPage() {
     formaMatricula,
     numParcelasMatricula,
     incluirMaterial,
+    selectedMaterialIds,
     incluirExtracurricular,
+    incluirDP,
+    numMateriasDP,
     currentAntecipacao
   ])
 
@@ -1018,7 +1123,7 @@ export default function ValoresPage() {
             if (etapa.mes === 'Regular') {
               return `${icone} *${etapa.mes.toUpperCase()} (Jan em diante):* *${fmt(etapa.aVistaTot)}* _(tabela integral)_`
             }
-            return `${icone} *${etapa.mes.toUpperCase()} (${etapa.destaque}):* à vista *${fmt(etapa.aVistaTot)}* (${etapa.aVistaPct}% OFF) ou *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* (${etapa.parceladoPct}% OFF)`
+            return `${icone} *${etapa.mes.toUpperCase()} (${etapa.destaque}):* à vista *${fmt(etapa.aVistaTot)}* (${etapa.aVistaPct}% OFF) ou em até *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* sem juros (${etapa.parceladoPct}% OFF)`
           }).join('\n')
         } else if (formaMatricula === 'avista') {
           detalheMatricula = etapasFiltradas.map(etapa => {
@@ -1033,9 +1138,9 @@ export default function ValoresPage() {
           detalheMatricula = etapasFiltradas.map(etapa => {
             const icone = mesIcons[etapa.mes] || '🔹'
             if (etapa.mes === 'Regular') {
-              return `${icone} *${etapa.mes.toUpperCase()}:* *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* _(total ${fmt(etapa.parcTot)})_`
+              return `${icone} *${etapa.mes.toUpperCase()}:* em até *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* sem juros _(total ${fmt(etapa.parcTot)})_`
             }
-            return `${icone} *${etapa.mes.toUpperCase()}:* *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* (${etapa.parceladoPct}% OFF • total ${fmt(etapa.parcTot)})`
+            return `${icone} *${etapa.mes.toUpperCase()}:* em até *${numParcelasMatricula}x de ${fmt(etapa.parcelaTot)}* no cartão sem juros (${etapa.parceladoPct}% OFF • total ${fmt(etapa.parcTot)})`
           }).join('\n')
         }
       } else {
@@ -1053,7 +1158,7 @@ export default function ValoresPage() {
               const valV = item ? item.finalAVista : (sc.mensalidadeOrig * (1 - etapa.aVistaPct / 100))
               const finalP = item ? item.finalParc : (sc.mensalidadeOrig * (1 - etapa.parceladoPct / 100))
               const parc = numParcelasMatricula > 0 ? (finalP / numParcelasMatricula) : finalP
-              return `  • *${sc.serie.nome}:* à vista *${fmt(valV)}* ou *${numParcelasMatricula}x de ${fmt(parc)}*`
+              return `  • *${sc.serie.nome}:* à vista *${fmt(valV)}* ou em até *${numParcelasMatricula}x de ${fmt(parc)}* no cartão sem juros`
             }).join('\n')
 
             return `${icone} *${etapa.mes.toUpperCase()} (${etapa.destaque}):*\n${lines}`
@@ -1079,7 +1184,7 @@ export default function ValoresPage() {
             if (etapa.mes === 'Regular') {
               const lines = calculations.seriesCalc.map(sc => {
                 const parc = numParcelasMatricula > 0 ? (sc.mensalidadeOrig / numParcelasMatricula) : sc.mensalidadeOrig
-                return `${sc.serie.nome}: *${numParcelasMatricula}x de ${fmt(parc)}*`
+                return `${sc.serie.nome}: em até *${numParcelasMatricula}x de ${fmt(parc)}*`
               }).join(' | ')
               return `${icone} *${etapa.mes.toUpperCase()} (Jan em diante):* ${lines}`
             }
@@ -1087,7 +1192,7 @@ export default function ValoresPage() {
               const item = sc.matCampanha.find(m => m.mes === etapa.mes)
               const finalP = item ? item.finalParc : (sc.mensalidadeOrig * (1 - etapa.parceladoPct / 100))
               const parc = numParcelasMatricula > 0 ? (finalP / numParcelasMatricula) : finalP
-              return `${sc.serie.nome}: *${numParcelasMatricula}x de ${fmt(parc)}*`
+              return `${sc.serie.nome}: em até *${numParcelasMatricula}x de ${fmt(parc)}* sem juros`
             }).join(' | ')
             return `${icone} *${etapa.mes.toUpperCase()} (${etapa.parceladoPct}% OFF):* ${lines}`
           }).join('\n')
@@ -1097,17 +1202,17 @@ export default function ValoresPage() {
       // Mês Específico Único (Outubro, Novembro, Dezembro ou Regular)
       if (!isMulti) {
         if (formaMatricula === 'ambos') {
-          detalheMatricula = `• *À Vista (${calculations.aVistaPct}% OFF):* *${fmt(calculations.valorMatriculaFinalAVista)}* (econ. ${fmt(calculations.valorDescontoMatriculaAVista)})\n• *Parcelado (${calculations.parceladoPct}% OFF):* até *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}* (total ${fmt(calculations.valorMatriculaFinalParcelado)})`
+          detalheMatricula = `• *À Vista (${calculations.aVistaPct}% OFF):* *${fmt(calculations.valorMatriculaFinalAVista)}* (econ. ${fmt(calculations.valorDescontoMatriculaAVista)})\n• *Parcelado (${calculations.parceladoPct}% OFF):* até *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}* no cartão sem juros (total ${fmt(calculations.valorMatriculaFinalParcelado)})`
         } else if (formaMatricula === 'avista') {
           detalheMatricula = `• *À Vista (${calculations.descontoMatriculaPct}% OFF):* *${fmt(calculations.valorMatriculaFinal)}* (de ~${fmt(calculations.mensalidadeOriginal)}~ • econ. ${fmt(calculations.valorDescontoMatricula)})`
         } else {
-          detalheMatricula = `• *Parcelado em até ${numParcelasMatricula}x (${calculations.descontoMatriculaPct}% OFF):* Total de *${fmt(calculations.valorMatriculaFinal)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}*`
+          detalheMatricula = `• *Parcelado em até ${numParcelasMatricula}x no cartão (${calculations.descontoMatriculaPct}% OFF):* Total de *${fmt(calculations.valorMatriculaFinal)}* em *${numParcelasMatricula}x de ${fmt(calculations.valorParcelaMatricula)}* sem juros`
         }
       } else {
         // Múltiplas séries com mês específico
         if (formaMatricula === 'ambos') {
           const lines = calculations.seriesCalc.map(sc =>
-            `  • *${sc.serie.nome}:* à vista *${fmt(sc.finalMatAVista)}* (econ. ${fmt(sc.descMatAVista)}) ou *${numParcelasMatricula}x de ${fmt(sc.parcelaMat)}*`
+            `  • *${sc.serie.nome}:* à vista *${fmt(sc.finalMatAVista)}* (econ. ${fmt(sc.descMatAVista)}) ou em até *${numParcelasMatricula}x de ${fmt(sc.parcelaMat)}* no cartão sem juros`
           ).join('\n')
           detalheMatricula = `• *Condições por Série (${calculations.aVistaPct}% à vista ou ${calculations.parceladoPct}% parcelado):*\n${lines}`
         } else if (formaMatricula === 'avista') {
@@ -1117,9 +1222,9 @@ export default function ValoresPage() {
           detalheMatricula = `• *À Vista (${calculations.descontoMatriculaPct}% OFF):*\n${lines}`
         } else {
           const lines = calculations.seriesCalc.map(sc =>
-            `  • *${sc.serie.nome}:* *${numParcelasMatricula}x de ${fmt(sc.parcelaMat)}* (total ${fmt(sc.finalMatParcelado)})`
+            `  • *${sc.serie.nome}:* em até *${numParcelasMatricula}x de ${fmt(sc.parcelaMat)}* no cartão sem juros (total ${fmt(sc.finalMatParcelado)})`
           ).join('\n')
-          detalheMatricula = `• *Parcelado em até ${numParcelasMatricula}x (${calculations.descontoMatriculaPct}% OFF):*\n${lines}`
+          detalheMatricula = `• *Parcelado em até ${numParcelasMatricula}x no cartão (${calculations.descontoMatriculaPct}% OFF):*\n${lines}`
         }
       }
     }
@@ -1147,14 +1252,18 @@ export default function ValoresPage() {
             ? `até ${fmt(calculations.valorDescontoMatriculaAVista)}`
             : fmt(calculations.valorDescontoMatricula)))
 
-    // Material e Extracurricular (INDIVIDUAL - NUNCA SOMA QUANDO MÚLTIPLAS SÉRIES)
+    // Material e Extracurricular
     let linhaMaterial = ''
-    if (incluirMaterial) {
-      if (!isMulti) {
-        linhaMaterial = `📦 *Material Didático:* ${fmt(calculations.valorMaterial)} (anual)`
+    if (incluirMaterial && selectedMaterialIds.length > 0) {
+      const mats = OPCOES_MATERIAIS.filter(m => selectedMaterialIds.includes(m.id))
+      const totalMat = calculations.valorMaterial
+      const parcMat10x = totalMat / 10
+      if (mats.length === 1) {
+        const m = mats[0]
+        linhaMaterial = `📦 *${m.nome}:* ${fmt(m.valor)} (anual • parcelamento em até 10x de *${fmt(m.valor / 10)}* no cartão sem juros)`
       } else {
-        const matLines = calculations.seriesCalc.map(sc => `${sc.serie.nome}: ${fmt(sc.material)}`).join(' | ')
-        linhaMaterial = `📦 *Material Didático:* ${matLines} (anual)`
+        const matListStr = mats.map(m => `  • ${m.nome}: *${fmt(m.valor)}* (ou até 10x de ${fmt(m.valor / 10)})`).join('\n')
+        linhaMaterial = `📦 *Materiais & Livros Didáticos (${mats.length} itens - Total: ${fmt(totalMat)} • parcelamento em até 10x de *${fmt(parcMat10x)}* sem juros):*\n${matListStr}`
       }
     }
 
@@ -1163,6 +1272,11 @@ export default function ValoresPage() {
           ? `⚽ *Atividade Extracurricular (${atividadeSelecionada}):* ${fmt(SERVICOS_ADICIONAIS.extracurricularMensal)} / mês por aluno`
           : `⚽ *Atividade Extracurricular (${atividadeSelecionada}):* ${fmt(SERVICOS_ADICIONAIS.extracurricularMensal)} / mês`)
       : ''
+
+    let linhaDP = ''
+    if (incluirDP) {
+      linhaDP = `📖 *Progressão Parcial (${numMateriasDP} ${numMateriasDP > 1 ? 'matérias' : 'matéria'}):* ${fmt(calculations.valorDP)} (${fmt(SERVICOS_ADICIONAIS.dpPorMateria)}/matéria)`
+    }
 
     const economiaTotalDesc = isMulti
       ? `${calculations.seriesCalc.map(sc => {
@@ -1175,6 +1289,14 @@ export default function ValoresPage() {
           : fmt(calculations.economiaTotalGeral))
 
     let content = activeTemplate.conteudo
+
+    if (incluirDP && !content.includes('{linha_dp}')) {
+      if (content.includes('{linha_extracurricular}')) {
+        content = content.replace('{linha_extracurricular}', `{linha_extracurricular}\n${linhaDP}`)
+      } else if (content.includes('{linha_material}')) {
+        content = content.replace('{linha_material}', `{linha_material}\n${linhaDP}`)
+      }
+    }
 
     const replacements: Record<string, string> = {
       saudacao,
@@ -1193,6 +1315,7 @@ export default function ValoresPage() {
       economia_matricula: economiaMatriculaDesc,
       linha_material: linhaMaterial,
       linha_extracurricular: linhaExtracurricular,
+      linha_dp: linhaDP,
       economia_total: economiaTotalDesc,
       convenio: convenioSelecionado || 'Institucional'
     }
@@ -1222,7 +1345,10 @@ export default function ValoresPage() {
     formaMatricula,
     numParcelasMatricula,
     incluirMaterial,
+    selectedMaterialIds,
     incluirExtracurricular,
+    incluirDP,
+    numMateriasDP,
     atividadeSelecionada,
     convenioSelecionado
   ])
@@ -2178,12 +2304,13 @@ export default function ValoresPage() {
                     </div>
 
                     {(formaMatricula === 'parcelado' || formaMatricula === 'ambos') && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
-                        <span style={{ fontSize: 11, color: '#64748b' }}>Parcelas do Cartão (em até 5x):</span>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {[1, 2, 3, 4, 5].map(p => (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #e2e8f0', paddingTop: 8, flexWrap: 'wrap', gap: 6 }}>
+                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Parcelas do Cartão (em até 10x sem juros):</span>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(p => (
                             <button
                               key={p}
+                              type="button"
                               onClick={() => setNumParcelasMatricula(p)}
                               style={{
                                 width: 28, height: 28, borderRadius: 6, fontSize: 11, fontWeight: 800, cursor: 'pointer',
@@ -2351,43 +2478,168 @@ export default function ValoresPage() {
                 </div>
 
                 <div style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {/* Material */}
-                  <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <input
-                        type="checkbox"
-                        checked={incluirMaterial}
-                        onChange={e => setIncluirMaterial(e.target.checked)}
-                        style={{ width: 16, height: 16, accentColor: '#7c3aed', cursor: 'pointer' }}
-                      />
-                      <div>
-                        <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', display: 'block' }}>Taxa de Material Didático / Livros</span>
-                        <span style={{ fontSize: 10, color: '#64748b' }}>
-                          {selectedSeries.length === 1
-                            ? (currentSerie.taxaMaterialDesc || 'Material pedagógico anual')
-                            : `Total para ${selectedSeries.length} séries (${selectedSeries.map(s => `${s.nome}: ${fmt(s.taxaMaterial || 0)}`).join(', ')})`}
+                  {/* Material Didático / Livros com Seleção Múltipla */}
+                  <div style={{
+                    padding: '12px 14px', borderRadius: 12,
+                    background: incluirMaterial ? '#faf5ff' : '#f8fafc',
+                    border: incluirMaterial ? '1.5px solid #a855f7' : '1px solid #e2e8f0',
+                    display: 'flex', flexDirection: 'column', gap: 10,
+                    transition: 'all 0.15s ease'
+                  }}>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <input
+                          type="checkbox"
+                          checked={incluirMaterial}
+                          onChange={e => handleToggleIncluirMaterial(e.target.checked)}
+                          style={{ width: 17, height: 17, accentColor: '#7c3aed', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', display: 'block' }}>
+                            Taxa de Material Didático / Livros
+                          </span>
+                          <span style={{ fontSize: 10, color: '#64748b' }}>
+                            {incluirMaterial
+                              ? `${selectedMaterialIds.length} ${selectedMaterialIds.length === 1 ? 'material selecionado' : 'materiais selecionados'} • Parcelamento em até 10x no cartão`
+                              : 'Opcional (anual) • Parcelamento em até 10x no cartão sem juros'}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: incluirMaterial ? '#6d28d9' : '#334155', display: 'block' }}>
+                          {fmt(calculations.valorMaterial)}
+                        </span>
+                        <span style={{ fontSize: 9, color: incluirMaterial ? '#7c3aed' : '#94a3b8', fontWeight: 700 }}>
+                          {incluirMaterial ? '✓ Incluído na Proposta (em até 10x)' : 'Opcional (anual)'}
                         </span>
                       </div>
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9' }}>{fmt(calculations.valorMaterial)}</span>
-                  </label>
+                    </label>
+
+                    {incluirMaterial && (
+                      <div style={{
+                        borderTop: '1px solid #e9d5ff',
+                        paddingTop: 10,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Selecione os materiais (parcelamento em até 10x sem juros):
+                          </span>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMaterialIds(getDefaultMaterialIdsForSeries(selectedSeries))}
+                              style={{
+                                background: 'none', border: 'none', fontSize: 10, color: '#7c3aed',
+                                fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', padding: 0
+                              }}
+                            >
+                              Sugerido
+                            </button>
+                            <span style={{ fontSize: 10, color: '#cbd5e1' }}>•</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedMaterialIds(OPCOES_MATERIAIS.map(m => m.id))}
+                              style={{
+                                background: 'none', border: 'none', fontSize: 10, color: '#7c3aed',
+                                fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', padding: 0
+                              }}
+                            >
+                              Marcar Todos
+                            </button>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+                          {OPCOES_MATERIAIS.map(opcao => {
+                            const isSelected = selectedMaterialIds.includes(opcao.id)
+                            return (
+                              <div
+                                key={opcao.id}
+                                onClick={() => handleToggleMaterial(opcao.id)}
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  padding: '8px 12px',
+                                  borderRadius: 8,
+                                  background: isSelected ? '#f5f3ff' : '#ffffff',
+                                  border: isSelected ? '1.5px solid #7c3aed' : '1px solid #e2e8f0',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.12s ease'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {}} // Evento tratado pelo card pai
+                                    style={{ width: 15, height: 15, accentColor: '#7c3aed', cursor: 'pointer' }}
+                                  />
+                                  <div>
+                                    <span style={{ fontSize: 11, fontWeight: isSelected ? 800 : 700, color: isSelected ? '#581c87' : '#1e293b', display: 'block' }}>
+                                      {opcao.nome}
+                                    </span>
+                                    <span style={{ fontSize: 9.5, color: '#64748b' }}>
+                                      {opcao.segmento}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <span style={{
+                                    fontSize: 11.5,
+                                    fontWeight: 900,
+                                    color: isSelected ? '#7c3aed' : '#475569',
+                                    background: isSelected ? '#ede9fe' : '#f1f5f9',
+                                    padding: '2px 8px',
+                                    borderRadius: 6,
+                                    display: 'block'
+                                  }}>
+                                    {fmt(opcao.valor)}
+                                  </span>
+                                  <span style={{ fontSize: 9, color: isSelected ? '#6d28d9' : '#64748b', fontWeight: 700 }}>
+                                    ou até 10x de {fmt(opcao.valor / 10)}
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Extracurricular */}
-                  <div style={{ padding: '10px 14px', borderRadius: 12, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{
+                    padding: '12px 14px', borderRadius: 12,
+                    background: incluirExtracurricular ? '#faf5ff' : '#f8fafc',
+                    border: incluirExtracurricular ? '1.5px solid #a855f7' : '1px solid #e2e8f0',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                    transition: 'all 0.15s ease'
+                  }}>
                     <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <input
                           type="checkbox"
                           checked={incluirExtracurricular}
                           onChange={e => setIncluirExtracurricular(e.target.checked)}
-                          style={{ width: 16, height: 16, accentColor: '#7c3aed', cursor: 'pointer' }}
+                          style={{ width: 17, height: 17, accentColor: '#7c3aed', cursor: 'pointer' }}
                         />
                         <div>
                           <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', display: 'block' }}>Atividades Extracurriculares (2 aulas/sem)</span>
                           <span style={{ fontSize: 10, color: '#64748b' }}>Ballet, Jazz, Futsal, Ginástica Rítmica</span>
                         </div>
                       </div>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: '#6d28d9' }}>{fmt(calculations.valorExtracurricular)} / mês</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: incluirExtracurricular ? '#6d28d9' : '#334155', display: 'block' }}>
+                          {fmt(SERVICOS_ADICIONAIS.extracurricularMensal)} / mês
+                        </span>
+                        <span style={{ fontSize: 9, color: incluirExtracurricular ? '#7c3aed' : '#94a3b8', fontWeight: 700 }}>
+                          {incluirExtracurricular ? '✓ Incluído' : 'Opcional'}
+                        </span>
+                      </div>
                     </label>
 
                     {incluirExtracurricular && (
@@ -2397,6 +2649,7 @@ export default function ValoresPage() {
                           {SERVICOS_ADICIONAIS.atividadesExtracurriculares.map(ativ => (
                             <button
                               key={ativ}
+                              type="button"
                               onClick={() => setAtividadeSelecionada(ativ)}
                               style={{
                                 padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer',
@@ -2406,6 +2659,64 @@ export default function ValoresPage() {
                               }}
                             >
                               {ativ}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Progressão Parcial (DP) */}
+                  <div style={{
+                    padding: '12px 14px', borderRadius: 12,
+                    background: incluirDP ? '#fffbeb' : '#f8fafc',
+                    border: incluirDP ? '1.5px solid #f59e0b' : '1px solid #e2e8f0',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                    transition: 'all 0.15s ease'
+                  }}>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <input
+                          type="checkbox"
+                          checked={incluirDP}
+                          onChange={e => setIncluirDP(e.target.checked)}
+                          style={{ width: 17, height: 17, accentColor: '#d97706', cursor: 'pointer' }}
+                        />
+                        <div>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', display: 'block' }}>Progressão Parcial (DP)</span>
+                          <span style={{ fontSize: 10, color: '#64748b' }}>
+                            Dependência curricular • {fmt(SERVICOS_ADICIONAIS.dpPorMateria)} por matéria (até 3)
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: incluirDP ? '#d97706' : '#334155', display: 'block' }}>
+                          {fmt(SERVICOS_ADICIONAIS.dpPorMateria * numMateriasDP)}
+                        </span>
+                        <span style={{ fontSize: 9, color: incluirDP ? '#d97706' : '#94a3b8', fontWeight: 700 }}>
+                          {incluirDP ? `✓ ${numMateriasDP} ${numMateriasDP > 1 ? 'matérias' : 'matéria'}` : 'R$ 300,00/matéria'}
+                        </span>
+                      </div>
+                    </label>
+
+                    {incluirDP && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #fef3c7', paddingTop: 8 }}>
+                        <span style={{ fontSize: 11, color: '#92400e', fontWeight: 700 }}>Quantidade de matérias em DP:</span>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          {[1, 2, 3].map(n => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setNumMateriasDP(n)}
+                              style={{
+                                padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                                background: numMateriasDP === n ? '#d97706' : '#ffffff',
+                                color: numMateriasDP === n ? '#ffffff' : '#475569',
+                                border: numMateriasDP === n ? 'none' : '1px solid #cbd5e1',
+                                boxShadow: numMateriasDP === n ? '0 1px 3px rgba(217,119,6,0.25)' : 'none'
+                              }}
+                            >
+                              {n} {n === 1 ? 'matéria' : 'matérias'} ({fmt(n * SERVICOS_ADICIONAIS.dpPorMateria)})
                             </button>
                           ))}
                         </div>
@@ -2530,15 +2841,38 @@ export default function ValoresPage() {
                       <span style={{ fontWeight: 700, color: '#0f172a' }}>{fmt(calculations.anuidadeComDesconto)}</span>
                     </div>
                     {incluirMaterial && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6d28d9', fontWeight: 700 }}>
-                        <span>Material Didático {selectedSeries.length > 1 ? `(${selectedSeries.length} séries)` : ''}:</span>
-                        <span>+ {fmt(calculations.valorMaterial)}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6d28d9', fontWeight: 700 }}>
+                          <span>Material Didático ({selectedMaterialIds.length} {selectedMaterialIds.length === 1 ? 'item' : 'itens'}):</span>
+                          <span>+ {fmt(calculations.valorMaterial)}</span>
+                        </div>
+                        {calculations.valorMaterial > 0 && (
+                          <div style={{ fontSize: 10, color: '#7c3aed', textAlign: 'right', fontWeight: 600 }}>
+                            em até 10x de {fmt(calculations.valorMaterial / 10)} sem juros
+                          </div>
+                        )}
+                        {selectedMaterialIds.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingLeft: 6 }}>
+                            {OPCOES_MATERIAIS.filter(m => selectedMaterialIds.includes(m.id)).map(m => (
+                              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#7c3aed' }}>
+                                <span>• {m.nome}:</span>
+                                <span style={{ fontWeight: 600 }}>{fmt(m.valor)} <span style={{ opacity: 0.8, fontSize: 9 }}>(10x {fmt(m.valor / 10)})</span></span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                     {incluirExtracurricular && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: '#6d28d9', fontWeight: 700 }}>
                         <span>Extracurricular ({atividadeSelecionada}):</span>
                         <span>+ {fmt(calculations.valorExtracurricular)}/mês</span>
+                      </div>
+                    )}
+                    {incluirDP && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: '#d97706', fontWeight: 700 }}>
+                        <span>Progressão Parcial ({numMateriasDP} {numMateriasDP > 1 ? 'matérias' : 'matéria'}):</span>
+                        <span>+ {fmt(calculations.valorDP)}</span>
                       </div>
                     )}
 
@@ -2733,7 +3067,7 @@ export default function ValoresPage() {
                 <div>
                   <span style={{ fontSize: 11, fontWeight: 800, color: '#93c5fd', textTransform: 'uppercase' }}>Colégio Impacto • {anoLetivo}</span>
                   <h2 style={{ fontSize: 20, fontWeight: 900, color: '#ffffff', margin: '2px 0 0' }}>Matrículas, Mensalidades e Serviços</h2>
-                  <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Descontos de antecipação com até 20% de desconto e simulação em até 5 parcelas.</p>
+                  <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>Descontos de antecipação com até 20% de desconto e parcelamento em até 10x sem juros.</p>
                 </div>
 
                 <div style={{ position: 'relative', width: 260 }}>
@@ -2761,15 +3095,15 @@ export default function ValoresPage() {
                       <th style={{ padding: '14px 12px', textAlign: 'right', background: '#eff6ff', color: '#1e40af' }}>Mensalidade {anoLetivo}</th>
                       <th style={{ padding: '14px 12px', textAlign: 'center', background: '#ecfdf5', color: '#065f46', borderLeft: '1px solid #e2e8f0' }}>
                         <div>OUTUBRO</div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#059669' }}>20% À Vista | 15% 5x</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#059669' }}>20% À Vista | 15% 10x</div>
                       </th>
                       <th style={{ padding: '14px 12px', textAlign: 'center', background: '#eff6ff', color: '#1e40af', borderLeft: '1px solid #e2e8f0' }}>
                         <div>NOVEMBRO</div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb' }}>15% À Vista | 10% 5x</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#2563eb' }}>15% À Vista | 10% 10x</div>
                       </th>
                       <th style={{ padding: '14px 12px', textAlign: 'center', background: '#fffbeb', color: '#92400e', borderLeft: '1px solid #e2e8f0' }}>
                         <div>DEZEMBRO</div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#d97706' }}>10% À Vista | 5% 5x</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#d97706' }}>10% À Vista | 5% 10x</div>
                       </th>
                       <th style={{ padding: '14px 12px', textAlign: 'center' }}>Ação</th>
                     </tr>
@@ -2778,16 +3112,16 @@ export default function ValoresPage() {
                     {filteredSeries.map((serie, idx) => {
                       const base = serie.mensalidadeBase
                       const outAVista = base * 0.80
-                      const out5xTotal = base * 0.85
-                      const out5xParc = out5xTotal / 5
+                      const out10xTotal = base * 0.85
+                      const out10xParc = out10xTotal / 10
 
                       const novAVista = base * 0.85
-                      const nov5xTotal = base * 0.90
-                      const nov5xParc = nov5xTotal / 5
+                      const nov10xTotal = base * 0.90
+                      const nov10xParc = nov10xTotal / 10
 
                       const dezAVista = base * 0.90
-                      const dez5xTotal = base * 0.95
-                      const dez5xParc = dez5xTotal / 5
+                      const dez10xTotal = base * 0.95
+                      const dez10xParc = dez10xTotal / 10
 
                       return (
                         <tr key={serie.id} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? '#ffffff' : '#fafafa' }}>
@@ -2801,15 +3135,15 @@ export default function ValoresPage() {
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(236, 253, 245, 0.4)' }}>
                             <span style={{ fontWeight: 900, color: '#047857', display: 'block' }}>{fmt(outAVista)}</span>
-                            <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(out5xParc)}</strong></span>
+                            <span style={{ fontSize: 10, color: '#64748b' }}>10x de <strong>{fmt(out10xParc)}</strong></span>
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(239, 246, 255, 0.4)' }}>
                             <span style={{ fontWeight: 900, color: '#1d4ed8', display: 'block' }}>{fmt(novAVista)}</span>
-                            <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(nov5xParc)}</strong></span>
+                            <span style={{ fontSize: 10, color: '#64748b' }}>10x de <strong>{fmt(nov10xParc)}</strong></span>
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center', borderLeft: '1px solid #f1f5f9', background: 'rgba(255, 251, 235, 0.4)' }}>
                             <span style={{ fontWeight: 900, color: '#b45309', display: 'block' }}>{fmt(dezAVista)}</span>
-                            <span style={{ fontSize: 10, color: '#64748b' }}>5x de <strong>{fmt(dez5xParc)}</strong></span>
+                            <span style={{ fontSize: 10, color: '#64748b' }}>10x de <strong>{fmt(dez10xParc)}</strong></span>
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center' }}>
                             <button
@@ -3010,26 +3344,41 @@ export default function ValoresPage() {
               </div>
               <div style={{ padding: 20 }}>
                 <div style={{ padding: '14px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>Taxa por Matéria</span>
-                  <span style={{ fontSize: 16, fontWeight: 900, color: '#d97706' }}>R$ 300,00</span>
+                  <div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', display: 'block' }}>Taxa por Matéria</span>
+                    <span style={{ fontSize: 10, color: '#64748b' }}>Do 7º ano EF à 2ª série EM (até 3 disciplinas)</span>
+                  </div>
+                  <span style={{ fontSize: 16, fontWeight: 900, color: '#d97706' }}>
+                    R$ 300,00 <span style={{ fontSize: 11, color: '#92400e', fontWeight: 700 }}>/ matéria</span>
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Card 3: Material */}
+            {/* Card 3: Material e Livros Didáticos */}
             <div style={{ background: '#ffffff', borderRadius: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)', overflow: 'hidden' }}>
-              <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #4c1d95 100%)', padding: '16px 20px', borderBottom: '1px solid #2e1065', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ padding: 8, borderRadius: 10, background: 'rgba(255, 255, 255, 0.15)', color: '#c084fc', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}><Layers size={18} /></div>
-                <div>
-                  <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', margin: 0 }}>Taxa de Material</h3>
-                  <span style={{ fontSize: 11, color: '#e9d5ff' }}>Nível 1</span>
+              <div style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #4c1d95 100%)', padding: '16px 20px', borderBottom: '1px solid #2e1065', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ padding: 8, borderRadius: 10, background: 'rgba(255, 255, 255, 0.15)', color: '#c084fc', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}><Layers size={18} /></div>
+                  <div>
+                    <h3 style={{ fontSize: 14, fontWeight: 800, color: '#ffffff', margin: 0 }}>Material Didático & Livros</h3>
+                    <span style={{ fontSize: 11, color: '#e9d5ff' }}>Tabela Oficial Anual</span>
+                  </div>
                 </div>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#e9d5ff', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '2px 8px', borderRadius: 12 }}>
+                  Anual
+                </span>
               </div>
-              <div style={{ padding: 20 }}>
-                <div style={{ padding: '14px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>Nível 1 (Anual)</span>
-                  <span style={{ fontSize: 16, fontWeight: 900, color: '#7c3aed' }}>R$ 480,00</span>
-                </div>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {SERVICOS_ADICIONAIS.tabelaServicosMateriais.map((item, idx) => (
+                  <div key={idx} style={{ padding: '8px 12px', borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#1e293b', display: 'block' }}>{item.nome}</span>
+                      <span style={{ fontSize: 9, color: '#64748b' }}>{item.segmento}</span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>{fmt(item.valor)}</span>
+                  </div>
+                ))}
               </div>
             </div>
 
