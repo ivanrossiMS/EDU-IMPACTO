@@ -29,50 +29,81 @@ export async function GET(request: Request) {
     const idParam = searchParams.get('id')
 
     // VERIFICAÇÃO DE PERFIL E IDOR
-    let isFamilyOrStudent = false;
-    const perfil = user.user_metadata?.perfil || '';
-    const cargo = user.user_metadata?.cargo || '';
-    if (
-      perfil === 'Família' || 
-      perfil === 'Responsável' || 
-      cargo === 'Responsável' || 
-      cargo === 'Aluno' || 
-      perfil === 'Aluno'
-    ) {
-      isFamilyOrStudent = true;
-    } else {
-      const { data: dbUser } = await supabase
-        .from('system_users')
-        .select('perfil, cargo')
-        .eq('id', user.id)
-        .maybeSingle();
-      if (dbUser && (
-        dbUser.perfil === 'Família' || 
-        dbUser.perfil === 'Responsável' || 
-        dbUser.cargo === 'Responsável' || 
-        dbUser.cargo === 'Aluno' || 
-        dbUser.perfil === 'Aluno'
-      )) {
-        isFamilyOrStudent = true;
+    const perfil = (user.user_metadata?.perfil || '').trim();
+    const cargo = (user.user_metadata?.cargo || '').trim();
+
+    // Buscar no system_users se necessário para obter perfil, cargo e dados adicionais
+    let dbUser: any = null;
+    const { data: foundUser } = await supabase
+      .from('system_users')
+      .select('id, perfil, cargo, dados')
+      .or(`id.eq."${user.id}",auth_id.eq."${user.id}"${user.email ? `,email.ilike."${user.email}"` : ''}`)
+      .maybeSingle();
+    dbUser = foundUser;
+
+    const effectivePerfil = dbUser?.perfil || perfil;
+    const effectiveCargo = dbUser?.cargo || cargo;
+
+    const perfisMasterAdmin = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master'];
+    const isAdmin = perfisMasterAdmin.some(p => p === effectivePerfil.toLowerCase() || p === effectiveCargo.toLowerCase());
+
+    const isFamilyOrStudentProfile = (
+      effectivePerfil === 'Família' || 
+      effectivePerfil === 'Responsável' || 
+      effectiveCargo === 'Responsável' || 
+      effectiveCargo === 'Aluno' || 
+      effectivePerfil === 'Aluno'
+    );
+
+    // BLINDAGEM IDOR: Se aluno_id foi fornecido, validar autorização
+    if (alunoId) {
+      if (!isAdmin) {
+        const candidateRespIds = new Set<string>();
+        if (user.user_metadata?.responsavel_id) candidateRespIds.add(String(user.user_metadata.responsavel_id));
+        if (user.user_metadata?.aluno_id) candidateRespIds.add(String(user.user_metadata.aluno_id));
+        if (user.id) candidateRespIds.add(String(user.id));
+        if (dbUser?.id) candidateRespIds.add(String(dbUser.id));
+        if (dbUser?.dados?.responsavel_id) candidateRespIds.add(String(dbUser.dados.responsavel_id));
+        if (dbUser?.dados?.aluno_id) candidateRespIds.add(String(dbUser.dados.aluno_id));
+
+        if (user.email) {
+          const { data: respByEmail } = await supabase
+            .from('responsaveis')
+            .select('id')
+            .eq('email', user.email)
+            .maybeSingle();
+          if (respByEmail?.id) candidateRespIds.add(String(respByEmail.id));
+        }
+
+        let isAuthorized = false;
+        const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
+
+        for (const checkId of candidateRespIds) {
+          const cleanCheckId = String(checkId).replace(/^(a_|_ALU)/, '');
+          if (cleanCheckId === cleanAlunoId) {
+            isAuthorized = true;
+            break;
+          }
+          const hasRel = await checkResponsavelRelationship(checkId, alunoId);
+          if (hasRel) {
+            isAuthorized = true;
+            break;
+          }
+        }
+
+        if (!isAuthorized) {
+          return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
+        }
       }
+    } else if (isFamilyOrStudentProfile) {
+      return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
     }
 
-    if (isFamilyOrStudent) {
-      if (!alunoId) {
-        return NextResponse.json({ error: 'Acesso negado: ID do aluno não informado.' }, { status: 403 });
-      }
-      const checkId = user.user_metadata?.responsavel_id || user.user_metadata?.aluno_id || user.id;
-      const isOwner = await checkResponsavelRelationship(checkId, alunoId);
-      if (!isOwner) {
-        return NextResponse.json({ error: 'Acesso negado: Você não tem permissão para visualizar dados deste aluno.' }, { status: 403 });
-      }
-    }
-
-    let accessStartDate = await getLoggedUserAccessStartDate(true)
-    let query = supabase.from('momentos').select('*')
+    let accessStartDate = await getLoggedUserAccessStartDate();
+    let query = supabase.from('momentos').select('*');
 
     // Filtragem segura no Backend
-    if (isFamilyOrStudent && alunoId) {
+    if (alunoId) {
       let resolvedTargets: string[] = [];
       const [alunoRes, turmasRes, gruposRes] = await Promise.all([
         supabase.from('alunos').select('*').eq('id', alunoId).maybeSingle(),
@@ -82,41 +113,45 @@ export async function GET(request: Request) {
 
       const alunoData = alunoRes.data;
       if (alunoData) {
-        const turmasList = (turmasRes.data || []).map(t => ({ id: t.id, nome: t.nome, codigo: t.codigo, ano: t.ano, dados: t.dados }));
-        const gruposList = (gruposRes.data || []).map(g => ({ id: g.id, nome: g.nome || g.dados?.nome, alunosIds: g.alunosIds || g.dados?.alunosIds, syncId: g.syncId || g.dados?.syncId, dados: g.dados }));
-        
-        resolvedTargets = getAlunoTodasTurmasEGrupos(alunoData, turmasList, gruposList);
-
-        const dateStr = alunoData.dados?.data_matricula || alunoData.dados?.data_inicio || alunoData.dados?.data_ingresso || alunoData.created_at;
-        if (dateStr) {
-          const studentEntryDate = new Date(dateStr);
-          if (accessStartDate === null || studentEntryDate > accessStartDate) {
-            accessStartDate = studentEntryDate;
-          }
-        }
+        // Enviar turmasRes.data completo para isAlunoCursandoTurma preservar turno, modalidade, serie e segmento
+        resolvedTargets = getAlunoTodasTurmasEGrupos(alunoData, turmasRes.data || [], gruposRes.data || []);
       }
 
-      const conditions = [];
+      const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
+      const conditions: string[] = [];
+
       // Momentos públicos para "Toda a escola", "TODOS" ou sem array (empty array)
       conditions.push(`dados->targetClasses.eq."[]"`);
       conditions.push(`dados->targetClasses.is.null`);
       conditions.push(`dados->targetClasses.cs.["Todos"]`);
+      conditions.push(`dados->targetClasses.cs.["todos"]`);
+      conditions.push(`dados->targetClasses.cs.["TODOS"]`);
       conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
       conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
+      conditions.push(`dados->targetClasses.cs.["toda a escola"]`);
       conditions.push(`dados->targetClasses.cs.["Todas"]`);
+      conditions.push(`dados->targetClasses.cs.["todas"]`);
 
       // Se tiver aluno especifico
-      conditions.push(`dados->alunosIds.cs.["${alunoId}"]`);
-      conditions.push(`dados->alunosIds.cs.["a_${alunoId}"]`);
-      conditions.push(`dados->alunosIds.cs.["_ALU${alunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["${cleanAlunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["a_${cleanAlunoId}"]`);
+      conditions.push(`dados->alunosIds.cs.["_ALU${cleanAlunoId}"]`);
+      conditions.push(`dados->targetStudents.cs.["${cleanAlunoId}"]`);
 
-      // Incluir todas as turmas e grupos ativos do aluno no filtro
+      // Incluir todas as turmas e grupos ativos do aluno no filtro (tanto por nome quanto por ID)
       resolvedTargets.forEach(target => {
-        conditions.push(`dados->targetClasses.cs.["${target}"]`);
+        if (!target) return;
+        const tStr = String(target).trim();
+        conditions.push(`dados->targetClasses.cs.["${tStr}"]`);
+        conditions.push(`dados->targetClassesIds.cs.["${tStr}"]`);
+        if (/^\d+$/.test(tStr)) {
+          conditions.push(`dados->targetClassesIds.cs.["t_${tStr}"]`);
+          conditions.push(`dados->targetClassesIds.cs.["g_${tStr}"]`);
+        }
       });
 
       query = query.or(conditions.join(','));
-    } else if (!isFamilyOrStudent) {
+    } else if (!isAdmin) {
        // Se for colaborador
         const perfisMasterAdmin = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master'];
         const isAdmin = perfisMasterAdmin.some(p => p === perfil.toLowerCase() || p === cargo.toLowerCase());
@@ -276,7 +311,7 @@ export async function GET(request: Request) {
        }
     }
 
-    if (isFamilyOrStudent && accessStartDate) {
+    if (!alunoId && accessStartDate) {
       const adjustedStartDate = new Date(accessStartDate.getTime() - 60000); // 1 min buffer para clock skew
       query = query.gte('created_at', adjustedStartDate.toISOString());
     }

@@ -1405,65 +1405,107 @@ export default function ADInnerLayout({
           border-top-right-radius: 24px;
         }
 
-        /* Modern Badges (Turma, Turno, Responsável) */
-        .ad-modern-badges-row {
+        /* Modern Badges (Turma, Turno, Responsável - Estilo Imagem 2 Compacto e Alinhado) */
+        .ad-modern-badges-container {
           display: flex;
-          flex-wrap: wrap;
+          flex-direction: column;
+          gap: 5px;
+          margin-top: 1px;
+          width: 100%;
+        }
+
+        .ad-modern-badges-top-row {
+          display: flex;
           align-items: center;
-          gap: 8px;
-          margin-top: 4px;
+          gap: 6px;
           width: 100%;
         }
 
         .ad-modern-badge {
           display: inline-flex;
           align-items: center;
-          gap: 7px;
-          padding: 5px 12px 5px 7px;
-          border-radius: 9999px;
-          font-size: 12px;
-          font-weight: 700;
+          gap: 6px;
+          padding: 2px 8px 2px 3px;
+          border-radius: 10px;
           font-family: 'Outfit', sans-serif;
           letter-spacing: -0.01em;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
           transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
           cursor: default;
           user-select: none;
-          max-width: 100%;
+          box-sizing: border-box;
+          height: 28px;
         }
 
-        .ad-modern-badge:hover {
-          transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        .ad-modern-badges-top-row .ad-modern-badge {
+          flex: 1;
+          min-width: 0;
+          height: 28px;
         }
 
         .ad-modern-badge.badge-turma {
-          background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.03) 100%);
-          border: 1px solid rgba(99, 102, 241, 0.18);
-          color: #3730a3;
+          background: #ffffff;
+          border: 1.2px solid #dcdffe;
+          color: #1e1b4b;
         }
         .ad-modern-badge.badge-turma:hover {
-          border-color: rgba(99, 102, 241, 0.35);
+          border-color: #c7d2fe;
+          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
         }
 
         .ad-modern-badge.badge-turno {
-          background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(168, 85, 247, 0.03) 100%);
-          border: 1px solid rgba(168, 85, 247, 0.18);
-          color: #6b21a8;
+          background: #ffffff;
+          border: 1.2px solid #ebd5ff;
+          color: #4a044e;
         }
         .ad-modern-badge.badge-turno:hover {
-          border-color: rgba(168, 85, 247, 0.35);
+          border-color: #d8b4fe;
+          box-shadow: 0 2px 8px rgba(168, 85, 247, 0.08);
         }
 
         .ad-modern-badge.badge-resp {
-          background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.03) 100%);
-          border: 1px solid rgba(16, 185, 129, 0.18);
-          color: #065f46;
+          width: 100%;
+          height: 28px;
+          min-height: 28px;
+          background: #ffffff;
+          border: 1.2px solid #bbf7d0;
+          padding: 2px 8px 2px 3px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 5px;
         }
         .ad-modern-badge.badge-resp:hover {
-          border-color: rgba(16, 185, 129, 0.35);
+          border-color: #86efac;
+          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+        }
+
+        .ad-badge-resp-left {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          flex: 1;
+        }
+
+        .ad-badge-resp-info {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          justify-content: center;
+          min-width: 0;
+          line-height: 1;
+          gap: 1px;
+        }
+
+        .ad-badge-resp-label {
+          font-size: 7.5px;
+          font-weight: 700;
+          color: #047857;
+          letter-spacing: 0.15px;
+          text-transform: uppercase;
+          line-height: 1;
         }
 
         .ad-badge-icon-box {
@@ -1477,37 +1519,39 @@ export default function ADInnerLayout({
         }
 
         .turma-icon {
-          background: rgba(99, 102, 241, 0.15);
-          color: #6366f1;
+          background: #e0e7ff;
+          color: #4338ca;
         }
         .turno-icon {
-          background: rgba(168, 85, 247, 0.15);
-          color: #a855f7;
+          background: #f3e8ff;
+          color: #9333ea;
         }
         .resp-icon {
-          background: rgba(16, 185, 129, 0.15);
-          color: #10b981;
+          background: #d1fae5;
+          color: #059669;
         }
 
         .ad-badge-text {
-          font-weight: 700;
+          font-size: 11.5px;
+          font-weight: 800;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          letter-spacing: -0.01em;
+          line-height: 1.1;
         }
 
         .ad-badge-text.resp-name {
-          max-width: 200px;
+          color: #064e3b;
+          font-size: 11.5px;
         }
 
-        .ad-badge-tag {
-          font-size: 8.5px;
-          padding: 2px 6px;
-          border-radius: 6px;
-          font-weight: 800;
-          letter-spacing: 0.3px;
-          text-transform: uppercase;
+        .ad-badge-resp-tags {
+          display: flex;
+          align-items: center;
+          gap: 3px;
           flex-shrink: 0;
+          margin-left: 3px;
         }
 
         .ad-badge-icon-tag {
@@ -1521,22 +1565,16 @@ export default function ADInnerLayout({
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .tag-parentesco {
-          background: #3b82f6;
-          color: #ffffff;
-          box-shadow: 0 1px 4px rgba(59, 130, 246, 0.3);
-        }
-
         .tag-fin {
           background: #10b981;
           color: #ffffff;
-          box-shadow: 0 1px 4px rgba(16, 185, 129, 0.35);
+          box-shadow: 0 1px 3px rgba(16, 185, 129, 0.3);
         }
 
         .tag-ped {
           background: #6366f1;
           color: #ffffff;
-          box-shadow: 0 1px 4px rgba(99, 102, 241, 0.35);
+          box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
         }
 
         /* Actions Row (Chamar aluno, Trocar aluno e Sair - Lado a Lado) */
@@ -1715,51 +1753,72 @@ export default function ADInnerLayout({
             border-radius: 24px;
           }
           .ad-premium-card-avatar {
-            width: 76px !important;
-            height: 76px !important;
+            width: 86px !important;
+            height: 86px !important;
             border-radius: 18px !important;
           }
           .ad-premium-student-name {
-            font-size: 17px !important;
+            font-size: 18px !important;
             white-space: nowrap !important;
             max-width: 100% !important;
             display: flex !important;
             align-items: center !important;
             flex-wrap: nowrap !important;
-            gap: 8px !important;
+            gap: 7px !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
           }
           .ad-premium-card-header-flex {
             gap: 12px !important;
           }
-          .ad-modern-badges-row {
-            gap: 6px !important;
-            margin-top: 2px !important;
+          .ad-modern-badges-container {
+            gap: 4px !important;
+            margin-top: 1px !important;
           }
-          .ad-modern-badge {
-            font-size: 11px !important;
-            padding: 4px 10px 4px 6px !important;
+          .ad-modern-badges-top-row {
             gap: 5px !important;
           }
+          .ad-modern-badges-top-row .ad-modern-badge {
+            height: 27px !important;
+            padding: 2px 6px 2px 3px !important;
+            gap: 5px !important;
+            border-radius: 9px !important;
+          }
           .ad-badge-icon-box {
-            width: 18px !important;
-            height: 18px !important;
+            width: 21px !important;
+            height: 21px !important;
           }
           .ad-badge-icon-box svg {
             width: 11px !important;
             height: 11px !important;
           }
+          .ad-badge-text {
+            font-size: 11px !important;
+          }
+          .ad-modern-badge.badge-resp {
+            height: 27px !important;
+            min-height: 27px !important;
+            padding: 2px 6px 2px 3px !important;
+            border-radius: 9px !important;
+            gap: 5px !important;
+          }
+          .ad-badge-resp-left {
+            gap: 5px !important;
+          }
+          .ad-badge-resp-label {
+            font-size: 7px !important;
+          }
           .ad-badge-text.resp-name {
-            max-width: 160px !important;
+            font-size: 11px !important;
+            max-width: 140px !important;
           }
           .ad-badge-icon-tag {
-            width: 16px !important;
-            height: 16px !important;
+            width: 18px !important;
+            height: 18px !important;
           }
           .ad-badge-icon-tag svg {
-            width: 9px !important;
-            height: 9px !important;
+            width: 10px !important;
+            height: 10px !important;
           }
           .ad-card-actions-row {
             gap: 8px !important;
@@ -2564,11 +2623,11 @@ export default function ADInnerLayout({
       <div className="ad-premium-card-wrapper">
         <div className="ad-premium-card">
           {/* AREA 1: PERFIL ALUNO (Avatar + Nome + Badges Modernos) */}
-          <div className="ad-premium-card-header-flex" style={{ display: 'flex', alignItems: 'center', gap: 18, width: '100%' }}>
+          <div className="ad-premium-card-header-flex" style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%' }}>
             <div className="ad-premium-card-avatar" style={{ 
               width: 90, 
               height: 90, 
-              borderRadius: 22, 
+              borderRadius: 20, 
               background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)', 
               boxShadow: '0 8px 24px rgba(168,85,247,0.3)', 
               display: 'flex', 
@@ -2593,9 +2652,9 @@ export default function ADInnerLayout({
         width: '100vw', height: '50%', background: 'linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0))' }} />
             </div>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, flex: 1, maxWidth: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%' }}>
-                <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', minWidth: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5, minWidth: 0, flex: 1, maxWidth: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%' }}>
+                <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', minWidth: 0, lineHeight: 1.15 }}>
                   <span style={{ whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{abbreviateName(aluno?.nome || 'Carregando...')}</span>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="#6366f1" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                 </h2>
@@ -2629,55 +2688,61 @@ export default function ADInnerLayout({
                 )}
               </div>
 
-              {/* Badges Ultra Modernos: Turma, Turno, Responsável (sem legenda, ícone à esquerda) */}
-              <div className="ad-modern-badges-row">
-                {/* Badge 1: Turma */}
-                <div className="ad-modern-badge badge-turma" title={`Turma: ${cleanTurma}`}>
-                  <div className="ad-badge-icon-box turma-icon">
-                    <GraduationCap size={13} strokeWidth={2.4} />
+              {/* Badges Ultra Modernos (Estilo Imagem 2 Compacto): Turma + Turno no topo, Responsável abaixo em largura total */}
+              <div className="ad-modern-badges-container">
+                <div className="ad-modern-badges-top-row">
+                  {/* Badge 1: Turma */}
+                  <div className="ad-modern-badge badge-turma" title={`Turma: ${cleanTurma}`}>
+                    <div className="ad-badge-icon-box turma-icon">
+                      <GraduationCap size={12} strokeWidth={2.4} />
+                    </div>
+                    <span className="ad-badge-text">{cleanTurma}</span>
                   </div>
-                  <span className="ad-badge-text">{cleanTurma}</span>
-                </div>
 
-                {/* Badge 2: Turno */}
-                <div className="ad-modern-badge badge-turno" title={`Turno: ${cleanTurno}`}>
-                  <div className="ad-badge-icon-box turno-icon">
-                    <Calendar size={13} strokeWidth={2.4} />
+                  {/* Badge 2: Turno */}
+                  <div className="ad-modern-badge badge-turno" title={`Turno: ${cleanTurno}`}>
+                    <div className="ad-badge-icon-box turno-icon">
+                      <Calendar size={12} strokeWidth={2.4} />
+                    </div>
+                    <span className="ad-badge-text">{cleanTurno}</span>
                   </div>
-                  <span className="ad-badge-text">{cleanTurno}</span>
                 </div>
 
                 {/* Badge 3: Responsável */}
-                {(currentUser?.cargo !== 'Aluno' && !isMirroringAluno) && (
-                  <div className="ad-modern-badge badge-resp" title={`Responsável: ${(() => {
-                    const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis 
-                      ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) 
-                      : null;
-                    return mirroredResp?.nome || currentUser?.nome || (aluno as any)?.responsavel || 'Responsável';
-                  })()}`}>
-                    <div className="ad-badge-icon-box resp-icon">
-                      <Users size={13} strokeWidth={2.4} />
+                {(currentUser?.cargo !== 'Aluno' && !isMirroringAluno) && (() => {
+                  const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis 
+                    ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) 
+                    : null;
+                  const rawName = mirroredResp?.nome || currentUser?.nome || (aluno as any)?.responsavel || 'Responsável';
+                  const respFullName = abbreviateName(rawName);
+
+                  return (
+                    <div className="ad-modern-badge badge-resp" title={`Responsável: ${rawName}`}>
+                      <div className="ad-badge-resp-left">
+                        <div className="ad-badge-icon-box resp-icon">
+                          <Users size={12} strokeWidth={2.4} />
+                        </div>
+                        <div className="ad-badge-resp-info">
+                          <span className="ad-badge-resp-label">Responsável</span>
+                          <span className="ad-badge-text resp-name">{respFullName}</span>
+                        </div>
+                      </div>
+
+                      <div className="ad-badge-resp-tags">
+                        {userAccessRole.isFin && (
+                          <span className="ad-badge-icon-tag tag-fin" title="Responsável Financeiro">
+                            <DollarSign size={10} strokeWidth={2.8} />
+                          </span>
+                        )}
+                        {userAccessRole.isPed && (
+                          <span className="ad-badge-icon-tag tag-ped" title="Responsável Pedagógico">
+                            <BookOpen size={9.5} strokeWidth={2.4} />
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span className="ad-badge-text resp-name">
-                      {(() => {
-                         const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis 
-                           ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) 
-                           : null;
-                         return abbreviateName(mirroredResp?.nome || currentUser?.nome || (aluno as any)?.responsavel || 'Responsável');
-                      })()}
-                    </span>
-                    {userAccessRole.isFin && (
-                      <span className="ad-badge-icon-tag tag-fin" title="Responsável Financeiro">
-                        <DollarSign size={10} strokeWidth={2.8} />
-                      </span>
-                    )}
-                    {userAccessRole.isPed && (
-                      <span className="ad-badge-icon-tag tag-ped" title="Responsável Pedagógico">
-                        <BookOpen size={10} strokeWidth={2.6} />
-                      </span>
-                    )}
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
           </div>

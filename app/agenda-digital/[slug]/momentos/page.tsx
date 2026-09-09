@@ -214,69 +214,14 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return `${namesList.slice(0, -1).join(', ')} e ${namesList[namesList.length - 1]}`
   }, [aluno, turmas, grupos])
 
-  // Filtrar momentos aprovados
-  // Filtrar momentos aprovados e checar se o targetClasses reflete a turma do aluno ou 'TODOS' / 'Toda a Escola'
+  // Momentos já filtrados e autorizados com segurança pelo backend para este aluno
   const meusMomentos = React.useMemo(() => {
-    // Para família/aluno, o backend JÁ TRAZ FILTRADO corretamente (inclusive com as turmas convertidas)
-    const isFamilyOrStudent = !currentUser || 
-      currentUser.perfil === 'Família' || 
-      currentUser.perfil === 'Responsável' || 
-      currentUser.cargo === 'Responsável' || 
-      currentUser.cargo === 'Aluno' || 
-      currentUser.perfil === 'Aluno';
-      
-    if (isFamilyOrStudent) {
-      return [...fetchMomentos].sort((a, b) => {
-        const dateA = new Date((a as any).date || (a as any).created_at || 0).getTime();
-        const dateB = new Date((b as any).date || (b as any).created_at || 0).getTime();
-        return dateB - dateA;
-      });
-    }
-
-    return fetchMomentos.filter(m => {
-      const targetClasses = m.targetClasses || []
-      const targetAlunos = m.alunosIds || []
-
-      // Se tiver alunosIds e o aluno atual estiver nele
-      if (targetAlunos.length > 0 && aluno?.id) {
-        const aIdPlain = String(aluno.id).replace(/^_*(ALU)?/, '')
-        const isTargeted = targetAlunos.some((idRaw: string) => String(idRaw).replace(/^_*(ALU)?/, '') === aIdPlain)
-        if (isTargeted) return true
-      }
-
-      // Se tiver targetClasses e a turma corresponder
-      if (targetClasses.length > 0) {
-        return targetClasses.some((tc: string) => {
-          const tcl = tc.toLowerCase()
-          if (tcl === 'todos' || tcl === 'toda a escola' || tcl === 'todas') return true
-          
-          if (tcl.startsWith('todos:')) {
-            const targetAno = tcl.split(':')[1]?.trim()
-            const currentTurmaObj: any = turmas.find(tObj => tObj && (String(tObj.id) === String(aluno?.turma) || String(tObj.codigo) === String(aluno?.turma) || String(tObj.nome) === String(aluno?.turma)))
-            const studentAno = currentTurmaObj ? (currentTurmaObj.ano !== undefined ? String(currentTurmaObj.ano) : (currentTurmaObj.anoLetivo || currentTurmaObj.ano_letivo || currentTurmaObj.dados?.anoLetivo || '')) : ''
-            if (studentAno === targetAno) return true
-          }
-          
-          // Check if it matches any of the student's classes (current or historical)
-          const isMatch = todasTurmasDoAluno.some((minhaTurma: string) => 
-            minhaTurma.includes(tcl) || tcl.includes(minhaTurma)
-          )
-          
-          return isMatch;
-        })
-      }
-
-      // Se não tiver nenhum targetClasses e nenhum alunosIds, é público
-      if (targetClasses.length === 0 && targetAlunos.length === 0) return true
-
-      return false
-    }).sort((a, b) => {
-      // Ordem do mais novo para o mais antigo
-      const dateA = new Date((a as any).date || (a as any).created_at || 0).getTime()
-      const dateB = new Date((b as any).date || (b as any).created_at || 0).getTime()
-      return dateB - dateA
-    })
-  }, [fetchMomentos, aluno?.turma, aluno?.id, nomeTurmaDoAluno, todasTurmasDoAluno, currentUser])
+    return [...fetchMomentos].sort((a, b) => {
+      const dateA = new Date((a as any).date || (a as any).created_at || 0).getTime();
+      const dateB = new Date((b as any).date || (b as any).created_at || 0).getTime();
+      return dateB - dateA;
+    });
+  }, [fetchMomentos]);
 
   useEffect(() => {
     if (!aluno?.id || meusMomentos.length === 0) return;
