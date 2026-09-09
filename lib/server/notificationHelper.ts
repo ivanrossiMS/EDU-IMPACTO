@@ -132,12 +132,12 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       // 1. Resolver grupos na tabela agenda_grupos
       const { data: allGrupos, error: gruposError } = await supabase
         .from('agenda_grupos')
-        .select('id, nome, dados')
+        .select('id, dados')
 
       if (!gruposError && allGrupos) {
         const matchedGrupos = allGrupos.filter(g => {
           const gId = String(g.id).toLowerCase()
-          const gNome = String(g.nome || '').toLowerCase()
+          const gNome = String(g.dados?.nome || (g as any).nome || '').toLowerCase()
           return allGroupTerms.some(term => {
             const tl = term.toLowerCase().trim()
             return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome)
@@ -161,7 +161,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
       // 2. Resolver nomes/IDs de turmas para IDs reais no banco
       const { data: allTurmas, error: turmasError } = await supabase
         .from('turmas')
-        .select('id, nome, codigo, ano, dados')
+        .select('id, codigo, nome, serie, turno, ano, dados')
         .limit(500) // evitar full-table scan em escolas grandes
 
       if (turmasError) {
@@ -579,8 +579,8 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       if (allGroupTerms.length > 0) {
         // 1. Resolver grupos na tabela agenda_grupos e agenda_equipes
         const [gruposRes, equipesRes] = await Promise.allSettled([
-          supabase.from('agenda_grupos').select('id, nome, dados'),
-          supabase.from('agenda_equipes').select('id, nome, dados')
+          supabase.from('agenda_grupos').select('id, dados'),
+          supabase.from('agenda_equipes').select('id, dados')
         ])
 
         const allGrupos = gruposRes.status === 'fulfilled' && gruposRes.value.data ? gruposRes.value.data : []
@@ -590,9 +590,10 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           const matchedGrupos = allGrupos.filter((g: any) => {
             const gId = String(g.id || '').toLowerCase()
             const gNome = String(g.dados?.nome || g.nome || '').toLowerCase()
+            const gSync = String(g.dados?.syncId || g.syncId || '').toLowerCase()
             return allGroupTerms.some(term => {
               const tl = term.toLowerCase().trim()
-              return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome) || tl === `g_${gId}`
+              return tl === gId || tl === gNome || gNome.includes(tl) || tl.includes(gNome) || tl === `g_${gId}` || tl === gSync || (gSync && `sync-${tl}` === gSync)
             })
           })
           
@@ -656,7 +657,11 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         }
 
         // 2. Resolver nomes/IDs de turmas para IDs reais no banco
-        const { data: allTurmas, error: turmasError } = await supabase.from('turmas').select('id, nome, codigo, ano, dados').limit(500)
+        const { data: allTurmas, error: turmasError } = await supabase
+          .from('turmas')
+          .select('id, codigo, nome, serie, turno, ano, dados')
+          .limit(500)
+
         if (!turmasError && allTurmas) {
           const matchedTurmas = allTurmas.filter(t => {
             const tId = String(t.id).toLowerCase()
@@ -707,6 +712,50 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           if (allSearchTerms.length > 0) {
             const alunosTurma = await fetchInChunks<any>(supabase, 'alunos', 'id, nome', 'turma', allSearchTerms)
             alunosTurma.forEach(a => targetAlunosSet.set(String(a.id), a.nome || ''))
+          }
+
+          // Adicionar alunosIds de grupos sincronizados associados às turmas encontradas (ex: sync-6866 para Integral)
+          if (allGrupos && matchedTurmas.length > 0) {
+            matchedTurmas.forEach((t: any) => {
+              const tIdStr = String(t.id);
+              const syncG = allGrupos.find((g: any) => {
+                const gSync = g.dados?.syncId || (String(g.id).startsWith('sync-') ? g.id : '');
+                return gSync === `sync-${tIdStr}` || g.id === `sync-${tIdStr}` || String(g.dados?.nome || (g as any).nome || '').trim().toLowerCase() === String(t.nome || '').trim().toLowerCase();
+              });
+              if (syncG) {
+                let aList = syncG.dados?.alunosIds || (syncG as any).alunosIds || [];
+                if (typeof aList === 'string') {
+                  try { aList = JSON.parse(aList); } catch { aList = []; }
+                }
+                if (Array.isArray(aList)) {
+                  aList.forEach((aId: string) => {
+                    const cleanId = String(aId).replace(/^(a_|_ALU)/, '');
+                    if (cleanId && !targetAlunosSet.has(cleanId)) targetAlunosSet.set(cleanId, '');
+                  });
+                }
+              }
+            });
+          }
+
+          // Buscar todos alunos ativos para verificar pertencimento por duplo vínculo (Integral/Intermediário)
+          if (matchedTurmas.length > 0) {
+            const { data: allStudents } = await supabase
+              .from('alunos')
+              .select('id, nome, turma, status, dados')
+              .or('status.neq.inativo,status.is.null');
+
+            if (allStudents) {
+              allStudents.forEach((a: any) => {
+                matchedTurmas.forEach((t: any) => {
+                  if (isAlunoCursandoTurma(a, t, t.ano)) {
+                    targetAlunosSet.set(String(a.id), a.nome || '');
+                  }
+                });
+                if (targetAlunosSet.has(String(a.id)) && !targetAlunosSet.get(String(a.id))) {
+                  targetAlunosSet.set(String(a.id), a.nome || '');
+                }
+              });
+            }
           }
         }
       }

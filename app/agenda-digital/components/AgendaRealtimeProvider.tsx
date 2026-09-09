@@ -20,8 +20,8 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import Script from 'next/script'
-import { useRouter, useParams } from 'next/navigation'
-import { Calendar, FileText, Image as ImageIcon, ShieldAlert, Megaphone, X } from 'lucide-react'
+import { useRouter, useParams, usePathname } from 'next/navigation'
+import { Calendar, FileText, Image as ImageIcon, ShieldAlert, Megaphone, BarChart2, X } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { ReportPayloadView } from '@/components/DynamicReports/ReportPayloadView'
 
@@ -52,11 +52,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const params = useParams<{ slug: string }>()
-  const { currentUser } = useApp()
+  const pathname = usePathname()
+  const { currentUser, currentUserPerfil } = useApp()
   const osInitialized = useRef(false)
 
   const isFamily =
     currentUser?.perfil === 'Família' ||
+    currentUser?.perfil === 'Responsável' ||
     currentUser?.cargo === 'Aluno' ||
     currentUser?.cargo === 'Responsável'
 
@@ -142,6 +144,27 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
   const hasFamilyAccess = isFamily || meusAlunos.length > 0 || !!currentUser?.responsavel_id || currentUser?.cargo === 'Aluno'
   const hasDualAccess = isStaffUser && hasFamilyAccess
+
+  const isMasterAdmin = useMemo(() => {
+    if (!currentUser && !currentUserPerfil) return false
+    const p = String(currentUser?.perfil || currentUserPerfil || currentUser?.user_metadata?.perfil || '').toLowerCase().trim()
+    const c = String(currentUser?.cargo || currentUser?.user_metadata?.cargo || '').toLowerCase().trim()
+    const masterRoles = [
+      'administrador master',
+      'administrador',
+      'admin',
+      'diretor geral',
+      'diretora geral',
+      'master'
+    ]
+    return masterRoles.includes(p) || masterRoles.includes(c)
+  }, [currentUser, currentUserPerfil])
+
+  const isColaboradorAccess = useMemo(() => {
+    if (pathname?.includes('/agenda-digital/colaborador')) return true
+    if (isStaffUser && !isMasterAdmin) return true
+    return false
+  }, [pathname, isStaffUser, isMasterAdmin])
 
   const myCandidateStaffIds = useMemo(() => {
     const ids = new Set<string>()
@@ -627,6 +650,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     let iconNode = <Megaphone size={18} className="text-indigo-600" />
     if (type === 'momento') iconNode = <ImageIcon size={18} className="text-emerald-600" />
     if (type === 'calendario') iconNode = <Calendar size={18} className="text-amber-600" />
+    if (type === 'frequencia') iconNode = <BarChart2 size={18} className="text-indigo-600" />
 
     const preview = conteudo 
       ? (conteudo.replace(/<[^>]*>?/gm, '').slice(0, 75) + (conteudo.length > 75 ? '...' : ''))
@@ -1047,39 +1071,69 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const rowAlunoId = String(row.aluno_id || row.dados?.aluno_id || '')
 
       const matchingStudent = meusAlunos.find(s => String(s.id) === rowAlunoId) || (alunoId === rowAlunoId ? alunoObj : null)
-      const isForAluno = eventType === 'DELETE' || !!matchingStudent || rowAlunoId === String(alunoId) || !isFamily
 
-      if (isForAluno) {
-        window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'frequencias'] })
+      // Invalidação silenciosa para manter tabelas e gráficos sincronizados em background
+      window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'frequencias'] })
 
-        if (eventType === 'INSERT') {
-          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          const targetSlug = matchingStudent?.id || alunoId || (meusAlunos[0]?.id)
-          const match: EventMatchResult = {
-            isTarget: true,
-            profileTarget: 'familia',
-            targetAlunoId: targetSlug,
-            targetAlunoNome: matchingStudent?.nome
-          }
+      // Banners e notificações de presença NÃO devem aparecer para perfil acesso colaboradores,
+      // apenas para o Administrador Master (ou família para seus próprios dependentes).
+      if (isColaboradorAccess) {
+        return
+      }
 
-          addNotification({
-            id: row.id,
-            type: 'frequencia',
-            title: 'Nova falta registrada',
-            createdAt: row.created_at || new Date().toISOString(),
-            read: false,
-            link: `/agenda-digital/${targetSlug}/frequencia`,
-          })
-
-          showInAppToast({
-            type: 'frequencia',
-            id: row.id,
-            title: 'Nova falta registrada',
-            conteudo: 'Registro de frequência atualizado.',
-            match,
-          })
+      // Se não for Administrador Master, só exibe se for perfil família e para seu próprio aluno
+      if (!isMasterAdmin) {
+        if (!isFamily || !matchingStudent) {
+          return
         }
+      }
+
+      if (eventType === 'INSERT') {
+        window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
+        const targetSlug = matchingStudent?.id || rowAlunoId || alunoId || (meusAlunos[0]?.id)
+        const match: EventMatchResult = {
+          isTarget: true,
+          profileTarget: isMasterAdmin ? 'colaborador' : 'familia',
+          targetAlunoId: targetSlug,
+          targetAlunoNome: matchingStudent?.nome
+        }
+
+        const isPresenca = row.presente !== false && !row.justificativa && !row.dados?.justificativa
+        const isJustificada = Boolean(
+          (row.justificativa && String(row.justificativa).trim().length > 0) ||
+          (row.dados?.justificativa && String(row.dados.justificativa).trim().length > 0)
+        )
+
+        let title = 'Presença confirmada'
+        let conteudo = 'Registro de frequência atualizado.'
+
+        if (isJustificada) {
+          title = 'Falta justificada'
+          conteudo = (row.justificativa || row.dados?.justificativa)
+            ? `Justificativa: ${row.justificativa || row.dados?.justificativa}`
+            : 'Registro de frequência atualizado.'
+        } else if (!isPresenca) {
+          title = 'Nova falta registrada'
+          conteudo = 'Registro de frequência atualizado.'
+        }
+
+        addNotification({
+          id: row.id,
+          type: 'frequencia',
+          title,
+          createdAt: row.created_at || new Date().toISOString(),
+          read: false,
+          link: `/agenda-digital/${targetSlug}/frequencia`,
+        })
+
+        showInAppToast({
+          type: 'frequencia',
+          id: row.id,
+          title,
+          conteudo,
+          match,
+        })
       }
     })
 
@@ -1098,6 +1152,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     myCandidateStaffIds,
     myStaffGroupNamesAndIds,
     isStaffUser,
+    isMasterAdmin,
+    isColaboradorAccess,
     hasDualAccess,
     handleOpenItem,
     showInAppToast

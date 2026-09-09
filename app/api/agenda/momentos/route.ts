@@ -557,6 +557,7 @@ function buildRowAuth(body: any) {
 function normalizeMomentoParams(rawDados: any) {
   const inner = rawDados?.dados || {}
   const targetClasses = rawDados?.targetClasses || rawDados?.turmas || inner?.targetClasses || inner?.turmas || []
+  const targetClassesIds = rawDados?.targetClassesIds || rawDados?.turmasIds || inner?.targetClassesIds || inner?.turmasIds || []
   const grupos = rawDados?.grupos || inner?.grupos || rawDados?.targetGrupos || inner?.targetGrupos || []
   const funcionariosIds = rawDados?.funcionariosIds || rawDados?.colaboradoresIds || inner?.funcionariosIds || inner?.colaboradoresIds || []
   const alunosIds = rawDados?.alunosIds || rawDados?.targetStudents || inner?.alunosIds || inner?.targetStudents || []
@@ -565,6 +566,8 @@ function normalizeMomentoParams(rawDados: any) {
   return {
     turmas: targetClasses,
     targetClasses,
+    turmasIds: targetClassesIds,
+    targetClassesIds,
     grupos,
     alunosIds,
     funcionariosIds,
