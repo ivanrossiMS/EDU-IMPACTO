@@ -8,6 +8,7 @@ import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const maxDuration = 30
@@ -491,21 +492,22 @@ export async function POST(request: Request) {
                 }
               }
             } else {
-              const allResponsaveis = Array.from(
-                new Set(students.flatMap(s => s.responsaveis_ids))
-              ).filter(Boolean);
-              if (allResponsaveis.length > 0) {
-                allPushPromises.push(
-                  sendAgendaPushNotification({
-                    type: 'comunicados',
-                    itemId: String(row.id),
-                    title: `📢 Comunicado: ${row.titulo}`,
-                    message: `${row.autor} enviou um novo comunicado escolar. Confira!`,
-                    targetUserIds: allResponsaveis,
-                    targetUrl: `/agenda-digital?redirect=comunicados&id=${row.id}`,
-                    metadata: { perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
-                  }).catch(err => console.error("Push Error Batch:", err))
-                );
+              // Comunicado para a turma (> 5 alunos): personalizar com o nome de cada aluno
+              for (const student of students) {
+                if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
+                  const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
+                  allPushPromises.push(
+                    sendAgendaPushNotification({
+                      type: 'comunicados',
+                      itemId: String(row.id),
+                      title: `📢 Comunicado: ${row.titulo}`,
+                      message: `${row.autor} enviou um novo comunicado para a turma de ${nomeAluno}. Confira!`,
+                      targetUserIds: student.responsaveis_ids,
+                      targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
+                      metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
+                    }).catch(err => console.error("Push Error Turma Batch:", err))
+                  );
+                }
               }
             }
           }
@@ -611,21 +613,22 @@ export async function POST(request: Request) {
             }
           }
         } else {
-          const allResponsaveis = Array.from(
-            new Set(students.flatMap(s => s.responsaveis_ids))
-          ).filter(Boolean);
-          if (allResponsaveis.length > 0) {
-            pushPromises.push(
-              sendAgendaPushNotification({
-                type: 'comunicados',
-                itemId: String(data.id),
-                title: `📢 Comunicado: ${data.titulo}`,
-                message: `${data.autor} enviou um novo comunicado escolar. Confira!`,
-                targetUserIds: allResponsaveis,
-                targetUrl: `/agenda-digital?redirect=comunicados&id=${data.id}`,
-                metadata: { perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
-              }).catch(err => console.error("Push Error Batch:", err))
-            );
+          // Comunicado para a turma (> 5 alunos): personalizar com o nome de cada aluno
+          for (const student of students) {
+            if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
+              const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
+              pushPromises.push(
+                sendAgendaPushNotification({
+                  type: 'comunicados',
+                  itemId: String(data.id),
+                  title: `📢 Comunicado: ${data.titulo}`,
+                  message: `${data.autor} enviou um novo comunicado para a turma de ${nomeAluno}. Confira!`,
+                  targetUserIds: student.responsaveis_ids,
+                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
+                }).catch(err => console.error("Push Error Turma:", err))
+              );
+            }
           }
         }
       }

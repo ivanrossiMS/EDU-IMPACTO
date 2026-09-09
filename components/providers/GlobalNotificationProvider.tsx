@@ -62,16 +62,23 @@ function mapTypeToRoute(type?: string): string {
 export function resolveDestinationFromPayload(data: any, currentUser?: any): string {
   if (!data) return ''
 
-  // 1. Se veio targetUrl ou url direta
-  const directUrl = data.targetUrl || data.url || data.launchURL
+  // 1. Se veio route, targetUrl ou url direta
+  const directUrl = data.route || data.targetUrl || data.url || data.launchURL
   if (directUrl && typeof directUrl === 'string') {
-    let cleanUrl = directUrl
+    let cleanUrl = directUrl.trim()
     try {
-      if (cleanUrl.startsWith('http')) {
+      if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
         const parsed = new URL(cleanUrl)
         cleanUrl = parsed.pathname + parsed.search
+      } else if (cleanUrl.includes('://')) {
+        // Schemes customizados (ex: impactoedu://agenda-digital/...)
+        cleanUrl = '/' + cleanUrl.replace(/^[a-zA-Z0-9._-]+:\/*/, '')
       }
     } catch {}
+
+    if (!cleanUrl.startsWith('/')) {
+      cleanUrl = '/' + cleanUrl
+    }
 
     if (data.item_id && !cleanUrl.includes('id=')) {
       cleanUrl += (cleanUrl.includes('?') ? '&' : '?') + `id=${encodeURIComponent(data.item_id)}`
@@ -110,12 +117,17 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
 export function GlobalNotificationProvider() {
   const router = useRouter()
   const pathname = usePathname()
-  const { currentUser } = useApp()
+  const { currentUser, hydrated } = useApp()
   const currentUserRef = useRef(currentUser)
+  const hydratedRef = useRef(hydrated)
 
   useEffect(() => {
     currentUserRef.current = currentUser
   }, [currentUser])
+
+  useEffect(() => {
+    hydratedRef.current = hydrated
+  }, [hydrated])
 
   // Limpa rota pendente apenas quando o usuário efetivamente entra na tela de destino
   useEffect(() => {
@@ -169,12 +181,16 @@ export function GlobalNotificationProvider() {
     }
 
     const user = currentUserRef.current
+    const isHydrated = hydratedRef.current
+
     if (user) {
       console.log(`[GlobalPush] Usuário autenticado. Navegando diretamente para ${destination}`)
       router.replace(destination)
-    } else {
-      console.log(`[GlobalPush] Usuário não logado. Redirecionando para login com redirect pendente.`)
+    } else if (isHydrated) {
+      console.log(`[GlobalPush] Usuário não logado (sessão hidratada). Redirecionando para login com redirect pendente.`)
       router.replace(`/login?redirect=${encodeURIComponent(destination)}`)
+    } else {
+      console.log(`[GlobalPush] App ainda hidratando sessão no cold start. Rota salva aguardando conclusão: ${destination}`)
     }
   }
 

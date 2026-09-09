@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getStudentTargetsForComunicados } from '@/lib/server/notificationHelper'
+import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -160,41 +161,44 @@ async function dispatchPushNotifications(supabase: any, row: any) {
     shouldSendReminder = sendAfterDate > new Date();
   }
 
-  // 1. Dispatch for students (grouped to avoid timeouts and infinite loops)
-  const allStudentTargetIds = new Set<string>();
-  for (const student of students) {
-    if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
-      student.responsaveis_ids.forEach(id => allStudentTargetIds.add(id));
+  // 1. Dispatch for students (personalizado com o nome do aluno)
+  if (students.length > 0) {
+    const studentPushPromises: Promise<any>[] = [];
+    for (const student of students) {
+      if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
+        const nomeAluno = formatFriendlyStudentName(student.aluno_nome);
+
+        // Notificação Imediata
+        studentPushPromises.push(
+          sendAgendaPushNotification({
+            type: 'calendario',
+            itemId: `${row.id}-${student.aluno_id}`,
+            title: '📅 Novo Evento!',
+            message: `Novo evento no calendário para a turma de ${nomeAluno}: ${row.titulo}. Confira os detalhes!`,
+            targetUserIds: student.responsaveis_ids,
+            targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}`,
+            metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}` }
+          }).catch(err => console.error('Evento Push Error:', err))
+        );
+
+        // Lembrete Agendado na Véspera
+        if (shouldSendReminder && sendAfterStr) {
+          studentPushPromises.push(
+            sendAgendaPushNotification({
+              type: 'calendario',
+              itemId: `${row.id}-${student.aluno_id}-reminder`,
+              title: '⏰ Lembrete: Amanhã!',
+              message: `Lembrete para ${nomeAluno}: amanhã temos o evento ${row.titulo}. Não se esqueça!`,
+              targetUserIds: student.responsaveis_ids,
+              targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}`,
+              metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/${student.aluno_id}/calendario?id=${row.id}` },
+              sendAfter: sendAfterStr
+            }).catch(err => console.error('Evento Reminder Error:', err))
+          );
+        }
+      }
     }
-  }
-
-  const studentTargetArray = Array.from(allStudentTargetIds);
-
-  if (studentTargetArray.length > 0) {
-    // Notificação Imediata em Lote
-    await sendAgendaPushNotification({
-      type: 'calendario',
-      itemId: `${row.id}-all-students`,
-      title: '📅 Novo Evento!',
-      message: `Novo evento no calendário: ${row.titulo}. Confira os detalhes!`,
-      targetUserIds: studentTargetArray,
-      targetUrl: `/agenda-digital/calendario?id=${row.id}`,
-      metadata: { perfil_destino: 'familia', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/calendario?id=${row.id}` }
-    }).catch(err => console.error('Evento Push Error:', err));
-
-    // Lembrete Agendado em Lote
-    if (shouldSendReminder && sendAfterStr) {
-      await sendAgendaPushNotification({
-        type: 'calendario',
-        itemId: `${row.id}-all-students-reminder`,
-        title: '⏰ Lembrete: Amanhã!',
-        message: `Amanhã temos o evento: ${row.titulo}. Não se esqueça!`,
-        targetUserIds: studentTargetArray,
-        targetUrl: `/agenda-digital/calendario?id=${row.id}`,
-        metadata: { perfil_destino: 'familia', item_id: String(row.id), rota: 'calendario', data: row.data, targetUrl: `/agenda-digital/calendario?id=${row.id}` },
-        sendAfter: sendAfterStr
-      }).catch(err => console.error('Evento Reminder Error:', err));
-    }
+    await Promise.allSettled(studentPushPromises);
   }
 
   // 2. Dispatch for direct colaboradores / untargeted responsaveis

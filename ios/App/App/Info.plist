@@ -8,6 +8,19 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>Impacto Edu</string>
+	<key>OneSignal_suppress_launch_urls</key>
+	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>br.com.impactoedu.agenda</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>impactoedu</string>
+			</array>
+		</dict>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>CFBundleExecutable</key>

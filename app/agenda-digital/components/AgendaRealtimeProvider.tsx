@@ -233,11 +233,25 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 const data = event?.notification?.additionalData || {}
                 console.log('[OneSignal] Notificação nativa clicada:', data)
                 
-                const directUrl = data.targetUrl || data.url
-                if (directUrl) {
-                  const finalUrl = data.item_id && !directUrl.includes('id=')
-                    ? `${directUrl}${directUrl.includes('?') ? '&' : '?'}id=${data.item_id}`
-                    : directUrl
+                const rawDirect = data.route || data.targetUrl || data.url
+                if (rawDirect && typeof rawDirect === 'string') {
+                  let cleanRoute = rawDirect.trim()
+                  try {
+                    if (cleanRoute.startsWith('http://') || cleanRoute.startsWith('https://')) {
+                      const p = new URL(cleanRoute)
+                      cleanRoute = p.pathname + p.search
+                    } else if (cleanRoute.includes('://')) {
+                      cleanRoute = '/' + cleanRoute.replace(/^[a-zA-Z0-9._-]+:\/*/, '')
+                    }
+                  } catch {}
+
+                  if (!cleanRoute.startsWith('/')) {
+                    cleanRoute = '/' + cleanRoute
+                  }
+
+                  const finalUrl = data.item_id && !cleanRoute.includes('id=')
+                    ? `${cleanRoute}${cleanRoute.includes('?') ? '&' : '?'}id=${data.item_id}`
+                    : cleanRoute
                   console.log(`[OneSignal] Deep link nativo direto → ${finalUrl}`)
                   if ((data?.type === 'comunicados' || data?.rota === 'comunicados') && data?.item_id) {
                     window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: data.item_id } }))

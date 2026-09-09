@@ -8,6 +8,7 @@ import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { getAlunoTodasTurmasEGrupos } from '@/lib/studentTurmaUtils'
+import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -393,21 +394,22 @@ export async function POST(request: Request) {
               }
             }
           } else {
-            const allResponsaveis = Array.from(
-              new Set(students.flatMap(s => s.responsaveis_ids))
-            ).filter(Boolean);
-            if (allResponsaveis.length > 0) {
-              allPushPromises.push(
-                sendAgendaPushNotification({
-                  type: 'momentos',
-                  itemId: String(row.id),
-                  title: '📸 Novo Momento Publicado!',
-                  message: 'Novas fotos e atividades foram compartilhadas na turma. Confira!',
-                  targetUserIds: allResponsaveis,
-                  targetUrl: `/agenda-digital?redirect=momentos&id=${row.id}`,
-                  metadata: { perfil_destino: 'familia', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital?redirect=momentos&id=${row.id}` }
-                }).catch(err => console.error('Momento Push Error Batch:', err))
-              );
+            // Momentos para a turma (> 5 alunos): personalizar com o nome de cada aluno
+            for (const student of students) {
+              if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
+                const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
+                allPushPromises.push(
+                  sendAgendaPushNotification({
+                    type: 'momentos',
+                    itemId: String(row.id),
+                    title: '📸 Novo Momento Publicado!',
+                    message: `Novas fotos e atividades da turma de ${nomeAluno} foram compartilhadas. Confira!`,
+                    targetUserIds: student.responsaveis_ids,
+                    targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}`,
+                    metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${row.id}` }
+                  }).catch(err => console.error('Momento Push Error Turma Batch:', err))
+                );
+              }
             }
           }
 
@@ -466,21 +468,22 @@ export async function POST(request: Request) {
             }
           }
         } else {
-          const allResponsaveis = Array.from(
-            new Set(students.flatMap(s => s.responsaveis_ids))
-          ).filter(Boolean);
-          if (allResponsaveis.length > 0) {
-            pushPromises.push(
-              sendAgendaPushNotification({
-                type: 'momentos',
-                itemId: String(data.id),
-                title: '📸 Novo Momento Publicado!',
-                message: 'Novas fotos e atividades foram compartilhadas na turma. Confira!',
-                targetUserIds: allResponsaveis,
-                targetUrl: `/agenda-digital?redirect=momentos&id=${data.id}`,
-                metadata: { perfil_destino: 'familia', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital?redirect=momentos&id=${data.id}` }
-              }).catch(err => console.error('Momento Push Error Batch:', err))
-            );
+          // Momentos para a turma (> 5 alunos): personalizar com o nome de cada aluno
+          for (const student of students) {
+            if (student.responsaveis_ids && student.responsaveis_ids.length > 0) {
+              const nomeAluno = formatFriendlyStudentName(student.aluno_nome)
+              pushPromises.push(
+                sendAgendaPushNotification({
+                  type: 'momentos',
+                  itemId: String(data.id),
+                  title: '📸 Novo Momento Publicado!',
+                  message: `Novas fotos e atividades da turma de ${nomeAluno} foram compartilhadas. Confira!`,
+                  targetUserIds: student.responsaveis_ids,
+                  targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familia', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/${student.aluno_id}/momentos?id=${data.id}` }
+                }).catch(err => console.error('Momento Push Error Turma:', err))
+              );
+            }
           }
         }
 

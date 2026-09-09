@@ -210,14 +210,37 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return { success: allOk, data: results }
   }
 
+  // Extrair rota interna relativa para uso no aplicativo móvel
+  const relativeRoute = (() => {
+    if (!params.url) return undefined
+    try {
+      if (params.url.startsWith('http://') || params.url.startsWith('https://')) {
+        const p = new URL(params.url)
+        return p.pathname + p.search
+      }
+    } catch {}
+    return params.url.replace(/^[a-zA-Z0-9._-]+:\/*/, '/')
+  })()
+
   const commonFields = {
     app_id: ONESIGNAL_APP_ID,
     headings: { en: params.title, pt: params.title },
     contents: { en: params.body, pt: params.body },
-    ...(params.url && { web_url: params.url, app_url: params.url }),
+    ...(params.url && {
+      // web_url é exclusivo para Web Push (navegadores desktop). Ao clicar no PC, abre a URL web.
+      web_url: params.url,
+      // NUNCA enviar URLs http:// ou https:// no app_url. No iOS e Android, URLs http(s) no app_url
+      // são tratadas pelo OneSignal nativo como Launch URL externa, forçando a abertura no Safari/Chrome.
+      // Apenas schemes customizados (ex: impactoedu://) são aceitos como app_url nativo.
+      ...(!params.url.startsWith('http://') && !params.url.startsWith('https://') ? { app_url: params.url } : {}),
+    }),
     data: {
       ...(params.data || {}),
-      ...(params.url && { targetUrl: params.url, url: params.url }),
+      ...(params.url && {
+        targetUrl: params.url,
+        url: params.url,
+        route: relativeRoute,
+      }),
     },
     ...(params.sendAfter && { send_after: params.sendAfter }),
     chrome_web_icon: params.largeIcon || `${process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net'}/logo-impacto.png`,
