@@ -339,7 +339,13 @@ export function ADSidebar() {
                   {idx > 0 && (
                     <div style={{ position: 'absolute', left: 0, width: 1, height: 28, background: 'rgba(255,255,255,0.15)' }} />
                   )}
-                  <Link href={appendMirrorParams(item.href)} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: 4, position: 'relative', overflow: 'visible' }}>
+                  <Link 
+                    href={appendMirrorParams(item.href)} 
+                    onClick={item.id === 'modulos' ? (e) => {
+                      e.preventDefault()
+                      window.location.href = '/login?step=choose_system'
+                    } : undefined}
+                    style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, gap: 4, position: 'relative', overflow: 'visible' }}>
                     <motion.div 
                       whileTap={{ scale: 0.9 }}
                       style={{
@@ -565,7 +571,14 @@ export function ADSidebar() {
                   }).map((item, idx) => {
                     const isActive = pathname.startsWith(item.href)
                     return (
-                      <Link key={idx} href={appendMirrorParams(item.href)} style={{ textDecoration: 'none' }}>
+                      <Link 
+                        key={idx} 
+                        href={appendMirrorParams(item.href)} 
+                        onClick={item.label === 'Trocar Módulo' || (item as any).id === 'modulos' ? (e) => {
+                          e.preventDefault()
+                          window.location.href = '/login?step=choose_system'
+                        } : undefined}
+                        style={{ textDecoration: 'none' }}>
                         <motion.div
                           whileHover={{ x: 6, background: 'rgba(255,255,255,0.04)' }}
                           whileTap={{ scale: 0.98 }}

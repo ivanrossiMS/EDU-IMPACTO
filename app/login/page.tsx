@@ -55,7 +55,7 @@ const ModernLoadingSpinner = () => (
 
 export default function LoginPage() {
   const router = useRouter()
-  const { setCurrentUser } = useApp()
+  const { setCurrentUser, currentUser } = useApp()
   const [showBlockModal, setShowBlockModal] = useState(false)
 
   // ── step manager
@@ -96,30 +96,10 @@ export default function LoginPage() {
     }
     window.addEventListener('edu:navigate-push', handlePushEvent)
 
-    if (step === 'choose_system' && typeof window !== 'undefined') {
-      const checkAndForward = async () => {
-        let p = (window as any).__EDU_PENDING_PUSH_ROUTE__ ||
-          new URLSearchParams(window.location.search).get('redirect') ||
-          localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
-
-        if (!p && Capacitor.isNativePlatform()) {
-          try {
-            const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
-            p = value
-          } catch {}
-        }
-        if (p) {
-          console.log('[Login] Encaminhando automaticamente da escolha de módulos para rota de push:', p)
-          router.replace(p)
-        }
-      }
-      checkAndForward()
-    }
-
     return () => {
       window.removeEventListener('edu:navigate-push', handlePushEvent)
     }
-  }, [step, router])
+  }, [router])
   const [hasDualRole, setHasDualRole] = useState(false)
   const [profileData, setProfileData] = useState<any>(null)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
@@ -240,6 +220,34 @@ export default function LoginPage() {
           // Restaura o usuário no contexto
           setCurrentUser(storedUser)
 
+          // Se a URL solicitar explicitamente troca de módulo ou perfil de agenda:
+          if (stepParam === 'choose_system' || stepParam === 'choose_agenda_role') {
+            clearTimeout(timeoutId)
+            try {
+              localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+              if (typeof window !== 'undefined') delete (window as any).__EDU_PENDING_PUSH_ROUTE__
+              if (Capacitor.isNativePlatform()) {
+                Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
+              }
+            } catch {}
+
+            const isAlsoFamily = !!storedUser.responsavel_id || !!storedUser.hasDualRole
+            setPendingAuth({
+              id: storedUser.id,
+              nome: storedUser.nome,
+              cargo: storedUser.cargo || storedUser.perfil || '',
+              perfil: storedUser.perfil || storedUser.cargo || '',
+              aluno_id: storedUser.aluno_id,
+              responsavel_id: storedUser.responsavel_id,
+              hasDualRole: storedUser.hasDualRole
+            })
+            setHasDualRole(isAlsoFamily)
+            setIsCheckingSavedUser(false)
+            setStep(stepParam)
+            hideSplashScreen(300)
+            return
+          }
+
           // Se houver redirect pendente (ex: notificação clicada), redireciona direto
           let pendingRoute = (typeof window !== 'undefined' ? (window as any).__EDU_PENDING_PUSH_ROUTE__ : null) ||
             params.get('redirect') ||
@@ -259,7 +267,7 @@ export default function LoginPage() {
             return
           }
 
-          // Se estiver no app móvel nativo, redireciona diretamente ao portal correto SEM piscar login
+          // Se estiver no app móvel nativo em cold start, redireciona diretamente ao portal correto SEM piscar login
           if (Capacitor.isNativePlatform()) {
             clearTimeout(timeoutId)
             const perfil = storedUser.perfil || ''
@@ -294,18 +302,18 @@ export default function LoginPage() {
           // Em ambiente web desktop, habilita tela de escolha de sistema
           const isAlsoFamily = !!storedUser.responsavel_id || !!storedUser.hasDualRole
           setPendingAuth({
-            cargo: storedUser.cargo,
-            perfil: storedUser.perfil
+            id: storedUser.id,
+            nome: storedUser.nome,
+            cargo: storedUser.cargo || storedUser.perfil || '',
+            perfil: storedUser.perfil || storedUser.cargo || '',
+            aluno_id: storedUser.aluno_id,
+            responsavel_id: storedUser.responsavel_id,
+            hasDualRole: storedUser.hasDualRole
           })
           setHasDualRole(isAlsoFamily)
           setIsCheckingSavedUser(false)
           hideSplashScreen(300)
-
-          if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
-            setStep(stepParam)
-          } else {
-            setStep('choose_system')
-          }
+          setStep('choose_system')
         } catch (e) {
           console.error('[Login] checkStoredUser error:', e)
           setIsCheckingSavedUser(false)
@@ -1046,11 +1054,31 @@ export default function LoginPage() {
                 onClick={() => {
                   setLoadingSystem('agenda-digital');
                   setTimeout(() => {
-                    const p = pendingAuth?.perfil;
-                    if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
-                        window.location.href = '/agenda-digital/selecionar-perfil-admin';
-                    } else {
+                    const p = pendingAuth?.perfil || currentUser?.perfil || '';
+                    const c = pendingAuth?.cargo || currentUser?.cargo || '';
+                    const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(p) ||
+                                    ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(c);
+                    const isFamily = p === 'Família' || c === 'Responsável' || p === 'Aluno' || c === 'Aluno';
+
+                    if (isFamily) {
+                      if (c === 'Aluno' && (pendingAuth?.aluno_id || currentUser?.aluno_id)) {
+                        window.location.href = `/agenda-digital/${pendingAuth?.aluno_id || currentUser?.aluno_id}/comunicados`;
+                      } else {
                         window.location.href = '/agenda-digital/selecionar-aluno';
+                      }
+                    } else if (isAdmin) {
+                      if (p === 'Diretor Geral' || c === 'Administrador Master' || p === 'Administrador') {
+                        window.location.href = '/agenda-digital/selecionar-perfil-admin';
+                      } else {
+                        window.location.href = '/agenda-digital/admin';
+                      }
+                    } else {
+                      // Colaborador (Secretária, Professor, Coordenador, etc.)
+                      if (hasDualRole || pendingAuth?.responsavel_id || currentUser?.responsavel_id) {
+                        window.location.href = '/agenda-digital/selecionar-aluno';
+                      } else {
+                        window.location.href = '/agenda-digital/colaborador/comunicados';
+                      }
                     }
                   }, 100);
                 }}
