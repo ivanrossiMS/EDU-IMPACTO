@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Search, Filter, Eye, Clock, CheckCircle, XCircle,
   Upload, BookOpen, Users, User, Info, ChevronRight, AlertCircle, Trash2,
-  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp, Sparkles, BookMarked, MoreVertical, ExternalLink, ArrowRight, ChevronLeft
+  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp, Sparkles, BookMarked, MoreVertical, ExternalLink, ArrowRight, ChevronLeft, ArrowUp, ArrowDown
 } from 'lucide-react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -206,6 +206,7 @@ export default function UploadProvasGerenciamentoPage() {
 
   // Sort orders per group
   const [sortOrders, setSortOrders] = useState<Record<string, string>>({})
+  const [localCustomOrders, setLocalCustomOrders] = useState<Record<string, string[]>>({})
 
   // Pagination per group
   const [groupPages, setGroupPages] = useState<Record<string, number>>({})
@@ -240,7 +241,116 @@ export default function UploadProvasGerenciamentoPage() {
   useEffect(() => {
     setIsClient(true)
     setShowAnoModal(true)
+    try {
+      const saved = localStorage.getItem('impacto_provas_upload_ordens')
+      if (saved) {
+        setLocalCustomOrders(JSON.parse(saved))
+      }
+    } catch (e) {}
   }, [])
+
+  const getProvaOrder = (prova: any, groupKey: string): number | null => {
+    const customList = localCustomOrders[groupKey]
+    if (customList && customList.length > 0) {
+      const idx = customList.indexOf(prova.id)
+      if (idx !== -1) return idx + 1
+    }
+    if (prova.ordem_series && typeof prova.ordem_series === 'object') {
+      const sOrder = prova.ordem_series[groupKey]
+      if (typeof sOrder === 'number' && sOrder > 0) return sOrder
+    }
+    if (typeof prova.ordem === 'number' && prova.ordem > 0) {
+      return prova.ordem
+    }
+    return null
+  }
+
+  const handleMoveProva = async (
+    turmaName: string,
+    bimestreNome: string,
+    provaId: string,
+    direction: 'cima' | 'baixo',
+    currentList: any[]
+  ) => {
+    const groupKey = `${turmaName}_${bimestreNome}`
+    const idx = currentList.findIndex(p => p.id === provaId)
+    if (idx === -1) return
+    if (direction === 'cima' && idx <= 0) return
+    if (direction === 'baixo' && idx >= currentList.length - 1) return
+
+    const targetIdx = direction === 'cima' ? idx - 1 : idx + 1
+    const newList = [...currentList]
+    const [movedItem] = newList.splice(idx, 1)
+    newList.splice(targetIdx, 0, movedItem)
+
+    const newOrderIds = newList.map(p => p.id)
+
+    // 1. Optimistic Local State Update
+    setLocalCustomOrders(prev => {
+      const updated = { ...prev, [groupKey]: newOrderIds }
+      try {
+        localStorage.setItem('impacto_provas_upload_ordens', JSON.stringify(updated))
+      } catch (e) {}
+      return updated
+    })
+
+    setSortOrders(prev => ({ ...prev, [groupKey]: 'ordem' }))
+
+    setProvas(prev => {
+      return prev.map(item => {
+        const pos = newOrderIds.indexOf(item.id)
+        if (pos !== -1) {
+          const updatedOrdemSeries = { ...(item.ordem_series || {}), [groupKey]: pos + 1 }
+          return {
+            ...item,
+            ordem: pos + 1,
+            ordem_series: updatedOrdemSeries
+          }
+        }
+        return item
+      })
+    })
+
+    // 2. Persist to Supabase in Background
+    try {
+      const updates = newList.map((item, i) => {
+        const newPos = i + 1
+        const updatedOrdemSeries = { ...(item.ordem_series || {}), [groupKey]: newPos }
+        return {
+          id: item.id,
+          ordem: newPos,
+          ordem_series: updatedOrdemSeries
+        }
+      })
+
+      await Promise.all(
+        updates.map(u =>
+          (supabase as any)
+            .from('provas_upload')
+            .update({
+              ordem: u.ordem,
+              ordem_series: u.ordem_series,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', u.id)
+        )
+      )
+    } catch (err) {
+      console.warn('Tentando fallback de ordenação no Supabase (provas):', err)
+      try {
+        await Promise.all(
+          newList.map((item, i) =>
+            (supabase as any)
+              .from('provas_upload')
+              .update({ ordem: i + 1, updated_at: new Date().toISOString() })
+              .eq('id', item.id)
+          )
+        )
+      } catch (e2) {
+        console.warn('Ordem de provas mantida via LocalStorage:', e2)
+      }
+    }
+  }
 
   useEffect(() => {
     if (isClient) {
@@ -922,11 +1032,22 @@ export default function UploadProvasGerenciamentoPage() {
                           
                           {turma.bimestres.map(bimGroup => {
                             const groupKey = `${turma.turmaName}_${bimGroup.bimestreNome}`
-                            const currentSort = sortOrders[groupKey] || 'recentes'
+                            const currentSort = sortOrders[groupKey] || 'ordem'
 
                             // Apply Sorting
                             let sortedProvas = [...bimGroup.provas]
-                            if (currentSort === 'recentes') {
+                            if (currentSort === 'ordem') {
+                              sortedProvas.sort((a, b) => {
+                                const orderA = getProvaOrder(a, groupKey)
+                                const orderB = getProvaOrder(b, groupKey)
+                                if (orderA !== null && orderB !== null && orderA !== orderB) {
+                                  return orderA - orderB
+                                }
+                                if (orderA !== null && orderB === null) return -1
+                                if (orderA === null && orderB !== null) return 1
+                                return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+                              })
+                            } else if (currentSort === 'recentes') {
                               sortedProvas.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
                             } else if (currentSort === 'antigas') {
                               sortedProvas.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
@@ -983,6 +1104,7 @@ export default function UploadProvasGerenciamentoPage() {
                                       onChange={e => setSortOrders(prev => ({ ...prev, [groupKey]: e.target.value }))}
                                       style={{ padding: '6px 24px 6px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 12, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
                                     >
+                                      <option value="ordem">Ordem personalizada</option>
                                       <option value="recentes">Mais recentes</option>
                                       <option value="antigas">Mais antigas</option>
                                       <option value="az">Título (A-Z)</option>
@@ -1003,7 +1125,7 @@ export default function UploadProvasGerenciamentoPage() {
                                   <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: '0 6px' }}>
                                     <thead>
                                       <tr style={{ color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                                        <th style={{ width: 260, minWidth: 220, padding: '8px 12px 8px 16px', textAlign: 'left' }}>PROVA</th>
+                                        <th style={{ width: 285, minWidth: 240, padding: '8px 12px 8px 16px', textAlign: 'left' }}>PROVA</th>
                                         <th style={{ width: 130, minWidth: 110, padding: '8px 6px', textAlign: 'left' }}>DISCIPLINA</th>
                                         <th style={{ width: 160, minWidth: 140, padding: '8px 6px', textAlign: 'left' }}>PROFESSOR</th>
                                         <th style={{ width: 145, minWidth: 130, padding: '8px 6px', textAlign: 'left' }}>CRIAÇÃO / ENVIO</th>
@@ -1013,7 +1135,7 @@ export default function UploadProvasGerenciamentoPage() {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {sortedProvas.map(prova => {
+                                      {sortedProvas.map((prova, itemIdx) => {
                                         const rawReqs = prova.provas_upload_requisicoes || []
                                         const reqs = rawReqs.length > 0 ? rawReqs : [{
                                           id: prova.id,
@@ -1068,28 +1190,104 @@ export default function UploadProvasGerenciamentoPage() {
                                               {/* PROVA Title (spans all reqs of this prova) */}
                                               {isFirstRow && (
                                                 <td rowSpan={rowSpanCount} style={{ background: 'hsl(var(--bg-surface))', padding: '8px 12px 8px 16px', borderRadius: '12px 0 0 12px', borderLeft: '1px solid hsl(var(--border-subtle))', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', verticalAlign: 'middle' }}>
-                                                  <Link href={`/simulados/provas-upload/${prova.id}/upload?all=true`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', cursor: 'pointer' }}>
-                                                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
-                                                      <FileText size={15} />
+                                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                    {/* Mini-toolbar de Ordenação: Subir / Posição / Descer */}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, flexShrink: 0, marginRight: 2 }}>
+                                                      {/* Botão Subir */}
+                                                      <button
+                                                        type="button"
+                                                        disabled={itemIdx === 0}
+                                                        onClick={(e) => {
+                                                          e.stopPropagation()
+                                                          handleMoveProva(turma.turmaName, bimGroup.bimestreNome, prova.id, 'cima', sortedProvas)
+                                                        }}
+                                                        title={itemIdx === 0 ? 'Primeira posição' : 'Subir posição na série'}
+                                                        style={{
+                                                          width: 22,
+                                                          height: 18,
+                                                          display: 'flex',
+                                                          alignItems: 'center',
+                                                          justifyContent: 'center',
+                                                          border: '1px solid hsl(var(--border-subtle))',
+                                                          borderRadius: 4,
+                                                          background: 'hsl(var(--bg-app))',
+                                                          color: itemIdx === 0 ? 'hsl(var(--text-secondary))' : '#8b5cf6',
+                                                          cursor: itemIdx === 0 ? 'not-allowed' : 'pointer',
+                                                          opacity: itemIdx === 0 ? 0.25 : 1,
+                                                          transition: 'all 0.15s ease',
+                                                          padding: 0
+                                                        }}
+                                                      >
+                                                        <ChevronUp size={13} strokeWidth={2.5} />
+                                                      </button>
+
+                                                      {/* Indicador Numérico de Posição */}
+                                                      <span 
+                                                        style={{ 
+                                                          fontSize: 10, 
+                                                          fontWeight: 800, 
+                                                          color: 'hsl(var(--text-secondary))', 
+                                                          lineHeight: 1, 
+                                                          padding: '2px 0', 
+                                                          fontVariantNumeric: 'tabular-nums' 
+                                                        }}
+                                                        title={`Posição ${itemIdx + 1} de ${sortedProvas.length} neste bimestre`}
+                                                      >
+                                                        {itemIdx + 1}º
+                                                      </span>
+
+                                                      {/* Botão Descer */}
+                                                      <button
+                                                        type="button"
+                                                        disabled={itemIdx === sortedProvas.length - 1}
+                                                        onClick={(e) => {
+                                                          e.stopPropagation()
+                                                          handleMoveProva(turma.turmaName, bimGroup.bimestreNome, prova.id, 'baixo', sortedProvas)
+                                                        }}
+                                                        title={itemIdx === sortedProvas.length - 1 ? 'Última posição' : 'Descer posição na série'}
+                                                        style={{
+                                                          width: 22,
+                                                          height: 18,
+                                                          display: 'flex',
+                                                          alignItems: 'center',
+                                                          justifyContent: 'center',
+                                                          border: '1px solid hsl(var(--border-subtle))',
+                                                          borderRadius: 4,
+                                                          background: 'hsl(var(--bg-app))',
+                                                          color: itemIdx === sortedProvas.length - 1 ? 'hsl(var(--text-secondary))' : '#8b5cf6',
+                                                          cursor: itemIdx === sortedProvas.length - 1 ? 'not-allowed' : 'pointer',
+                                                          opacity: itemIdx === sortedProvas.length - 1 ? 0.25 : 1,
+                                                          transition: 'all 0.15s ease',
+                                                          padding: 0
+                                                        }}
+                                                      >
+                                                        <ChevronDown size={13} strokeWidth={2.5} />
+                                                      </button>
                                                     </div>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
-                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
-                                                        <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prova.titulo}>
-                                                          {prova.titulo}
-                                                        </span>
-                                                        {isAdaptada && (
-                                                          <span className="badge-adaptada-neon-brown">
-                                                            ADAPTADA
-                                                          </span>
-                                                        )}
+
+                                                    <Link href={`/simulados/provas-upload/${prova.id}/upload?all=true`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 8, overflow: 'hidden', cursor: 'pointer', flex: 1 }}>
+                                                      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
+                                                        <FileText size={15} />
                                                       </div>
-                                                      <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 500, color: 'hsl(var(--text-secondary))', marginTop: 2, whiteSpace: 'nowrap' }}>
-                                                        {formatCreatedInfo(prova.created_at, prova.criado_por_nome)}
-                                                       </span>
-                                                     </div>
-                                                   </Link>
-                                                 </td>
-                                               )}
+                                                      <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                                                          <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={prova.titulo}>
+                                                            {prova.titulo}
+                                                          </span>
+                                                          {isAdaptada && (
+                                                            <span className="badge-adaptada-neon-brown">
+                                                              ADAPTADA
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                        <span style={{ fontSize: 10, fontStyle: 'italic', fontWeight: 500, color: 'hsl(var(--text-secondary))', marginTop: 2, whiteSpace: 'nowrap' }}>
+                                                          {formatCreatedInfo(prova.created_at, prova.criado_por_nome)}
+                                                        </span>
+                                                      </div>
+                                                    </Link>
+                                                  </div>
+                                                </td>
+                                              )}
 
                                                {/* DISCIPLINA (Individual per req) */}
                                                <td style={{ padding: '8px 6px', borderTop: '1px solid hsl(var(--border-subtle))', borderBottom: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', verticalAlign: 'middle' }}>
@@ -1259,6 +1457,32 @@ export default function UploadProvasGerenciamentoPage() {
                                                             </div>
                                                           </Link>
                                                         </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Separator style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
+
+                                                        {itemIdx > 0 && (
+                                                          <DropdownMenu.Item asChild>
+                                                            <div 
+                                                              onClick={() => handleMoveProva(turma.turmaName, bimGroup.bimestreNome, prova.id, "cima", sortedProvas)} 
+                                                              style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "hsl(var(--text-primary))", cursor: "pointer", userSelect: "none", outline: "none" }} 
+                                                              className="menu-item-hover"
+                                                            >
+                                                              <ArrowUp size={15} color="#8b5cf6" /> Subir posição na série
+                                                            </div>
+                                                          </DropdownMenu.Item>
+                                                        )}
+
+                                                        {itemIdx < sortedProvas.length - 1 && (
+                                                          <DropdownMenu.Item asChild>
+                                                            <div 
+                                                              onClick={() => handleMoveProva(turma.turmaName, bimGroup.bimestreNome, prova.id, "baixo", sortedProvas)} 
+                                                              style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "hsl(var(--text-primary))", cursor: "pointer", userSelect: "none", outline: "none" }} 
+                                                              className="menu-item-hover"
+                                                            >
+                                                              <ArrowDown size={15} color="#8b5cf6" /> Descer posição na série
+                                                            </div>
+                                                          </DropdownMenu.Item>
+                                                        )}
 
                                                         <DropdownMenu.Separator style={{ height: 1, background: 'hsl(var(--border-subtle))', margin: '4px 0' }} />
 

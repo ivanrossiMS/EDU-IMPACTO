@@ -3,14 +3,17 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { KeyRound, Save, AlertCircle, Shield, Lock, BookOpen, CheckCircle2 } from 'lucide-react';
+import { KeyRound, Save, AlertCircle, Shield, Lock, BookOpen, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 export default function AtualizarSenha() {
   const [novaSenha, setNovaSenha] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [sessionValid, setSessionValid] = useState<boolean | null>(null); // null = verificando, false = inválido/erro, true = válido
   const [sucesso, setSucesso] = useState(false);
+  const [mantemMesmaSenha, setMantemMesmaSenha] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -37,6 +40,7 @@ export default function AtualizarSenha() {
       const checkAuth = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
+          if (session.user?.email) setUserEmail(session.user.email);
           setSessionValid(true);
           return;
         }
@@ -48,6 +52,7 @@ export default function AtualizarSenha() {
             const { data: { session: currentSession } } = await supabase.auth.getSession();
             attempts++;
             if (currentSession) {
+              if (currentSession.user?.email) setUserEmail(currentSession.user.email);
               setSessionValid(true);
               clearInterval(interval);
             } else if (attempts >= 10) {
@@ -68,21 +73,74 @@ export default function AtualizarSenha() {
     }
   }, []);
 
+  const isSamePasswordError = (err: any) => {
+    if (!err) return false;
+    const msg = (err.message || '').toLowerCase();
+    const code = (err.code || '').toLowerCase();
+    return (
+      code === 'same_password' ||
+      msg.includes('different from the old password') ||
+      msg.includes('should be different') ||
+      msg.includes('same password') ||
+      (err.status === 422 && msg.includes('password'))
+    );
+  };
+
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!novaSenha || novaSenha.length < 6) {
+      setErro('A senha deve ter no mínimo 6 caracteres.');
+      return;
+    }
+
     setLoading(true);
     setErro('');
 
-    const { error } = await supabase.auth.updateUser({
-      password: novaSenha
-    });
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: novaSenha
+      });
 
-    if (error) {
-      setErro(`Falha ao atualizar: ${error.message}`);
+      if (error) {
+        if (isSamePasswordError(error)) {
+          // A senha informada já é exatamente a senha atual do usuário no Supabase.
+          // Atualiza metadados para registrar a confirmação e refrescar a sessão sem disparar erro do GoTrue
+          await supabase.auth.updateUser({
+            data: { 
+              password_confirmed_at: new Date().toISOString() 
+            }
+          }).catch(() => {});
+
+          setMantemMesmaSenha(true);
+          setSucesso(true);
+          setLoading(false);
+          return;
+        }
+
+        setErro(`Falha ao atualizar: ${error.message}`);
+        setLoading(false);
+      } else {
+        setMantemMesmaSenha(false);
+        setSucesso(true);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      if (isSamePasswordError(err)) {
+        setMantemMesmaSenha(true);
+        setSucesso(true);
+      } else {
+        setErro(`Falha ao atualizar: ${err?.message || 'Erro inesperado ao atualizar senha'}`);
+      }
       setLoading(false);
-    } else {
-      setSucesso(true);
     }
+  };
+
+  const handleGoToLogin = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {}
+    const loginUrl = userEmail ? `/login?email=${encodeURIComponent(userEmail)}` : '/login';
+    router.push(loginUrl);
   };
 
   // Estado de sucesso: modal moderno
@@ -153,14 +211,16 @@ export default function AtualizarSenha() {
 
             {/* Titles */}
             <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#ffffff', textAlign: 'center', marginBottom: '12px', fontFamily: 'var(--font-outfit), sans-serif', margin: '0 0 12px 0' }}>
-              Senha Atualizada!
+              {mantemMesmaSenha ? 'Senha Confirmada com Sucesso!' : 'Senha Atualizada!'}
             </h2>
             <p style={{ color: '#94a3b8', fontSize: '14px', textAlign: 'center', marginBottom: '32px', lineHeight: 1.6, margin: '0 0 32px 0' }}>
-              Sua senha foi redefinida com sucesso. Você já pode usar a nova credencial para acessar sua conta com segurança.
+              {mantemMesmaSenha
+                ? 'A sua senha foi validada e mantida com sucesso. Você pode continuar utilizando essa mesma credencial para acessar sua conta com segurança.'
+                : 'Sua senha foi redefinida com sucesso. Você já pode usar a nova credencial para acessar sua conta com segurança.'}
             </p>
 
             <button
-              onClick={() => router.push('/login')}
+              onClick={handleGoToLogin}
               style={{ 
                 width: '100%', 
                 borderRadius: '16px', 
@@ -429,7 +489,7 @@ export default function AtualizarSenha() {
                   <KeyRound size={20} color="#94a3b8" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={novaSenha}
                   onChange={(e) => setNovaSenha(e.target.value)}
                   required
@@ -437,7 +497,7 @@ export default function AtualizarSenha() {
                   style={{ 
                     width: '100%', 
                     borderRadius: '16px', 
-                    padding: '16px 16px 16px 48px', 
+                    padding: '16px 48px 16px 48px', 
                     fontSize: '15px', 
                     color: '#ffffff', 
                     outline: 'none', 
@@ -448,6 +508,29 @@ export default function AtualizarSenha() {
                   }}
                   placeholder="Mínimo de 6 caracteres"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                  style={{
+                    position: 'absolute',
+                    right: '16px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#94a3b8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '4px',
+                    borderRadius: '8px',
+                    transition: 'color 0.2s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
             </div>
 

@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus, Search, Filter, Eye, Clock, CheckCircle, XCircle,
   Upload, BookOpen, Users, User, Info, ChevronRight, AlertCircle, Trash2,
-  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp, Sparkles, BookMarked, MoreVertical
+  FileText, Calendar, Layers, Edit, CheckSquare, Printer, ChevronDown, GraduationCap, ChevronUp, Sparkles, BookMarked, MoreVertical,
+  ArrowUp, ArrowDown
 } from 'lucide-react'
 import Link from 'next/link'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -193,6 +194,7 @@ export default function UploadSimuladosGerenciamentoPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [selectedSimulados, setSelectedSimulados] = useState<Record<string, boolean>>({})
   const [sortOrders, setSortOrders] = useState<Record<string, string>>({})
+  const [localCustomOrders, setLocalCustomOrders] = useState<Record<string, string[]>>({})
 
   const [selectedAnoLetivo, setSelectedAnoLetivo] = useState<string | null>(null)
   const [showAnoModal, setShowAnoModal] = useState(true)
@@ -223,7 +225,116 @@ export default function UploadSimuladosGerenciamentoPage() {
   useEffect(() => {
     setIsClient(true)
     setShowAnoModal(true)
+    try {
+      const saved = localStorage.getItem('impacto_simulados_upload_ordens')
+      if (saved) {
+        setLocalCustomOrders(JSON.parse(saved))
+      }
+    } catch (e) {}
   }, [])
+
+  const getSimuladoOrder = (simulado: any, groupKey: string): number | null => {
+    const customList = localCustomOrders[groupKey]
+    if (customList && customList.length > 0) {
+      const idx = customList.indexOf(simulado.id)
+      if (idx !== -1) return idx + 1
+    }
+    if (simulado.ordem_series && typeof simulado.ordem_series === 'object') {
+      const sOrder = simulado.ordem_series[groupKey]
+      if (typeof sOrder === 'number' && sOrder > 0) return sOrder
+    }
+    if (typeof simulado.ordem === 'number' && simulado.ordem > 0) {
+      return simulado.ordem
+    }
+    return null
+  }
+
+  const handleMoveSimulado = async (
+    turmaName: string,
+    bimestreNome: string,
+    simuladoId: string,
+    direction: 'cima' | 'baixo',
+    currentList: any[]
+  ) => {
+    const groupKey = `${turmaName}_${bimestreNome}`
+    const idx = currentList.findIndex(p => p.id === simuladoId)
+    if (idx === -1) return
+    if (direction === 'cima' && idx <= 0) return
+    if (direction === 'baixo' && idx >= currentList.length - 1) return
+
+    const targetIdx = direction === 'cima' ? idx - 1 : idx + 1
+    const newList = [...currentList]
+    const [movedItem] = newList.splice(idx, 1)
+    newList.splice(targetIdx, 0, movedItem)
+
+    const newOrderIds = newList.map(p => p.id)
+
+    // 1. Optimistic Local State Update
+    setLocalCustomOrders(prev => {
+      const updated = { ...prev, [groupKey]: newOrderIds }
+      try {
+        localStorage.setItem('impacto_simulados_upload_ordens', JSON.stringify(updated))
+      } catch (e) {}
+      return updated
+    })
+
+    setSortOrders(prev => ({ ...prev, [groupKey]: 'ordem' }))
+
+    setSimulados(prev => {
+      return prev.map(item => {
+        const pos = newOrderIds.indexOf(item.id)
+        if (pos !== -1) {
+          const updatedOrdemSeries = { ...(item.ordem_series || {}), [groupKey]: pos + 1 }
+          return {
+            ...item,
+            ordem: pos + 1,
+            ordem_series: updatedOrdemSeries
+          }
+        }
+        return item
+      })
+    })
+
+    // 2. Persist to Supabase in Background
+    try {
+      const updates = newList.map((item, i) => {
+        const newPos = i + 1
+        const updatedOrdemSeries = { ...(item.ordem_series || {}), [groupKey]: newPos }
+        return {
+          id: item.id,
+          ordem: newPos,
+          ordem_series: updatedOrdemSeries
+        }
+      })
+
+      await Promise.all(
+        updates.map(u =>
+          (supabase as any)
+            .from('simulados_upload')
+            .update({
+              ordem: u.ordem,
+              ordem_series: u.ordem_series,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', u.id)
+        )
+      )
+    } catch (err) {
+      console.warn('Tentando fallback de ordenação no Supabase:', err)
+      try {
+        await Promise.all(
+          newList.map((item, i) =>
+            (supabase as any)
+              .from('simulados_upload')
+              .update({ ordem: i + 1, updated_at: new Date().toISOString() })
+              .eq('id', item.id)
+          )
+        )
+      } catch (e2) {
+        console.warn('Ordem mantida via LocalStorage:', e2)
+      }
+    }
+  }
 
   useEffect(() => {
     if (isClient) {
@@ -966,11 +1077,22 @@ export default function UploadSimuladosGerenciamentoPage() {
                           
                           {turma.bimestres.map(bimGroup => {
                             const groupKey = `${turma.turmaName}_${bimGroup.bimestreNome}`
-                            const currentSort = sortOrders[groupKey] || 'recentes'
+                            const currentSort = sortOrders[groupKey] || 'ordem'
 
                             // Apply Sorting
                             let sortedSimulados = [...bimGroup.provas]
-                            if (currentSort === 'recentes') {
+                            if (currentSort === 'ordem') {
+                              sortedSimulados.sort((a, b) => {
+                                const orderA = getSimuladoOrder(a, groupKey)
+                                const orderB = getSimuladoOrder(b, groupKey)
+                                if (orderA !== null && orderB !== null && orderA !== orderB) {
+                                  return orderA - orderB
+                                }
+                                if (orderA !== null && orderB === null) return -1
+                                if (orderA === null && orderB !== null) return 1
+                                return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+                              })
+                            } else if (currentSort === 'recentes') {
                               sortedSimulados.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
                             } else if (currentSort === 'antigas') {
                               sortedSimulados.sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
@@ -1027,6 +1149,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                       onChange={e => setSortOrders(prev => ({ ...prev, [groupKey]: e.target.value }))}
                                       style={{ padding: '6px 24px 6px 12px', borderRadius: 8, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 12, fontWeight: 600, outline: 'none', cursor: 'pointer', appearance: 'none' }}
                                     >
+                                      <option value="ordem">Ordem personalizada</option>
                                       <option value="recentes">Mais recentes</option>
                                       <option value="antigas">Mais antigas</option>
                                       <option value="az">Título (A-Z)</option>
@@ -1047,7 +1170,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                   <table style={{ width: '100%', minWidth: 920, tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: '0 10px' }}>
                                     <thead>
                                       <tr style={{ color: 'hsl(var(--text-secondary))', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                                        <th style={{ width: 270, minWidth: 230, padding: '8px 12px 8px 16px', textAlign: 'left' }}>SIMULADO</th>
+                                        <th style={{ width: 285, minWidth: 240, padding: '8px 12px 8px 16px', textAlign: 'left' }}>SIMULADO</th>
                                         <th style={{ width: 130, minWidth: 110, padding: '8px 6px', textAlign: 'left' }}>DISCIPLINA</th>
                                         <th style={{ width: 160, minWidth: 140, padding: '8px 6px', textAlign: 'left' }}>PROFESSOR</th>
                                         <th style={{ width: 145, minWidth: 130, padding: '8px 6px', textAlign: 'left' }}>CRIAÇÃO / ENVIO</th>
@@ -1057,7 +1180,7 @@ export default function UploadSimuladosGerenciamentoPage() {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {sortedSimulados.map(simulado => {
+                                      {sortedSimulados.map((simulado, itemIdx) => {
                                         const rawReqs = simulado.simulados_upload_requisicoes || []
                                         const reqs = rawReqs.length > 0 ? rawReqs : [{
                                           id: simulado.id,
@@ -1118,6 +1241,80 @@ export default function UploadSimuladosGerenciamentoPage() {
                                               {isFirstRow && (
                                                 <td rowSpan={rowSpanCount} style={{ background: 'hsl(var(--bg-surface))', padding: '10px 12px 10px 16px', borderRadius: '12px 0 0 12px', borderLeft: cardBorder, borderTop: cardBorder, borderBottom: cardBorder, verticalAlign: 'middle' }}>
                                                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                                    {/* Mini-toolbar de Ordenação: Subir / Posição / Descer */}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, flexShrink: 0, marginRight: 2, marginTop: 1 }}>
+                                                      {/* Botão Subir */}
+                                                      <button
+                                                        type="button"
+                                                        disabled={itemIdx === 0}
+                                                        onClick={(e) => {
+                                                          e.stopPropagation()
+                                                          handleMoveSimulado(turma.turmaName, bimGroup.bimestreNome, simulado.id, 'cima', sortedSimulados)
+                                                        }}
+                                                        title={itemIdx === 0 ? 'Primeira posição' : 'Subir posição na série'}
+                                                        style={{
+                                                          width: 22,
+                                                          height: 18,
+                                                          display: 'flex',
+                                                          alignItems: 'center',
+                                                          justifyContent: 'center',
+                                                          border: '1px solid hsl(var(--border-subtle))',
+                                                          borderRadius: 4,
+                                                          background: 'hsl(var(--bg-app))',
+                                                          color: itemIdx === 0 ? 'hsl(var(--text-secondary))' : '#8b5cf6',
+                                                          cursor: itemIdx === 0 ? 'not-allowed' : 'pointer',
+                                                          opacity: itemIdx === 0 ? 0.25 : 1,
+                                                          transition: 'all 0.15s ease',
+                                                          padding: 0
+                                                        }}
+                                                      >
+                                                        <ChevronUp size={13} strokeWidth={2.5} />
+                                                      </button>
+
+                                                      {/* Indicador Numérico de Posição */}
+                                                      <span 
+                                                        style={{ 
+                                                          fontSize: 10, 
+                                                          fontWeight: 800, 
+                                                          color: 'hsl(var(--text-secondary))', 
+                                                          lineHeight: 1, 
+                                                          padding: '2px 0', 
+                                                          fontVariantNumeric: 'tabular-nums' 
+                                                        }}
+                                                        title={`Posição ${itemIdx + 1} de ${sortedSimulados.length} neste bimestre`}
+                                                      >
+                                                        {itemIdx + 1}º
+                                                      </span>
+
+                                                      {/* Botão Descer */}
+                                                      <button
+                                                        type="button"
+                                                        disabled={itemIdx === sortedSimulados.length - 1}
+                                                        onClick={(e) => {
+                                                          e.stopPropagation()
+                                                          handleMoveSimulado(turma.turmaName, bimGroup.bimestreNome, simulado.id, 'baixo', sortedSimulados)
+                                                        }}
+                                                        title={itemIdx === sortedSimulados.length - 1 ? 'Última posição' : 'Descer posição na série'}
+                                                        style={{
+                                                          width: 22,
+                                                          height: 18,
+                                                          display: 'flex',
+                                                          alignItems: 'center',
+                                                          justifyContent: 'center',
+                                                          border: '1px solid hsl(var(--border-subtle))',
+                                                          borderRadius: 4,
+                                                          background: 'hsl(var(--bg-app))',
+                                                          color: itemIdx === sortedSimulados.length - 1 ? 'hsl(var(--text-secondary))' : '#8b5cf6',
+                                                          cursor: itemIdx === sortedSimulados.length - 1 ? 'not-allowed' : 'pointer',
+                                                          opacity: itemIdx === sortedSimulados.length - 1 ? 0.25 : 1,
+                                                          transition: 'all 0.15s ease',
+                                                          padding: 0
+                                                        }}
+                                                      >
+                                                        <ChevronDown size={13} strokeWidth={2.5} />
+                                                      </button>
+                                                    </div>
+
                                                     <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0, marginTop: 1 }}>
                                                       <FileText size={15} />
                                                     </div>
@@ -1364,6 +1561,32 @@ export default function UploadSimuladosGerenciamentoPage() {
                                                             </div>
                                                           </Link>
                                                         </DropdownMenu.Item>
+
+                                                        <DropdownMenu.Separator style={{ height: 1, background: "hsl(var(--border-subtle))", margin: "4px 0" }} />
+
+                                                        {itemIdx > 0 && (
+                                                          <DropdownMenu.Item asChild>
+                                                            <div 
+                                                              onClick={() => handleMoveSimulado(turma.turmaName, bimGroup.bimestreNome, simulado.id, "cima", sortedSimulados)} 
+                                                              style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "hsl(var(--text-primary))", cursor: "pointer", userSelect: "none", outline: "none" }} 
+                                                              className="menu-item-hover"
+                                                            >
+                                                              <ArrowUp size={15} color="#8b5cf6" /> Subir posição na série
+                                                            </div>
+                                                          </DropdownMenu.Item>
+                                                        )}
+
+                                                        {itemIdx < sortedSimulados.length - 1 && (
+                                                          <DropdownMenu.Item asChild>
+                                                            <div 
+                                                              onClick={() => handleMoveSimulado(turma.turmaName, bimGroup.bimestreNome, simulado.id, "baixo", sortedSimulados)} 
+                                                              style={{ minHeight: 38, padding: "6px 12px", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, fontSize: 13, fontWeight: 600, color: "hsl(var(--text-primary))", cursor: "pointer", userSelect: "none", outline: "none" }} 
+                                                              className="menu-item-hover"
+                                                            >
+                                                              <ArrowDown size={15} color="#8b5cf6" /> Descer posição na série
+                                                            </div>
+                                                          </DropdownMenu.Item>
+                                                        )}
                                                       </DropdownMenu.Content>
                                                     </DropdownMenu.Portal>
                                                   </DropdownMenu.Root>

@@ -186,6 +186,10 @@ export default function LoginPage() {
       const params = new URLSearchParams(window.location.search)
       const stepParam = params.get('step') as Step
       const nextParam = params.get('next')
+      const emailParam = params.get('email')
+      if (emailParam) {
+        setEmail(emailParam)
+      }
 
       // Capturar erros vindos do redirecionamento do Supabase (ex: link expirado / otp_expired)
       const hash = window.location.hash

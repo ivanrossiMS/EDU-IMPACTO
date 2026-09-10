@@ -7,6 +7,19 @@ export const dynamic = 'force-dynamic'
 const isValidEmail = (email: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && !email.endsWith('@impactoedu.local')
 
+const isSamePasswordError = (err: any): boolean => {
+  if (!err) return false
+  const msg = (err.message || '').toLowerCase()
+  const code = (err.code || '').toLowerCase()
+  return (
+    code === 'same_password' ||
+    msg.includes('different from the old password') ||
+    msg.includes('should be different') ||
+    msg.includes('same password') ||
+    (err.status === 422 && msg.includes('password'))
+  )
+}
+
 export async function POST(request: Request) {
   try {
     const { userIdLegacy, newPass, registeredEmail } = await request.json()
@@ -80,7 +93,21 @@ export async function POST(request: Request) {
         }
 
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, updatePayload)
-        if (upErr) throw upErr
+        if (upErr) {
+          if (isSamePasswordError(upErr)) {
+            // A senha já é a mesma cadastrada anteriormente.
+            // Se houver alteração de e-mail no payload, aplica sem enviar o password
+            if (updatePayload.email) {
+              const { error: emailErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
+                email: updatePayload.email,
+                email_confirm: true
+              })
+              if (emailErr && !isSamePasswordError(emailErr)) throw emailErr
+            }
+          } else {
+            throw upErr
+          }
+        }
       } else {
         // Create auth user for student (using registered email if valid, else virtual)
         const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -152,7 +179,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Senha já definida. Use Login normal.' }, { status: 409 })
         }
         const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existing.id, { password: newPass })
-        if (upErr) throw upErr
+        if (upErr && !isSamePasswordError(upErr)) throw upErr
       } else {
         const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email: targetEmail,
@@ -211,7 +238,7 @@ export async function POST(request: Request) {
 
     if (existingAuthUser) {
       const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(existingAuthUser.id, { password: newPass })
-      if (upErr) throw upErr
+      if (upErr && !isSamePasswordError(upErr)) throw upErr
       if (existingAuthUser.id !== userIdLegacy) {
         await supabaseAdmin.from('system_users')
           .update({ auth_id: existingAuthUser.id })
