@@ -44,20 +44,78 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
   const [enunciadoFontSize, setEnunciadoFontSize] = useState<number>(simulado?.config_estudio?.config_fonte_enunciado || 14)
   const [alternativasFontSize, setAlternativasFontSize] = useState<number>(simulado?.config_estudio?.config_fonte_alternativa || 12)
   const [alternativasLayout, setAlternativasLayout] = useState<'vertical' | 'horizontal'>(simulado?.config_estudio?.config_layout_alternativas || 'vertical')
-  const initialLocal = questoes.map(q => ({ ...q, _internalId: (q as any)._internalId || 'q-' + Math.random().toString(36).substr(2, 9) }))
-  const [localQuestoes, setLocalQuestoes] = useState<any[]>(initialLocal)
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialLocal.filter((q: any) => !q.excluida).map((q: any) => q._internalId)))
+  const ensureStableIds = (qs: any[], existing?: any[]) => {
+    const existingMap = new Map((existing || []).map((q: any) => [q.id || q._internalId || q.numero, q]));
+    return (qs || []).map((q, qIdx) => {
+      const prev = existingMap.get(q.id || q._internalId || q.numero);
+      const qInternalId = q._internalId || prev?._internalId || q.id || `q-${qIdx}-${q.numero ?? 'x'}`;
+      return {
+        ...q,
+        _internalId: qInternalId,
+        alternativas: (q.alternativas || []).map((alt: any, aIdx: number) => {
+          const prevAlt = prev?.alternativas?.[aIdx];
+          return {
+            ...alt,
+            _uid: alt._uid || prevAlt?._uid || alt.id || `alt-${qInternalId}-${aIdx}-${alt.letter || alt.letra || ''}`
+          };
+        })
+      };
+    });
+  };
+
+  const matchQuestion = (q: any, qId: string) => {
+    return (q._internalId && q._internalId === qId) ||
+           (q.id && q.id === qId) ||
+           String(q.id) === String(qId) ||
+           (q.numero !== undefined && (String(q.numero) === String(qId) || `q-${q.numero}` === String(qId)));
+  };
+
+  const findAlternativeIndex = (alts: any[], aId: string, fallbackIdx?: number, fallbackLetter?: string) => {
+    let idx = -1;
+    if (aId) {
+      idx = alts.findIndex((a: any) => (a.id && a.id === aId) || (a._uid && a._uid === aId));
+    }
+    if (idx === -1 && typeof fallbackIdx === 'number' && fallbackIdx >= 0 && fallbackIdx < alts.length) {
+      idx = fallbackIdx;
+    }
+    if (idx === -1 && fallbackLetter) {
+      idx = alts.findIndex((a: any) => a.letter === fallbackLetter || a.letra === fallbackLetter);
+    }
+    if (idx === -1 && typeof aId === 'string' && aId.length === 1) {
+      idx = alts.findIndex((a: any) => a.letter === aId || a.letra === aId);
+    }
+    if (idx === -1 && typeof aId === 'string' && aId.startsWith('alt-preview-')) {
+      idx = parseInt(aId.replace('alt-preview-', ''));
+    }
+    if (idx === -1 && typeof aId === 'string' && aId.startsWith('alt-')) {
+      const parts = aId.split('-');
+      for (let p = 1; p < parts.length; p++) {
+        const parsed = parseInt(parts[p], 10);
+        if (!isNaN(parsed) && parsed >= 0 && parsed < alts.length) {
+          idx = parsed;
+          break;
+        }
+      }
+    }
+    return (idx >= 0 && idx < alts.length) ? idx : -1;
+  };
+
+  const initialLocal = ensureStableIds(questoes);
+  const [localQuestoes, setLocalQuestoes] = useState<any[]>(initialLocal);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(initialLocal.filter((q: any) => !q.excluida).map((q: any) => q._internalId)));
 
   useEffect(() => {
     if (questoes && questoes.length > 0) {
-      const updated = questoes.map(q => ({
-        ...q,
-        _internalId: (q as any)._internalId || 'q-' + Math.random().toString(36).substr(2, 9)
-      }))
-      setLocalQuestoes(updated)
-      setSelectedIds(new Set(updated.filter((q: any) => !q.excluida).map((q: any) => q._internalId)))
+      setLocalQuestoes(prev => {
+        if (prev && prev.length > 0) return prev;
+        return ensureStableIds(questoes, prev);
+      });
+      setSelectedIds(prev => {
+        if (prev && prev.size > 0) return prev;
+        return new Set(ensureStableIds(questoes).filter((q: any) => !q.excluida).map((q: any) => q._internalId));
+      });
     }
-  }, [questoes])
+  }, [questoes]);
   
   const defaultHeaderLayout = {
     title: { label: "Título", x: 60, y: 6.5, fontSize: 13, width: 25, align: "left" },
@@ -423,13 +481,17 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
       tipo_questao: q.tipo_questao || 'multipla_escolha',
       enunciado: `<div style="white-space: pre-wrap;">${enunciadoHtml.trim()}</div>`,
       imagens: q.imagens?.map((img: any) => img.src) || [],
-      simulados_alternativas: (q.alternativas || []).map((alt: any, i: number) => ({
-        id: `alt-preview-${i}`,
-        letra: alt.letter,
-        texto: alt.text,
-        eh_correta: alt.correct,
-        imagem_url: (alt as any).imagem_url
-      })),
+      simulados_alternativas: (q.alternativas || []).map((alt: any, i: number) => {
+        const altId = alt._uid || alt.id || `alt-${q._internalId || q.id || idx}-${i}-${alt.letter || alt.letra || ''}`;
+        return {
+          id: altId,
+          letra: alt.letter || alt.letra,
+          texto: alt.text || alt.texto,
+          eh_correta: alt.correct || alt.eh_correta,
+          imagem_url: (alt as any).imagem_url,
+          _uid: altId
+        };
+      }),
       id_disciplina: discId,
       disciplina_nome: discName,
       disciplina: discName,
@@ -952,72 +1014,74 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
               }))
             }}
             onEditAlternativa={isReadOnly ? () => {} : (qId, aId, text) => {
-              const aIdx = parseInt(aId.replace('alt-preview-', ''))
               setLocalQuestoes(prev => prev.map(q => {
-                if ((q._internalId || q.id) !== qId) return q
-                const newAlts = [...q.alternativas]
-                newAlts[aIdx] = { ...newAlts[aIdx], text }
-                return { ...q, alternativas: newAlts }
-              }))
+                if (!matchQuestion(q, qId)) return q;
+                const alts = q.alternativas || [];
+                const aIdx = findAlternativeIndex(alts, aId);
+                if (aIdx === -1 || !alts[aIdx]) return q;
+                const newAlts = [...alts];
+                newAlts[aIdx] = { ...newAlts[aIdx], text };
+                return { ...q, alternativas: newAlts };
+              }));
             }}
             onRemoveAlternativa={isReadOnly ? () => {} : (qId, aId) => {
               setLocalQuestoes(prev => prev.map(q => {
-                if ((q._internalId || q.id) !== qId) return q
-                let aIdx = q.alternativas.findIndex((a: any) => a.id === aId)
-                if (aIdx === -1 && typeof aId === 'string' && aId.startsWith('alt-preview-')) {
-                  aIdx = parseInt(aId.replace('alt-preview-', ''))
-                }
-                if (aIdx === -1 || isNaN(aIdx)) return q
-                const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
-                const remaining = q.alternativas.filter((_: any, ai: number) => ai !== aIdx)
+                if (!matchQuestion(q, qId)) return q;
+                const alts = q.alternativas || [];
+                const aIdx = findAlternativeIndex(alts, aId);
+                if (aIdx === -1) return q;
+                const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+                const remaining = alts.filter((_: any, ai: number) => ai !== aIdx);
                 const relettered = remaining.map((a: any, idx: number) => ({
                   ...a,
-                  letter: LETTERS[idx] || String.fromCharCode(65 + idx)
-                }))
-                return { ...q, alternativas: relettered }
-              }))
+                  letter: LETTERS[idx] || String.fromCharCode(65 + idx),
+                  letra: LETTERS[idx] || String.fromCharCode(65 + idx)
+                }));
+                const correctAlt = relettered.find((alt: any) => alt.correct || alt.eh_correta);
+                const newGabarito = correctAlt ? (correctAlt.letter || correctAlt.letra) : (relettered.some((alt: any) => alt.letter === q.gabarito) ? q.gabarito : '');
+                return { ...q, alternativas: relettered, ...(newGabarito !== undefined ? { gabarito: newGabarito } : {}) };
+              }));
             }}
-            onMoveAlternativa={isReadOnly ? () => {} : (qId, aId, direction) => {
+            onMoveAlternativa={isReadOnly ? () => {} : (qId: string, aId: string, directionOrTarget: 'up' | 'down' | number, sourceIdx?: number, sourceLetter?: string) => {
               setLocalQuestoes(prev => prev.map(q => {
-                if ((q._internalId || q.id) !== qId) return q
-                const alts = q.alternativas || []
-                let aIdx = alts.findIndex((a: any) => a.id === aId)
-                if (aIdx === -1 && typeof aId === 'string' && aId.startsWith('alt-preview-')) {
-                  aIdx = parseInt(aId.replace('alt-preview-', ''))
-                }
-                if (aIdx === -1 || isNaN(aIdx)) return q
-                const targetIdx = direction === 'up' ? aIdx - 1 : aIdx + 1
-                if (targetIdx < 0 || targetIdx >= alts.length) return q
+                if (!matchQuestion(q, qId)) return q;
+                const alts = q.alternativas || [];
+                const aIdx = findAlternativeIndex(alts, aId, sourceIdx, sourceLetter);
+                if (aIdx === -1) return q;
+
+                const targetIdx = typeof directionOrTarget === 'number'
+                  ? directionOrTarget
+                  : (directionOrTarget === 'up' ? aIdx - 1 : aIdx + 1);
+
+                if (targetIdx < 0 || targetIdx >= alts.length || targetIdx === aIdx) return q;
                 
-                const newAlts = [...alts]
-                const [moved] = newAlts.splice(aIdx, 1)
-                newAlts.splice(targetIdx, 0, moved)
+                const newAlts = [...alts];
+                const [moved] = newAlts.splice(aIdx, 1);
+                newAlts.splice(targetIdx, 0, moved);
                 
-                const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+                const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
                 const relettered = newAlts.map((alt: any, idx: number) => ({
                   ...alt,
-                  letter: LETTERS[idx] || String.fromCharCode(65 + idx)
-                }))
-                return { ...q, alternativas: relettered }
-              }))
+                  letter: LETTERS[idx] || String.fromCharCode(65 + idx),
+                  letra: LETTERS[idx] || String.fromCharCode(65 + idx)
+                }));
+
+                const correctAlt = relettered.find((alt: any) => alt.correct || alt.eh_correta);
+                const newGabarito = correctAlt ? (correctAlt.letter || correctAlt.letra) : q.gabarito;
+
+                return { ...q, alternativas: relettered, ...(newGabarito ? { gabarito: newGabarito } : {}) };
+              }));
             }}
             onEditAlternativaImage={isReadOnly ? () => {} : (qId, aId, url) => {
-              let aIdx = -1
-              if (typeof aId === 'string' && aId.startsWith('alt-preview-')) {
-                aIdx = parseInt(aId.replace('alt-preview-', ''))
-              }
               setLocalQuestoes(prev => prev.map(q => {
-                if ((q._internalId || q.id) !== qId) return q
-                const newAlts = [...(q.alternativas || [])]
-                let targetIdx = aIdx
-                if (targetIdx === -1 || isNaN(targetIdx)) {
-                  targetIdx = newAlts.findIndex((a: any) => a.id === aId)
-                }
+                if (!matchQuestion(q, qId)) return q;
+                const newAlts = [...(q.alternativas || [])];
+                const targetIdx = findAlternativeIndex(newAlts, aId);
                 if (targetIdx !== -1 && newAlts[targetIdx]) {
-                  newAlts[targetIdx] = { ...newAlts[targetIdx], imagem_url: url } as any
+                  newAlts[targetIdx] = { ...newAlts[targetIdx], imagem_url: url } as any;
                 }
-                return { ...q, alternativas: newAlts }
-              }))
+                return { ...q, alternativas: newAlts };
+              }));
             }}
             onEditEnunciadoImage={isReadOnly ? () => {} : (qId, imgIndex, newUrl) => {
               setLocalQuestoes(prev => prev.map((q) => {

@@ -1,6 +1,5 @@
-import React from 'react';
-import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, Plus, Minus, FileText, LayoutList, ChevronUp, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { X, BookOpen, ImageIcon, Sparkles, Upload, Trash2, ZoomIn, ZoomOut, AlignLeft, AlignCenter, AlignRight, ArrowUp, ArrowDown, Plus, Minus, FileText, LayoutList, ArrowUpDown } from 'lucide-react';
 import { HtmlContent } from '../HtmlContent';
 import { DraggableHeaderField } from './DraggableHeaderField';
 import { parseEnunciadoParts, splitTextIntoChunks } from './PaginationEngine';
@@ -52,6 +51,145 @@ export function PageContent({
   const [linesCount, setLinesCount] = useState<number>(5);
   const [linesType, setLinesType] = useState<'pautado' | 'branco'>('pautado');
   const [linesModalOpen, setLinesModalOpen] = useState<{qId: string, parts: any[], defaultCount: number, q: any} | null>(null);
+  const [reorderMenuOpen, setReorderMenuOpen] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!reorderMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target?.closest?.('.reorder-popover') || target?.closest?.('.reorder-trigger')) {
+        return;
+      }
+      setReorderMenuOpen(null);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setReorderMenuOpen(null);
+    };
+    const timer = setTimeout(() => {
+      window.addEventListener('pointerdown', handleClickOutside);
+    }, 0);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointerdown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [reorderMenuOpen]);
+
+  const renderReorderPopover = (
+    qId: string,
+    altId: string,
+    currentLetter: string,
+    currentIndex: number,
+    totalAlts: number,
+    isTop: boolean = false
+  ) => {
+    const menuKey = `${qId}-${altId}`;
+    if (reorderMenuOpen !== menuKey || readOnly || !onMoveAlternativa) return null;
+
+    return (
+      <div
+        className="no-print reorder-popover"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute',
+          left: 0,
+          bottom: isTop ? 'auto' : '100%',
+          top: isTop ? '100%' : 'auto',
+          marginBottom: isTop ? 0 : 8,
+          marginTop: isTop ? 8 : 0,
+          background: '#ffffff',
+          borderRadius: 14,
+          padding: '10px 14px',
+          boxShadow: '0 12px 32px -4px rgba(15, 23, 42, 0.25), 0 4px 12px -2px rgba(15, 23, 42, 0.12)',
+          border: '1.5px solid #93c5fd',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          zIndex: 1000,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'auto'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Mover alternativa <span style={{ color: '#2563eb' }}>({currentLetter})</span> para:
+          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setReorderMenuOpen(null);
+            }}
+            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', borderRadius: 4 }}
+            title="Fechar"
+          >
+            <X size={13} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {Array.from({ length: totalAlts }).map((_, targetIdx) => {
+            const targetLetter = String.fromCharCode(65 + targetIdx);
+            const isCurrent = targetIdx === currentIndex;
+            return (
+              <button
+                key={targetIdx}
+                type="button"
+                disabled={isCurrent}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    onMoveAlternativa(qId, altId, targetIdx, currentIndex, currentLetter);
+                  } catch (err) {
+                    console.error('Erro ao mover alternativa:', err);
+                  }
+                  setReorderMenuOpen(null);
+                  forceRepaginate?.();
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                title={isCurrent ? `Posição atual (${targetLetter})` : `Mover para posição ${targetLetter}`}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 13,
+                  fontWeight: 900,
+                  cursor: isCurrent ? 'default' : 'pointer',
+                  border: isCurrent ? '1.5px solid #e2e8f0' : '1.5px solid #93c5fd',
+                  background: isCurrent ? '#f1f5f9' : 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                  color: isCurrent ? '#94a3b8' : '#1d4ed8',
+                  transition: 'all 0.15s ease',
+                  boxShadow: isCurrent ? 'none' : '0 2px 4px rgba(37,99,235,0.15)'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isCurrent) {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)';
+                    e.currentTarget.style.color = '#ffffff';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(37,99,235,0.3)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isCurrent) {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)';
+                    e.currentTarget.style.color = '#1d4ed8';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(37,99,235,0.15)';
+                  }
+                }}
+              >
+                {targetLetter}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   const handleMainImageAction = async (qId: string, imgIndex: number, action: 'upload' | 'ai', altText: string) => {
     setMainImgMenuOpen(null);
@@ -855,16 +993,31 @@ export function PageContent({
                                   display: 'flex', gap: 12, 
                                   marginTop: 6, 
                                   alignItems: 'flex-start', position: 'relative',
-                                  zIndex: imgMenuOpen === `${q.id}-${a.id}` ? 50 : 1
+                                  zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : (imgMenuOpen === `${q.id}-${a.id}` ? 50 : 1)
                                 }}>
-                                  <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                                    border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                                  }}>
+                                  <div 
+                                    className={`reorder-trigger ${a.eh_correta ? 'correct-bubble-preview' : ''}`} 
+                                    onClick={!readOnly && onMoveAlternativa ? (e) => {
+                                      e.stopPropagation();
+                                      setReorderMenuOpen(reorderMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`);
+                                    } : undefined}
+                                    title={!readOnly && onMoveAlternativa ? `Alternativa ${a.letra} (clique para reordenar)` : undefined}
+                                    style={{
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                                      border: reorderMenuOpen === `${q.id}-${a.id}` ? '2px solid #2563eb' : '2px solid #cbd5e1', 
+                                      color: reorderMenuOpen === `${q.id}-${a.id}` ? '#2563eb' : '#475569', 
+                                      fontWeight: 800, fontSize: '10pt', marginTop: '2px',
+                                      cursor: !readOnly && onMoveAlternativa ? 'pointer' : 'default',
+                                      background: reorderMenuOpen === `${q.id}-${a.id}` ? '#eff6ff' : undefined,
+                                      boxShadow: reorderMenuOpen === `${q.id}-${a.id}` ? '0 0 0 3px rgba(37,99,235,0.2)' : undefined,
+                                      transition: 'all 0.15s ease'
+                                    }}
+                                  >
                                     {a.letra}
                                   </div>
-                                   <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+                                  {renderReorderPopover(q.id, a.id, a.letra, aIndex, totalAlts, aIndex === 0)}
+                                  <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
                                      {a.imagem_url && (
                                        <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
                                          <div className="alt-img-wrapper" style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
@@ -975,7 +1128,7 @@ export function PageContent({
                                         if (part.type === 'text') {
                                           return (
                                             <HtmlContent
-                                              key={`alt-text-${pIdx}`}
+                                              key={`alt-text-${a.id}-${pIdx}`}
                                               editable={!readOnly}
                                               html={part.content || ''}
                                               onBlurHtml={(newHtml: string) => {
@@ -999,7 +1152,7 @@ export function PageContent({
                                                 </div>
                                               ))}
                                               {!readOnly && (
-                                                <div className="no-print alt-actions" style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
+                                                <div className="no-print" style={{ position: 'absolute', right: 4, bottom: 2, display: 'flex', gap: 4, zIndex: 10 }}>
                                                   <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: Math.max(1, p.count - 1) } : p); saveAltParts(updated); }} style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Remover uma linha">-</button>
                                                   <button onClick={() => { const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, count: p.count + 1 } : p); saveAltParts(updated); }} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }} title="Adicionar uma linha">+</button>
                                                   <button onClick={() => { const updated = altParts.filter((_: any, i: number) => i !== pIdx); saveAltParts(updated); }} style={{ background: 'rgba(239,68,68,0.9)', color: 'white', border: 'none', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} title="Remover bloco de linhas"><Trash2 size={12} /></button>
@@ -1051,71 +1204,47 @@ export function PageContent({
                                 )}
                               </div>
 
-                              {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
-                                <div className="no-print alt-control-btns" style={{
-                                  position: 'absolute',
-                                  left: onMoveAlternativa ? -72 : -28,
-                                  top: 4,
-                                  display: 'flex',
-                                  gap: 3,
-                                  alignItems: 'center',
-                                  zIndex: 20
-                                }}>
-                                  {onMoveAlternativa && (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          onMoveAlternativa(q.id, a.id, 'up');
-                                          forceRepaginate?.();
-                                        }}
-                                        disabled={aIndex === 0}
-                                        title="Subir alternativa"
-                                        style={{
-                                          background: aIndex === 0 ? '#f1f5f9' : '#e0f2fe',
-                                          color: aIndex === 0 ? '#cbd5e1' : '#0284c7',
-                                          border: 'none',
-                                          borderRadius: 20,
-                                          width: 18,
-                                          height: 18,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          cursor: aIndex === 0 ? 'not-allowed' : 'pointer',
-                                        }}
-                                      >
-                                        <ChevronUp size={12} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          onMoveAlternativa(q.id, a.id, 'down');
-                                          forceRepaginate?.();
-                                        }}
-                                        disabled={aIndex === totalAlts - 1}
-                                        title="Descer alternativa"
-                                        style={{
-                                          background: aIndex === totalAlts - 1 ? '#f1f5f9' : '#e0f2fe',
-                                          color: aIndex === totalAlts - 1 ? '#cbd5e1' : '#0284c7',
-                                          border: 'none',
-                                          borderRadius: 20,
-                                          width: 18,
-                                          height: 18,
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          cursor: aIndex === totalAlts - 1 ? 'not-allowed' : 'pointer',
-                                        }}
-                                      >
-                                        <ChevronDown size={12} />
-                                      </button>
-                                    </>
-                                  )}
+                                 {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
+                                   <div className="no-print alt-control-btns" style={{
+                                     position: 'absolute',
+                                     left: onMoveAlternativa ? -50 : -26,
+                                     top: 4,
+                                     display: 'flex',
+                                     gap: 3,
+                                     alignItems: 'center',
+                                     zIndex: 20
+                                   }}>
+                                     {onMoveAlternativa && (
+                                       <button
+                                         type="button"
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           setReorderMenuOpen(reorderMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`);
+                                         }}
+                                         title="Mover alternativa para outra letra (A, B, C...)"
+                                         style={{
+                                           background: reorderMenuOpen === `${q.id}-${a.id}` ? '#2563eb' : '#eff6ff',
+                                           color: reorderMenuOpen === `${q.id}-${a.id}` ? '#ffffff' : '#2563eb',
+                                           border: 'none',
+                                           borderRadius: 20,
+                                           width: 18,
+                                           height: 18,
+                                           display: 'flex',
+                                           alignItems: 'center',
+                                           justifyContent: 'center',
+                                           cursor: 'pointer',
+                                           boxShadow: reorderMenuOpen === `${q.id}-${a.id}` ? '0 1px 3px rgba(37,99,235,0.3)' : 'none'
+                                         }}
+                                       >
+                                         <ArrowUpDown size={11} />
+                                       </button>
+                                     )}
                                   {onRemoveAlternativa && (
                                     <button
                                       type="button"
                                       className="no-print alt-delete-btn"
                                       onClick={() => {
+                                        setReorderMenuOpen(null);
                                         onRemoveAlternativa(q.id, a.id);
                                         forceRepaginate?.();
                                       }}
@@ -1605,15 +1734,30 @@ export function PageContent({
                         <div key={a.id} className="alt-hover-group" style={{ 
                           display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative',
                           flex: effectiveWidth ? '0 0 auto' : '1 1 200px',
-                          zIndex: imgMenuOpen === a.id ? 50 : 1
+                          zIndex: reorderMenuOpen === `${qId}-${a.id}` ? 500 : (imgMenuOpen === a.id ? 50 : 1)
                         }}>
-                          <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                            border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                          }}>
+                          <div 
+                            className={`reorder-trigger ${a.eh_correta ? 'correct-bubble-preview' : ''}`} 
+                            onClick={!readOnly && onMoveAlternativa ? (e) => {
+                              e.stopPropagation();
+                              setReorderMenuOpen(reorderMenuOpen === `${qId}-${a.id}` ? null : `${qId}-${a.id}`);
+                            } : undefined}
+                            title={!readOnly && onMoveAlternativa ? `Alternativa ${a.letra} (clique para reordenar)` : undefined}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                              border: reorderMenuOpen === `${qId}-${a.id}` ? '2px solid #2563eb' : '2px solid #cbd5e1', 
+                              color: reorderMenuOpen === `${qId}-${a.id}` ? '#2563eb' : '#475569', 
+                              fontWeight: 800, fontSize: '10pt', marginTop: '2px',
+                              cursor: !readOnly && onMoveAlternativa ? 'pointer' : 'default',
+                              background: reorderMenuOpen === `${qId}-${a.id}` ? '#eff6ff' : undefined,
+                              boxShadow: reorderMenuOpen === `${qId}-${a.id}` ? '0 0 0 3px rgba(37,99,235,0.2)' : undefined,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
                             {a.letra}
                           </div>
+                          {renderReorderPopover(qId, a.id, a.letra, aIndex, totalAlts, aIndex === 0)}
                           <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', minWidth: 0 }}>
                             {a.imagem_url && (
                               <div className="alt-img-wrapper" style={{ position: 'relative', marginBottom: 8, width: '100%', maxWidth: '100%' }}>
@@ -1745,7 +1889,7 @@ export function PageContent({
                                     if (part.type === 'text') {
                                       return (
                                         <HtmlContent 
-                                          key={`alt-text-${pIdx}`}
+                                          key={`alt-text-${a.id}-${pIdx}`}
                                           editable={!readOnly}
                                           html={part.content || ''}
                                           onBlurHtml={(newHtml) => {
@@ -1798,7 +1942,7 @@ export function PageContent({
                           {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
                             <div className="no-print alt-control-btns" style={{
                               position: 'absolute',
-                              left: onMoveAlternativa ? -72 : -28,
+                              left: onMoveAlternativa ? -50 : -26,
                               top: 4,
                               display: 'flex',
                               gap: 3,
@@ -1806,57 +1950,32 @@ export function PageContent({
                               zIndex: 20
                             }}>
                               {onMoveAlternativa && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      onMoveAlternativa(qId, a.id, 'up');
-                                      forceRepaginate?.();
-                                    }}
-                                    disabled={aIndex === 0}
-                                    title="Subir alternativa"
-                                    style={{
-                                      background: aIndex === 0 ? '#f1f5f9' : '#e0f2fe',
-                                      color: aIndex === 0 ? '#cbd5e1' : '#0284c7',
-                                      border: 'none',
-                                      borderRadius: 20,
-                                      width: 18,
-                                      height: 18,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      cursor: aIndex === 0 ? 'not-allowed' : 'pointer',
-                                    }}
-                                  >
-                                    <ChevronUp size={12} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      onMoveAlternativa(qId, a.id, 'down');
-                                      forceRepaginate?.();
-                                    }}
-                                    disabled={aIndex === totalAlts - 1}
-                                    title="Descer alternativa"
-                                    style={{
-                                      background: aIndex === totalAlts - 1 ? '#f1f5f9' : '#e0f2fe',
-                                      color: aIndex === totalAlts - 1 ? '#cbd5e1' : '#0284c7',
-                                      border: 'none',
-                                      borderRadius: 20,
-                                      width: 18,
-                                      height: 18,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      cursor: aIndex === totalAlts - 1 ? 'not-allowed' : 'pointer',
-                                    }}
-                                  >
-                                    <ChevronDown size={12} />
-                                  </button>
-                                </>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setReorderMenuOpen(reorderMenuOpen === `${qId}-${a.id}` ? null : `${qId}-${a.id}`);
+                                  }}
+                                  title="Mover direto para outra letra (A, B, C...)"
+                                  style={{
+                                    background: reorderMenuOpen === `${qId}-${a.id}` ? '#2563eb' : '#eff6ff',
+                                    color: reorderMenuOpen === `${qId}-${a.id}` ? '#ffffff' : '#2563eb',
+                                    border: 'none',
+                                    borderRadius: 20,
+                                    width: 18,
+                                    height: 18,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    boxShadow: reorderMenuOpen === `${qId}-${a.id}` ? '0 1px 3px rgba(37,99,235,0.3)' : 'none'
+                                  }}
+                                >
+                                  <ArrowUpDown size={11} />
+                                </button>
                               )}
                               {onRemoveAlternativa && (
-                                <button className="no-print alt-delete-btn" onClick={() => { onRemoveAlternativa(qId, a.id); forceRepaginate(); }} title="Remover alternativa" style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button>
+                                <button className="no-print alt-delete-btn" onClick={() => { setReorderMenuOpen(null); onRemoveAlternativa(qId, a.id); forceRepaginate(); }} title="Remover alternativa" style={{ background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: 20, width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} /></button>
                               )}
                             </div>
                           )}
@@ -1873,19 +1992,37 @@ export function PageContent({
                 const q = block.q;
                 const a = block.alt;
                 const alts = q.simulados_alternativas || [];
-                const aIndex = alts.findIndex((item: any) => item.id === a.id);
+                let aIndex = alts.findIndex((item: any) => item.id === a.id);
+                if (aIndex === -1 && a.letra) {
+                  aIndex = alts.findIndex((item: any) => item.letra === a.letra || item.letter === a.letra);
+                }
                 const totalAlts = alts.length;
                 return (
                   <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
                     <div style={{ width: '28px', minWidth: '28px' }}></div>
-                    <div style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative' }}>
-                      <div className={a.eh_correta ? 'correct-bubble-preview' : ''} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                        border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                      }}>
+                    <div style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative', zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : 1 }}>
+                      <div 
+                        className={`reorder-trigger ${a.eh_correta ? 'correct-bubble-preview' : ''}`} 
+                        onClick={!readOnly && onMoveAlternativa ? (e) => {
+                          e.stopPropagation();
+                          setReorderMenuOpen(reorderMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`);
+                        } : undefined}
+                        title={!readOnly && onMoveAlternativa ? `Alternativa ${a.letra} (clique para reordenar)` : undefined}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                          border: reorderMenuOpen === `${q.id}-${a.id}` ? '2px solid #2563eb' : '2px solid #cbd5e1', 
+                          color: reorderMenuOpen === `${q.id}-${a.id}` ? '#2563eb' : '#475569', 
+                          fontWeight: 800, fontSize: '10pt', marginTop: '2px',
+                          cursor: !readOnly && onMoveAlternativa ? 'pointer' : 'default',
+                          background: reorderMenuOpen === `${q.id}-${a.id}` ? '#eff6ff' : undefined,
+                          boxShadow: reorderMenuOpen === `${q.id}-${a.id}` ? '0 0 0 3px rgba(37,99,235,0.2)' : undefined,
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
                         {a.letra}
                       </div>
+                      {renderReorderPopover(q.id, a.id, a.letra, aIndex, totalAlts, aIndex === 0)}
                       <div style={{ flex: 1, position: 'relative' }}>
                         {(() => {
                           const imgWidths = q.simulados_alternativas
@@ -2033,7 +2170,7 @@ export function PageContent({
                                       if (part.type === 'text') {
                                         return (
                                           <HtmlContent 
-                                            key={`alt-text-${pIdx}`}
+                                            key={`alt-text-${a.id}-${pIdx}`}
                                             editable={!readOnly}
                                             html={part.content || ''}
                                             onBlurHtml={(newHtml) => {
@@ -2089,7 +2226,7 @@ export function PageContent({
                       {!readOnly && (onRemoveAlternativa || onMoveAlternativa) && (
                         <div className="no-print alt-control-btns" style={{
                           position: 'absolute',
-                          left: onMoveAlternativa ? -72 : -28,
+                          left: onMoveAlternativa ? -50 : -26,
                           top: 4,
                           display: 'flex',
                           gap: 3,
@@ -2097,59 +2234,35 @@ export function PageContent({
                           zIndex: 20
                         }}>
                           {onMoveAlternativa && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onMoveAlternativa(q.id, a.id, 'up');
-                                  forceRepaginate?.();
-                                }}
-                                disabled={aIndex === 0}
-                                title="Subir alternativa"
-                                style={{
-                                  background: aIndex === 0 ? '#f1f5f9' : '#e0f2fe',
-                                  color: aIndex === 0 ? '#cbd5e1' : '#0284c7',
-                                  border: 'none',
-                                  borderRadius: 20,
-                                  width: 18,
-                                  height: 18,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: aIndex === 0 ? 'not-allowed' : 'pointer',
-                                }}
-                              >
-                                <ChevronUp size={12} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onMoveAlternativa(q.id, a.id, 'down');
-                                  forceRepaginate?.();
-                                }}
-                                disabled={aIndex === totalAlts - 1}
-                                title="Descer alternativa"
-                                style={{
-                                  background: aIndex === totalAlts - 1 ? '#f1f5f9' : '#e0f2fe',
-                                  color: aIndex === totalAlts - 1 ? '#cbd5e1' : '#0284c7',
-                                  border: 'none',
-                                  borderRadius: 20,
-                                  width: 18,
-                                  height: 18,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: aIndex === totalAlts - 1 ? 'not-allowed' : 'pointer',
-                                }}
-                              >
-                                <ChevronDown size={12} />
-                              </button>
-                            </>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReorderMenuOpen(reorderMenuOpen === `${q.id}-${a.id}` ? null : `${q.id}-${a.id}`);
+                              }}
+                              title="Mover direto para outra letra (A, B, C...)"
+                              style={{
+                                background: reorderMenuOpen === `${q.id}-${a.id}` ? '#2563eb' : '#eff6ff',
+                                color: reorderMenuOpen === `${q.id}-${a.id}` ? '#ffffff' : '#2563eb',
+                                border: 'none',
+                                borderRadius: 20,
+                                width: 18,
+                                height: 18,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                boxShadow: reorderMenuOpen === `${q.id}-${a.id}` ? '0 1px 3px rgba(37,99,235,0.3)' : 'none'
+                              }}
+                            >
+                              <ArrowUpDown size={11} />
+                            </button>
                           )}
                           {onRemoveAlternativa && (
                             <button
                               className="no-print alt-delete-btn"
                               onClick={() => {
+                                setReorderMenuOpen(null);
                                 onRemoveAlternativa(q.id, a.id);
                                 forceRepaginate();
                               }}

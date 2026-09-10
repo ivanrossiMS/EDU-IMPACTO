@@ -217,6 +217,22 @@ export default function LoginPage() {
         }, 2500)
 
         try {
+          // Se o servidor redirecionou para o login com `next`, a sessão no servidor já foi recusada.
+          // Limpa qualquer cache de usuário local para quebrar imediatamente o loop infinito de redirecionamentos.
+          if (nextParam) {
+            console.warn('[Login] Acesso à rota recusado pelo servidor (next=' + nextParam + '). Limpando sessão local.');
+            await removeSettingAsync('edu-current-user');
+            if (typeof window !== 'undefined') {
+              window.localStorage.removeItem('edu-current-user');
+            }
+            setCurrentUser(null);
+            clearTimeout(timeoutId);
+            setIsCheckingSavedUser(false);
+            setStep('login');
+            hideSplashScreen(300);
+            return;
+          }
+
           const storedUser = await loadSettingAsync<any>('edu-current-user', null)
           if (!storedUser) {
             clearTimeout(timeoutId)
@@ -224,6 +240,30 @@ export default function LoginPage() {
             setStep('login')
             hideSplashScreen(300)
             return
+          }
+
+          // Validação rápida: se não estamos em ambiente offline garantido, verifica se a sessão no servidor está viva
+          try {
+            const meRes = await fetch('/api/auth/me', {
+              cache: 'no-store',
+              credentials: 'include',
+              signal: AbortSignal.timeout(1800)
+            })
+            if (!meRes.ok && (meRes.status === 401 || meRes.status === 403)) {
+              console.warn('[Login] Sessão no servidor expirada (401/403). Limpando sessão local.');
+              await removeSettingAsync('edu-current-user');
+              if (typeof window !== 'undefined') {
+                window.localStorage.removeItem('edu-current-user');
+              }
+              setCurrentUser(null);
+              clearTimeout(timeoutId);
+              setIsCheckingSavedUser(false);
+              setStep('login');
+              hideSplashScreen(300);
+              return;
+            }
+          } catch {
+            // Em caso de offline ou timeout de rede, permite prosseguir com dados locais
           }
 
           // Restaura o usuário no contexto
@@ -348,7 +388,10 @@ export default function LoginPage() {
     if (step === 'choose_system' && pendingAuth?.perfil) {
       setIsProfileLoading(true)
       fetch('/api/configuracoes/perfis')
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) throw new Error(`Perfis HTTP ${res.status}`)
+          return res.json()
+        })
         .then(data => {
           let perfisList = DEFAULT_PERFIS
           if (Array.isArray(data) && data.length > 0) {

@@ -21,7 +21,20 @@ const DEFAULT_CONFIG = {
     { label: 'Cansado', emoji: '😟', color: '#f87171' },
     { label: 'Precisando conversar', emoji: '😞', color: '#ef4444' }
   ],
-  motivos: ['Sobrecarga', 'Conflitos', 'Problemas pessoais', 'Dificuldade com equipe', 'Outro'],
+  motivos: [
+    'Semana tranquila',
+    'Apoio da equipe',
+    'Reconhecimento no trabalho',
+    'Organização da rotina',
+    'Aprendizado e evolução',
+    'Equilíbrio vida e trabalho',
+    'Sentimento de propósito',
+    'Sobrecarga de tarefas',
+    'Dificuldade com equipe',
+    'Conflitos no trabalho',
+    'Problemas pessoais',
+    'Outro'
+  ],
   perguntas_burnout: [
     { id: 'q1', pergunta: 'Estou dormindo bem?', invertida: false, opcoes: DEFAULT_OPTIONS },
     { id: 'q2', pergunta: 'Tenho energia para trabalhar?', invertida: false, opcoes: DEFAULT_OPTIONS },

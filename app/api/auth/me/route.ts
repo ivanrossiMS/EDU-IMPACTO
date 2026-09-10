@@ -19,6 +19,10 @@ export async function GET(request: Request) {
         setAll(cookiesToSet) {
           try { 
             cookiesToSet.forEach(({ name, value, options }) => {
+              if (options?.maxAge === 0 || value === '') {
+                cookieStore.set(name, '', { ...options, maxAge: 0, path: '/' })
+                return
+              }
               const expires = new Date();
               expires.setFullYear(expires.getFullYear() + 1);
               cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 315360000, expires })
@@ -29,9 +33,22 @@ export async function GET(request: Request) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const res = await supabase.auth.getUser();
+    user = res.data?.user || null;
+  } catch (err) {
+    // Refresh token not found ou sessão expirada
+  }
+
   if (!user) {
-    return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401 });
+    const unauthRes = NextResponse.json({ error: 'Unauthorized', ip }, { status: 401 });
+    cookieStore.getAll().forEach(c => {
+      if (c.name.startsWith('sb-')) {
+        unauthRes.cookies.set(c.name, '', { maxAge: 0, path: '/' });
+      }
+    });
+    return unauthRes;
   }
 
   // Fetch the latest profile data from system_users to ensure it is always up to date

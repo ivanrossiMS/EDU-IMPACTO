@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Trash2, ChevronDown, ChevronUp, Image as ImageIcon,
   Loader2, Sparkles, Plus, X, ZoomIn, ZoomOut, CheckCircle, Upload, Edit, FileText, BookOpen,
-  ArrowUp, ArrowDown
+  ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { isQuestionForRequisicao } from '@/lib/utils'
@@ -38,6 +38,7 @@ export function QuestoesEditor({
 }: QuestoesEditorProps) {
   const [generatingAiFor, setGeneratingAiFor] = useState<number | null>(null)
   const [disciplinasList, setDisciplinasList] = useState<any[]>(disciplinas || [])
+  const [reorderOpen, setReorderOpen] = useState<string | null>(null)
 
   React.useEffect(() => {
     if (disciplinas && disciplinas.length > 0) {
@@ -56,6 +57,15 @@ export function QuestoesEditor({
     }
     loadDisc()
   }, [disciplinas])
+
+  React.useEffect(() => {
+    if (!reorderOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setReorderOpen(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [reorderOpen])
 
   const getQuestaoDisciplina = (q: any): string | null => {
     if (q.disciplina_nome && typeof q.disciplina_nome === 'string' && q.disciplina_nome.trim()) {
@@ -233,12 +243,12 @@ export function QuestoesEditor({
   }
 
   const addAlternativa = (qIdx: number) => {
-    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
     setQuestoes(prev => prev.map((q, i) => {
       if (i !== qIdx) return q
       const alts = q.alternativas || []
-      const nextLetter = letters[alts.length] || `${alts.length + 1}`
-      return { ...q, alternativas: [...alts, { letter: nextLetter, text: '', correct: false }] }
+      const nextLetter = letters[alts.length] || String.fromCharCode(65 + alts.length)
+      return { ...q, alternativas: [...alts, { letter: nextLetter, letra: nextLetter, text: '', correct: false }] }
     }))
   }
 
@@ -260,8 +270,7 @@ export function QuestoesEditor({
         
         setQuestoes(prev => prev.map((q, i) => {
           if (i !== qIdx) return q
-          // Adiciona #w=350 para a imagem já nascer com um tamanho harmonioso
-          const newImgs = [...(q.imagens || []), { src: `${data.url}#w=350`, contentType: 'image/jpeg' }]
+          const newImgs = [...(q.imagens || []), { src: `${data.url}#w=350`, contentType: file.type }]
           return { ...q, imagens: newImgs }
         }))
       } catch (err: any) {
@@ -368,9 +377,40 @@ export function QuestoesEditor({
   }
 
   const removeAlternativa = (qIdx: number, aIdx: number) => {
+    setReorderOpen(null)
     setQuestoes(prev => prev.map((q, i) => {
       if (i !== qIdx) return q
-      return { ...q, alternativas: (q.alternativas || []).filter((_, ai) => ai !== aIdx) }
+      const remaining = (q.alternativas || []).filter((_, ai) => ai !== aIdx)
+      const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+      const relettered = remaining.map((a, idx) => ({
+        ...a,
+        letter: LETTERS[idx] || String.fromCharCode(65 + idx),
+        letra: LETTERS[idx] || String.fromCharCode(65 + idx)
+      }))
+      const correctAlt = relettered.find(a => a.correct || a.eh_correta)
+      return { 
+        ...q, 
+        alternativas: relettered, 
+        gabarito: correctAlt ? correctAlt.letter : '' 
+      }
+    }))
+  }
+
+  const moveAlternativa = (qIdx: number, aIdx: number, targetIdx: number) => {
+    setQuestoes(prev => prev.map((q, i) => {
+      if (i !== qIdx) return q
+      const alts = [...(q.alternativas || [])]
+      if (targetIdx < 0 || targetIdx >= alts.length || targetIdx === aIdx) return q
+      const [moved] = alts.splice(aIdx, 1)
+      alts.splice(targetIdx, 0, moved)
+      const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+      const relettered = alts.map((a, idx) => ({
+        ...a,
+        letter: LETTERS[idx] || String.fromCharCode(65 + idx),
+        letra: LETTERS[idx] || String.fromCharCode(65 + idx)
+      }))
+      const correctAlt = relettered.find(a => a.correct || a.eh_correta)
+      return { ...q, alternativas: relettered, ...(correctAlt ? { gabarito: correctAlt.letter } : {}) }
     }))
   }
 
@@ -851,12 +891,98 @@ export function QuestoesEditor({
                           </div>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {q.alternativas.map((alt, aIdx) => (
-                              <div key={aIdx} className="alt-row"
-                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: alt.correct ? 'rgba(16,185,129,0.05)' : 'hsl(var(--bg-app))', border: `1px solid ${alt.correct ? 'rgba(16,185,129,0.3)' : 'hsl(var(--border-subtle))'}`, transition: 'all 0.15s' }}>
-                                <div style={{ width: 28, height: 28, borderRadius: 8, background: alt.correct ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800, fontSize: 13, color: alt.correct ? '#10b981' : 'hsl(var(--text-secondary))' }}>
+                            {q.alternativas.map((alt, aIdx) => {
+                              const altUid = (alt as any)._uid || (alt as any).id || ((alt as any)._uid = `alt-ed-${qIdx}-${aIdx}-${Math.random().toString(36).substring(2, 7)}`);
+                              return (
+                                <div key={altUid} className="alt-row"
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: alt.correct ? 'rgba(16,185,129,0.05)' : 'hsl(var(--bg-app))', border: `1px solid ${alt.correct ? 'rgba(16,185,129,0.3)' : 'hsl(var(--border-subtle))'}`, transition: 'all 0.15s', position: 'relative', zIndex: reorderOpen === `${qIdx}-${aIdx}` ? 50 : 1 }}>
+                                <div 
+                                  onClick={!readOnly ? () => setReorderOpen(reorderOpen === `${qIdx}-${aIdx}` ? null : `${qIdx}-${aIdx}`) : undefined}
+                                  title={!readOnly ? `Alternativa ${alt.letter} (clique para reordenar)` : undefined}
+                                  style={{ 
+                                    width: 28, height: 28, borderRadius: 8, 
+                                    background: reorderOpen === `${qIdx}-${aIdx}` ? '#eff6ff' : (alt.correct ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.1)'), 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 800, fontSize: 13, 
+                                    color: reorderOpen === `${qIdx}-${aIdx}` ? '#2563eb' : (alt.correct ? '#10b981' : 'hsl(var(--text-secondary))'),
+                                    cursor: !readOnly ? 'pointer' : 'default',
+                                    border: reorderOpen === `${qIdx}-${aIdx}` ? '2px solid #2563eb' : '1px solid transparent',
+                                    boxShadow: reorderOpen === `${qIdx}-${aIdx}` ? '0 0 0 2px rgba(37,99,235,0.2)' : 'none',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
                                   {alt.letter}
                                 </div>
+                                {reorderOpen === `${qIdx}-${aIdx}` && (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      position: 'absolute',
+                                      left: 12,
+                                      bottom: aIdx === 0 ? 'auto' : '100%',
+                                      top: aIdx === 0 ? '100%' : 'auto',
+                                      marginBottom: aIdx === 0 ? 0 : 6,
+                                      marginTop: aIdx === 0 ? 6 : 0,
+                                      background: 'hsl(var(--bg-surface, #ffffff))',
+                                      borderRadius: 12,
+                                      padding: '8px 12px',
+                                      boxShadow: '0 10px 25px -4px rgba(0,0,0,0.25), 0 4px 10px -2px rgba(0,0,0,0.15)',
+                                      border: '1.5px solid #93c5fd',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: 6,
+                                      zIndex: 9999,
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                                      <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                                        Mover alternativa <strong>({alt.letter})</strong> para:
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setReorderOpen(null)}
+                                        style={{ background: 'transparent', border: 'none', color: 'hsl(var(--text-secondary))', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}
+                                      >
+                                        <X size={12} />
+                                      </button>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                      {Array.from({ length: q.alternativas.length }).map((_, targetIdx) => {
+                                        const targetLetter = String.fromCharCode(65 + targetIdx);
+                                        const isCurrent = targetIdx === aIdx;
+                                        return (
+                                          <button
+                                            key={targetIdx}
+                                            type="button"
+                                            disabled={isCurrent}
+                                            onClick={() => {
+                                              moveAlternativa(qIdx, aIdx, targetIdx);
+                                              setReorderOpen(null);
+                                            }}
+                                            title={isCurrent ? `Posição atual (${targetLetter})` : `Mover para letra ${targetLetter}`}
+                                            style={{
+                                              width: 30,
+                                              height: 30,
+                                              borderRadius: 8,
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              justifyContent: 'center',
+                                              fontSize: 12,
+                                              fontWeight: 800,
+                                              cursor: isCurrent ? 'default' : 'pointer',
+                                              border: isCurrent ? '1.5px solid #e2e8f0' : '1.5px solid #93c5fd',
+                                              background: isCurrent ? '#f1f5f9' : '#eff6ff',
+                                              color: isCurrent ? '#94a3b8' : '#2563eb',
+                                              transition: 'all 0.15s ease'
+                                            }}
+                                          >
+                                            {targetLetter}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
                                   {alt.imagem_url && (
                                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: 'rgba(59,130,246,0.06)', borderRadius: 8, border: '1px solid rgba(59,130,246,0.2)', width: 'fit-content' }}>
@@ -878,6 +1004,7 @@ export function QuestoesEditor({
                                     </div>
                                   )}
                                   <HtmlContent
+                                    key={`alt-content-${altUid}`}
                                     editable={!readOnly}
                                     html={alt.text || ''}
                                     onBlurHtml={(newHtml: string) => updateAlternativa(qIdx, aIdx, 'text', newHtml)}
@@ -886,6 +1013,25 @@ export function QuestoesEditor({
                                 </div>
                                 {!readOnly && (
                                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setReorderOpen(reorderOpen === `${qIdx}-${aIdx}` ? null : `${qIdx}-${aIdx}`)}
+                                      title="Reordenar / Mover alternativa"
+                                      style={{
+                                        width: 28,
+                                        height: 28,
+                                        borderRadius: 7,
+                                        background: reorderOpen === `${qIdx}-${aIdx}` ? '#2563eb' : 'transparent',
+                                        border: `1px solid ${reorderOpen === `${qIdx}-${aIdx}` ? '#2563eb' : 'hsl(var(--border-subtle))'}`,
+                                        color: reorderOpen === `${qIdx}-${aIdx}` ? '#ffffff' : 'hsl(var(--text-secondary))',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      <ArrowUpDown size={13} />
+                                    </button>
                                     <button 
                                       type="button"
                                       onClick={() => handleUploadAlternativaImagem(qIdx, aIdx)} 
@@ -905,7 +1051,8 @@ export function QuestoesEditor({
                                   </div>
                                 )}
                               </div>
-                            ))}
+                            );
+                          })}
                           </div>
                         )}
                       </div>
@@ -918,6 +1065,12 @@ export function QuestoesEditor({
           )
         })}
       </div>
+      {reorderOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
+          onClick={() => setReorderOpen(null)}
+        />
+      )}
     </div>
   )
 }

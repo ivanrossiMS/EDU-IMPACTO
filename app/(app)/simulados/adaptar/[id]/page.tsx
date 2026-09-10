@@ -149,40 +149,56 @@ export default function AdaptarSimuladoPage() {
   const handleRemoveAlternativa = (qId: string, altId: string) => {
     setQuestoes(prev => prev.map(q => {
       if (q.id === qId) {
-        const remaining = q.simulados_alternativas.filter((a: any) => a.id !== altId)
+        const remaining = (q.simulados_alternativas || []).filter((a: any) => a.id !== altId)
         const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+        const relettered = remaining.map((a: any, idx: number) => ({
+          ...a,
+          letra: letters[idx] || String.fromCharCode(65 + idx),
+          letter: letters[idx] || String.fromCharCode(65 + idx)
+        }))
+        const correctAlt = relettered.find((a: any) => a.correta || a.eh_correta || a.correct)
+        const newGabarito = correctAlt ? correctAlt.letra : (relettered.some((a: any) => a.letra === q.gabarito) ? q.gabarito : '')
         return {
           ...q,
-          simulados_alternativas: remaining.map((a: any, idx: number) => ({
-            ...a,
-            letra: letters[idx] || String.fromCharCode(65 + idx)
-          }))
+          simulados_alternativas: relettered,
+          ...(newGabarito !== undefined ? { gabarito: newGabarito } : {})
         }
       }
       return q
     }))
   }
 
-  const handleMoveAlternativa = (qId: string, altId: string, direction: 'up' | 'down') => {
+  const handleMoveAlternativa = (qId: string, altId: string, directionOrTarget: 'up' | 'down' | number, sourceIdx?: number, sourceLetter?: string) => {
     setQuestoes(prev => prev.map(q => {
-      if (q.id === qId) {
-        const alts = q.simulados_alternativas || []
-        const index = alts.findIndex((a: any) => a.id === altId)
+      if (q.id === qId || q._internalId === qId || String(q.id) === String(qId)) {
+        const alts = q.simulados_alternativas || q.alternativas || []
+        let index = alts.findIndex((a: any) => (a.id && a.id === altId) || (a._uid && a._uid === altId))
+        if (index === -1 && typeof sourceIdx === 'number' && sourceIdx >= 0 && sourceIdx < alts.length) index = sourceIdx
+        if (index === -1 && sourceLetter) index = alts.findIndex((a: any) => a.letter === sourceLetter || a.letra === sourceLetter)
+        if (index === -1 && typeof altId === 'string') index = alts.findIndex((a: any) => a.letter === altId || a.letra === altId)
         if (index === -1) return q
-        const targetIndex = direction === 'up' ? index - 1 : index + 1
-        if (targetIndex < 0 || targetIndex >= alts.length) return q
+        const targetIndex = typeof directionOrTarget === 'number'
+          ? directionOrTarget
+          : (directionOrTarget === 'up' ? index - 1 : index + 1)
+        if (targetIndex < 0 || targetIndex >= alts.length || targetIndex === index) return q
         
         const newAlts = [...alts]
         const [moved] = newAlts.splice(index, 1)
         newAlts.splice(targetIndex, 0, moved)
         
         const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+        const relettered = newAlts.map((a: any, idx: number) => ({
+          ...a,
+          letra: letters[idx] || String.fromCharCode(65 + idx),
+          letter: letters[idx] || String.fromCharCode(65 + idx)
+        }))
+        const correctAlt = relettered.find((a: any) => a.correta || a.eh_correta || a.correct)
+        const newGabarito = correctAlt ? (correctAlt.letra || correctAlt.letter) : q.gabarito
         return {
           ...q,
-          simulados_alternativas: newAlts.map((a: any, idx: number) => ({
-            ...a,
-            letra: letters[idx] || String.fromCharCode(65 + idx)
-          }))
+          simulados_alternativas: relettered,
+          alternativas: relettered,
+          ...(newGabarito ? { gabarito: newGabarito } : {})
         }
       }
       return q

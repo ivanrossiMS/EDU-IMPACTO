@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS public.gp_checkin_config (
     {"label": "Cansado", "emoji": "😟", "color": "#f87171"},
     {"label": "Precisando conversar", "emoji": "😞", "color": "#ef4444"}
   ]'::jsonb,
-  motivos JSONB DEFAULT '["Sobrecarga", "Conflitos", "Problemas pessoais", "Dificuldade com equipe", "Outro"]'::jsonb,
+  motivos JSONB DEFAULT '["Semana tranquila", "Apoio da equipe", "Reconhecimento no trabalho", "Organização da rotina", "Aprendizado e evolução", "Equilíbrio vida e trabalho", "Sentimento de propósito", "Sobrecarga de tarefas", "Dificuldade com equipe", "Conflitos no trabalho", "Problemas pessoais", "Outro"]'::jsonb,
   perguntas_burnout JSONB DEFAULT '[
     {"id": "q1", "pergunta": "Estou dormindo bem?", "invertida": false},
     {"id": "q2", "pergunta": "Tenho energia para trabalhar?", "invertida": false},

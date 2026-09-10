@@ -89,6 +89,10 @@ export async function middleware(request: NextRequest) {
           )
           response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) => {
+            if (options?.maxAge === 0 || value === '') {
+              response.cookies.set(name, '', { ...options, maxAge: 0, path: '/' })
+              return
+            }
             const sessionOptions = { ...options };
             // Preserva sessão longa para apps nativos ou usuários com keepConnected ativo
             const keepConnected = request.cookies.get('edu_keep_connected')?.value === '1';
@@ -109,27 +113,51 @@ export async function middleware(request: NextRequest) {
   let user = null
   try {
     const userPromise = supabase.auth.getUser()
-    const timeoutPromise = new Promise<{ data: { user: any } }>(res =>
+    const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
       setTimeout(() => res({ data: { user: null } }), 4000)
     )
-    const { data } = await Promise.race([userPromise, timeoutPromise])
-    user = data?.user ?? null
-  } catch (err) {
-    console.warn('[Middleware Auth Warning]', err)
+    const { data, error } = await Promise.race([userPromise, timeoutPromise])
+    if (!error) {
+      user = data?.user ?? null
+    }
+  } catch (err: any) {
+    if (!err?.message?.includes('Refresh Token') && err?.code !== 'refresh_token_not_found') {
+      console.warn('[Middleware Auth Warning]', err)
+    }
   }
-
 
   // ── Sem sessão → redireciona para login ──────────────────────────────────
   if (!user) {
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
+      const errResponse = NextResponse.json(
         { error: 'Não autorizado. Faça login para continuar.' },
         { status: 401 }
       )
+      // Limpa os cookies sb-* para evitar que requisições subsequentes reenviem tokens mortos
+      request.cookies.getAll().forEach(c => {
+        if (c.name.startsWith('sb-')) {
+          errResponse.cookies.set(c.name, '', { maxAge: 0, path: '/' })
+        }
+      })
+      return errResponse
     }
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', pathname)
-    return NextResponse.redirect(loginUrl)
+    const redirectResponse = NextResponse.redirect(loginUrl)
+
+    // Repassa cookies definidos/deletados em response
+    response.cookies.getAll().forEach(c => {
+      redirectResponse.cookies.set(c.name, c.value, c)
+    })
+
+    // Limpa forçadamente cookies de sessão inválidos para não manter o refresh token corrompido
+    request.cookies.getAll().forEach(c => {
+      if (c.name.startsWith('sb-')) {
+        redirectResponse.cookies.set(c.name, '', { maxAge: 0, path: '/' })
+      }
+    })
+
+    return redirectResponse
   }
 
   // ── Usuário autenticado: verificar se não é família/aluno tentando acessar rotas do ERP ──

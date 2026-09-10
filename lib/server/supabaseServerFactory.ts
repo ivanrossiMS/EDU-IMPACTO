@@ -28,6 +28,10 @@ export async function createProtectedClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => {
+              if (options?.maxAge === 0 || value === '') {
+                cookieStore.set(name, '', { ...options, maxAge: 0, path: '/' })
+                return
+              }
               const sessionOptions = { ...options };
               
               // Unconditionally keep the user connected for 1 year
@@ -75,8 +79,12 @@ export function createAdminClient() {
  * Use para proteger rotas sensíveis programaticamente.
  */
 export async function getAuthenticatedUser() {
-  const client = await createProtectedClient()
-  const { data: { user }, error } = await client.auth.getUser()
-  if (error || !user) return null
-  return user
+  try {
+    const client = await createProtectedClient()
+    const { data, error } = await client.auth.getUser()
+    if (error || !data?.user) return null
+    return data.user
+  } catch {
+    return null
+  }
 }

@@ -26,6 +26,10 @@ export async function createProtectedClient() {
                }
             })
             cookiesToSet.forEach(({ name, value, options }) => {
+              if (options?.maxAge === 0 || value === '') {
+                cookieStore.set(name, '', { ...options, maxAge: 0, path: '/' })
+                return
+              }
               const sessionOptions = { ...options };
               const expires = new Date();
               expires.setFullYear(expires.getFullYear() + 1);

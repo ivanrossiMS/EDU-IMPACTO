@@ -27,7 +27,7 @@ interface PaginationEngineProps {
   onEditEnunciadoImage?: (qId: string, imgIndex: number, url: string) => void;
   onEditAlternativa: (qId: string, altId: string, newText: string) => void;
   onRemoveAlternativa: (qId: string, altId: string) => void;
-  onMoveAlternativa?: (qId: string, altId: string, direction: 'up' | 'down') => void;
+  onMoveAlternativa?: (qId: string, altId: string, directionOrTarget: 'up' | 'down' | number, sourceIdx?: number, sourceLetter?: string) => void;
   onToggleQuestion: (qId: string) => void;
   isEditHeaderMode?: boolean;
   headerLayout?: any;

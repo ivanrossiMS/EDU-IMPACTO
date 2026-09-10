@@ -104,6 +104,14 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
     }
   }, [html])
 
+  useEffect(() => {
+    if (containerRef.current && document.activeElement !== containerRef.current) {
+      if (containerRef.current.innerHTML !== renderedHtml) {
+        containerRef.current.innerHTML = renderedHtml
+      }
+    }
+  }, [renderedHtml])
+
   const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
     if (!onBlurHtml) return
     
