@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { motion, AnimatePresence } from 'framer-motion'
 import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 
 export function GlobalNavigationLoader() {
@@ -36,7 +35,7 @@ export function GlobalNavigationLoader() {
         const linkUrl = new URL(anchor.href)
         const newUrl = linkUrl.pathname + linkUrl.search
         
-        if (currentUrl === newUrl) return;
+        if (currentUrl === newUrl) return
 
         // Ativa o loading
         setIsNavigating(true)
@@ -50,18 +49,5 @@ export function GlobalNavigationLoader() {
     }
   }, [])
 
-  return (
-    <AnimatePresence>
-      {isNavigating && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          style={{ zIndex: 99999, position: 'relative' }}
-        >
-          <ImpactoLoader />
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
+  return <ImpactoLoader isLoading={isNavigating} />
 }

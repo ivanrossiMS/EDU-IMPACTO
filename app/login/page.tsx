@@ -44,6 +44,7 @@ function temSenha(uid: string): boolean { return !!getSenhas()[uid] }
 
 import { BackgroundEffects } from '@/components/ui/LoginBackground'
 import { BemEstarCheckinModal } from '@/components/login/BemEstarCheckinModal'
+import { AppLoadingScreen } from '@/components/AppLoadingScreen'
 
 const ModernLoadingSpinner = () => (
   <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1271,10 +1272,7 @@ export default function LoginPage() {
         {/* Enterprise SaaS Background Overlay */}
         <BackgroundEffects />
         {step === 'login' && (isCheckingSavedUser ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 16 }}>
-            <ModernLoadingSpinner />
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.02em' }}>Validando sessão segura...</span>
-          </div>
+          <AppLoadingScreen statusText="Validando sessão segura..." />
         ) : LoginContent)}
         {(step === 'first_access_verify' || step === 'forgot_password') && FirstAccessVerify}
         {(step === 'first_access_create' || step === 'forgot_password_create') && FirstAccessCreate}

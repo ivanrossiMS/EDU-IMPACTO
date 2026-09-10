@@ -2,7 +2,6 @@
 
 import { useApiQuery } from '@/hooks/useApi'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
-import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { formatNumber, formatCurrency } from '@/lib/utils'
 import { useData, Tarefa } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'

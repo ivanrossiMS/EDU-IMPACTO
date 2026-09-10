@@ -1,63 +1,84 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
+import styles from './ImpactoLoader.module.css'
 
-export function ImpactoLoader() {
+export interface ImpactoLoaderProps {
+  isLoading?: boolean
+  className?: string
+  style?: React.CSSProperties
+}
+
+export function ImpactoLoader({
+  isLoading = true,
+  className,
+  style,
+}: ImpactoLoaderProps) {
+  const [shouldRender, setShouldRender] = useState(isLoading)
+  const [visible, setVisible] = useState(isLoading)
+
+  useEffect(() => {
+    let animFrame: number | null = null
+    let timeoutId: NodeJS.Timeout | null = null
+
+    if (isLoading) {
+      setShouldRender(true)
+      animFrame = requestAnimationFrame(() => {
+        setVisible(true)
+      })
+    } else {
+      setVisible(false)
+      timeoutId = setTimeout(() => {
+        setShouldRender(false)
+      }, 200)
+    }
+
+    return () => {
+      if (animFrame !== null) {
+        cancelAnimationFrame(animFrame)
+      }
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId)
+      }
+    }
+  }, [isLoading])
+
+  if (!shouldRender) return null
+
   return (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 99999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#0A0F24',
-      }}
+      className={`${styles.overlay} ${visible ? styles.visible : styles.hidden} ${className || ''}`}
+      style={style}
+      aria-hidden="true"
     >
-      <div
-        style={{
-          width: 100,
-          height: 100,
-          borderRadius: 32,
-          background: '#ffffff',
-          boxShadow: '0 16px 40px rgba(0, 0, 0, 0.3)',
-          border: '1px solid rgba(255, 255, 255, 0.9)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative'
-        }}
-      >
-        {/* Animated halo */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: -4,
-            borderRadius: 36,
-            background: 'conic-gradient(from 0deg, transparent 0%, rgba(99, 102, 241, 0.1) 60%, rgba(99, 102, 241, 0.8) 100%)',
-            WebkitMaskImage: 'radial-gradient(circle at center, transparent 48%, black 50%)',
-            maskImage: 'radial-gradient(circle at center, transparent 48%, black 50%)',
-            animation: 'impactoSpin 2s linear infinite'
-          }}
-        />
+      <div className={styles.container}>
+        {/* 1. Aura radial suave de fundo */}
+        <div className={styles.aura} />
 
-        {/* Logo Impacto */}
-        <img 
-          src="/logo-impacto.png" 
-          alt="Carregando..." 
-          style={{ width: 48, height: 48, objectFit: 'contain', zIndex: 10 }}
-        />
+        {/* 2. Indicador circular fino de conic-gradient ao redor da logo */}
+        <div className={styles.circularArc} />
+
+        {/* 3. Pontos neon com órbita assíncrona */}
+        <div className={styles.neonOrbit}>
+          <span className={`${styles.neonDot} ${styles.dot1}`} />
+          <span className={`${styles.neonDot} ${styles.dot2}`} />
+          <span className={`${styles.neonDot} ${styles.dot3}`} />
+          <span className={`${styles.neonDot} ${styles.dot4}`} />
+          <span className={`${styles.neonDot} ${styles.dot5}`} />
+          <span className={`${styles.neonDot} ${styles.dot6}`} />
+        </div>
+
+        {/* 4. Logo Oficial 100 x 100 px em squircle animado com reflexo luminoso */}
+        <div className={styles.logoCard}>
+          <img
+            src="/logo-impacto.png"
+            alt=""
+            className={styles.logoImage}
+            draggable={false}
+          />
+          <div className={styles.shineOverlay} aria-hidden="true" />
+        </div>
       </div>
-      <style>{`
-        @keyframes impactoSpin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   )
 }
