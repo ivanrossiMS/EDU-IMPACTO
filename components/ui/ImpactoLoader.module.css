@@ -5,9 +5,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 15, 36, 0.45);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(10, 15, 36, 0.30);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -21,71 +21,71 @@
   opacity: 0;
 }
 
-/* 150 x 150 px conjunto completo centralizado */
+/* Área total da animação: aproximadamente 118 × 118 px */
 .container {
   position: relative;
-  width: 150px;
-  height: 150px;
+  width: 118px;
+  height: 118px;
   display: flex;
   align-items: center;
   justify-content: center;
-  perspective: 600px;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* ── 1. Aura radial suave atrás do squircle da logo ── */
-.aura {
+/* ── 1. Iluminação: halo circular suave atrás da logo ── */
+.halo {
   position: absolute;
-  width: 120px;
-  height: 120px;
+  width: 86px;
+  height: 86px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(168, 85, 247, 0.28) 0%,
-    rgba(6, 182, 212, 0.18) 50%,
-    transparent 72%
+    rgba(168, 85, 247, 0.26) 0%,
+    rgba(56, 189, 248, 0.15) 42%,
+    rgba(6, 182, 212, 0.08) 65%,
+    transparent 75%
   );
-  animation: auraPulse 2.4s ease-in-out infinite alternate;
+  animation: haloPulse 1.45s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
   pointer-events: none;
   z-index: 1;
 }
 
-@keyframes auraPulse {
+@keyframes haloPulse {
   0% {
-    transform: scale(0.92);
+    transform: scale(0.95);
     opacity: 0.65;
   }
   100% {
-    transform: scale(1.08);
+    transform: scale(1.06);
     opacity: 0.95;
   }
 }
 
-/* ── 2. Indicador circular (arco fino de conic-gradient ao redor da logo) ── */
-.circularArc {
+/* ── 2. Órbita externa: 112px, rotação no sentido horário (1.45s) ── */
+.orbitOuter {
   position: absolute;
-  width: 136px;
-  height: 136px;
+  width: 112px;
+  height: 112px;
   border-radius: 50%;
   background: conic-gradient(
     from 0deg,
     transparent 0%,
-    transparent 65%,
-    #06b6d4 78%,
-    #38bdf8 88%,
-    #a855f7 100%
+    transparent 60%,
+    #06b6d4 75%,
+    #3b82f6 88%,
+    #8b5cf6 100%
   );
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
-  filter: drop-shadow(0 0 4px rgba(6, 182, 212, 0.7)) drop-shadow(0 0 7px rgba(168, 85, 247, 0.5));
-  animation: spinArc 0.9s linear infinite;
+  filter: drop-shadow(0 0 3px rgba(6, 182, 212, 0.7)) drop-shadow(0 0 5px rgba(139, 92, 246, 0.45));
+  animation: spinClockwise 1.45s linear infinite;
   pointer-events: none;
   z-index: 2;
 }
 
-@keyframes spinArc {
+@keyframes spinClockwise {
   0% {
     transform: rotate(0deg);
   }
@@ -94,22 +94,47 @@
   }
 }
 
-/* ── 3. Elementos neon bem posicionados FORA da logo (raio 74-79px) ── */
-.neonOrbit {
+/* ── 3. Órbita interna: 90px, rotação no sentido anti-horário (0.92s) ── */
+.orbitInner {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 170px;
-  height: 170px;
-  margin-top: -85px;
-  margin-left: -85px;
+  width: 90px;
+  height: 90px;
   border-radius: 50%;
-  animation: slowOrbit 22s linear infinite;
+  background: conic-gradient(
+    from 180deg,
+    transparent 0%,
+    transparent 62%,
+    #06b6d4 76%,
+    #8b5cf6 88%,
+    #a855f7 100%
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1.5px));
+  filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.7)) drop-shadow(0 0 5px rgba(6, 182, 212, 0.4));
+  animation: spinCounterClockwise 0.92s linear infinite;
   pointer-events: none;
-  z-index: 20; /* Fica acima e totalmente fora do card */
+  z-index: 3;
 }
 
-@keyframes slowOrbit {
+@keyframes spinCounterClockwise {
+  0% {
+    transform: rotate(360deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* ── 4. Partículas neon orbitais ao redor das órbitas ── */
+.particleLayer {
+  position: absolute;
+  inset: 0;
+  animation: slowDrift 24s linear infinite;
+  pointer-events: none;
+  z-index: 20;
+}
+
+@keyframes slowDrift {
   0% {
     transform: rotate(0deg);
   }
@@ -118,113 +143,115 @@
   }
 }
 
-.neonDot {
+.particle {
   position: absolute;
   border-radius: 50%;
-  animation: dotPulse 2.4s ease-in-out infinite;
+  animation: particlePulse 2.4s ease-in-out infinite;
   opacity: 0;
   pointer-events: none;
 }
 
-@keyframes dotPulse {
+@keyframes particlePulse {
   0%, 100% {
     opacity: 0;
     transform: scale(0.3);
   }
   45%, 55% {
     opacity: 1;
-    transform: scale(1.2);
+    transform: scale(1.15);
   }
 }
 
-/* Bolinhas posicionadas com folga externa (raio 74px a 79px a partir do centro 85, 85) */
 .dot1 {
-  width: 4.5px;
-  height: 4.5px;
-  left: 158px;
-  top: 105px;
+  width: 4px;
+  height: 4px;
+  left: 110px;
+  top: 77px;
   background: #2dd4bf;
-  box-shadow: 0 0 8px #2dd4bf, 0 0 14px rgba(45, 212, 191, 0.8);
+  box-shadow: 0 0 6px #2dd4bf, 0 0 10px rgba(45, 212, 191, 0.8);
   animation-delay: 0s;
 }
 
 .dot2 {
-  width: 4px;
-  height: 4px;
-  left: 98px;
-  top: 162px;
-  background: #38bdf8;
-  box-shadow: 0 0 8px #38bdf8, 0 0 14px rgba(56, 189, 248, 0.8);
+  width: 3.5px;
+  height: 3.5px;
+  left: 63px;
+  top: 106px;
+  background: #a855f7;
+  box-shadow: 0 0 6px #a855f7, 0 0 10px rgba(168, 85, 247, 0.8);
   animation-delay: 0.4s;
 }
 
 .dot3 {
-  width: 5px;
-  height: 5px;
-  left: 28px;
-  top: 133px;
-  background: #a855f7;
-  box-shadow: 0 0 8px #a855f7, 0 0 14px rgba(168, 85, 247, 0.8);
+  width: 4.5px;
+  height: 4.5px;
+  left: 13px;
+  top: 85px;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8, 0 0 12px rgba(56, 189, 248, 0.8);
   animation-delay: 0.8s;
 }
 
 .dot4 {
-  width: 3.5px;
-  height: 3.5px;
-  left: 15px;
-  top: 52px;
+  width: 3px;
+  height: 3px;
+  left: 21px;
+  top: 33px;
   background: #c084fc;
-  box-shadow: 0 0 8px #c084fc, 0 0 12px rgba(192, 132, 252, 0.8);
+  box-shadow: 0 0 6px #c084fc, 0 0 10px rgba(192, 132, 252, 0.8);
   animation-delay: 1.2s;
 }
 
 .dot5 {
   width: 4px;
   height: 4px;
-  left: 78px;
-  top: 6px;
+  left: 50px;
+  top: 5px;
   background: #06b6d4;
-  box-shadow: 0 0 8px #06b6d4, 0 0 14px rgba(6, 182, 212, 0.8);
+  box-shadow: 0 0 6px #06b6d4, 0 0 10px rgba(6, 182, 212, 0.8);
   animation-delay: 1.6s;
 }
 
 .dot6 {
-  width: 4.5px;
-  height: 4.5px;
-  left: 142px;
-  top: 37px;
-  background: #00a3ff;
-  box-shadow: 0 0 8px #00a3ff, 0 0 14px rgba(0, 163, 255, 0.8);
+  width: 3.5px;
+  height: 3.5px;
+  left: 102px;
+  top: 39px;
+  background: #8b5cf6;
+  box-shadow: 0 0 6px #8b5cf6, 0 0 10px rgba(139, 92, 246, 0.8);
   animation-delay: 2.0s;
 }
 
-/* ── 4. Logo Oficial 100 x 100 px com squircle suave e reflexo diagonal ── */
+/* ── 5. Logo oficial central: 70 x 70 px, cantos 20px, pulso 0.97 a 1.035 ── */
 .logoCard {
   position: relative;
-  width: 100px;
-  height: 100px;
-  border-radius: 26px;
+  width: 70px;
+  height: 70px;
+  border-radius: 20px;
   background: #ffffff;
+  padding: 4px;
+  box-sizing: border-box;
   box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.35),
-    0 0 24px rgba(168, 85, 247, 0.15),
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    0 0 18px rgba(168, 85, 247, 0.15),
     inset 0 1px 1px rgba(255, 255, 255, 0.9);
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  transform-style: preserve-3d;
-  animation: logoMotion 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
+  animation: logoPulseMotion 1.45s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
   z-index: 10;
   pointer-events: none;
 }
 
-@keyframes logoMotion {
+@keyframes logoPulseMotion {
   0% {
-    transform: translateY(1px) scale(0.98) rotateY(-2deg);
+    transform: scale(0.97) rotate(-1deg);
+    filter: brightness(1);
   }
   100% {
-    transform: translateY(-2px) scale(1.025) rotateY(2deg);
+    transform: scale(1.035) rotate(1deg);
+    filter: brightness(1.07);
   }
 }
 
@@ -238,11 +265,11 @@
   pointer-events: none;
 }
 
-/* Reflexo luminoso diagonal atravessando suavemente o card da logo */
+/* Reflexo fino atravessando a superfície da logo */
 .shineOverlay {
   position: absolute;
   inset: 0;
-  border-radius: 26px;
+  border-radius: 20px;
   pointer-events: none;
   overflow: hidden;
 }
@@ -252,47 +279,50 @@
   position: absolute;
   top: -50%;
   left: -120%;
-  width: 70%;
+  width: 60%;
   height: 200%;
   background: linear-gradient(
     115deg,
     transparent 0%,
-    transparent 38%,
-    rgba(255, 255, 255, 0.15) 46%,
-    rgba(255, 255, 255, 0.65) 50%,
-    rgba(255, 255, 255, 0.15) 54%,
-    transparent 62%,
+    transparent 40%,
+    rgba(255, 255, 255, 0.12) 47%,
+    rgba(255, 255, 255, 0.6) 50%,
+    rgba(255, 255, 255, 0.12) 53%,
+    transparent 60%,
     transparent 100%
   );
   transform: rotate(25deg);
-  animation: sweepShine 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: sweepShine 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 @keyframes sweepShine {
   0% {
     transform: translateX(0) rotate(25deg);
   }
-  48%, 100% {
-    transform: translateX(320%) rotate(25deg);
+  45%, 100% {
+    transform: translateX(340%) rotate(25deg);
   }
 }
 
-/* ── 5. Acessibilidade (prefers-reduced-motion) ── */
+/* ── 6. Acessibilidade (prefers-reduced-motion) ── */
 @media (prefers-reduced-motion: reduce) {
   .overlay {
     transition: none;
   }
-  .aura {
+  .halo {
     animation: none;
     opacity: 0.8;
   }
-  .circularArc {
+  .orbitOuter {
     animation: none;
   }
-  .neonOrbit {
+  .orbitInner {
     animation: none;
   }
-  .neonDot {
+  .particleLayer {
+    animation: none;
+  }
+  .particle {
     animation: none;
     opacity: 0.8;
     transform: scale(1);
@@ -300,6 +330,7 @@
   .logoCard {
     animation: none;
     transform: none;
+    filter: none;
   }
   .shineOverlay::after {
     animation: none;

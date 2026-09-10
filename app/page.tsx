@@ -9,6 +9,12 @@ import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificatio
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { AppLoadingScreen } from '@/components/AppLoadingScreen'
+import {
+  isFamilyOrStudent,
+  getAgendaDigitalDestination,
+  getInitialRouteForUser,
+  fetchPerfisWithCache
+} from '@/lib/auth/moduleRouting'
 
 export default function Root() {
   const router = useRouter()
@@ -79,39 +85,34 @@ export default function Root() {
         return
       }
 
-      const perfil = currentUser.perfil || ''
-      const cargo = currentUser.cargo || ''
-      const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(perfil) ||
-                      ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(cargo)
-
-      const isFamilyOrStudent = (
-        perfil === 'Família' ||
-        perfil === 'Responsável' ||
-        perfil === 'Aluno' ||
-        cargo === 'Responsável' ||
-        cargo === 'Aluno'
-      )
-
-      if (isFamilyOrStudent) {
-        if (cargo === 'Aluno' && currentUser.aluno_id) {
-          router.replace(`/agenda-digital/${currentUser.aluno_id}/comunicados`)
-          return
-        }
-        router.replace('/agenda-digital/selecionar-aluno')
-      } else if (isAdmin) {
-        if (perfil === 'Diretor Geral' || cargo === 'Administrador Master' || perfil === 'Administrador') {
-          router.replace('/agenda-digital/selecionar-perfil-admin')
-        } else {
-          router.replace('/agenda-digital/admin')
-        }
-      } else {
-        // Colaborador (Secretária, Professor, Coordenador, Financeiro, etc.):
-        if (currentUser.hasDualRole || currentUser.responsavel_id) {
-          router.replace('/agenda-digital/selecionar-aluno')
-        } else {
-          router.replace('/agenda-digital/colaborador/comunicados')
-        }
+      // 1. Família / Aluno / Responsável têm exclusivamente acesso à Agenda Digital
+      if (isFamilyOrStudent(currentUser)) {
+        const dest = getAgendaDigitalDestination(currentUser)
+        router.replace(dest)
+        return
       }
+
+      // 2. Colaborador / Administrador / Professor / etc.
+      // Carrega perfis (com cache local instantâneo) para verificar os módulos habilitados
+      let userPerfilObj: any = null
+      try {
+        const perfisList = await fetchPerfisWithCache(1500)
+        if (!isSubscribed) return
+        const targetPerfilName = currentUser.perfil || currentUser.cargo || ''
+        userPerfilObj = (perfisList || []).find(p => p.nome === targetPerfilName) || null
+      } catch (err) {
+        console.warn('[Root] Falha ao resolver perfil com cache:', err)
+      }
+
+      if (!isSubscribed) return
+
+      // Determina a rota correta:
+      // - Se o perfil tiver APENAS a Agenda Digital liberada: vai direto para ela.
+      // - Se tiver APENAS 1 outro módulo liberado (ex: ERP): vai direto para ele.
+      // - Se tiver MÚLTIPLOS módulos: vai para a tela de escolha (/login?step=choose_system).
+      const initialRoute = getInitialRouteForUser(currentUser, userPerfilObj)
+      console.log('[Root] Rota inicial resolvida para o perfil:', initialRoute)
+      router.replace(initialRoute)
     }
 
     checkPendingPushAndRoute()

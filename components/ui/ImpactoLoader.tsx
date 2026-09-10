@@ -52,23 +52,26 @@ export function ImpactoLoader({
       aria-hidden="true"
     >
       <div className={styles.container}>
-        {/* 1. Aura radial suave de fundo */}
-        <div className={styles.aura} />
+        {/* 1. Halo circular suave de iluminação */}
+        <div className={styles.halo} />
 
-        {/* 2. Indicador circular fino de conic-gradient ao redor da logo */}
-        <div className={styles.circularArc} />
+        {/* 2. Órbita magnética externa (sentido horário, 1.45s) */}
+        <div className={styles.orbitOuter} />
 
-        {/* 3. Pontos neon com órbita assíncrona */}
-        <div className={styles.neonOrbit}>
-          <span className={`${styles.neonDot} ${styles.dot1}`} />
-          <span className={`${styles.neonDot} ${styles.dot2}`} />
-          <span className={`${styles.neonDot} ${styles.dot3}`} />
-          <span className={`${styles.neonDot} ${styles.dot4}`} />
-          <span className={`${styles.neonDot} ${styles.dot5}`} />
-          <span className={`${styles.neonDot} ${styles.dot6}`} />
+        {/* 3. Órbita magnética interna (sentido anti-horário, 0.92s) */}
+        <div className={styles.orbitInner} />
+
+        {/* 4. Partículas neon orbitais */}
+        <div className={styles.particleLayer}>
+          <span className={`${styles.particle} ${styles.dot1}`} />
+          <span className={`${styles.particle} ${styles.dot2}`} />
+          <span className={`${styles.particle} ${styles.dot3}`} />
+          <span className={`${styles.particle} ${styles.dot4}`} />
+          <span className={`${styles.particle} ${styles.dot5}`} />
+          <span className={`${styles.particle} ${styles.dot6}`} />
         </div>
 
-        {/* 4. Logo Oficial 100 x 100 px em squircle animado com reflexo luminoso */}
+        {/* 5. Logo oficial 70 x 70 px (cantos 20px) com pulso 0.97 a 1.035 e inclinação ±1° */}
         <div className={styles.logoCard}>
           <img
             src="/logo-impacto.png"

@@ -11,6 +11,14 @@ import { Preferences } from '@capacitor/preferences'
 import { LogOut } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
+import {
+  isFamilyOrStudent,
+  getAgendaDigitalDestination,
+  getInitialRouteForUser,
+  getUserModuleAccess,
+  fetchPerfisWithCache,
+  setCachedPerfis
+} from '@/lib/auth/moduleRouting'
 type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
@@ -268,39 +276,44 @@ export default function LoginPage() {
             return
           }
 
-          // Se estiver no app móvel nativo em cold start, redireciona diretamente ao portal correto SEM piscar login
-          if (Capacitor.isNativePlatform()) {
+          // 1. Família / Responsável / Aluno têm exclusivamente o módulo Agenda Digital
+          if (isFamilyOrStudent(storedUser)) {
             clearTimeout(timeoutId)
-            const perfil = storedUser.perfil || ''
-            const cargo = storedUser.cargo || ''
-            const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(perfil) ||
-                            ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(cargo)
-            const isFamily = perfil === 'Família' || cargo === 'Responsável' || perfil === 'Aluno' || cargo === 'Aluno'
-
-            if (isFamily) {
-              if (cargo === 'Aluno' && storedUser.aluno_id) {
-                router.replace(`/agenda-digital/${storedUser.aluno_id}/comunicados`)
-              } else {
-                router.replace('/agenda-digital/selecionar-aluno')
-              }
-            } else if (isAdmin) {
-              if (perfil === 'Diretor Geral' || cargo === 'Administrador Master' || perfil === 'Administrador') {
-                router.replace('/agenda-digital/selecionar-perfil-admin')
-              } else {
-                router.replace('/agenda-digital/admin')
-              }
-            } else {
-              // Colaborador (Secretária, Professor, Coordenador, etc.):
-              if (storedUser.hasDualRole || storedUser.responsavel_id) {
-                router.replace('/agenda-digital/selecionar-aluno')
-              } else {
-                router.replace('/agenda-digital/colaborador/comunicados')
-              }
-            }
+            hideSplashScreen(300)
+            const dest = getAgendaDigitalDestination(storedUser)
+            router.replace(dest)
             return
           }
 
-          // Em ambiente web desktop, habilita tela de escolha de sistema
+          // 2. Colaborador / Administrador: resolve módulos liberados para o perfil
+          let userPerfilObj: any = null
+          try {
+            const perfisList = await fetchPerfisWithCache(1200)
+            const targetPerfilName = storedUser.perfil || storedUser.cargo || ''
+            userPerfilObj = (perfisList || []).find(p => p.nome === targetPerfilName) || null
+          } catch (e) {}
+
+          const access = getUserModuleAccess(storedUser, userPerfilObj)
+
+          // Só deve entrar direto na Agenda Digital se o perfil tiver EXCLUSIVAMENTE o módulo Agenda Digital
+          if (access.onlyAgendaDigital) {
+            clearTimeout(timeoutId)
+            hideSplashScreen(300)
+            const dest = getAgendaDigitalDestination(storedUser)
+            router.replace(dest)
+            return
+          }
+
+          // Se tiver apenas 1 outro módulo liberado (ex: ERP), vai direto para esse módulo
+          if (access.totalModules === 1) {
+            clearTimeout(timeoutId)
+            hideSplashScreen(300)
+            router.replace(getInitialRouteForUser(storedUser, userPerfilObj))
+            return
+          }
+
+          // 3. Múltiplos módulos liberados: habilita tela de escolha de sistema (web e mobile nativo)
+          clearTimeout(timeoutId)
           const isAlsoFamily = !!storedUser.responsavel_id || !!storedUser.hasDualRole
           setPendingAuth({
             id: storedUser.id,
@@ -311,6 +324,9 @@ export default function LoginPage() {
             responsavel_id: storedUser.responsavel_id,
             hasDualRole: storedUser.hasDualRole
           })
+          if (userPerfilObj) {
+            setProfileData(userPerfilObj)
+          }
           setHasDualRole(isAlsoFamily)
           setIsCheckingSavedUser(false)
           hideSplashScreen(300)
@@ -337,11 +353,23 @@ export default function LoginPage() {
           let perfisList = DEFAULT_PERFIS
           if (Array.isArray(data) && data.length > 0) {
              perfisList = data
+             setCachedPerfis(data)
           }
           // Caso não ache, garante um objeto vazio para pelo menos exibir os acessos padrão (liberados)
           const pData = perfisList.find(x => x.nome === pendingAuth.perfil) || ({} as any)
           setProfileData(pData)
-          
+
+          // Se o perfil configurado tiver apenas 1 módulo liberado, redireciona diretamente
+          const access = getUserModuleAccess(pendingAuth, pData)
+          if (access.onlyAgendaDigital) {
+            const dest = getAgendaDigitalDestination(pendingAuth || currentUser)
+            router.replace(dest)
+            return
+          } else if (access.totalModules === 1) {
+            router.replace(getInitialRouteForUser(pendingAuth || currentUser, pData))
+            return
+          }
+
           setIsProfileLoading(false)
         })
         .catch(err => {
@@ -350,7 +378,7 @@ export default function LoginPage() {
           setIsProfileLoading(false)
         })
     }
-  }, [step, pendingAuth])
+  }, [step, pendingAuth, currentUser, router])
 
 
 
@@ -473,47 +501,67 @@ export default function LoginPage() {
       const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(perfilReal) ||
                       ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(cargoReal);
 
-      if (cargoReal === 'Aluno') {
+      // 1. Aluno / Família / Responsável têm exclusivamente acesso à Agenda Digital
+      if (cargoReal === 'Aluno' || perfilReal === 'Família' || cargoReal === 'Responsável') {
         setLoginLoading(false)
-        if (meta.aluno_id) {
-          router.replace(`/agenda-digital/${meta.aluno_id}/comunicados`)
-        } else {
-          router.replace('/agenda-digital')
-        }
-        return
-      } else if (perfilReal === 'Família' || cargoReal === 'Responsável') {
-        setLoginLoading(false)
-        router.replace('/agenda-digital/selecionar-aluno')
-        return
-      } else if (Capacitor.isNativePlatform()) {
-        // App móvel nativo: redireciona com precisão de acordo com o perfil
-        setLoginLoading(false)
-        if (isAdmin) {
-          if (perfilReal === 'Diretor Geral' || cargoReal === 'Administrador Master' || perfilReal === 'Administrador') {
-            router.replace('/agenda-digital/selecionar-perfil-admin')
-          } else {
-            router.replace('/agenda-digital/admin')
-          }
-        } else {
-          // Colaborador (Secretária, Professor, Coordenador, etc.):
-          if (isAlsoFamily) {
-            router.replace('/agenda-digital/selecionar-aluno')
-          } else {
-            router.replace('/agenda-digital/colaborador/comunicados')
-          }
-        }
-        return
-      } else {
-        // Ambiente desktop/web
-        setPendingAuth({
-           cargo: cargoReal,
-           perfil: perfilReal
+        const dest = getAgendaDigitalDestination({
+          perfil: perfilReal,
+          cargo: cargoReal,
+          aluno_id: meta.aluno_id,
+          responsavel_id: meta.responsavel_id,
+          hasDualRole: isAlsoFamily
         })
-        setHasDualRole(isAlsoFamily)
-        setStep('choose_system')
-        setLoginLoading(false)
-        return;
+        router.replace(dest)
+        return
       }
+
+      // 2. Colaborador / Administrador: verifica módulos liberados no perfil
+      let userPerfilObj: any = null
+      try {
+        const perfisList = await fetchPerfisWithCache(1200)
+        userPerfilObj = (perfisList || []).find(p => p.nome === perfilReal || p.nome === cargoReal) || null
+      } catch (e) {}
+
+      const access = getUserModuleAccess({ perfil: perfilReal, cargo: cargoReal, ...meta }, userPerfilObj)
+
+      // Só vai direto para a Agenda Digital se o perfil tiver EXCLUSIVAMENTE o módulo Agenda Digital liberado
+      if (access.onlyAgendaDigital) {
+        setLoginLoading(false)
+        const dest = getAgendaDigitalDestination({
+          perfil: perfilReal,
+          cargo: cargoReal,
+          aluno_id: meta.aluno_id,
+          responsavel_id: meta.responsavel_id,
+          hasDualRole: isAlsoFamily
+        })
+        router.replace(dest)
+        return
+      }
+
+      // Se tiver apenas 1 outro módulo liberado (ex: ERP):
+      if (access.totalModules === 1) {
+        setLoginLoading(false)
+        router.replace(getInitialRouteForUser({ perfil: perfilReal, cargo: cargoReal, ...meta }, userPerfilObj))
+        return
+      }
+
+      // 3. Múltiplos módulos liberados: habilita tela de escolha de sistema (web e mobile)
+      setPendingAuth({
+        id: userObj.id,
+        nome: userObj.nome,
+        cargo: cargoReal,
+        perfil: perfilReal,
+        aluno_id: meta.aluno_id,
+        responsavel_id: meta.responsavel_id,
+        hasDualRole: isAlsoFamily
+      })
+      if (userPerfilObj) {
+        setProfileData(userPerfilObj)
+      }
+      setHasDualRole(isAlsoFamily)
+      setStep('choose_system')
+      setLoginLoading(false)
+      return
     } catch (err: any) {
       setLoginLoading(false)
       if (err.name === 'AbortError') {
@@ -1034,9 +1082,7 @@ export default function LoginPage() {
                 onClick={() => {
                   setLoadingSystem('gestao-escolar');
                   setTimeout(() => {
-                    const p = pendingAuth?.perfil;
-                    if (p === 'Professor') window.location.href = '/professor';
-                    else window.location.href = '/dashboard';
+                    window.location.href = '/dashboard';
                   }, 100);
                 }}
                 style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
@@ -1055,32 +1101,12 @@ export default function LoginPage() {
                 onClick={() => {
                   setLoadingSystem('agenda-digital');
                   setTimeout(() => {
-                    const p = pendingAuth?.perfil || currentUser?.perfil || '';
-                    const c = pendingAuth?.cargo || currentUser?.cargo || '';
-                    const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(p) ||
-                                    ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(c);
-                    const isFamily = p === 'Família' || c === 'Responsável' || p === 'Aluno' || c === 'Aluno';
-
-                    if (isFamily) {
-                      if (c === 'Aluno' && (pendingAuth?.aluno_id || currentUser?.aluno_id)) {
-                        window.location.href = `/agenda-digital/${pendingAuth?.aluno_id || currentUser?.aluno_id}/comunicados`;
-                      } else {
-                        window.location.href = '/agenda-digital/selecionar-aluno';
-                      }
-                    } else if (isAdmin) {
-                      if (p === 'Diretor Geral' || c === 'Administrador Master' || p === 'Administrador') {
-                        window.location.href = '/agenda-digital/selecionar-perfil-admin';
-                      } else {
-                        window.location.href = '/agenda-digital/admin';
-                      }
-                    } else {
-                      // Colaborador (Secretária, Professor, Coordenador, etc.)
-                      if (hasDualRole || pendingAuth?.responsavel_id || currentUser?.responsavel_id) {
-                        window.location.href = '/agenda-digital/selecionar-aluno';
-                      } else {
-                        window.location.href = '/agenda-digital/colaborador/comunicados';
-                      }
-                    }
+                    const dest = getAgendaDigitalDestination({
+                      ...currentUser,
+                      ...pendingAuth,
+                      hasDualRole: hasDualRole || pendingAuth?.hasDualRole || currentUser?.hasDualRole
+                    })
+                    window.location.href = dest;
                   }, 100);
                 }}
                 style={{ position: 'relative', overflow: 'hidden', flex:'1 1 200px', padding:'32px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, minWidth: '180px' }}
