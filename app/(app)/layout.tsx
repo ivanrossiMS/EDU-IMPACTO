@@ -43,7 +43,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         // ✅ CORREÇÃO DE SEGURANÇA: Qualquer falha → redirecionar para login, exceto se houver cache local offline
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
-            // Sessão inválida ou expirada — ir para login
+            // Sessão pode estar apenas com access_token vencido — tenta renovar silenciosamente
+            try {
+              const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession()
+              if (!refreshErr && refreshData?.session) {
+                const retryRes = await fetch('/api/auth/me', {
+                  cache: 'no-store', credentials: 'include',
+                  headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+                })
+                if (retryRes.ok) {
+                  const retryData = await retryRes.json()
+                  if (retryData.user) {
+                    setCurrentUser(retryData.user)
+                    setAuthState('authorized')
+                    hideSplashScreen(300)
+                    return
+                  }
+                }
+              }
+            } catch (refreshCatch) {}
+
             router.replace('/login')
             return
           }

@@ -221,23 +221,38 @@ export default function LoginPage() {
         }, 2500)
 
         try {
-          // Se o servidor redirecionou para o login com `next`, a sessão no servidor já foi recusada.
-          // Limpa qualquer cache de usuário local para quebrar imediatamente o loop infinito de redirecionamentos.
-          if (nextParam) {
-            console.warn('[Login] Acesso à rota recusado pelo servidor (next=' + nextParam + '). Limpando sessão local.');
-            await removeSettingAsync('edu-current-user');
-            if (typeof window !== 'undefined') {
-              window.localStorage.removeItem('edu-current-user');
-            }
-            setCurrentUser(null);
-            clearTimeout(timeoutId);
-            setIsCheckingSavedUser(false);
-            setStep('login');
-            hideSplashScreen(300);
-            return;
+          let storedUser = await loadSettingAsync<any>('edu-current-user', null)
+          if (!storedUser) {
+            // Tenta restaurar do armazenamento seguro persistente (Keychain / Keystore / Preferences)
+            try {
+              const { supabase } = await import('@/lib/supabase')
+              const { restoreSessionSecurely } = await import('@/lib/auth/secureSession')
+              const restored = await restoreSessionSecurely(supabase)
+              if (restored) {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (user) {
+                  const meta = user.user_metadata || {}
+                  storedUser = {
+                    id: user.id,
+                    nome: meta.nome || user.email?.split('@')[0],
+                    email: user.email,
+                    cargo: meta.cargo || 'Colaborador',
+                    perfil: meta.perfil || 'Usuário',
+                    foto: meta.foto,
+                    aluno_id: meta.aluno_id || '',
+                    responsavel_id: meta.responsavel_id || '',
+                    colaborador_id: meta.colaborador_id || meta.system_user_id || '',
+                    system_user_id: meta.system_user_id || meta.colaborador_id || '',
+                    hasDualRole: Boolean(meta.hasDualRole || meta.responsavel_id),
+                    user_metadata: meta
+                  }
+                  saveSetting('edu-current-user', storedUser)
+                  saveSetting('edu-current-perfil', storedUser.perfil)
+                }
+              }
+            } catch (e) {}
           }
 
-          const storedUser = await loadSettingAsync<any>('edu-current-user', null)
           if (!storedUser) {
             clearTimeout(timeoutId)
             setIsCheckingSavedUser(false)
@@ -246,25 +261,34 @@ export default function LoginPage() {
             return
           }
 
-          // Validação rápida: se não estamos em ambiente offline garantido, verifica se a sessão no servidor está viva
+          // Validação rápida: verifica se a sessão no servidor está viva ou renova silenciosamente
           try {
             const meRes = await fetch('/api/auth/me', {
               cache: 'no-store',
               credentials: 'include',
-              signal: AbortSignal.timeout(1800)
+              signal: AbortSignal.timeout(2500)
             })
             if (!meRes.ok && (meRes.status === 401 || meRes.status === 403)) {
-              console.warn('[Login] Sessão no servidor expirada (401/403). Limpando sessão local.');
-              await removeSettingAsync('edu-current-user');
-              if (typeof window !== 'undefined') {
-                window.localStorage.removeItem('edu-current-user');
+              // Tenta silenciosamente renovar o token com Supabase client antes de deslogar
+              const { supabase } = await import('@/lib/supabase')
+              const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession()
+              if (!refreshErr && refreshData?.session) {
+                console.log('[Login] Sessão renovada com sucesso via refresh_token.')
+                const { saveSessionSecurely } = await import('@/lib/auth/secureSession')
+                await saveSessionSecurely(refreshData.session)
+              } else if (refreshErr?.message?.includes('invalid') || refreshErr?.message?.includes('not found')) {
+                console.warn('[Login] Sessão expirada no servidor e refresh falhou. Limpando sessão local.');
+                await removeSettingAsync('edu-current-user');
+                if (typeof window !== 'undefined') {
+                  window.localStorage.removeItem('edu-current-user');
+                }
+                setCurrentUser(null);
+                clearTimeout(timeoutId);
+                setIsCheckingSavedUser(false);
+                setStep('login');
+                hideSplashScreen(300);
+                return;
               }
-              setCurrentUser(null);
-              clearTimeout(timeoutId);
-              setIsCheckingSavedUser(false);
-              setStep('login');
-              hideSplashScreen(300);
-              return;
             }
           } catch {
             // Em caso de offline ou timeout de rede, permite prosseguir com dados locais
@@ -301,9 +325,10 @@ export default function LoginPage() {
             return
           }
 
-          // Se houver redirect pendente (ex: notificação clicada), redireciona direto
+          // Se houver redirect pendente (ex: notificação clicada ou next da URL), redireciona direto
           let pendingRoute = (typeof window !== 'undefined' ? (window as any).__EDU_PENDING_PUSH_ROUTE__ : null) ||
             params.get('redirect') ||
+            params.get('next') ||
             (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
 
           if (!pendingRoute && Capacitor.isNativePlatform()) {
@@ -315,7 +340,10 @@ export default function LoginPage() {
 
           if (pendingRoute) {
             clearTimeout(timeoutId)
-            console.log('[Login] Usuário já logado e notificação pendente detectada:', pendingRoute)
+            console.log('[Login] Usuário já logado e rota pendente detectada:', pendingRoute)
+            if (isFamilyOrStudent(storedUser) && !pendingRoute.startsWith('/agenda-digital')) {
+              pendingRoute = getAgendaDigitalDestination(storedUser)
+            }
             router.replace(pendingRoute)
             return
           }
@@ -457,6 +485,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         signal: controller.signal,
         body: JSON.stringify({ 
           email: cleanEmail, 
@@ -497,28 +526,38 @@ export default function LoginPage() {
       }
       setCurrentUser(userObj)
       
-      // Sincroniza sessão no cliente Supabase e Keychain
+      // Sincroniza sessão no cliente Supabase e Keychain/Keystore
       if (authData.session) {
         try {
           const { supabase } = await import('@/lib/supabase')
+          const { saveSessionSecurely } = await import('@/lib/auth/secureSession')
           await supabase.auth.setSession({
             access_token: authData.session.access_token,
             refresh_token: authData.session.refresh_token,
           })
+          await saveSessionSecurely(authData.session)
         } catch (e) {
           console.warn('[Login] Erro ao sincronizar sessão no cliente Supabase:', e)
         }
       }
 
-      // FIX: Force synchronous localStorage write to avoid React batching race condition before navigation
+      // Salva de forma síncrona no localStorage e Preferences
       try {
         saveSetting('edu-current-user', userObj)
         saveSetting('edu-current-perfil', perfilReal)
       } catch (e) {}
 
+      // Função de navegação segura que garante que os cookies sejam consolidados
+      const navigateSafely = (targetUrl: string) => {
+        setTimeout(() => {
+          window.location.href = targetUrl
+        }, 120)
+      }
+
       // Se houver notificação pendente ou redirect especificado, vai direto para ele!
       const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
       let pendingRedirect = urlParams?.get('redirect') ||
+        urlParams?.get('next') ||
         (typeof window !== 'undefined' ? ((window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY)) : null)
 
       if (!pendingRedirect && Capacitor.isNativePlatform()) {
@@ -529,7 +568,7 @@ export default function LoginPage() {
       }
 
       if (pendingRedirect) {
-        console.log('[Login] Login com sucesso. Redirecionando direto para notificação pendente:', pendingRedirect)
+        console.log('[Login] Login com sucesso. Redirecionando direto para rota pendente:', pendingRedirect)
         try {
           localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
           if (typeof window !== 'undefined') {
@@ -539,18 +578,26 @@ export default function LoginPage() {
             Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY }).catch(() => {})
           }
         } catch {}
-        setLoginLoading(false)
-        router.replace(pendingRedirect)
+
+        if (cargoReal === 'Aluno' || perfilReal === 'Família' || cargoReal === 'Responsável') {
+          if (!pendingRedirect.startsWith('/agenda-digital')) {
+            pendingRedirect = getAgendaDigitalDestination({
+              perfil: perfilReal,
+              cargo: cargoReal,
+              aluno_id: meta.aluno_id,
+              responsavel_id: meta.responsavel_id,
+            })
+          }
+        }
+
+        navigateSafely(pendingRedirect)
         return
       }
 
       const isAlsoFamily = !!meta.responsavel_id || !!authData.user?.hasDualRole;
-      const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(perfilReal) ||
-                      ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(cargoReal);
 
       // 1. Aluno / Família / Responsável têm exclusivamente acesso à Agenda Digital
       if (cargoReal === 'Aluno' || perfilReal === 'Família' || cargoReal === 'Responsável') {
-        setLoginLoading(false)
         const dest = getAgendaDigitalDestination({
           perfil: perfilReal,
           cargo: cargoReal,
@@ -558,7 +605,7 @@ export default function LoginPage() {
           responsavel_id: meta.responsavel_id,
           hasDualRole: isAlsoFamily
         })
-        router.replace(dest)
+        navigateSafely(dest)
         return
       }
 
@@ -573,7 +620,6 @@ export default function LoginPage() {
 
       // Só vai direto para a Agenda Digital se o perfil tiver EXCLUSIVAMENTE o módulo Agenda Digital liberado
       if (access.onlyAgendaDigital) {
-        setLoginLoading(false)
         const dest = getAgendaDigitalDestination({
           perfil: perfilReal,
           cargo: cargoReal,
@@ -581,14 +627,14 @@ export default function LoginPage() {
           responsavel_id: meta.responsavel_id,
           hasDualRole: isAlsoFamily
         })
-        router.replace(dest)
+        navigateSafely(dest)
         return
       }
 
       // Se tiver apenas 1 outro módulo liberado (ex: ERP):
       if (access.totalModules === 1) {
-        setLoginLoading(false)
-        router.replace(getInitialRouteForUser({ perfil: perfilReal, cargo: cargoReal, ...meta }, userPerfilObj))
+        const dest = getInitialRouteForUser({ perfil: perfilReal, cargo: cargoReal, ...meta }, userPerfilObj)
+        navigateSafely(dest)
         return
       }
 

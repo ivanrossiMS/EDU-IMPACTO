@@ -94,13 +94,13 @@ export async function middleware(request: NextRequest) {
               return
             }
             const sessionOptions = { ...options };
-            // Preserva sessão longa para apps nativos ou usuários com keepConnected ativo
-            const keepConnected = request.cookies.get('edu_keep_connected')?.value === '1';
-            const maxAge = keepConnected ? 315360000 : 2592000; // 1 ano ou 30 dias
-            const expires = new Date();
-            expires.setSeconds(expires.getSeconds() + maxAge);
-            sessionOptions.maxAge = maxAge;
+            // Preserva sessão permanente/vitalícia com rolagem contínua
+            const INFINITE_SESSION_SECONDS = 3153600000;
+            const expires = new Date(Date.now() + INFINITE_SESSION_SECONDS * 1000);
+            sessionOptions.maxAge = INFINITE_SESSION_SECONDS;
             sessionOptions.expires = expires;
+            sessionOptions.path = options?.path || '/';
+            sessionOptions.sameSite = options?.sameSite || 'lax';
             response.cookies.set(name, value, sessionOptions)
           })
         },
@@ -108,17 +108,16 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // PERFORMANCE & RESILIÊNCIA: Timeout de 4s para evitar que chamadas de rede travadas
-  // no Edge congelem a abertura do app mobile.
+  // PERFORMANCE & RESILIÊNCIA: Timeout de 8s para evitar falsos negativos em conexões móveis (3G/4G).
   let user = null
   try {
     const userPromise = supabase.auth.getUser()
     const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
-      setTimeout(() => res({ data: { user: null } }), 4000)
+      setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 8000)
     )
     const { data, error } = await Promise.race([userPromise, timeoutPromise])
-    if (!error) {
-      user = data?.user ?? null
+    if (!error && data?.user) {
+      user = data.user
     }
   } catch (err: any) {
     if (!err?.message?.includes('Refresh Token') && err?.code !== 'refresh_token_not_found') {
@@ -129,32 +128,18 @@ export async function middleware(request: NextRequest) {
   // ── Sem sessão → redireciona para login ──────────────────────────────────
   if (!user) {
     if (pathname.startsWith('/api/')) {
-      const errResponse = NextResponse.json(
+      return NextResponse.json(
         { error: 'Não autorizado. Faça login para continuar.' },
         { status: 401 }
       )
-      // Limpa os cookies sb-* para evitar que requisições subsequentes reenviem tokens mortos
-      request.cookies.getAll().forEach(c => {
-        if (c.name.startsWith('sb-')) {
-          errResponse.cookies.set(c.name, '', { maxAge: 0, path: '/' })
-        }
-      })
-      return errResponse
     }
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', pathname)
     const redirectResponse = NextResponse.redirect(loginUrl)
 
-    // Repassa cookies definidos/deletados em response
+    // Repassa cookies definidos/atualizados em response (sem apagar os cookies existentes)
     response.cookies.getAll().forEach(c => {
       redirectResponse.cookies.set(c.name, c.value, c)
-    })
-
-    // Limpa forçadamente cookies de sessão inválidos para não manter o refresh token corrompido
-    request.cookies.getAll().forEach(c => {
-      if (c.name.startsWith('sb-')) {
-        redirectResponse.cookies.set(c.name, '', { maxAge: 0, path: '/' })
-      }
     })
 
     return redirectResponse

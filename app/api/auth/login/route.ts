@@ -131,6 +131,9 @@ export async function POST(request: NextRequest) {
     }
 
     const cookieStore = await cookies()
+    const INFINITE_SESSION_SECONDS = 3153600000 // 100 anos (permanência vitalícia com rolagem contínua)
+    const expiresDate = new Date(Date.now() + INFINITE_SESSION_SECONDS * 1000)
+    const capturedCookiesToSet: { name: string; value: string; options: any }[] = []
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -142,26 +145,30 @@ export async function POST(request: NextRequest) {
             const newNames = cookiesToSet.map(c => c.name)
             cookieStore.getAll().forEach(c => {
                if (c.name.startsWith('sb-') && !newNames.includes(c.name)) {
-                  try { cookieStore.set({ name: c.name, value: '', maxAge: 0 }) } catch(e) {}
+                  try { 
+                    cookieStore.set(c.name, '', { maxAge: 0, path: '/' }) 
+                    capturedCookiesToSet.push({ name: c.name, value: '', options: { maxAge: 0, path: '/' } })
+                  } catch(e) {}
                }
             })
             cookiesToSet.forEach(({ name, value, options }) => {
               try { 
-                const sessionOptions = { ...options };
-                if (!keepConnected) {
+                const sessionOptions = { 
+                  ...options,
+                  path: options?.path || '/',
+                  sameSite: options?.sameSite || 'lax',
+                  httpOnly: options?.httpOnly !== undefined ? options.httpOnly : true,
+                };
+                if (keepConnected === false) {
                   delete sessionOptions.maxAge;
                   delete sessionOptions.expires;
                 } else {
-                  const expires = new Date();
-                  expires.setFullYear(expires.getFullYear() + 1);
-                  sessionOptions.maxAge = options.maxAge || 315360000;
-                  sessionOptions.expires = expires;
+                  // Sessão permanente/vitalícia
+                  sessionOptions.maxAge = INFINITE_SESSION_SECONDS;
+                  sessionOptions.expires = expiresDate;
                 }
-                cookieStore.set({ 
-                  name, 
-                  value, 
-                  ...sessionOptions 
-                }) 
+                cookieStore.set(name, value, sessionOptions)
+                capturedCookiesToSet.push({ name, value, options: sessionOptions })
               } catch(e) {}
             })
           },
@@ -223,10 +230,18 @@ export async function POST(request: NextRequest) {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
         .select('id, nome, email, cargo, perfil, status')
-        .or(`email.ilike."${resolvedEmail}",auth_id.eq."${user?.id}"`)
+        .or(`email.ilike.${resolvedEmail},auth_id.eq.${user?.id || ''}`)
         .limit(1)
 
       dbSystemUser = dbSystemUserRows?.[0]
+      if (!dbSystemUser && resolvedEmail) {
+        const { data: fallbackUser } = await supabaseAdmin
+          .from('system_users')
+          .select('id, nome, email, cargo, perfil, status')
+          .ilike('email', resolvedEmail)
+          .maybeSingle()
+        if (fallbackUser) dbSystemUser = fallbackUser
+      }
 
       if (dbSystemUser) {
         dbRecordExists = true
@@ -327,19 +342,32 @@ export async function POST(request: NextRequest) {
       user_metadata: { ...user?.user_metadata, ...userMetadataUpdate }
     }
 
+    const response = NextResponse.json({ user: enrichedUser, session: session }, { status: 200 })
+
+    // Garantir que todos os cookies de sessão sejam anexados no cabeçalho Set-Cookie da resposta
+    capturedCookiesToSet.forEach(({ name, value, options }) => {
+      try {
+        response.cookies.set(name, value, options)
+      } catch (e) {}
+    })
+
     try {
-      if (keepConnected) {
-        (await cookies()).set('edu_keep_connected', '1', { maxAge: 315360000, path: '/' })
+      if (keepConnected !== false) {
+        (await cookies()).set('edu_keep_connected', '1', { maxAge: INFINITE_SESSION_SECONDS, expires: expiresDate, path: '/' })
+        response.cookies.set('edu_keep_connected', '1', {
+          maxAge: INFINITE_SESSION_SECONDS,
+          expires: expiresDate,
+          path: '/',
+          sameSite: 'lax',
+          httpOnly: false,
+        })
       } else {
         (await cookies()).delete('edu_keep_connected')
+        response.cookies.delete('edu_keep_connected')
       }
     } catch(e) {}
 
-    const body = JSON.stringify({ user: enrichedUser, session: session })
-    return new NextResponse(body, {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return response
   } catch (err: any) {
     console.error('[API login]', err)
     return NextResponse.json({ error: 'Erro interno de autenticação' }, { status: 500 })

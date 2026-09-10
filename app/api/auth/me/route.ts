@@ -10,6 +10,9 @@ export async function GET(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
 
   const cookieStore = await cookies();
+  const INFINITE_SESSION_SECONDS = 3153600000;
+  const expiresDate = new Date(Date.now() + INFINITE_SESSION_SECONDS * 1000);
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -23,9 +26,13 @@ export async function GET(request: Request) {
                 cookieStore.set(name, '', { ...options, maxAge: 0, path: '/' })
                 return
               }
-              const expires = new Date();
-              expires.setFullYear(expires.getFullYear() + 1);
-              cookieStore.set(name, value, { ...options, maxAge: options.maxAge || 315360000, expires })
+              cookieStore.set(name, value, {
+                ...options,
+                path: options?.path || '/',
+                sameSite: options?.sameSite || 'lax',
+                maxAge: INFINITE_SESSION_SECONDS,
+                expires: expiresDate,
+              })
             }) 
           } catch {}
         },
@@ -42,22 +49,29 @@ export async function GET(request: Request) {
   }
 
   if (!user) {
-    const unauthRes = NextResponse.json({ error: 'Unauthorized', ip }, { status: 401 });
-    cookieStore.getAll().forEach(c => {
-      if (c.name.startsWith('sb-')) {
-        unauthRes.cookies.set(c.name, '', { maxAge: 0, path: '/' });
-      }
-    });
-    return unauthRes;
+    return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401 });
   }
 
   // Fetch the latest profile data from system_users to ensure it is always up to date
   const supabaseAdmin = getAdminClient();
-  const { data: dbUser } = await supabaseAdmin
-    .from('system_users')
-    .select('*')
-    .or(`id.eq."${user.id}",auth_id.eq."${user.id}",email.eq."${user.email}"`)
-    .maybeSingle();
+  let dbUser = null;
+  try {
+    const { data } = await supabaseAdmin
+      .from('system_users')
+      .select('*')
+      .or(`id.eq.${user.id},auth_id.eq.${user.id},email.eq.${user.email}`)
+      .maybeSingle();
+    dbUser = data;
+  } catch (e) {
+    if (user.email) {
+      const { data } = await supabaseAdmin
+        .from('system_users')
+        .select('*')
+        .ilike('email', user.email)
+        .maybeSingle();
+      dbUser = data;
+    }
+  }
 
   // Combine top-level auth data (id, email) with user_metadata and database fields
   const userData = {

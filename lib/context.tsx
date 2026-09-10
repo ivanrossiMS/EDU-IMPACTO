@@ -180,9 +180,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrate() {
       try {
-        if (Capacitor.isNativePlatform()) {
-          restoreSessionSecurely(supabase).catch(() => {})
-        }
+        await restoreSessionSecurely(supabase).catch(() => {})
 
         const [savedTheme, savedSidebarTheme, savedModules, savedUnit, savedPerfil, savedUser] = await Promise.all([
           loadSettingAsync<Theme>('edu-theme', 'light'),
@@ -287,17 +285,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveSetting('edu-current-perfil', user.perfil)
     } else {
       setCurrentUserState(null)
-      // Logout: wipe ALL user-related keys from localStorage & Capacitor Preferences
+      // Logout: remove auth-specific keys
       const USER_KEYS = [
         'edu-current-user',
         'edu-current-perfil',
-        'edu-user-passwords',  // legacy local passwords — nuke on every logout
-        'edu_has_seen_splash',  // reset splash flag so next open shows it correctly
+        'edu-user-passwords',
+        'edu_has_seen_splash',
       ]
       USER_KEYS.forEach(k => removeSettingAsync(k))
-      if (Capacitor.isNativePlatform()) {
-        Preferences.clear().catch(() => {})
-      }
       setCurrentUserPerfilState('')
     }
   }, [])
