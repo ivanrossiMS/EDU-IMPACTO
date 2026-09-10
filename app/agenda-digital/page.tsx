@@ -7,7 +7,7 @@ import { useApp } from '@/lib/context'
 import { supabase } from '@/lib/supabase'
 import { BookOpen, Sparkles } from 'lucide-react'
 
-const ADMIN_PERFIS = ['Diretor Geral', 'Coordenador', 'Secretária']
+const ADMIN_ROLES = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master']
 
 export default function AgendaDigitalIndex() {
   return (
@@ -24,9 +24,11 @@ function AgendaDigitalIndexContent() {
 
   useEffect(() => {
     // Prevent execution if user is not loaded
-    if (!currentUserPerfil || !currentUser) return;
+    if (!currentUser) return;
 
-    const isAdmin = ADMIN_PERFIS.includes(currentUserPerfil)
+    const perfil = currentUserPerfil || currentUser.perfil || ''
+    const cargo = currentUser.cargo || ''
+    const isAdmin = ADMIN_ROLES.includes(perfil) || ADMIN_ROLES.includes(cargo)
     const perfilDestino = searchParams.get('perfil_destino')
     const redirect = searchParams.get('redirect') || 'comunicados'
     const paramStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
@@ -38,7 +40,7 @@ function AgendaDigitalIndexContent() {
     }
     
     if (isAdmin) {
-      if (currentUserPerfil === 'Diretor Geral' || currentUser?.cargo === 'Administrador Master') {
+      if (perfil === 'Diretor Geral' || cargo === 'Administrador Master' || perfil === 'Administrador') {
         router.replace('/agenda-digital/selecionar-perfil-admin')
       } else {
         router.replace(searchParams.get('redirect') ? `/agenda-digital/admin/${searchParams.get('redirect')}` : '/agenda-digital/admin')
@@ -46,10 +48,20 @@ function AgendaDigitalIndexContent() {
       return;
     }
 
+    // Para colaboradores que NÃO são alunos nem família
+    const isStaff = !['Família', 'Responsável', 'Aluno'].includes(perfil) && !['Responsável', 'Aluno'].includes(cargo);
+    const hasDualRole = Boolean(currentUser.hasDualRole || currentUser.responsavel_id);
+
+    // Se é colaborador puro (sem filhos/responsável vinculados), vai direto para colaborador sem esperar
+    if (isStaff && !hasDualRole) {
+      router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+      return;
+    }
+
     const fetchSecureStudents = async () => {
       try {
         // Fast path para alunos que já tem o ID na sessão
-        if (currentUser?.cargo === 'Aluno') {
+        if (cargo === 'Aluno') {
            const directAlunoId = currentUser.aluno_id || (currentUser as any).user_metadata?.aluno_id;
            if (directAlunoId) {
              router.replace(`/agenda-digital/${directAlunoId}/${redirect}${paramStr}`);
@@ -66,18 +78,19 @@ function AgendaDigitalIndexContent() {
             router.replace(`/agenda-digital/${data[0].id}/${redirect}${paramStr}`);
             return;
           }
-          if (Array.isArray(data) && data.length === 0) {
-            const isStaff = !['Família', 'Responsável', 'Aluno'].includes(currentUserPerfil) && !['Responsável', 'Aluno'].includes(currentUser?.cargo || '');
-            if (isStaff) {
-              router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
-              return;
-            }
+          if (Array.isArray(data) && data.length === 0 && isStaff) {
+            router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+            return;
           }
         }
         router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
       } catch (e) {
         console.error('Erro ao buscar alunos:', e);
-        router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
+        if (isStaff) {
+          router.replace(`/agenda-digital/colaborador/${redirect}${paramStr}`);
+        } else {
+          router.replace(`/agenda-digital/selecionar-aluno${paramStr}`);
+        }
       }
     };
 

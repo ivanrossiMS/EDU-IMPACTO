@@ -15,6 +15,7 @@ import { ADSidebar } from './components/Sidebar'
 import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
 import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
 import { Loader2 } from 'lucide-react'
+import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 
 
@@ -129,6 +130,12 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     clearTimeout(emergencyTimer)
     return () => clearTimeout(emergencyTimer)
   }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis])
+
+  React.useEffect(() => {
+    if (accessState === 'allowed') {
+      hideSplashScreen(300)
+    }
+  }, [accessState])
 
   // Enquanto verificando: spinner minimalista elegante
   if (accessState === 'checking') {

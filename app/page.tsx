@@ -80,6 +80,9 @@ export default function Root() {
 
       const perfil = currentUser.perfil || ''
       const cargo = currentUser.cargo || ''
+      const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(perfil) ||
+                      ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(cargo)
+
       const isFamilyOrStudent = (
         perfil === 'Família' ||
         perfil === 'Responsável' ||
@@ -94,14 +97,18 @@ export default function Root() {
           return
         }
         router.replace('/agenda-digital/selecionar-aluno')
-      } else {
-        // Colaborador / Administrador:
-        // No app móvel nativo (celular), vai direto para a Agenda Digital!
-        if (Capacitor.isNativePlatform()) {
-          console.log('[Root] Colaborador em app mobile nativo. Abrindo diretamente a Agenda Digital.')
-          router.replace('/agenda-digital')
+      } else if (isAdmin) {
+        if (perfil === 'Diretor Geral' || cargo === 'Administrador Master' || perfil === 'Administrador') {
+          router.replace('/agenda-digital/selecionar-perfil-admin')
         } else {
-          router.replace('/login?step=choose_system')
+          router.replace('/agenda-digital/admin')
+        }
+      } else {
+        // Colaborador (Secretária, Professor, Coordenador, Financeiro, etc.):
+        if (currentUser.hasDualRole || currentUser.responsavel_id) {
+          router.replace('/agenda-digital/selecionar-aluno')
+        } else {
+          router.replace('/agenda-digital/colaborador/comunicados')
         }
       }
     }
@@ -114,11 +121,11 @@ export default function Root() {
     }
   }, [hydrated, currentUser, router])
 
-  // Fallback de segurança para liberar a splash screen se a navegação demorar mais que 1.2s
+  // Fallback de segurança para liberar a splash screen em caso extremo (ex: 4s sem resposta)
   useEffect(() => {
     const timer = setTimeout(() => {
       hideSplashScreen(300)
-    }, 1200)
+    }, 4000)
     return () => clearTimeout(timer)
   }, [])
 

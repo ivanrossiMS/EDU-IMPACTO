@@ -79,21 +79,21 @@ export async function POST(request: NextRequest) {
       const alunoPromise = supabaseAdmin
         .from('alunos')
         .select('id, nome, email, matricula, dados, status')
-        .eq('email', loginInput)
+        .ilike('email', loginInput)
         .maybeSingle()
         .then(r => r.data || null)
         
       const respPromise = supabaseAdmin
         .from('responsaveis')
         .select('id, nome, email')
-        .eq('email', loginInput)
+        .ilike('email', loginInput)
         .maybeSingle()
         .then(r => r.data || null)
         
       const sysUserPromise = supabaseAdmin
         .from('system_users')
         .select('id, nome, email')
-        .eq('email', loginInput)
+        .ilike('email', loginInput)
         .limit(1)
         .then(r => r.data?.[0] || null)
         
@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
         .select('id, nome, email, cargo, perfil, status')
-        .or(`email.eq."${resolvedEmail}",auth_id.eq."${user?.id}"`)
+        .or(`email.ilike."${resolvedEmail}",auth_id.eq."${user?.id}"`)
         .limit(1)
 
       dbSystemUser = dbSystemUserRows?.[0]
@@ -256,7 +256,7 @@ export async function POST(request: NextRequest) {
         const { data: respFound } = await supabaseAdmin
           .from('responsaveis')
           .select('id')
-          .eq('email', resolvedEmail)
+          .ilike('email', resolvedEmail)
           .limit(1)
         if (respFound && respFound.length > 0) {
           hasDualRole = true

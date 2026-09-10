@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
+import { restoreSessionSecurely } from '@/lib/auth/secureSession'
+import { supabase } from '@/lib/supabase'
 
 export type Theme = 'dark' | 'light'
 
@@ -171,14 +173,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch { /* localStorage pode estar bloqueado em alguns contextos */ }
 
-    // PERFORMANCE: Fallback de 150ms (era 800ms) — Capacitor Preferences responde em <100ms
-    // em dispositivos modernos. O valor alto anterior bloqueava o resume do app desnecessariamente.
+    // Fallback de segurança para garantir hidratação mesmo em falha de storage
     const fallbackTimer = setTimeout(() => {
       if (isMounted) setHydrated(true)
-    }, 150)
+    }, 2000)
 
     async function hydrate() {
       try {
+        if (Capacitor.isNativePlatform()) {
+          restoreSessionSecurely(supabase).catch(() => {})
+        }
+
         const [savedTheme, savedSidebarTheme, savedModules, savedUnit, savedPerfil, savedUser] = await Promise.all([
           loadSettingAsync<Theme>('edu-theme', 'light'),
           loadSettingAsync<Theme>('edu-sidebar-theme', 'dark'),
@@ -207,8 +212,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } catch (e) {}
           setCurrentUserState(savedUser)
         } else {
-          setCurrentUserPerfilState('')
-          removeSettingAsync('edu-current-perfil')
+          // Apenas zera perfil se não houver nenhum usuário síncrono ativo
+          setCurrentUserState(prev => {
+            if (!prev) {
+              setCurrentUserPerfilState('')
+            }
+            return prev
+          })
         }
         document.documentElement.setAttribute('data-theme', savedTheme)
       } catch (err) {

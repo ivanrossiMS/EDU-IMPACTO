@@ -6,6 +6,8 @@ import { useState, useEffect } from 'react'
 import { getInitials } from '@/lib/utils'
 import { ChevronDown, LogOut } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { LoadingGlass } from '@/components/LoadingGlass'
+import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 export default function AgendaDigitalAdminLayout({
   children
@@ -16,15 +18,28 @@ export default function AgendaDigitalAdminLayout({
   const [showUserMenu, setShowUserMenu] = useState(false)
   const router = useRouter()
 
+  const allowed = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master']
+  const p = currentUser?.perfil
+  const cargo = currentUser?.cargo
+  const isAllowed = Boolean(currentUser && (allowed.includes(p as string) || allowed.includes(cargo as string)))
+
   useEffect(() => {
     if (!hydrated) return;
-    const p = currentUser?.perfil
-    const cargo = currentUser?.cargo
-    const allowed = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master']
-    if (!allowed.includes(p as string) && !allowed.includes(cargo as string)) {
-      router.push('/login')
+    if (!currentUser) {
+      router.replace('/login')
+      return;
     }
-  }, [hydrated, currentUser, router])
+    if (!isAllowed) {
+      const isStaff = !['Família', 'Responsável', 'Aluno'].includes(p || '') && !['Responsável', 'Aluno'].includes(cargo || '');
+      if (isStaff) {
+        router.replace('/agenda-digital/colaborador/comunicados')
+      } else {
+        router.replace('/agenda-digital/selecionar-aluno')
+      }
+      return;
+    }
+    hideSplashScreen(300)
+  }, [hydrated, currentUser, isAllowed, p, cargo, router])
 
   const { setLoadingPath } = useApp()
   const handleLogout = () => {
@@ -32,6 +47,14 @@ export default function AgendaDigitalAdminLayout({
     setCurrentUser(null)
     performLogout()
     window.location.href = '/login'
+  }
+
+  if (!hydrated || !isAllowed) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', width: '100%' }}>
+        <LoadingGlass />
+      </div>
+    )
   }
 
   const nomeUsuario = currentUser?.nome || 'Administrador'

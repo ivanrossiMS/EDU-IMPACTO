@@ -11,7 +11,7 @@ import {
   CheckCheck, GraduationCap, ChevronRight, HelpCircle,
   Clock, ArrowUpRight, Sparkle, Tag, RotateCcw, X, Loader2,
   Users, UserCheck, Settings, Save, Edit3, Plus, Trash2, CheckSquare,
-  Share2, Camera, Download, FileText, Utensils
+  Camera, Download, FileText, Utensils
 } from 'lucide-react'
 import { useConfigDb } from '@/lib/useConfigDb'
 import AmpliacaoPeriodoTab from './components/AmpliacaoPeriodoTab'
@@ -786,7 +786,6 @@ export default function ValoresPage() {
   const [selectedResponsavelId, setSelectedResponsavelId] = useState<string | null>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
   const propostaCardRef = useRef<HTMLDivElement>(null)
-  const [isSharingWhatsApp, setIsSharingWhatsApp] = useState<boolean>(false)
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false)
   const [pdfSavedSuccess, setPdfSavedSuccess] = useState<boolean>(false)
   const [isCopyingProposal, setIsCopyingProposal] = useState<boolean>(false)
@@ -1734,85 +1733,6 @@ export default function ValoresPage() {
     }
   }
 
-  // Compartilhar no WhatsApp o arquivo PDF da proposta com mensagem formal e refinada
-  const handleShareWhatsAppPDF = async () => {
-    if (isSharingWhatsApp) return
-    setIsSharingWhatsApp(true)
-
-    const saudacao = nomeResponsavel.trim() ? `Prezado(a) *${nomeResponsavel.trim()}*,` : 'Prezada Família,'
-    const refAluno = nomeAluno.trim() ? ` para o(a) aluno(a) *${nomeAluno.trim()}*` : ''
-
-    // Texto formal, institucional e com emojis para acompanhar o arquivo PDF da proposta
-    const formalIntroMsg =
-      `🏫 *COLÉGIO IMPACTO • PROPOSTA COMERCIAL OFICIAL*\n\n` +
-      `${saudacao}\n\n` +
-      `É com grande satisfação que apresentamos a *Proposta Comercial Oficial* para o Ano Letivo de *${anoLetivo}*${refAluno}. 🎓📚\n\n` +
-      `No Colégio Impacto, temos o compromisso inegociável com a excelência acadêmica, a formação integral e o desenvolvimento humano de nossos estudantes.\n\n` +
-      `📄 *Documento Oficial em Anexo (PDF):*\n` +
-      `Segue anexo o arquivo oficial em PDF contendo o detalhamento completo dos valores, opções de turnos e condições especiais de antecipação da matrícula.\n\n` +
-      `✨ *Destaques do Plano:*\n` +
-      `✔️ Condições exclusivas de campanha por antecipação\n` +
-      `✔️ Matrícula facilitada em até ${numParcelasMatricula}x sem juros no cartão de crédito\n` +
-      `✔️ Material didático de excelência e estrutura escolar completa\n\n` +
-      `Permanecemos à inteira disposição para quaisquer esclarecimentos, agendamento de visitas ou suporte na efetivação da matrícula. 🤝✨\n\n` +
-      `Atenciosamente,\n` +
-      `*Equipe de Admissões e Matrículas* 🏛️\n` +
-      `*Colégio Impacto*`
-
-    // Roteamento para WhatsApp: se houver telefone, direciona com 55; senão, abre seletor de contatos
-    const cleanPhone = telefone.replace(/\D/g, '')
-    let fullPhone = cleanPhone
-    if (cleanPhone.length === 10 || cleanPhone.length === 11) {
-      fullPhone = `55${cleanPhone}`
-    } else if (cleanPhone.length > 11 && !cleanPhone.startsWith('55')) {
-      fullPhone = `55${cleanPhone}`
-    }
-
-    const waUrl = fullPhone
-      ? `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(formalIntroMsg)}`
-      : `https://api.whatsapp.com/send?text=${encodeURIComponent(formalIntroMsg)}`
-
-    // Abre o WhatsApp IMEDIATAMENTE no clique (sem bloqueios de popup do navegador)
-    window.open(waUrl, '_blank')
-
-    // Gera o PDF oficial e baixa automaticamente para ser anexado na conversa
-    try {
-      showToast('🚀 WhatsApp aberto! Gerando o arquivo PDF da proposta...')
-
-      // Baixa o arquivo PDF oficial da proposta e obtém o canvas de alta fidelidade
-      const { blob: pdfBlob, fileName: pdfFileName, canvas } = await generateProposalPdfBlob()
-
-      // Copia a imagem da proposta para a Área de Transferência (caso queira colar prévia com Cmd+V)
-      if (canvas && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
-        try {
-          const imgBlob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/png'))
-          if (imgBlob) {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': imgBlob })])
-          }
-        } catch (clipErr) {
-          console.warn('Cópia para clipboard em background:', clipErr)
-        }
-      }
-
-      const downloadUrl = URL.createObjectURL(pdfBlob)
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = pdfFileName
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000)
-
-      showToast(fullPhone
-        ? '📄 PDF Oficial baixado! No WhatsApp, basta anexar o arquivo PDF baixado (ou arrastar) na conversa!'
-        : '📄 PDF Oficial baixado! Selecione o contato no WhatsApp e anexe o arquivo PDF baixado!'
-      )
-    } catch (err: any) {
-      console.warn('Processamento em background do PDF:', err)
-    } finally {
-      setIsSharingWhatsApp(false)
-    }
-  }
 
   const filteredSeries = useMemo(() => {
     if (!searchQuery.trim()) return seriesList
@@ -3234,28 +3154,6 @@ export default function ValoresPage() {
                 </span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {/* 1. Compartilhar no WhatsApp (PDF Oficial + Apresentação) */}
-                  <button
-                    onClick={handleShareWhatsAppPDF}
-                    disabled={isSharingWhatsApp}
-                    title="Compartilhar a Proposta Comercial em PDF pelo WhatsApp"
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: 10,
-                      padding: '7px 14px',
-                      fontSize: 12,
-                      fontWeight: 800,
-                      cursor: isSharingWhatsApp ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 2px 8px rgba(16,185,129,0.3)',
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    {isSharingWhatsApp ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />}
-                    <span>{isSharingWhatsApp ? 'Preparando PDF...' : 'Compartilhar no WhatsApp'}</span>
-                  </button>
 
                   {/* 2. Salvar Proposta em PDF Oficial (1 página no tamanho exato) */}
                   <button

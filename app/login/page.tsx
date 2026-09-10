@@ -59,7 +59,8 @@ export default function LoginPage() {
   const [showBlockModal, setShowBlockModal] = useState(false)
 
   // ── step manager
-    const [step, setStep] = useState<Step>('login')
+  const [step, setStep] = useState<Step>('login')
+  const [isCheckingSavedUser, setIsCheckingSavedUser] = useState(true)
   const [pendingAuth, setPendingAuth] = useState<any>(null)
   
   const [showCheckinModal, setShowCheckinModal] = useState(false)
@@ -154,7 +155,6 @@ export default function LoginPage() {
   const headline = 'Bem-vindo de volta!'
 
   useEffect(() => {
-    hideSplashScreen(300)
     let i = 0; setTypedText('')
     const iv = setInterval(() => { if (i <= headline.length) { setTypedText(headline.slice(0, i)); i++ } else clearInterval(iv) }, 55)
     return () => clearInterval(iv)
@@ -220,106 +220,97 @@ export default function LoginPage() {
       }
       
       const checkStoredUser = async () => {
-        // Hard timeout: if anything hangs (Capacitor Preferences, network), force login form after 3s
+        // Timeout de proteção: se demorar mais que 2.5s, libera o form de login
         const timeoutId = setTimeout(() => {
-          console.warn('[Login] checkStoredUser timed out after 3s — forcing login form')
+          setIsCheckingSavedUser(false)
           setStep('login')
-        }, 3000)
+          hideSplashScreen(300)
+        }, 2500)
 
         try {
           const storedUser = await loadSettingAsync<any>('edu-current-user', null)
           if (!storedUser) {
             clearTimeout(timeoutId)
+            setIsCheckingSavedUser(false)
             setStep('login')
+            hideSplashScreen(300)
             return
           }
 
-          // Se fomos redirecionados para o login pelo middleware (nextParam existe)
-          // ou se a sessão no servidor expirou, limpamos o estado local.
-          if (nextParam) {
-            await removeSettingAsync('edu-current-user')
-            await removeSettingAsync('edu-current-perfil')
-            if (Capacitor.isNativePlatform()) {
-              await Preferences.clear().catch(() => {})
-            }
-            setCurrentUser(null)
+          // Restaura o usuário no contexto
+          setCurrentUser(storedUser)
+
+          // Se houver redirect pendente (ex: notificação clicada), redireciona direto
+          let pendingRoute = (typeof window !== 'undefined' ? (window as any).__EDU_PENDING_PUSH_ROUTE__ : null) ||
+            params.get('redirect') ||
+            (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
+
+          if (!pendingRoute && Capacitor.isNativePlatform()) {
+            try {
+              const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
+              if (value) pendingRoute = value
+            } catch {}
+          }
+
+          if (pendingRoute) {
             clearTimeout(timeoutId)
-            setStep('login')
+            console.log('[Login] Usuário já logado e notificação pendente detectada:', pendingRoute)
+            router.replace(pendingRoute)
             return
           }
 
-          // Verificação ativa de sessão no servidor Supabase
-          try {
-            const meRes = await fetch('/api/auth/me', {
-              cache: 'no-store',
-              credentials: 'include',
-              headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-            })
-            if (!meRes.ok) {
-              // Sessão expirada ou revogada — limpa resíduos locais e força formulário de login
-              await removeSettingAsync('edu-current-user')
-              await removeSettingAsync('edu-current-perfil')
-              if (Capacitor.isNativePlatform()) {
-                await Preferences.clear().catch(() => {})
+          // Se estiver no app móvel nativo, redireciona diretamente ao portal correto SEM piscar login
+          if (Capacitor.isNativePlatform()) {
+            clearTimeout(timeoutId)
+            const perfil = storedUser.perfil || ''
+            const cargo = storedUser.cargo || ''
+            const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(perfil) ||
+                            ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(cargo)
+            const isFamily = perfil === 'Família' || cargo === 'Responsável' || perfil === 'Aluno' || cargo === 'Aluno'
+
+            if (isFamily) {
+              if (cargo === 'Aluno' && storedUser.aluno_id) {
+                router.replace(`/agenda-digital/${storedUser.aluno_id}/comunicados`)
+              } else {
+                router.replace('/agenda-digital/selecionar-aluno')
               }
-              setCurrentUser(null)
-              clearTimeout(timeoutId)
-              setStep('login')
-              return
+            } else if (isAdmin) {
+              if (perfil === 'Diretor Geral' || cargo === 'Administrador Master' || perfil === 'Administrador') {
+                router.replace('/agenda-digital/selecionar-perfil-admin')
+              } else {
+                router.replace('/agenda-digital/admin')
+              }
+            } else {
+              // Colaborador (Secretária, Professor, Coordenador, etc.):
+              if (storedUser.hasDualRole || storedUser.responsavel_id) {
+                router.replace('/agenda-digital/selecionar-aluno')
+              } else {
+                router.replace('/agenda-digital/colaborador/comunicados')
+              }
             }
-          } catch (err) {
-            console.warn('[Login] Erro ao validar sessão no servidor, forçando formulário de login:', err)
-            await removeSettingAsync('edu-current-user')
-            await removeSettingAsync('edu-current-perfil')
-            if (Capacitor.isNativePlatform()) {
-              await Preferences.clear().catch(() => {})
-            }
-            setCurrentUser(null)
-            clearTimeout(timeoutId)
-            setStep('login')
             return
           }
 
-          try {
-            const user = storedUser
-            const isAlsoFamily = !!user.responsavel_id || !!user.hasDualRole;
-            
-            // Se houver redirect pendente (ex: notificação clicada), redireciona direto sem parar na escolha de módulos
-            let pendingRoute = (typeof window !== 'undefined' ? (window as any).__EDU_PENDING_PUSH_ROUTE__ : null) ||
-              params.get('redirect') ||
-              (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
+          // Em ambiente web desktop, habilita tela de escolha de sistema
+          const isAlsoFamily = !!storedUser.responsavel_id || !!storedUser.hasDualRole
+          setPendingAuth({
+            cargo: storedUser.cargo,
+            perfil: storedUser.perfil
+          })
+          setHasDualRole(isAlsoFamily)
+          setIsCheckingSavedUser(false)
+          hideSplashScreen(300)
 
-            if (!pendingRoute && Capacitor.isNativePlatform()) {
-              try {
-                const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
-                pendingRoute = value
-              } catch {}
-            }
-
-            if (pendingRoute) {
-              console.log('[Login] Usuário já logado e notificação pendente detectada:', pendingRoute)
-              router.replace(pendingRoute)
-              return
-            }
-
-            setPendingAuth({
-              cargo: user.cargo,
-              perfil: user.perfil
-            })
-            setHasDualRole(isAlsoFamily)
-            
-            if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
-              setStep(stepParam)
-            } else {
-              setStep('choose_system')
-            }
-          } catch (e) {
-            console.error("Error restoring user for step:", e)
-            setStep('login')
+          if (stepParam === 'choose_agenda_role' || stepParam === 'choose_system') {
+            setStep(stepParam)
+          } else {
+            setStep('choose_system')
           }
         } catch (e) {
-          console.error('[Login] checkStoredUser fatal error:', e)
+          console.error('[Login] checkStoredUser error:', e)
+          setIsCheckingSavedUser(false)
           setStep('login')
+          hideSplashScreen(300)
         } finally {
           clearTimeout(timeoutId)
         }
@@ -370,16 +361,22 @@ export default function LoginPage() {
   // ── handlers
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email || !password) { setLoginError('Preencha e-mail e senha.'); return }
+    const cleanEmail = email.trim()
+    const cleanPassword = password
+    if (!cleanEmail || !cleanPassword) { setLoginError('Preencha e-mail e senha.'); return }
     setLoginLoading(true); setLoginError('')
     
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000)
+
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({ 
-          email, 
-          password,
+          email: cleanEmail, 
+          password: cleanPassword,
           keepConnected: keepConnected
         })
       })
@@ -396,14 +393,14 @@ export default function LoginPage() {
       
       // Update local context with enriched profile from system_users
       const meta = authData.user?.user_metadata || {}
-      const nomeReal = meta.nome || email.split('@')[0]
+      const nomeReal = meta.nome || cleanEmail.split('@')[0]
       const cargoReal = meta.cargo || 'Colaborador'
       const perfilReal = meta.perfil || 'Usuário'
 
       const userObj = { 
         id: authData.user.id, 
         nome: nomeReal, 
-        email: email, 
+        email: cleanEmail, 
         cargo: cargoReal, 
         perfil: perfilReal,
         foto: meta.foto || undefined,
@@ -416,6 +413,19 @@ export default function LoginPage() {
       }
       setCurrentUser(userObj)
       
+      // Sincroniza sessão no cliente Supabase e Keychain
+      if (authData.session) {
+        try {
+          const { supabase } = await import('@/lib/supabase')
+          await supabase.auth.setSession({
+            access_token: authData.session.access_token,
+            refresh_token: authData.session.refresh_token,
+          })
+        } catch (e) {
+          console.warn('[Login] Erro ao sincronizar sessão no cliente Supabase:', e)
+        }
+      }
+
       // FIX: Force synchronous localStorage write to avoid React batching race condition before navigation
       try {
         saveSetting('edu-current-user', userObj)
@@ -450,42 +460,61 @@ export default function LoginPage() {
         return
       }
 
+      const isAlsoFamily = !!meta.responsavel_id || !!authData.user?.hasDualRole;
+      const isAdmin = ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(perfilReal) ||
+                      ['Direção', 'Administrador', 'Diretor Geral', 'Administrador Master'].includes(cargoReal);
+
       if (cargoReal === 'Aluno') {
+        setLoginLoading(false)
         if (meta.aluno_id) {
-          router.push(`/agenda-digital/${meta.aluno_id}/comunicados`)
+          router.replace(`/agenda-digital/${meta.aluno_id}/comunicados`)
         } else {
-          router.push('/agenda-digital')
+          router.replace('/agenda-digital')
         }
+        return
       } else if (perfilReal === 'Família' || cargoReal === 'Responsável') {
-        router.push('/agenda-digital/selecionar-aluno')
+        setLoginLoading(false)
+        router.replace('/agenda-digital/selecionar-aluno')
+        return
+      } else if (Capacitor.isNativePlatform()) {
+        // App móvel nativo: redireciona com precisão de acordo com o perfil
+        setLoginLoading(false)
+        if (isAdmin) {
+          if (perfilReal === 'Diretor Geral' || cargoReal === 'Administrador Master' || perfilReal === 'Administrador') {
+            router.replace('/agenda-digital/selecionar-perfil-admin')
+          } else {
+            router.replace('/agenda-digital/admin')
+          }
+        } else {
+          // Colaborador (Secretária, Professor, Coordenador, etc.):
+          if (isAlsoFamily) {
+            router.replace('/agenda-digital/selecionar-aluno')
+          } else {
+            router.replace('/agenda-digital/colaborador/comunicados')
+          }
+        }
+        return
       } else {
-        // É um colaborador (Professor, Diretor, Coordenador, Financeiro, Secretaria, etc)
-        // Verificação de papel duplo feita no backend de forma performática
-        const isAlsoFamily = !!meta.responsavel_id || !!authData.user?.hasDualRole;
-        
+        // Ambiente desktop/web
         setPendingAuth({
            cargo: cargoReal,
            perfil: perfilReal
         })
         setHasDualRole(isAlsoFamily)
-
-        // Se estiver no aplicativo nativo (celular), vai direto para a Agenda Digital!
-        if (Capacitor.isNativePlatform()) {
-          console.log('[Login] Ambiente nativo mobile detectado. Direcionando colaborador direto para a Agenda Digital.')
-          setLoginLoading(false)
-          router.replace('/agenda-digital')
-          return
-        }
-
         setStep('choose_system')
-        
         setLoginLoading(false)
         return;
       }
     } catch (err: any) {
       setLoginLoading(false)
-      setLoginError(err.message || 'Credenciais inválidas.')
+      if (err.name === 'AbortError') {
+        setLoginError('Tempo limite de conexão excedido. Verifique sua internet e tente novamente.')
+      } else {
+        setLoginError(err.message || 'Credenciais inválidas.')
+      }
       console.log('Login falhou:', err.message)
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 
@@ -1213,7 +1242,12 @@ export default function LoginPage() {
 
         {/* Enterprise SaaS Background Overlay */}
         <BackgroundEffects />
-        {step === 'login' && LoginContent}
+        {step === 'login' && (isCheckingSavedUser ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 16 }}>
+            <ModernLoadingSpinner />
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', fontWeight: 600, letterSpacing: '0.02em' }}>Validando sessão segura...</span>
+          </div>
+        ) : LoginContent)}
         {(step === 'first_access_verify' || step === 'forgot_password') && FirstAccessVerify}
         {(step === 'first_access_create' || step === 'forgot_password_create') && FirstAccessCreate}
         {step === 'setup_master' && SetupMasterContent}

@@ -15,9 +15,10 @@ import {
   UserCog, Users, X, LogOut, Briefcase, ShieldCheck, CheckCircle2, FileText, MonitorSmartphone, AlertTriangle
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 export default function AgendaDigitalColaboradorLayout({ 
-  children
+  children 
 }: { 
   children: React.ReactNode 
 }) {
@@ -55,6 +56,7 @@ export default function AgendaDigitalColaboradorLayout({
   useEffect(() => {
     if (!hydrated || !currentUser) return
     setIsLoading(false)
+    hideSplashScreen(300)
   }, [hydrated, currentUser])
 
   useEffect(() => {
