@@ -482,7 +482,7 @@ export async function POST(request: Request) {
                     sendAgendaPushNotification({
                       type: 'comunicados',
                       itemId: String(row.id),
-                      title: `📢 Comunicado: ${row.titulo}`,
+                      title: `📢 ${row.titulo}`,
                       message: `${row.autor} enviou uma mensagem para ${student.aluno_nome}`,
                       targetUserIds: student.responsaveis_ids,
                       targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
@@ -500,7 +500,7 @@ export async function POST(request: Request) {
                     sendAgendaPushNotification({
                       type: 'comunicados',
                       itemId: String(row.id),
-                      title: `📢 Comunicado: ${row.titulo}`,
+                      title: `📢 ${row.titulo}`,
                       message: `${row.autor} enviou um novo comunicado para a turma de ${nomeAluno}. Confira!`,
                       targetUserIds: student.responsaveis_ids,
                       targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
@@ -517,7 +517,7 @@ export async function POST(request: Request) {
               sendAgendaPushNotification({
                 type: 'comunicados',
                 itemId: String(row.id),
-                title: `📢 Comunicado: ${row.titulo}`,
+                title: `📢 ${row.titulo}`,
                 message: `Você tem uma nova mensagem enviada por ${row.autor}.`,
                 targetUserIds: directColaboradores,
                 targetUrl: `/agenda-digital/colaborador/comunicados?id=${row.id}`,
@@ -603,7 +603,7 @@ export async function POST(request: Request) {
                 sendAgendaPushNotification({
                   type: 'comunicados',
                   itemId: String(data.id),
-                  title: `📢 Comunicado: ${data.titulo}`,
+                  title: `📢 ${data.titulo}`,
                   message: `${data.autor} enviou uma mensagem para ${student.aluno_nome}`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
@@ -621,7 +621,7 @@ export async function POST(request: Request) {
                 sendAgendaPushNotification({
                   type: 'comunicados',
                   itemId: String(data.id),
-                  title: `📢 Comunicado: ${data.titulo}`,
+                  title: `📢 ${data.titulo}`,
                   message: `${data.autor} enviou um novo comunicado para a turma de ${nomeAluno}. Confira!`,
                   targetUserIds: student.responsaveis_ids,
                   targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
@@ -639,7 +639,7 @@ export async function POST(request: Request) {
           sendAgendaPushNotification({
             type: 'comunicados',
             itemId: String(data.id),
-            title: `📢 Comunicado: ${data.titulo}`,
+            title: `📢 ${data.titulo}`,
             message: `Você tem uma nova mensagem enviada por ${data.autor}.`,
             targetUserIds: directColaboradores,
             targetUrl: `/agenda-digital/colaborador/comunicados?id=${data.id}`,

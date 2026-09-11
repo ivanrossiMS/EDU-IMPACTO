@@ -187,7 +187,7 @@ export async function POST(request: Request) {
     // ── Notificações Push e In-App bidirecionais ──
     try {
       const msgTexto = body.conteudo.length > 50 ? body.conteudo.substring(0, 50) + '...' : body.conteudo;
-      const remetenteNome = body.remetente_nome || (body.is_admin ? 'A Escola' : 'Usuário');
+      const remetenteNome = body.remetente_nome || user.user_metadata?.nome || user.user_metadata?.name || (serverIsAdmin ? 'A Escola' : 'Usuário');
 
       if (!body.is_admin) {
         // Responsável/Aluno respondeu -> Notifica a Escola (Autor original do comunicado)
@@ -247,7 +247,7 @@ export async function POST(request: Request) {
           try {
             await supabase.from('notificacoes').insert({
               user_id: targetUserId,
-              titulo: `Nova resposta da Escola`,
+              titulo: `Nova resposta de ${remetenteNome}`,
               mensagem: `Resposta no comunicado "${tituloCom}": "${msgTexto}"`,
               link: `/agenda-digital/comunicados?id=${body.comunicado_id}`,
               lida: false,
@@ -262,7 +262,7 @@ export async function POST(request: Request) {
             await sendAgendaPushNotification({
               type: 'comunicados',
               itemId: String(data.id),
-              title: `🏫 Nova mensagem da Escola`,
+              title: `🏫 Nova mensagem de ${remetenteNome}`,
               message: `Sobre "${tituloCom}": ${msgTexto}`,
               targetUserIds: [targetUserId],
               targetUrl: `/agenda-digital/comunicados?id=${body.comunicado_id}`,

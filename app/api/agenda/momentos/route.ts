@@ -449,12 +449,17 @@ export async function POST(request: Request) {
           }
 
           if (directColaboradores && directColaboradores.length > 0) {
+            const autorMomento = (row.dados?.author || row.dados?.autor || user.user_metadata?.nome || user.user_metadata?.name || '').trim()
+            const msgMomento = autorMomento
+              ? `${autorMomento} compartilhou um novo conteúdo. Confira!`
+              : `Um novo conteúdo foi compartilhado. Confira!`
+
             allPushPromises.push(
               sendAgendaPushNotification({
                 type: 'momentos',
                 itemId: String(row.id),
                 title: '📸 Novo Momento Publicado!',
-                message: `Um novo conteúdo foi compartilhado. Confira!`,
+                message: msgMomento,
                 targetUserIds: directColaboradores,
                 targetUrl: `/agenda-digital/colaborador/momentos?id=${row.id}`,
                 metadata: { perfil_destino: 'colaborador', item_id: String(row.id), rota: 'momentos', targetUrl: `/agenda-digital/colaborador/momentos?id=${row.id}` }
@@ -523,12 +528,17 @@ export async function POST(request: Request) {
         }
 
         if (directColaboradores && directColaboradores.length > 0) {
+          const autorMomento = (data.dados?.author || data.dados?.autor || user.user_metadata?.nome || user.user_metadata?.name || '').trim()
+          const msgMomento = autorMomento
+            ? `${autorMomento} compartilhou um novo conteúdo. Confira!`
+            : `Um novo conteúdo foi compartilhado. Confira!`
+
           pushPromises.push(
             sendAgendaPushNotification({
               type: 'momentos',
               itemId: String(data.id),
               title: '📸 Novo Momento Publicado!',
-              message: `Um novo conteúdo foi compartilhado. Confira!`,
+              message: msgMomento,
               targetUserIds: directColaboradores,
               targetUrl: `/agenda-digital/colaborador/momentos?id=${data.id}`,
               metadata: { perfil_destino: 'colaborador', item_id: String(data.id), rota: 'momentos', targetUrl: `/agenda-digital/colaborador/momentos?id=${data.id}` }
