@@ -6,6 +6,7 @@ import { useRelatorios, ReportTemplate, ReportField } from '@/lib/relatoriosCont
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 
 import { useData } from '@/lib/dataContext';
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils';
 
 interface ReportFillerModalProps {
   isOpen: boolean
@@ -65,15 +66,25 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
   const targetedStudents = useMemo(() => {
     if (!payload || !alunos) return [];
     if (payload.studentIds && payload.studentIds.length > 0) {
-      return alunos.filter(a => payload.studentIds.includes(a.id));
+      const idSet = new Set(payload.studentIds.map((id: any) => String(id)));
+      return alunos.filter(a => idSet.has(String(a.id)));
     }
     if (payload.turmaId) {
+      const tTarget = String(payload.turmaId).trim().toLowerCase();
+      const targetTurmaObj = turmas?.find((t: any) => 
+        String(t.id).toLowerCase() === tTarget || 
+        String(t.codigo || '').toLowerCase() === tTarget || 
+        String(t.nome || '').trim().toLowerCase() === tTarget
+      );
+
       return alunos.filter(a => {
+        if (targetTurmaObj && isAlunoCursandoTurma(a, targetTurmaObj, targetTurmaObj.ano, turmas)) {
+          return true;
+        }
         const refs = [String(a.turma || '').trim(), String((a as any).turmaId || '').trim()].filter(Boolean);
         return refs.some(tRef => {
-          const tObj = turmas?.find((t: any) => String(t.id) === tRef || String(t.codigo) === tRef || String(t.nome) === tRef);
-          const canonicalId = tObj ? String(tObj.id) : tRef;
-          return canonicalId.toLowerCase() === String(payload.turmaId).trim().toLowerCase() || tRef.toLowerCase() === String(payload.turmaId).trim().toLowerCase();
+          const tRefLower = tRef.toLowerCase();
+          return tRefLower === tTarget || (targetTurmaObj && (String(targetTurmaObj.id).toLowerCase() === tRefLower || String(targetTurmaObj.codigo || '').toLowerCase() === tRefLower || String(targetTurmaObj.nome || '').trim().toLowerCase() === tRefLower));
         });
       });
     }

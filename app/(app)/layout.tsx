@@ -63,7 +63,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               }
             } catch (refreshCatch) {}
 
-            router.replace('/login')
+            await performLogout()
             return
           }
           // Erro de servidor (5xx) — pode ser temporário. 

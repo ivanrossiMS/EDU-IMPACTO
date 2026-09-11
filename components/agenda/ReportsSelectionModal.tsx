@@ -7,6 +7,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useRelatorios, ReportTemplate, ReportField } from '@/lib/relatoriosContext'
 
 import { useApp } from '@/lib/context'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 
 interface ReportsSelectionModalProps {
   isOpen: boolean
@@ -19,7 +20,7 @@ interface ReportsSelectionModalProps {
 export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, onFillDirectly }: ReportsSelectionModalProps) {
   const { currentUser } = useApp()
   const { templates: contextTemplates = [] } = useRelatorios()
-  const [alunos, _sa, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight')
+  const [alunos, _sa, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [gruposManuais, _sg, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
   const [turmas, _st, { loading: loadingTurmas }] = useSupabaseArray<any>('turmas')
   
@@ -152,6 +153,70 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
+  // Resolver alunos vinculados a uma turma usando as regras completas da escola
+  const resolveTurmaAlunos = React.useCallback((selectedTurma: any, year: string) => {
+    if (!selectedTurma) return []
+    const tIdStr = String(selectedTurma.id || '')
+    const tAno = selectedTurma.ano !== undefined && selectedTurma.ano !== null && String(selectedTurma.ano).trim() !== ''
+      ? String(selectedTurma.ano)
+      : (selectedTurma.anoLetivo || selectedTurma.ano_letivo || selectedTurma.dados?.anoLetivo || year || String(new Date().getFullYear()))
+
+    // 1. Procura grupo espelhado em agenda/grupos (sync-{id}, id ou mesmo nome)
+    const syncGroup = (gruposManuais || []).find((g: any) => {
+      const gSync = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
+      return (
+        gSync === `sync-${tIdStr}` || 
+        g.id === `sync-${tIdStr}` || 
+        g.id === tIdStr ||
+        (g.nome && String(g.nome).trim().toLowerCase() === String(selectedTurma.nome || '').trim().toLowerCase())
+      )
+    })
+
+    let extraAlunosIds: string[] = []
+    if (syncGroup) {
+      let aIds = syncGroup.alunosIds || syncGroup.dados?.alunosIds || []
+      if (typeof aIds === 'string') {
+        try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+      }
+      if (Array.isArray(aIds)) extraAlunosIds = aIds.map(String)
+    }
+
+    const tIdLower = tIdStr.toLowerCase()
+    const tNomeLower = String(selectedTurma.nome || '').trim().toLowerCase()
+    const tCodLower = String(selectedTurma.codigo || '').trim().toLowerCase()
+
+    return (alunos || []).filter((a: any) => {
+      const aIdStr = String(a.id)
+
+      // Se constar nos alunos vinculados do grupo espelhado (ex: /admin/turmas)
+      if (extraAlunosIds.includes(aIdStr)) return true
+
+      // Regra oficial de matricula cursando (inclui Dual-Enrollment de Integral/Intermediário!)
+      if (isAlunoCursandoTurma(a, selectedTurma, tAno, turmas)) return true
+
+      // Vínculos diretos nas propriedades do aluno
+      const directTurma = String(a.turma || '').trim().toLowerCase()
+      const directTurmaId = String((a as any).turmaId || '').trim().toLowerCase()
+      if (directTurma && (directTurma === tIdLower || directTurma === tNomeLower || (tCodLower && directTurma === tCodLower))) return true
+      if (directTurmaId && (directTurmaId === tIdLower || directTurmaId === tNomeLower || (tCodLower && directTurmaId === tCodLower))) return true
+
+      // Histórico de turmas
+      const hist = a.historicoTurmas || a.dados?.historicoTurmas
+      if (Array.isArray(hist)) {
+        const matchesHist = hist.some((h: any) => {
+          if (!h || h.status === 'Inativo') return false
+          const hYear = String(h.anoLetivo || h.ano || '').trim()
+          if (tAno && hYear && hYear !== tAno) return false
+          const hTurma = String(h.serieTurma || h.turma || h.nome || '').trim().toLowerCase()
+          return hTurma === tIdLower || hTurma === tNomeLower || (tCodLower && hTurma === tCodLower)
+        })
+        if (matchesHist) return true
+      }
+
+      return false
+    })
+  }, [alunos, gruposManuais, turmas])
+
   // Resolve targeted students when dependencies or filters change
   useEffect(() => {
     if (isOpen) {
@@ -175,9 +240,15 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
             const gId = d.id.replace(/^g_?/, '')
             const groupObj = (gruposManuais || []).find(g => String(g.id) === String(gId))
             if (groupObj && groupObj.alunosIds) {
-              groupObj.alunosIds.forEach((sId: any) => {
-                directStudentIds.add(String(sId))
-              })
+              let gAids = groupObj.alunosIds;
+              if (typeof gAids === 'string') {
+                try { gAids = JSON.parse(gAids); } catch(e) { gAids = []; }
+              }
+              if (Array.isArray(gAids)) {
+                gAids.forEach((sId: any) => {
+                  directStudentIds.add(String(sId))
+                })
+              }
             }
           }
         })
@@ -194,6 +265,10 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
 
         resolved = (alunos || []).filter(a => {
            if (directStudentIds.has(String(a.id))) return true;
+           for (const tc of Array.from(targetedClasses)) {
+             const tObj = turmas.find((t: any) => String(t.id).toLowerCase() === tc || String(t.codigo).toLowerCase() === tc || String(t.nome).trim().toLowerCase() === tc)
+             if (tObj && isAlunoCursandoTurma(a, tObj, tObj.ano || filterYear, turmas)) return true
+           }
            const tRefLower = String(a.turma || '').trim().toLowerCase();
            const tIdLower = String((a as any).turmaId || '').trim().toLowerCase();
            return validTurmaRefs.has(tRefLower) || validTurmaRefs.has(tIdLower);
@@ -202,50 +277,16 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
 
       if (filterTurmaId && filterTurmaId !== 'all') {
         const filterLower = filterTurmaId.trim().toLowerCase();
-        
-        // Vamos usar a mesmíssima lógica blindada do DestinatariosModal
-        const byTurmaRef = new Map<string, any[]>()
-        ;(alunos || []).forEach((a: any) => {
-          const refs = [String(a.turma || ''), String((a as any).turmaId || '')].filter(Boolean)
-          refs.forEach(r => {
-            const ref = r.trim().toLowerCase()
-            if (ref) {
-              let list = byTurmaRef.get(ref)
-              if (!list) {
-                list = []
-                byTurmaRef.set(ref, list)
-              }
-              if (!list.find(x => x.id === a.id)) list.push(a)
-            }
-          })
-        })
-
-        const selectedTurma = turmas.find((t: any) => 
+        const selectedTurma = (turmas || []).find((t: any) => 
           String(t.id).toLowerCase() === filterLower || 
           String(t.codigo).toLowerCase() === filterLower || 
           String(t.nome).trim().toLowerCase() === filterLower
+        ) || (gruposManuais || []).find((g: any) => 
+          String(g.id).toLowerCase() === filterLower || 
+          String(g.nome).trim().toLowerCase() === filterLower
         );
         
-        let foundStudents: any[] = []
-        if (selectedTurma) {
-          const uniqueStudents = new Map<string, any>()
-          
-          const tRefs = new Set<string>()
-          if (selectedTurma.id) tRefs.add(String(selectedTurma.id).toLowerCase())
-          if (selectedTurma.codigo) tRefs.add(String(selectedTurma.codigo).toLowerCase())
-          if (selectedTurma.nome) tRefs.add(String(selectedTurma.nome).trim().toLowerCase())
-          
-          tRefs.forEach(ref => {
-             const list = byTurmaRef.get(ref) || []
-             list.forEach(a => uniqueStudents.set(a.id, a))
-          })
-          
-          foundStudents = Array.from(uniqueStudents.values())
-        } else {
-          foundStudents = byTurmaRef.get(filterLower) || []
-        }
-        
-        resolved = foundStudents
+        resolved = resolveTurmaAlunos(selectedTurma, filterYear)
       } else if (selectedDest && selectedDest.length > 0) {
         // Se nenhuma turma foi selecionada no modal, mas temos destinatários, 
         // a lista já está filtrada em `resolved`. Não fazemos nada.
@@ -256,7 +297,7 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
 
       setTargetedStudents(resolved)
     }
-  }, [isOpen, selectedDest, alunos, turmas, gruposManuais, filterYear, filterTurmaId, availableTurmas])
+  }, [isOpen, selectedDest, alunos, turmas, gruposManuais, filterYear, filterTurmaId, availableTurmas, resolveTurmaAlunos])
 
   // Set default date when going to step 2
   useEffect(() => {
@@ -433,6 +474,17 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
                   </div>
                 </div>
               )}
+              {filterTurmaId && (
+                <div style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, color: targetedStudents.length > 0 ? '#10b981' : '#ef4444', marginTop: -4 }}>
+                  {isLoadingData ? (
+                    <span style={{ color: '#64748b' }}>Carregando alunos da turma...</span>
+                  ) : targetedStudents.length > 0 ? (
+                    <span>✓ {targetedStudents.length} aluno{targetedStudents.length > 1 ? 's' : ''} participante{targetedStudents.length > 1 ? 's' : ''} vinculado{targetedStudents.length > 1 ? 's' : ''} a esta turma</span>
+                  ) : (
+                    <span>⚠️ Nenhum aluno encontrado nesta turma para o ano {filterYear || 'selecionado'}.</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Template choice */}
@@ -490,6 +542,13 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
               <button 
                 onClick={handleFillDirectly}
                 disabled={!selectedTemplate || filterYear === '' || filterTurmaId === '' || targetedStudents.length === 0}
+                title={
+                  !selectedTemplate ? 'Selecione um relatório' :
+                  !filterYear ? 'Selecione o ano' :
+                  !filterTurmaId ? 'Selecione a turma' :
+                  targetedStudents.length === 0 ? 'Nenhum aluno encontrado para esta turma' :
+                  'Clique para preencher o relatório'
+                }
                 style={{ 
                   padding: '16px 36px', borderRadius: 18, border: 'none', background: (selectedTemplate && filterYear !== '' && filterTurmaId !== '' && targetedStudents.length > 0) ? '#3b82f6' : '#cbd5e1', 
                   color: '#fff', fontSize: 15, fontWeight: 900, cursor: (selectedTemplate && filterYear !== '' && filterTurmaId !== '' && targetedStudents.length > 0) ? 'pointer' : 'not-allowed',

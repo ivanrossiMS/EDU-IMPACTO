@@ -1,4 +1,4 @@
-import { createClient, processLock } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
 import { createChunks, combineChunks, stringToBase64URL, stringFromBase64URL, isChunkLike } from '@supabase/ssr'
@@ -82,7 +82,7 @@ const customStorage = {
   getItem: async (key: string) => {
     if (typeof window === 'undefined') return null
 
-    // 1. Native platform preferences
+    // 1. Native platform preferences (iOS/Android Capacitor)
     if (Capacitor.isNativePlatform()) {
       try {
         const { value } = await Preferences.get({ key })
@@ -91,14 +91,9 @@ const customStorage = {
       } catch (e) {}
     }
 
-    // 2. localStorage
-    try {
-      const localVal = window.localStorage.getItem(key)
-      const valid = decodeAndValidate(localVal)
-      if (valid) return valid
-    } catch (e) {}
-
-    // 3. Fallback to document.cookie chunks
+    // 2. Web Browser: document.cookie chunks MUST take precedence!
+    // Next.js Middleware and SSR endpoints refresh tokens and update cookies on responses.
+    // If we read stale localStorage before cookies, the client sends outdated tokens and gets "Invalid Refresh Token".
     if (typeof document !== 'undefined') {
       try {
         const parsedCookies = document.cookie.split('; ').reduce((acc, c) => {
@@ -113,9 +108,21 @@ const customStorage = {
           return parsedCookies[chunkName] || null
         })
         const valid = decodeAndValidate(combined)
-        if (valid) return valid
+        if (valid) {
+          try {
+            window.localStorage.setItem(key, valid)
+          } catch {}
+          return valid
+        }
       } catch (e) {}
     }
+
+    // 3. Fallback to localStorage
+    try {
+      const localVal = window.localStorage.getItem(key)
+      const valid = decodeAndValidate(localVal)
+      if (valid) return valid
+    } catch (e) {}
 
     return null
   },
@@ -150,6 +157,7 @@ const customStorage = {
     }
 
     removeDocumentCookie(key)
+    clearSessionSecurely().catch(() => {})
   },
 }
 
@@ -167,7 +175,6 @@ if (isBrowser) {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
-        lock: processLock,
       }
     })
 
@@ -179,6 +186,14 @@ if (isBrowser) {
         }
       } else if (event === 'SIGNED_OUT') {
         clearSessionSecurely().catch(() => {})
+        if (typeof window !== 'undefined') {
+          try {
+            window.localStorage.removeItem('edu-current-user')
+            window.localStorage.removeItem('edu-current-perfil')
+            const projectRef = supabaseUrl.replace(/^https?:\/\//, '').split('.')[0]
+            removeDocumentCookie(`sb-${projectRef}-auth-token`)
+          } catch {}
+        }
       }
     })
 

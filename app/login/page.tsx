@@ -278,11 +278,20 @@ export default function LoginPage() {
                 await saveSessionSecurely(refreshData.session)
               } else {
                 const errMsg = refreshErr?.message?.toLowerCase() || '';
+                const errCode = (refreshErr as any)?.code || (refreshErr as any)?.error_code || '';
+                const isInvalidToken =
+                  errCode === 'refresh_token_not_found' ||
+                  errMsg.includes('refresh token not found') ||
+                  errMsg.includes('invalid refresh token') ||
+                  errMsg.includes('invalid_grant');
+
                 const isNetErr = 
-                  errMsg.includes('load failed') || 
-                  errMsg.includes('fetch failed') || 
-                  errMsg.includes('network') ||
-                  (refreshErr as any)?.name === 'AuthRetryableFetchError';
+                  !isInvalidToken && (
+                    errMsg.includes('load failed') || 
+                    errMsg.includes('fetch failed') || 
+                    errMsg.includes('network') ||
+                    (refreshErr as any)?.name === 'AuthRetryableFetchError'
+                  );
 
                 if (isNetErr) {
                   console.warn('[Login] Falha de rede ao tentar renovar sessão. Mantendo dados locais offline:', refreshErr?.message);
@@ -290,11 +299,14 @@ export default function LoginPage() {
                 } else {
                   console.warn('[Login] Sessão expirada no servidor e refresh falhou. Limpando sessão local:', refreshErr?.message || 'Sem sessão');
                   await removeSettingAsync('edu-current-user');
+                  await removeSettingAsync('edu-current-perfil');
                   if (typeof window !== 'undefined') {
                     window.localStorage.removeItem('edu-current-user');
+                    window.localStorage.removeItem('edu-current-perfil');
                   }
                   const { clearSessionSecurely } = await import('@/lib/auth/secureSession');
                   await clearSessionSecurely().catch(() => {});
+                  await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
                   setCurrentUser(null);
                   clearTimeout(timeoutId);
                   setIsCheckingSavedUser(false);
