@@ -213,14 +213,18 @@ function ColaboradorComunicadosContent() {
     });
   }, [chatGroups, candidateColabIds]);
 
-  const turmaOptions = useMemo(() => {
-    if (!effectiveUser?.id) return [];
+  const isMasterAdmin = useMemo(() => {
+    if (!effectiveUser?.id) return false;
     const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
     const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
     const perfilStr = effectiveUser?.perfil || ''; 
     const cargoStr = effectiveUser?.cargo || ''; 
-    const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
-    if (effectiveUser.perfil === 'administrador' || isMaster || effectiveUser.perfil === 'admin') return turmas;
+    return effectiveUser.perfil === 'administrador' || effectiveUser.perfil === 'admin' || perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
+  }, [effectiveUser]);
+
+  const turmaOptions = useMemo(() => {
+    if (!effectiveUser?.id) return [];
+    if (isMasterAdmin) return turmas;
     
     const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
     const hasGlobalWithoutYear = globalGroups.some((g: any) => {
@@ -1788,7 +1792,7 @@ function ColaboradorComunicadosContent() {
         onClose={() => setShowDestModal(false)}
         initialSelected={selectedDest}
         onAdd={(res) => setSelectedDest(res as any)}
-        allowedTurmasIds={turmaOptions.map(t => String(t.id))}
+        allowedTurmasIds={isMasterAdmin ? undefined : turmaOptions.map(t => String(t.id))}
         allowedGruposIds={effectiveUser?.perfil === 'administrador' || String(effectiveUser?.cargo || '').toLowerCase().includes('admin') || String(effectiveUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
         currentUserId={effectiveUser?.id}
       />

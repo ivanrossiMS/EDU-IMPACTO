@@ -45,11 +45,34 @@ export default function VerProvaUploadPage() {
       if (error) throw error
       setProva(data)
 
-      const { data: reqs } = await (supabase as any)
+      const { data: rawReqs } = await (supabase as any)
         .from('simulados_upload_requisicoes')
         .select('*')
         .eq('id_simulado_upload', provaId)
-      setRequisicoes(reqs || [])
+      
+      let reqs = rawReqs || []
+      const savedOrder = data?.config_estudio?.ordem_requisicoes || []
+      if (savedOrder.length > 0) {
+        reqs.sort((a: any, b: any) => {
+          const idxA = savedOrder.indexOf(a.id)
+          const idxB = savedOrder.indexOf(b.id)
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return 0
+        })
+      } else if (data?.config_estudio?.ordem_disciplinas?.length > 0) {
+        const savedDiscOrder = data.config_estudio.ordem_disciplinas
+        reqs.sort((a: any, b: any) => {
+          const idxA = savedDiscOrder.indexOf(a.id_disciplina)
+          const idxB = savedDiscOrder.indexOf(b.id_disciplina)
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return 0
+        })
+      }
+      setRequisicoes(reqs)
 
       const { data: cfg } = await (supabase as any).from('simulados_configuracoes').select('*').eq('id', 'default').single()
       if (cfg) setSimConfig(cfg)

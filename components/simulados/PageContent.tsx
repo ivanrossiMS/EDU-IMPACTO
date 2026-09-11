@@ -1697,45 +1697,50 @@ export function PageContent({
 
               if (block.type === 'part_alts_container') {
             return (
-              <div key={bIndex} style={{ padding: '0 40px', marginTop: block.renderMarginTop }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
-                  {(() => {
-                    const imgWidths = block.q.simulados_alternativas
-                      ?.filter((a: any) => a.imagem_url)
-                      .map((a: any) => {
-                        const hashIndex = a.imagem_url.indexOf('#');
-                        if (hashIndex >= 0) {
-                          const p = new URLSearchParams(a.imagem_url.substring(hashIndex + 1));
-                          const w = p.get('w');
-                          return w ? parseInt(w) : 250;
-                        }
-                        return 250;
-                      }) || [];
-                    const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+              <div key={bIndex} style={{ padding: '0 40px', marginTop: block.renderMarginTop, fontSize: `${alternativasFontSize}px` }}>
+                {(() => {
+                  const mCols = (block.q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
+                  const qCols = mCols ? parseInt(mCols[1]) : 1;
+                  return (
+                    <div style={qCols > 1 ? { display: 'grid', gridTemplateColumns: `repeat(${qCols}, 1fr)`, gap: '4px 16px', alignItems: 'start' } : { display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+                      {(() => {
+                        const imgWidths = block.q.simulados_alternativas
+                          ?.filter((a: any) => a.imagem_url)
+                          .map((a: any) => {
+                            const hashIndex = a.imagem_url.indexOf('#');
+                            if (hashIndex >= 0) {
+                              const p = new URLSearchParams(a.imagem_url.substring(hashIndex + 1));
+                              const w = p.get('w');
+                              return w ? parseInt(w) : 250;
+                            }
+                            return 250;
+                          }) || [];
+                        const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
 
-                    return block.q.simulados_alternativas?.map((a: any, aIndex: number) => {
-                      const totalAlts = block.q.simulados_alternativas?.length || 0;
-                      const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
-                      const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
-                      const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
-                      const params = new URLSearchParams(hashStr);
-                      const imgWidthStr = params.get('w');
-                      const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
-                      const effectiveWidth = imgWidth || maxImgWidth;
-                      const qId = block.q.id;
+                        return block.q.simulados_alternativas?.map((a: any, aIndex: number) => {
+                          const totalAlts = block.q.simulados_alternativas?.length || 0;
+                          const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
+                          const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
+                          const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
+                          const params = new URLSearchParams(hashStr);
+                          const imgWidthStr = params.get('w');
+                          const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                          const effectiveWidth = imgWidth || maxImgWidth;
+                          const qId = block.q.id;
 
-                      const setWidth = (w: number) => {
-                        const p = new URLSearchParams(hashStr);
-                        p.set('w', w.toString());
-                        onEditAlternativaImage?.(qId, a.id, `${imgBaseUrl}#${p.toString()}`);
-                      };
+                          const setWidth = (w: number) => {
+                            const p = new URLSearchParams(hashStr);
+                            p.set('w', w.toString());
+                            onEditAlternativaImage?.(qId, a.id, `${imgBaseUrl}#${p.toString()}`);
+                          };
 
-                      return (
-                        <div key={a.id} className="alt-hover-group" style={{ 
-                          display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative',
-                          flex: effectiveWidth ? '0 0 auto' : '1 1 200px',
-                          zIndex: reorderMenuOpen === `${qId}-${a.id}` ? 500 : (imgMenuOpen === a.id ? 50 : 1)
-                        }}>
+                          return (
+                            <div key={a.id} className="alt-hover-group" style={{ 
+                              display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative',
+                              flex: qCols > 1 ? undefined : (effectiveWidth ? '0 0 auto' : '1 1 200px'),
+                              fontSize: `${alternativasFontSize}px`,
+                              zIndex: reorderMenuOpen === `${qId}-${a.id}` ? 500 : (imgMenuOpen === a.id ? 50 : 1)
+                            }}>
                           <div 
                             className={`reorder-trigger ${a.eh_correta ? 'correct-bubble-preview' : ''}`} 
                             onClick={!readOnly && onMoveAlternativa ? (e) => {
@@ -1984,9 +1989,11 @@ export function PageContent({
                     });
                   })()}
                 </div>
-              </div>
-            );
-          }
+              );
+            })()}
+          </div>
+        );
+      }
 
           if (block.type === 'part_alt') {
                 const q = block.q;
@@ -1998,7 +2005,7 @@ export function PageContent({
                 }
                 const totalAlts = alts.length;
                 return (
-                  <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
+                  <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0, fontSize: `${alternativasFontSize}px` }}>
                     <div style={{ width: '28px', minWidth: '28px' }}></div>
                     <div style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative', zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : 1 }}>
                       <div 
@@ -2177,7 +2184,7 @@ export function PageContent({
                                               const updated = altParts.map((p: any, i: number) => i === pIdx ? { ...p, content: newHtml } : p);
                                               saveAltParts(updated);
                                             }}
-                                            style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text' }}
+                                            style={{ outline: 'none', border: '1px dashed transparent', padding: '0 4px', wordBreak: 'break-word', cursor: 'text', fontSize: `${alternativasFontSize}px` }}
                                           />
                                         );
                                       }

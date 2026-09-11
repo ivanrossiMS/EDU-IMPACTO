@@ -107,7 +107,28 @@ export default function UploadSimuladoPage() {
       if (error) throw error
 
       const { data: rawReqs } = await (supabase as any).from('simulados_upload_requisicoes').select('*').eq('id_simulado_upload', simuladoId)
-      const reqs = rawReqs || []
+      let reqs = rawReqs || []
+      const savedOrder = data?.config_estudio?.ordem_requisicoes || []
+      if (savedOrder.length > 0) {
+        reqs.sort((a: any, b: any) => {
+          const idxA = savedOrder.indexOf(a.id)
+          const idxB = savedOrder.indexOf(b.id)
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return 0
+        })
+      } else if (data?.config_estudio?.ordem_disciplinas?.length > 0) {
+        const savedDiscOrder = data.config_estudio.ordem_disciplinas
+        reqs.sort((a: any, b: any) => {
+          const idxA = savedDiscOrder.indexOf(a.id_disciplina)
+          const idxB = savedDiscOrder.indexOf(b.id_disciplina)
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return 0
+        })
+      }
       
       const formattedDisciplinas = Array.from(new Set(reqs.map((r: any) => r.simulados_disciplinas?.nome || r.disciplina_nome || ''))).filter(Boolean).join(', ')
       const formattedProfessors = Array.from(new Set(reqs.map((r: any) => {

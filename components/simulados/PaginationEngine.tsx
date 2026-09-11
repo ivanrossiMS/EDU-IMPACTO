@@ -442,10 +442,77 @@ export function PaginationEngine({
         currentY = 0;
       }
 
+      function getCompressibleSpace(additionalMargins: number[] = []) {
+        let compressible = 0;
+        currentCols[colIndex].forEach((b: any) => {
+          const m = b.renderMarginTop || 0;
+          if (m >= 20) {
+            compressible += (m - 18);
+          } else if (m >= 7) {
+            compressible += (m - 4);
+          }
+        });
+        additionalMargins.forEach(m => {
+          if (m >= 20) {
+            compressible += (m - 18);
+          } else if (m >= 7) {
+            compressible += (m - 4);
+          }
+        });
+        return compressible;
+      }
+
+      function applyCompression(deficit: number, upcomingMargins: { margin: number, setMargin: (val: number) => void }[] = []) {
+        const totalCompressible = getCompressibleSpace(upcomingMargins.map(u => u.margin));
+        if (totalCompressible <= 0 || deficit <= 0) return 0;
+        
+        const ratio = Math.min(1, deficit / totalCompressible);
+        let saved = 0;
+        
+        currentCols[colIndex].forEach((b: any) => {
+          const m = b.renderMarginTop || 0;
+          let maxReduce = 0;
+          if (m >= 20) maxReduce = m - 18;
+          else if (m >= 7) maxReduce = m - 4;
+          
+          if (maxReduce > 0) {
+            const reduce = Math.min(maxReduce, Math.max(1, Math.round(maxReduce * ratio)));
+            b.renderMarginTop = m - reduce;
+            saved += reduce;
+          }
+        });
+        
+        upcomingMargins.forEach(u => {
+          const m = u.margin;
+          let maxReduce = 0;
+          if (m >= 20) maxReduce = m - 18;
+          else if (m >= 7) maxReduce = m - 4;
+          
+          if (maxReduce > 0) {
+            const reduce = Math.min(maxReduce, Math.max(1, Math.round(maxReduce * ratio)));
+            u.setMargin(m - reduce);
+            saved += reduce;
+          }
+        });
+        
+        currentY = Math.max(0, currentY - saved);
+        return saved;
+      }
+
       function pushBlock(block: any, h: number, marginToApply: number = 0) {
         if (currentY + marginToApply + h > getAvailableHeight() && currentY > 0) {
-          advanceCol();
-          marginToApply = 0; // First in col has no top margin
+          const deficit = (currentY + marginToApply + h) - getAvailableHeight();
+          if (deficit > 0 && deficit <= 28) {
+            let refMargin = marginToApply;
+            const saved = applyCompression(deficit, [{ margin: marginToApply, setMargin: (v: number) => { refMargin = v; } }]);
+            if (saved > 0) {
+              marginToApply = refMargin;
+            }
+          }
+          if (currentY + marginToApply + h > getAvailableHeight() && currentY > 0) {
+            advanceCol();
+            marginToApply = 0; // First in col has no top margin
+          }
         }
         currentCols[colIndex].push({ ...block, renderMarginTop: marginToApply });
         currentY += marginToApply + h;
@@ -514,7 +581,10 @@ export function PaginationEngine({
         });
 
         let altsH: number[] = [];
-        if (alternativasLayout === 'horizontal') {
+        const metaAltColsMatch = (q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
+        const altColsNum = metaAltColsMatch ? parseInt(metaAltColsMatch[1], 10) : 1;
+
+        if (alternativasLayout === 'horizontal' || altColsNum > 1) {
           const h = heights[`${q.id}-alts-container`] || 0;
           totalH += h + ALT_SPACING;
           altsH = [h];
@@ -543,216 +613,251 @@ export function PaginationEngine({
           totalH += descritivaH + ALT_SPACING;
         }
 
-        if (currentY + questionMargin + totalH <= getAvailableHeight()) {
+        let isPushedFull = false;
+        const fullDeficit = (currentY + questionMargin + totalH) - getAvailableHeight();
+        if (fullDeficit <= 0) {
           pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, questionMargin);
-        } else if (alternativasLayout === 'horizontal' && totalH < 200) {
-          // Orphan protection: Only for horizontal layout.
-          // If it doesn't fit, don't split the question text from its horizontal alternatives.
-          advanceCol();
-          pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, 0);
-        } else {
-          // Orphan Protection: Abandon small remaining space if the whole question fits in a new column.
-          const remainingSpace = getAvailableHeight() - currentY - questionMargin;
-          const fifteenPercent = getAvailableHeight() * 0.15;
-          
-          if (remainingSpace < fifteenPercent && totalH <= getAvailableHeight()) {
-             advanceCol();
-             pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, 0);
-             return; // go to next question
+          isPushedFull = true;
+        } else if (currentY > 0 && fullDeficit <= 28) {
+          let refMargin = questionMargin;
+          applyCompression(fullDeficit, [{ margin: questionMargin, setMargin: (v: number) => { refMargin = v; } }]);
+          if (currentY + refMargin + totalH <= getAvailableHeight()) {
+            pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, refMargin);
+            isPushedFull = true;
           }
+        }
 
-
-          // Build generic render blocks for this question
-          let renderBlocks: any[] = [];
-          
-          groupedParts.forEach((group, gIdx) => {
-            if (group.type === 'text') {
-              const chunks = splitTextIntoChunks(group.content || '');
-              chunks.forEach((chunk, cIdx) => {
-                const rawH = heights[`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`] || 0;
-                const h = rawH > 0 ? rawH : 20;
-                const isFirstChunk = group.originalIndex === 0 && cIdx === 0;
-                renderBlocks.push({ 
-                  item: { 
-                    type: 'part_enun_txt', 
-                    q, 
-                    content: chunk, 
-                    originalIndex: group.originalIndex, 
-                    chunkIndex: cIdx,
-                    totalChunks: chunks.length,
-                    isFirst: isFirstChunk, 
-                    qIndex 
-                  }, 
-                  h, 
-                  margin: isFirstChunk ? questionMargin : 0, 
-                  category: 'enunciado_text' 
-                });
-              });
-            } else if (group.type === 'lines') {
-              for (let j = 0; j < group.count; j++) {
-                renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex, style: group.style, lineIndex: j }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
-              }
-            } else {
-              const h = heights[`${q.id}-img-group-${gIdx}`] || 0;
-              renderBlocks.push({ item: { type: 'part_img_group', q, images: group.images, isFirst: group.images[0].originalIndex === 0, qIndex }, h, margin: group.images[0].originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_img' });
-            }
-          });
-
-          if (q.tipo_questao === 'descritiva') {
-             for (let j = 0; j < linhasResposta; j++) {
-                renderBlocks.push({ item: { type: 'part_descritiva_line', q, estiloEspaco, lineIndex: j }, h: 28, margin: j === 0 ? 8 : 0, category: 'descritiva_line' });
-             }
+        if (!isPushedFull) {
+          if (alternativasLayout === 'horizontal' && totalH < 200) {
+            // Orphan protection: Only for horizontal layout.
+            // If it doesn't fit, don't split the question text from its horizontal alternatives.
+            advanceCol();
+            pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, 0);
           } else {
-            if (alternativasLayout === 'horizontal') {
-              renderBlocks.push({ item: { type: 'part_alts_container', q }, h: altsH[0], margin: 8, category: 'alternativas_container' });
-            } else {
-              (q.simulados_alternativas || []).forEach((a: any, j: number) => {
-                 renderBlocks.push({ item: { type: 'part_alt', q, alt: a }, h: altsH[j], margin: 8, category: 'alternativa' });
-              });
+            // Orphan Protection: Abandon small remaining space if the whole question fits in a new column.
+            const remainingSpace = getAvailableHeight() - currentY - questionMargin;
+            const fifteenPercent = getAvailableHeight() * 0.15;
+            
+            if (remainingSpace < fifteenPercent && totalH <= getAvailableHeight()) {
+               advanceCol();
+               pushBlock({ type: 'full', q, qIndex, linhasResposta, estiloEspaco }, totalH, 0);
+               return; // go to next question
             }
-          }
 
-          // Iterate and push with Heuristics
-          let i = 0;
-          while (i < renderBlocks.length) {
-            const block = renderBlocks[i];
-            const nextBlock = i + 1 < renderBlocks.length ? renderBlocks[i + 1] : null;
+            // Build generic render blocks for this question
+            let renderBlocks: any[] = [];
+            
+            groupedParts.forEach((group, gIdx) => {
+              if (group.type === 'text') {
+                const chunks = splitTextIntoChunks(group.content || '');
+                chunks.forEach((chunk, cIdx) => {
+                  const rawH = heights[`${q.id}-enun-txt-${group.originalIndex}-c-${cIdx}`] || 0;
+                  const h = rawH > 0 ? rawH : 20;
+                  const isFirstChunk = group.originalIndex === 0 && cIdx === 0;
+                  renderBlocks.push({ 
+                    item: { 
+                      type: 'part_enun_txt', 
+                      q, 
+                      content: chunk, 
+                      originalIndex: group.originalIndex, 
+                      chunkIndex: cIdx,
+                      totalChunks: chunks.length,
+                      isFirst: isFirstChunk, 
+                      qIndex 
+                    }, 
+                    h, 
+                    margin: isFirstChunk ? questionMargin : 0, 
+                    category: 'enunciado_text' 
+                  });
+                });
+              } else if (group.type === 'lines') {
+                for (let j = 0; j < group.count; j++) {
+                  renderBlocks.push({ item: { type: 'part_enun_lines_line', q, originalIndex: group.originalIndex, isFirstInGroup: j === 0, count: group.count, isFirst: group.originalIndex === 0 && j === 0, qIndex, style: group.style, lineIndex: j }, h: 28, margin: j === 0 ? (group.originalIndex === 0 ? questionMargin : 8) : 0, category: 'enunciado_lines' });
+                }
+              } else {
+                const h = heights[`${q.id}-img-group-${gIdx}`] || 0;
+                renderBlocks.push({ item: { type: 'part_img_group', q, images: group.images, isFirst: group.images[0].originalIndex === 0, qIndex }, h, margin: group.images[0].originalIndex === 0 ? questionMargin : ALT_SPACING, category: 'enunciado_img' });
+              }
+            });
 
-            // Heuristic 0: Orphan Question Header Protection
-            // If this block starts a question (isFirst is true) and remaining space cannot fit header + next block + minimum content (240px for lined/redação, 140px for normal), move question start to next column/page
-            if (block.item?.isFirst && currentY > 0) {
-              const remainingSpace = getAvailableHeight() - currentY;
-              const hasLines = renderBlocks.some(b => b.category === 'enunciado_lines' || b.category === 'descritiva_line');
-              const minRequired = hasLines ? 240 : 140;
-              const nextH = nextBlock ? (nextBlock.h + (nextBlock.margin || 0)) : 0;
-              const neededSpace = Math.max(minRequired, block.h + (block.margin || 0) + nextH);
-              if (remainingSpace < neededSpace) {
-                advanceCol();
-                block.margin = 0;
+            if (q.tipo_questao === 'descritiva') {
+               for (let j = 0; j < linhasResposta; j++) {
+                  renderBlocks.push({ item: { type: 'part_descritiva_line', q, estiloEspaco, lineIndex: j }, h: 28, margin: j === 0 ? 8 : 0, category: 'descritiva_line' });
+               }
+            } else {
+              if (alternativasLayout === 'horizontal' || altColsNum > 1) {
+                renderBlocks.push({ item: { type: 'part_alts_container', q }, h: altsH[0], margin: 8, category: 'alternativas_container' });
+              } else {
+                (q.simulados_alternativas || []).forEach((a: any, j: number) => {
+                   renderBlocks.push({ item: { type: 'part_alt', q, alt: a }, h: altsH[j], margin: 8, category: 'alternativa' });
+                });
               }
             }
 
-            // Heuristic A: Enunciado Text + Img indivisible if they fit together on a new page
-            if (block.category === 'enunciado_text' && nextBlock?.category === 'enunciado_img') {
-               const combinedH = block.h + block.margin + nextBlock.h + nextBlock.margin;
-               if (currentY + combinedH > getAvailableHeight()) {
-                  if (combinedH <= getAvailableHeight()) {
-                     advanceCol();
+            // Iterate and push with Heuristics
+            let i = 0;
+            while (i < renderBlocks.length) {
+              const block = renderBlocks[i];
+              const nextBlock = i + 1 < renderBlocks.length ? renderBlocks[i + 1] : null;
+
+              // Heuristic 0: Orphan Question Header Protection with Smart Compression
+              if (block.item?.isFirst && currentY > 0) {
+                const remainingSpace = getAvailableHeight() - currentY;
+                const hasLines = renderBlocks.some(b => b.category === 'enunciado_lines' || b.category === 'descritiva_line');
+                const firstAlt = renderBlocks.find(b => b.category === 'alternativa' || b.category === 'alternativas_container');
+                const minContentH = hasLines ? 200 : (firstAlt ? (firstAlt.h + ALT_SPACING) : (nextBlock ? (nextBlock.h + (nextBlock.margin || 0)) : 30));
+                const neededSpace = block.h + (block.margin || 0) + minContentH;
+                
+                if (remainingSpace < neededSpace) {
+                  const deficit = neededSpace - remainingSpace;
+                  if (deficit <= 28 && getCompressibleSpace() >= deficit) {
+                    applyCompression(deficit);
                   }
-               }
-            }
-
-            // Heuristic B: Alternativas "Rule of Minimum 2"
-            if (block.category === 'alternativa') {
-               const altsRemaining = renderBlocks.slice(i).filter(b => b.category === 'alternativa');
-               const N = altsRemaining.length;
-               
-               if (N > 2) { 
-                 let fitCount = 0;
-                 let tempY = currentY;
-                 for (let j = 0; j < N; j++) {
-                    const margin = j === 0 ? block.margin : ALT_SPACING;
-                    if (tempY + margin + altsRemaining[j].h <= getAvailableHeight() || tempY === 0) {
-                       fitCount++;
-                       tempY += margin + altsRemaining[j].h;
-                    } else {
-                       break;
-                    }
-                 }
-                 
-                 let K = fitCount;
-                 if (K > 0 && K < N) {
-                    if (K === 1) {
-                       K = 0;
-                    } else if (K === N - 1 && N >= 3) {
-                       K = N - 2;
-                    }
-                 }
-                 
-                 if (K === 0 && currentY > 0) {
+                  if (getAvailableHeight() - currentY < neededSpace) {
                     advanceCol();
-                    continue; 
-                 }
-                 
-                 if (K > 0 && K < N) {
-                   for (let j = 0; j < K; j++) {
-                      pushBlock(renderBlocks[i + j].item, renderBlocks[i + j].h, renderBlocks[i + j].margin);
-                   }
-                   i += K;
-                   advanceCol();
-                   continue;
-                 }
-               }
-            }
+                    block.margin = 0;
+                  }
+                }
+              }
 
-            // Heuristic C: Lines smart pagination (for descritiva_line and enunciado_lines)
-            if (block.category === 'descritiva_line' || block.category === 'enunciado_lines') {
-               const cat = block.category;
-               const linesRemaining = renderBlocks.slice(i).filter(b => b.category === cat);
-               const N = linesRemaining.length;
-               
-               if (N > 2) {
-                 let fitCount = 0;
-                 let tempY = currentY;
-                 for (let j = 0; j < N; j++) {
-                    const margin = j === 0 ? block.margin : 0;
-                    if (tempY + margin + linesRemaining[j].h <= getAvailableHeight() || tempY === 0) {
-                       fitCount++;
-                       tempY += margin + linesRemaining[j].h;
-                    } else {
-                       break;
+              // Heuristic A: Enunciado Text + Img indivisible if they fit together on a new page
+              if (block.category === 'enunciado_text' && nextBlock?.category === 'enunciado_img') {
+                 const combinedH = block.h + block.margin + nextBlock.h + nextBlock.margin;
+                 if (currentY + combinedH > getAvailableHeight()) {
+                    if (combinedH <= getAvailableHeight()) {
+                       advanceCol();
                     }
                  }
+              }
+
+              // Heuristic B: Smart Alternativas Fitting & Auto-Adjustment
+              if (block.category === 'alternativa') {
+                 const altsRemaining = renderBlocks.slice(i).filter(b => b.category === 'alternativa');
+                 const N = altsRemaining.length;
                  
-                 let K = fitCount;
-                 
-                 // Check if there are subsequent non-line blocks after all lines of this question (e.g., Texto de Apoio / "PARA USO DA PROFESSORA")
-                 const afterBlocks = renderBlocks.slice(i + N);
-                 let afterH = 0;
-                 afterBlocks.forEach(b => {
-                   afterH += b.h + (b.margin || 0);
-                 });
-                 
-                 if (K > 0 && K < N) {
-                   if (afterH > 0 && afterH < getAvailableHeight()) {
-                     // Subsequent content exists (like "PARA USO DA PROFESSORA").
-                     // Calculate maximum lines that fit on the next page ALONG WITH the subsequent content
-                     const maxNextLines = Math.floor((getAvailableHeight() - afterH - 16) / 28);
-                     if (maxNextLines >= 4 && maxNextLines < N) {
-                       const targetNextLines = Math.min(N - 2, maxNextLines);
-                       K = N - targetNextLines;
-                     }
-                   } else {
-                     // No subsequent block. Prevent tiny line orphans (less than 4 lines on next page)
-                     if (N - K < 4) {
-                       K = Math.max(2, N - 4);
+                 if (N > 0) { 
+                   let fitCount = 0;
+                   let tempY = currentY;
+                   for (let j = 0; j < N; j++) {
+                      const margin = (j === 0 && currentY === 0) ? 0 : (j === 0 ? (renderBlocks[i + j].margin || 0) : ALT_SPACING);
+                      if (tempY + margin + altsRemaining[j].h <= getAvailableHeight() || tempY === 0) {
+                         fitCount++;
+                         tempY += margin + altsRemaining[j].h;
+                      } else {
+                         break;
+                      }
+                   }
+                   
+                   // Smart near-miss check: can 1 more alternative fit if we compress space in this column?
+                   if (fitCount < N && currentY > 0) {
+                     const nextAlt = altsRemaining[fitCount];
+                     const nextMargin = (fitCount === 0 && currentY === 0) ? 0 : (fitCount === 0 ? (renderBlocks[i].margin || 0) : ALT_SPACING);
+                     const altDeficit = (tempY + nextMargin + nextAlt.h) - getAvailableHeight();
+                     
+                     if (altDeficit > 0 && altDeficit <= 28) {
+                       const compressible = getCompressibleSpace();
+                       if (altDeficit <= compressible) {
+                         applyCompression(altDeficit);
+                         fitCount++;
+                       }
                      }
                    }
                    
-                   if (K < 2) {
-                     K = 0;
+                   let K = fitCount;
+                   
+                   if (K === 0 && currentY > 0) {
+                      advanceCol();
+                      continue; 
+                   }
+                   
+                   if (K > 0 && K < N) {
+                     for (let j = 0; j < K; j++) {
+                        pushBlock(renderBlocks[i + j].item, renderBlocks[i + j].h, renderBlocks[i + j].margin);
+                     }
+                     i += K;
+                     advanceCol();
+                     continue;
+                   }
+                   
+                   if (K >= N) {
+                     for (let j = 0; j < N; j++) {
+                        pushBlock(renderBlocks[i + j].item, renderBlocks[i + j].h, renderBlocks[i + j].margin);
+                     }
+                     i += N;
+                     continue;
                    }
                  }
-                 
-                 if (K === 0 && currentY > 0) {
-                    advanceCol();
-                    continue; 
-                 }
-                 
-                 if (K > 0 && K < N) {
-                   for (let j = 0; j < K; j++) {
-                      pushBlock(renderBlocks[i + j].item, renderBlocks[i + j].h, renderBlocks[i + j].margin);
-                   }
-                   i += K;
-                   advanceCol();
-                   continue;
-                 }
-               }
-            }
+              }
 
-            // Default push
-            pushBlock(block.item, block.h, block.margin);
-            i++;
+              // Heuristic C: Lines smart pagination (for descritiva_line and enunciado_lines)
+              if (block.category === 'descritiva_line' || block.category === 'enunciado_lines') {
+                 const cat = block.category;
+                 const linesRemaining = renderBlocks.slice(i).filter(b => b.category === cat);
+                 const N = linesRemaining.length;
+                 
+                 if (N > 2) { 
+                   let fitCount = 0;
+                   let tempY = currentY;
+                   for (let j = 0; j < N; j++) {
+                      const margin = j === 0 ? block.margin : 0;
+                      if (tempY + margin + linesRemaining[j].h <= getAvailableHeight() || tempY === 0) {
+                         fitCount++;
+                         tempY += margin + linesRemaining[j].h;
+                      } else {
+                         break;
+                      }
+                   }
+                   
+                   let K = fitCount;
+                   
+                   // Check if there are subsequent non-line blocks after all lines of this question (e.g., Texto de Apoio / "PARA USO DA PROFESSORA")
+                   const afterBlocks = renderBlocks.slice(i + N);
+                   let afterH = 0;
+                   afterBlocks.forEach(b => {
+                     afterH += b.h + (b.margin || 0);
+                   });
+                   
+                   if (K > 0 && K < N) {
+                     if (afterH > 0 && afterH < getAvailableHeight()) {
+                       // Subsequent content exists (like "PARA USO DA PROFESSORA").
+                       // Calculate maximum lines that fit on the next page ALONG WITH the subsequent content
+                       const maxNextLines = Math.floor((getAvailableHeight() - afterH - 16) / 28);
+                       if (maxNextLines >= 4 && maxNextLines < N) {
+                         const targetNextLines = Math.min(N - 2, maxNextLines);
+                         K = N - targetNextLines;
+                       }
+                     } else {
+                       // No subsequent block. Prevent tiny line orphans (less than 4 lines on next page)
+                       if (N - K < 4) {
+                         K = Math.max(2, N - 4);
+                       }
+                     }
+                     
+                     if (K < 2) {
+                       K = 0;
+                     }
+                   }
+                   
+                   if (K === 0 && currentY > 0) {
+                      advanceCol();
+                      continue; 
+                   }
+                   
+                   if (K > 0 && K < N) {
+                     for (let j = 0; j < K; j++) {
+                        pushBlock(renderBlocks[i + j].item, renderBlocks[i + j].h, renderBlocks[i + j].margin);
+                     }
+                     i += K;
+                     advanceCol();
+                     continue;
+                   }
+                 }
+              }
+
+              // Default push
+              pushBlock(block.item, block.h, block.margin);
+              i++;
+            }
           }
         }
       });
@@ -958,68 +1063,13 @@ export function PaginationEngine({
                 })()}
 
                 {/* Alternatives measured inside the 38px-indented content column */}
-                {alternativasLayout === 'horizontal' ? (
-                  <div data-measure data-id={`${q.id}-alts-container`} style={{ display: 'flex', flexWrap: 'wrap', gap: 24, marginTop: 12 }}>
-                    {(() => {
-                      const imgWidths = q.simulados_alternativas
-                        ?.filter((a: any) => a.imagem_url)
-                        .map((a: any) => {
-                          const hashStr = a.imagem_url.indexOf('#') >= 0 ? a.imagem_url.substring(a.imagem_url.indexOf('#') + 1) : '';
-                          const params = new URLSearchParams(hashStr);
-                          const wStr = params.get('w');
-                          return wStr ? parseInt(wStr) : 250;
-                        }) || [];
-                      const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+                {/* Alternatives measured inside the 38px-indented content column */}
+                {(() => {
+                  const metaAltColsMatch = (q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
+                  const colsNum = metaAltColsMatch ? parseInt(metaAltColsMatch[1], 10) : 1;
+                  const isGridOrHorizontal = alternativasLayout === 'horizontal' || colsNum > 1;
 
-                      return q.simulados_alternativas?.map((a: any) => {
-                        const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
-                        const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
-                        const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
-                        const params = new URLSearchParams(hashStr);
-                        const imgWidthStr = params.get('w');
-                        const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
-                        const effectiveWidth = imgWidth || maxImgWidth;
-
-                        return (
-                          <div key={`shadow-alt-${a.id}`} style={{ 
-                            display: 'flex', gap: 12, alignItems: 'flex-start',
-                            flex: effectiveWidth ? '0 0 auto' : '1 1 200px'
-                          }}>
-                            <div style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                              border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                            }}>
-                              {a.letra}
-                            </div>
-                            <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
-                              {a.imagem_url && <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
-                              {(() => {
-                                const altParts = parseEnunciadoParts(a.texto || '', []);
-                                return altParts.map((part: any, pIdx: number) => {
-                                  if (part.type === 'text') {
-                                    return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word' }} />;
-                                  }
-                                  if (part.type === 'lines') {
-                                    return (
-                                      <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
-                                        {Array.from({ length: part.count }).map((_, li: number) => (
-                                          <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
-                                        ))}
-                                      </div>
-                                    );
-                                  }
-                                  return null;
-                                });
-                              })()}
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                ) : (
-                  (() => {
+                  if (isGridOrHorizontal) {
                     const imgWidths = q.simulados_alternativas
                       ?.filter((a: any) => a.imagem_url)
                       .map((a: any) => {
@@ -1030,58 +1080,131 @@ export function PaginationEngine({
                       }) || [];
                     const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
 
-                    return q.simulados_alternativas?.map((a: any) => {
-                      const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
-                      const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
-                      const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
-                      const params = new URLSearchParams(hashStr);
-                      const imgWidthStr = params.get('w');
-                      const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
-                      const imgAlign = params.get('a') || 'left';
-                      const justifyContent = imgAlign === 'center' ? 'center' : imgAlign === 'right' ? 'flex-end' : 'flex-start';
-                      const effectiveWidth = imgWidth || maxImgWidth;
-                      
-                      return (
-                        <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 6, width: '100%' }}>
-                          <div style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
-                            border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
-                          }}>
-                            {a.letra}
-                          </div>
-                          <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-                            {a.imagem_url && (
-                              <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
-                                <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
-                                  <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
-                                </div>
+                    return (
+                      <div 
+                        data-measure 
+                        data-id={`${q.id}-alts-container`} 
+                        style={{ 
+                          display: colsNum > 1 ? 'grid' : 'flex', 
+                          gridTemplateColumns: colsNum > 1 ? `repeat(${colsNum}, 1fr)` : undefined,
+                          flexWrap: colsNum > 1 ? undefined : 'wrap', 
+                          gap: colsNum > 1 ? '4px 16px' : 24, 
+                          marginTop: 12,
+                          fontSize: `${alternativasFontSize}px`,
+                          lineHeight: 1.6
+                        }}
+                      >
+                        {q.simulados_alternativas?.map((a: any) => {
+                          const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
+                          const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
+                          const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
+                          const params = new URLSearchParams(hashStr);
+                          const imgWidthStr = params.get('w');
+                          const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                          const effectiveWidth = imgWidth || maxImgWidth;
+
+                          return (
+                            <div key={`shadow-alt-${a.id}`} style={{ 
+                              display: 'flex', gap: 12, alignItems: 'flex-start',
+                              flex: colsNum > 1 ? undefined : (effectiveWidth ? '0 0 auto' : '1 1 200px'),
+                              fontSize: `${alternativasFontSize}px`
+                            }}>
+                              <div style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                                border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                              }}>
+                                {a.letra}
                               </div>
-                            )}
-                            {(() => {
-                              const altParts = parseEnunciadoParts(a.texto || '', []);
-                              return altParts.map((part: any, pIdx: number) => {
-                                if (part.type === 'text') {
-                                  return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word' }} />;
-                                }
-                                if (part.type === 'lines') {
-                                  return (
-                                    <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
-                                      {Array.from({ length: part.count }).map((_, li: number) => (
-                                        <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
-                                      ))}
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              });
-                            })()}
-                          </div>
+                              <div style={{ flex: 1, position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
+                                {a.imagem_url && <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 8, display: 'block' }} />}
+                                {(() => {
+                                  const altParts = parseEnunciadoParts(a.texto || '', []);
+                                  return altParts.map((part: any, pIdx: number) => {
+                                    if (part.type === 'text') {
+                                      return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word', fontSize: `${alternativasFontSize}px` }} />;
+                                    }
+                                    if (part.type === 'lines') {
+                                      return (
+                                        <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
+                                          {Array.from({ length: part.count }).map((_, li: number) => (
+                                            <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
+                                          ))}
+                                        </div>
+                                      );
+                                    }
+                                    return null;
+                                  });
+                                })()}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  const imgWidths = q.simulados_alternativas
+                    ?.filter((a: any) => a.imagem_url)
+                    .map((a: any) => {
+                      const hashStr = a.imagem_url.indexOf('#') >= 0 ? a.imagem_url.substring(a.imagem_url.indexOf('#') + 1) : '';
+                      const params = new URLSearchParams(hashStr);
+                      const wStr = params.get('w');
+                      return wStr ? parseInt(wStr) : 250;
+                    }) || [];
+                  const maxImgWidth = imgWidths.length > 0 ? Math.max(...imgWidths) : null;
+
+                  return q.simulados_alternativas?.map((a: any) => {
+                    const hashIndex = a.imagem_url ? a.imagem_url.indexOf('#') : -1;
+                    const imgBaseUrl = hashIndex >= 0 ? a.imagem_url.substring(0, hashIndex) : (a.imagem_url || '');
+                    const hashStr = hashIndex >= 0 ? a.imagem_url.substring(hashIndex + 1) : '';
+                    const params = new URLSearchParams(hashStr);
+                    const imgWidthStr = params.get('w');
+                    const imgWidth = imgWidthStr ? parseInt(imgWidthStr) : null;
+                    const imgAlign = params.get('a') || 'left';
+                    const justifyContent = imgAlign === 'center' ? 'center' : imgAlign === 'right' ? 'flex-end' : 'flex-start';
+                    const effectiveWidth = imgWidth || maxImgWidth;
+                    
+                    return (
+                      <div key={`shadow-alt-${a.id}`} data-measure data-id={`${q.id}-alt-${a.id}`} style={{ display: 'flex', gap: 12, marginTop: 6, width: '100%', fontSize: `${alternativasFontSize}px`, lineHeight: 1.6 }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: '24px', height: '24px', minWidth: '24px', borderRadius: '24px',
+                          border: '2px solid #cbd5e1', color: '#475569', fontWeight: 800, fontSize: '10pt', marginTop: '2px'
+                        }}>
+                          {a.letra}
                         </div>
-                      );
-                    });
-                  })()
-                )}
+                        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+                          {a.imagem_url && (
+                            <div style={{ display: 'flex', justifyContent, width: '100%', marginBottom: 8 }}>
+                              <div style={{ position: 'relative', width: effectiveWidth ? `${effectiveWidth}px` : 'auto', maxWidth: '100%' }}>
+                                <img src={imgBaseUrl} style={{ width: '100%', height: 'auto', borderRadius: 8, display: 'block' }} />
+                              </div>
+                            </div>
+                          )}
+                          {(() => {
+                            const altParts = parseEnunciadoParts(a.texto || '', []);
+                            return altParts.map((part: any, pIdx: number) => {
+                              if (part.type === 'text') {
+                                return <HtmlContent key={pIdx} html={part.content || ''} style={{ wordBreak: 'break-word', fontSize: `${alternativasFontSize}px` }} />;
+                              }
+                              if (part.type === 'lines') {
+                                return (
+                                  <div key={pIdx} style={{ width: '100%', marginTop: 4 }}>
+                                    {Array.from({ length: part.count }).map((_, li: number) => (
+                                      <div key={li} style={{ width: '100%', borderBottom: part.style === 'branco' ? 'none' : '1px solid #000', height: 22 }} />
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>

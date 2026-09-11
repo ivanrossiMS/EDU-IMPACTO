@@ -2,12 +2,19 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Save, Plus, Trash2, BookOpen, Calendar, Users, Upload, Sparkles, CheckCircle, AlertTriangle } from 'lucide-react'
+import { 
+  ArrowLeft, Save, Plus, Trash2, BookOpen, Calendar, Users, 
+  Upload, Sparkles, CheckCircle, AlertTriangle, ChevronUp, ChevronDown, Check, Layers, Info, X 
+} from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { DEFAULT_PROVA_INSTRUCOES } from '@/lib/utils'
+import { 
+  SIMULADOS_PRESETS, AREA_CONFIG, detectSeriePattern, 
+  buildAssignmentsFromPreset, getPresetGroupsByArea, getPresetAllFallbackNomes, SeriePreset 
+} from '@/lib/simuladosPresets'
 
 export default function EditarSimuladoUploadPage() {
   const router = useRouter()
@@ -30,6 +37,12 @@ export default function EditarSimuladoUploadPage() {
 
   // Assignments per teacher/discipline
   const [assignments, setAssignments] = useState<any[]>([])
+
+  // Preset modal state
+  const [showPresetModal, setShowPresetModal] = useState(false)
+  const [selectedPresetKey, setSelectedPresetKey] = useState<'fund2_8_9' | 'em_1_2' | 'em_3'>('em_1_2')
+  const [selectedDisciplines, setSelectedDisciplines] = useState<string[]>([])
+  const [presetMode, setPresetMode] = useState<'replace' | 'append'>('replace')
 
   // Loaded data
   const [bimestres, setBimestres] = useState<any[]>([])
@@ -63,8 +76,31 @@ export default function EditarSimuladoUploadPage() {
           if (provaData.valor) setValor(provaData.valor.toString())
           
           if (provaData.simulados_upload_requisicoes) {
-            setAssignments(provaData.simulados_upload_requisicoes.map((r: any) => ({
-              id: Date.now().toString() + Math.random(),
+            let reqs = [...provaData.simulados_upload_requisicoes]
+            const savedOrder = provaData.config_estudio?.ordem_requisicoes || []
+            if (savedOrder.length > 0) {
+              reqs.sort((a: any, b: any) => {
+                const idxA = savedOrder.indexOf(a.id)
+                const idxB = savedOrder.indexOf(b.id)
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB
+                if (idxA !== -1) return -1
+                if (idxB !== -1) return 1
+                return 0
+              })
+            } else if (provaData.config_estudio?.ordem_disciplinas?.length > 0) {
+              const savedDiscOrder = provaData.config_estudio.ordem_disciplinas
+              reqs.sort((a: any, b: any) => {
+                const idxA = savedDiscOrder.indexOf(a.id_disciplina)
+                const idxB = savedDiscOrder.indexOf(b.id_disciplina)
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB
+                if (idxA !== -1) return -1
+                if (idxB !== -1) return 1
+                return 0
+              })
+            }
+
+            setAssignments(reqs.map((r: any) => ({
+              id: r.id || (Date.now().toString() + Math.random()),
               reqId: r.id,
               disciplinaId: r.id_disciplina || '',
               disciplinaNome: r.disciplina_nome || '',
@@ -93,6 +129,87 @@ export default function EditarSimuladoUploadPage() {
   }, [params.id])
 
   const toggleSerie = (s: string) => setSeries(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
+
+  const moveAssignment = (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= assignments.length) return
+    setAssignments(prev => {
+      const next = [...prev]
+      const [item] = next.splice(index, 1)
+      next.splice(target, 0, item)
+      return next
+    })
+  }
+
+  const handleOpenPresetModal = () => {
+    const detected = detectSeriePattern(series)
+    const activeKey = detected || selectedPresetKey || 'em_1_2'
+    setSelectedPresetKey(activeKey)
+    setSelectedDisciplines(getPresetAllFallbackNomes(activeKey))
+    setShowPresetModal(true)
+  }
+
+  const handleSelectPresetTab = (key: 'fund2_8_9' | 'em_1_2' | 'em_3') => {
+    setSelectedPresetKey(key)
+    setSelectedDisciplines(getPresetAllFallbackNomes(key))
+  }
+
+  const toggleDiscipline = (fallbackNome: string) => {
+    setSelectedDisciplines(prev => 
+      prev.includes(fallbackNome) 
+        ? prev.filter(x => x !== fallbackNome) 
+        : [...prev, fallbackNome]
+    )
+  }
+
+  const toggleArea = (areaDisciplinas: any[]) => {
+    const areaNomes = areaDisciplinas.map((d: any) => d.fallbackNome)
+    const allSelected = areaNomes.every(n => selectedDisciplines.includes(n))
+    if (allSelected) {
+      setSelectedDisciplines(prev => prev.filter(n => !areaNomes.includes(n)))
+    } else {
+      setSelectedDisciplines(prev => Array.from(new Set([...prev, ...areaNomes])))
+    }
+  }
+
+  const selectAllDisciplines = () => {
+    setSelectedDisciplines(getPresetAllFallbackNomes(selectedPresetKey))
+  }
+
+  const deselectAllDisciplines = () => {
+    setSelectedDisciplines([])
+  }
+
+  const handleApplyPreset = () => {
+    if (selectedDisciplines.length === 0) {
+      alert('Selecione pelo menos uma disciplina para carregar.')
+      return
+    }
+
+    const newItems = buildAssignmentsFromPreset(selectedPresetKey, disciplinas, professores, selectedDisciplines)
+    if (newItems.length === 0) {
+      alert('Nenhuma disciplina correspondente foi encontrada no cadastro.')
+      return
+    }
+
+    if (presetMode === 'replace') {
+      // In replace mode in edit, existing items lose their reqId so DB sync must handle deletion cleanly
+      setAssignments(newItems.map(item => ({ ...item, reqId: null, status: 'pendente' })))
+    } else {
+      setAssignments(prev => {
+        const existingDiscIds = new Set(prev.map(a => a.disciplinaId).filter(Boolean))
+        const existingDiscNames = new Set(prev.map(a => (a.disciplinaNome || '').toLowerCase()).filter(Boolean))
+        const toAdd = newItems
+          .filter(item => 
+            (!item.disciplinaId || !existingDiscIds.has(item.disciplinaId)) &&
+            (!item.disciplinaNome || !existingDiscNames.has(item.disciplinaNome.toLowerCase()))
+          )
+          .map(item => ({ ...item, reqId: null, status: 'pendente' }))
+        return [...prev, ...toAdd]
+      })
+    }
+    setShowPresetModal(false)
+  }
 
   const addAssignment = () => setAssignments(prev => [...prev, {
     id: Date.now().toString() + Math.random(), reqId: null, disciplinaId: '', disciplinaNome: '', professorId: '', professorNome: '', qtdQuestoes: 10, status: 'pendente'
@@ -179,30 +296,8 @@ export default function EditarSimuladoUploadPage() {
         })
       }
 
-      const newQuestoesCount = currentQuestions.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
-
-      const payload = {
-        titulo: titulo.trim(),
-        descricao: descricao.trim() || null,
-        data_aplicacao: dataAplicacao || null,
-        data_limite_upload: dataLimiteUpload || null,
-        id_bimestre: bimestreId || null,
-        series,
-        valor: valor ? parseFloat(valor.replace(',', '.')) : null,
-        instrucoes: instrucoes.trim() || null,
-        questoes_json: currentQuestions,
-        questoes_count: newQuestoesCount,
-        updated_at: new Date().toISOString(),
-      }
-
-      const { error: provaError } = await (supabase as any)
-        .from('simulados_upload')
-        .update(payload)
-        .eq('id', params.id)
-
-      if (provaError) throw provaError
-
-      // Update or Insert
+      // 1. Update or Insert requisitions and track their ordered IDs
+      const orderedReqIds: string[] = []
       for (const a of assignments) {
         const reqPayload = {
           id_simulado_upload: params.id,
@@ -215,10 +310,93 @@ export default function EditarSimuladoUploadPage() {
         
         if (a.reqId) {
           await (supabase as any).from('simulados_upload_requisicoes').update(reqPayload).eq('id', a.reqId)
+          orderedReqIds.push(a.reqId)
         } else {
-          await (supabase as any).from('simulados_upload_requisicoes').insert([{ ...reqPayload, status: 'pendente' }])
+          const { data: newReq, error: insertError } = await (supabase as any)
+            .from('simulados_upload_requisicoes')
+            .insert([{ ...reqPayload, status: 'pendente' }])
+            .select('id')
+            .single()
+          if (insertError) throw insertError
+          if (newReq?.id) {
+            orderedReqIds.push(newReq.id)
+            a.reqId = newReq.id
+          }
         }
       }
+
+      // 2. Re-order currentQuestions based on the new discipline/requisition positions
+      const reqOrderMap = new Map<string, number>()
+      assignments.forEach((a, index) => {
+        if (a.reqId) reqOrderMap.set(a.reqId, index)
+        if (a.disciplinaId) reqOrderMap.set(a.disciplinaId, index)
+      })
+
+      if (currentQuestions.length > 0) {
+        currentQuestions.sort((qa: any, qb: any) => {
+          const orderA = (qa.id_requisicao && reqOrderMap.has(qa.id_requisicao))
+            ? reqOrderMap.get(qa.id_requisicao)!
+            : (qa.id_disciplina && reqOrderMap.has(qa.id_disciplina))
+              ? reqOrderMap.get(qa.id_disciplina)!
+              : (qa.disciplina_id && reqOrderMap.has(qa.disciplina_id))
+                ? reqOrderMap.get(qa.disciplina_id)!
+                : 999
+          const orderB = (qb.id_requisicao && reqOrderMap.has(qb.id_requisicao))
+            ? reqOrderMap.get(qb.id_requisicao)!
+            : (qb.id_disciplina && reqOrderMap.has(qb.id_disciplina))
+              ? reqOrderMap.get(qb.id_disciplina)!
+              : (qb.disciplina_id && reqOrderMap.has(qb.disciplina_id))
+                ? reqOrderMap.get(qb.disciplina_id)!
+                : 999
+          return orderA - orderB
+        })
+
+        let numCounter = 1
+        currentQuestions = currentQuestions.map((q: any) => {
+          const isApoio = q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio
+          return {
+            ...q,
+            numero: isApoio ? 0 : numCounter++
+          }
+        })
+      }
+
+      const newQuestoesCount = currentQuestions.filter((q: any) => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length
+
+      // 3. Update config_estudio with ordered lists
+      const { data: suConfig } = await (supabase as any)
+        .from('simulados_upload')
+        .select('config_estudio')
+        .eq('id', params.id)
+        .single()
+
+      const updatedConfigEstudio = {
+        ...(suConfig?.config_estudio || {}),
+        ordem_requisicoes: orderedReqIds,
+        ordem_disciplinas: assignments.map(a => a.disciplinaId).filter(Boolean)
+      }
+
+      const payload = {
+        titulo: titulo.trim(),
+        descricao: descricao.trim() || null,
+        data_aplicacao: dataAplicacao || null,
+        data_limite_upload: dataLimiteUpload || null,
+        id_bimestre: bimestreId || null,
+        series,
+        valor: valor ? parseFloat(valor.replace(',', '.')) : null,
+        instrucoes: instrucoes.trim() || null,
+        questoes_json: currentQuestions,
+        questoes_count: newQuestoesCount,
+        config_estudio: updatedConfigEstudio,
+        updated_at: new Date().toISOString(),
+      }
+
+      const { error: provaError } = await (supabase as any)
+        .from('simulados_upload')
+        .update(payload)
+        .eq('id', params.id)
+
+      if (provaError) throw provaError
 
       setSuccessModal(true)
     } catch (e: any) {
@@ -329,17 +507,43 @@ export default function EditarSimuladoUploadPage() {
 
         {/* ── Section 4: Assignments ── */}
         <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 20, padding: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
             <div>
               <h3 style={{ color: 'hsl(var(--text-primary))', fontSize: 16, fontWeight: 700, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Upload size={18} color="#8b5cf6" /> Atribuições por Professor
               </h3>
-              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, margin: 0 }}>Defina quais professores enviarão questões de quais disciplinas.</p>
+              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, margin: 0 }}>
+                Defina quais professores enviarão questões de quais disciplinas e ordene a sequência das matérias.
+              </p>
             </div>
-            <motion.button onClick={addAssignment} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 10, background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', fontSize: 13, fontWeight: 700, border: '1px solid rgba(139,92,246,0.2)', cursor: 'pointer' }}>
-              <Plus size={16} /> Adicionar
-            </motion.button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <motion.button 
+                type="button"
+                onClick={handleOpenPresetModal} 
+                whileHover={{ scale: 1.04 }} 
+                whileTap={{ scale: 0.96 }}
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 12, 
+                  background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', color: '#fff', fontSize: 13, 
+                  fontWeight: 800, border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(139,92,246,0.35)' 
+                }}
+              >
+                <Sparkles size={16} /> Carregar Padrão
+              </motion.button>
+              <motion.button 
+                type="button"
+                onClick={addAssignment} 
+                whileHover={{ scale: 1.04 }} 
+                whileTap={{ scale: 0.96 }}
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 12, 
+                  background: 'rgba(139,92,246,0.1)', color: '#8b5cf6', fontSize: 13, 
+                  fontWeight: 700, border: '1px solid rgba(139,92,246,0.25)', cursor: 'pointer' 
+                }}
+              >
+                <Plus size={16} /> Adicionar
+              </motion.button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -357,10 +561,86 @@ export default function EditarSimuladoUploadPage() {
                 : professores
 
               return (
-                <motion.div key={a.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                  style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px auto', gap: 14, alignItems: 'flex-end', background: 'hsl(var(--bg-app))', padding: '16px 20px', borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
+                <motion.div 
+                  key={a.id} 
+                  layout 
+                  initial={{ opacity: 0, y: 10 }} 
+                  animate={{ opacity: 1, y: 0 }}
+                  style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'auto 1fr 1fr 90px auto', 
+                    gap: 14, 
+                    alignItems: 'flex-end', 
+                    background: 'hsl(var(--bg-app))', 
+                    padding: '16px 20px', 
+                    borderRadius: 14, 
+                    border: '1px solid hsl(var(--border-subtle))',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                  }}
+                >
+                  {/* Position number & Move Up/Down buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 42 }}>
+                    <div 
+                      title={`Posição ${i + 1}`}
+                      style={{
+                        width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,0.12)',
+                        color: '#8b5cf6', fontSize: 13, fontWeight: 900, display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                      }}
+                    >
+                      #{i + 1}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <button
+                        type="button"
+                        onClick={() => moveAssignment(i, -1)}
+                        disabled={i === 0}
+                        title="Mover disciplina para cima"
+                        style={{
+                          width: 22, height: 18, border: 'none', borderRadius: 4,
+                          background: i === 0 ? 'transparent' : 'rgba(100,116,139,0.15)',
+                          color: i === 0 ? 'hsl(var(--text-secondary))' : 'hsl(var(--text-primary))',
+                          opacity: i === 0 ? 0.3 : 1, cursor: i === 0 ? 'not-allowed' : 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveAssignment(i, 1)}
+                        disabled={i === assignments.length - 1}
+                        title="Mover disciplina para baixo"
+                        style={{
+                          width: 22, height: 18, border: 'none', borderRadius: 4,
+                          background: i === assignments.length - 1 ? 'transparent' : 'rgba(100,116,139,0.15)',
+                          color: i === assignments.length - 1 ? 'hsl(var(--text-secondary))' : 'hsl(var(--text-primary))',
+                          opacity: i === assignments.length - 1 ? 0.3 : 1, cursor: i === assignments.length - 1 ? 'not-allowed' : 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                    </div>
+                  </div>
+
                   <div>
-                    <label style={{ ...labelStyle, marginBottom: 6 }}>Disciplina *</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <label style={{ ...labelStyle, marginBottom: 0 }}>Disciplina *</label>
+                      {a.area && AREA_CONFIG[a.area as keyof typeof AREA_CONFIG] && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700,
+                          color: AREA_CONFIG[a.area as keyof typeof AREA_CONFIG].cor,
+                          background: AREA_CONFIG[a.area as keyof typeof AREA_CONFIG].bg,
+                          padding: '2px 8px', borderRadius: 6,
+                          border: `1px solid ${AREA_CONFIG[a.area as keyof typeof AREA_CONFIG].borda}`
+                        }}>
+                          {AREA_CONFIG[a.area as keyof typeof AREA_CONFIG].label}
+                        </span>
+                      )}
+                    </div>
                     <select value={a.disciplinaId} onChange={e => updateAssignment(a.id, 'disciplinaId', e.target.value)}
                       style={{ ...inputStyle, padding: '10px 12px', fontSize: 14 }}>
                       <option value="" disabled>Selecionar...</option>
@@ -371,6 +651,7 @@ export default function EditarSimuladoUploadPage() {
                       ))}
                     </select>
                   </div>
+
                   <div>
                     <label style={{ ...labelStyle, marginBottom: 6 }}>Professor *</label>
                     <select value={a.professorId} onChange={e => updateAssignment(a.id, 'professorId', e.target.value)}
@@ -384,6 +665,7 @@ export default function EditarSimuladoUploadPage() {
                       {filteredProfs.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                     </select>
                   </div>
+
                   <div>
                     <label style={{ ...labelStyle, marginBottom: 6 }}>Qtd. Quest.</label>
                     <input type="number" min={1} max={100}
@@ -391,6 +673,7 @@ export default function EditarSimuladoUploadPage() {
                       onChange={e => updateAssignment(a.id, 'qtdQuestoes', parseInt(e.target.value))}
                       style={{ ...inputStyle, padding: '10px 12px', fontSize: 14, textAlign: 'center' }} />
                   </div>
+
                   <div>
                     <motion.button onClick={() => setAssignmentToDelete(a)} whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.94 }} disabled={assignments.length === 1}
                       style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: assignments.length === 1 ? 'not-allowed' : 'pointer', opacity: assignments.length === 1 ? 0.3 : 1 }}
@@ -407,6 +690,338 @@ export default function EditarSimuladoUploadPage() {
       </motion.div>
 
       <AnimatePresence>
+        {/* Modal de Carregamento Padrão por Série com Sub-seleção */}
+        {showPresetModal && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowPresetModal(false)}
+              style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} />
+
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              style={{ 
+                background: 'hsl(var(--bg-surface))', 
+                borderRadius: 24, 
+                padding: '28px 24px', 
+                width: '100%', 
+                maxWidth: 720, 
+                position: 'relative', 
+                boxShadow: '0 24px 60px rgba(0,0,0,0.35)', 
+                maxHeight: '92vh', 
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+              
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 8px 18px rgba(139,92,246,0.35)', flexShrink: 0 }}>
+                    <Sparkles size={22} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 19, fontWeight: 900, color: 'hsl(var(--text-primary))', margin: 0 }}>
+                      Carregar Grade Padrão por Série
+                    </h2>
+                    <p style={{ color: 'hsl(var(--text-secondary))', fontSize: 13, margin: '3px 0 0' }}>
+                      Selecione o segmento e escolha as áreas ou matérias que deseja importar para este simulado.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPresetModal(false)}
+                  style={{ background: 'transparent', border: 'none', color: 'hsl(var(--text-secondary))', cursor: 'pointer', padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Presets Segmented Selector (3 Cards) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 18 }}>
+                {(Object.keys(SIMULADOS_PRESETS) as Array<'fund2_8_9' | 'em_1_2' | 'em_3'>).map(key => {
+                  const preset = SIMULADOS_PRESETS[key]
+                  const isSelected = selectedPresetKey === key
+                  const isDetected = detectSeriePattern(series) === key
+
+                  return (
+                    <button
+                      type="button"
+                      key={key}
+                      onClick={() => handleSelectPresetTab(key)}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 14,
+                        border: `2px solid ${isSelected ? preset.cor : 'hsl(var(--border-subtle))'}`,
+                        background: isSelected ? `${preset.cor}12` : 'hsl(var(--bg-app))',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.2s',
+                        position: 'relative',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 3
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <span style={{ fontSize: 14, fontWeight: 800, color: isSelected ? preset.cor : 'hsl(var(--text-primary))' }}>
+                          {preset.titulo}
+                        </span>
+                        {isSelected && (
+                          <div style={{ width: 18, height: 18, borderRadius: '50%', background: preset.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                            <Check size={11} strokeWidth={3} />
+                          </div>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', lineHeight: 1.2 }}>
+                        {preset.disciplinas.length} matérias disponíveis
+                      </span>
+                      {isDetected && (
+                        <span style={{ marginTop: 2, fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 6, background: '#10b98120', color: '#10b981', alignSelf: 'flex-start' }}>
+                          Série selecionada
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Sub-Selection Panel */}
+              <div style={{ 
+                background: 'hsl(var(--bg-app))', 
+                borderRadius: 16, 
+                padding: '16px', 
+                border: '1px solid hsl(var(--border-subtle))', 
+                marginBottom: 18 
+              }}>
+                {/* Panel Header with Select All / Deselect All */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Layers size={16} color="#8b5cf6" />
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                      Sub-seleção de Disciplinas
+                    </span>
+                    <span style={{ 
+                      fontSize: 11, 
+                      fontWeight: 700, 
+                      padding: '2px 8px', 
+                      borderRadius: 100, 
+                      background: selectedDisciplines.length > 0 ? '#8b5cf620' : 'hsl(var(--border-subtle))', 
+                      color: selectedDisciplines.length > 0 ? '#8b5cf6' : 'hsl(var(--text-secondary))' 
+                    }}>
+                      {selectedDisciplines.length} de {SIMULADOS_PRESETS[selectedPresetKey].disciplinas.length} selecionadas
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={selectAllDisciplines}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#8b5cf6',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: '4px 6px'
+                      }}
+                    >
+                      Selecionar todas
+                    </button>
+                    <span style={{ color: 'hsl(var(--text-tertiary, #9ca3af))', fontSize: 12 }}>•</span>
+                    <button
+                      type="button"
+                      onClick={deselectAllDisciplines}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'hsl(var(--text-secondary))',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        padding: '4px 6px'
+                      }}
+                    >
+                      Desmarcar todas
+                    </button>
+                  </div>
+                </div>
+
+                {/* Area Groups with Discipline Pills */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {getPresetGroupsByArea(selectedPresetKey).map(group => {
+                    const groupNomes = group.disciplinas.map(d => d.fallbackNome)
+                    const selectedInGroup = groupNomes.filter(n => selectedDisciplines.includes(n))
+                    const allInGroupSelected = selectedInGroup.length === groupNomes.length
+                    const someInGroupSelected = selectedInGroup.length > 0 && !allInGroupSelected
+
+                    return (
+                      <div 
+                        key={group.area}
+                        style={{
+                          background: 'hsl(var(--bg-surface))',
+                          borderRadius: 12,
+                          border: `1px solid ${selectedInGroup.length > 0 ? group.borda : 'hsl(var(--border-subtle))'}`,
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {/* Area Header Bar */}
+                        <div 
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            background: selectedInGroup.length > 0 ? group.bg : 'hsl(var(--bg-app))',
+                            borderBottom: `1px solid ${selectedInGroup.length > 0 ? group.borda : 'hsl(var(--border-subtle))'}`,
+                            cursor: 'pointer',
+                            userSelect: 'none'
+                          }}
+                          onClick={() => toggleArea(group.disciplinas)}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="checkbox"
+                              checked={allInGroupSelected}
+                              ref={el => {
+                                if (el) el.indeterminate = someInGroupSelected
+                              }}
+                              onChange={() => {}} // handled by parent onClick
+                              style={{ accentColor: group.cor, cursor: 'pointer' }}
+                            />
+                            <span style={{ fontSize: 13, fontWeight: 800, color: group.cor }}>
+                              {group.label}
+                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, color: 'hsl(var(--text-secondary))' }}>
+                              ({selectedInGroup.length}/{group.disciplinas.length})
+                            </span>
+                          </div>
+
+                          <span style={{ fontSize: 11, fontWeight: 600, color: group.cor }}>
+                            {allInGroupSelected ? 'Desmarcar área' : 'Marcar área'}
+                          </span>
+                        </div>
+
+                        {/* Disciplines Pills */}
+                        <div style={{ padding: '10px 12px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {group.disciplinas.map((d, didx) => {
+                            const isChecked = selectedDisciplines.includes(d.fallbackNome)
+                            const displayLabel = d.rotulo && d.rotulo !== d.fallbackNome ? `${d.rotulo} (${d.fallbackNome})` : (d.rotulo || d.fallbackNome)
+
+                            return (
+                              <button
+                                type="button"
+                                key={didx}
+                                onClick={() => toggleDiscipline(d.fallbackNome)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  padding: '5px 10px',
+                                  borderRadius: 8,
+                                  border: isChecked ? `1.5px solid ${group.cor}` : '1px dashed hsl(var(--border-subtle))',
+                                  background: isChecked ? `${group.cor}18` : 'hsl(var(--bg-app))',
+                                  color: isChecked ? 'hsl(var(--text-primary))' : 'hsl(var(--text-secondary))',
+                                  cursor: 'pointer',
+                                  fontSize: 12,
+                                  fontWeight: isChecked ? 700 : 500,
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <div style={{
+                                  width: 14,
+                                  height: 14,
+                                  borderRadius: 3,
+                                  border: isChecked ? `1.5px solid ${group.cor}` : '1px solid hsl(var(--text-secondary))',
+                                  background: isChecked ? group.cor : 'transparent',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#fff',
+                                  flexShrink: 0
+                                }}>
+                                  {isChecked && <Check size={10} strokeWidth={3} />}
+                                </div>
+                                <span>{displayLabel}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Substitution Mode */}
+              <div style={{ background: 'hsl(var(--bg-app))', padding: '12px 16px', borderRadius: 14, marginBottom: 18, border: '1px solid hsl(var(--border-subtle))' }}>
+                <label style={{ ...labelStyle, marginBottom: 6, fontSize: 11 }}>Modo de carregamento</label>
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: presetMode === 'replace' && assignments.length > 0 ? 10 : 0 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-primary))', cursor: 'pointer', fontWeight: 600 }}>
+                    <input 
+                      type="radio" 
+                      name="presetModeEdit" 
+                      checked={presetMode === 'replace'} 
+                      onChange={() => setPresetMode('replace')}
+                    />
+                    Substituir todas as atribuições atuais
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'hsl(var(--text-primary))', cursor: 'pointer', fontWeight: 600 }}>
+                    <input 
+                      type="radio" 
+                      name="presetModeEdit" 
+                      checked={presetMode === 'append'} 
+                      onChange={() => setPresetMode('append')}
+                    />
+                    Acrescentar às atribuições existentes
+                  </label>
+                </div>
+
+                {presetMode === 'replace' && assignments.length > 0 && (
+                  <p style={{ margin: '8px 0 0', fontSize: 12, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                    <AlertTriangle size={14} /> As disciplinas atuais serão substituídas. Questões vinculadas às disciplinas removidas poderão ser excluídas ao salvar.
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <motion.button 
+                  type="button"
+                  onClick={() => setShowPresetModal(false)} 
+                  whileHover={{ scale: 1.01 }} 
+                  whileTap={{ scale: 0.99 }}
+                  style={{ padding: '12px 0', borderRadius: 12, background: 'hsl(var(--bg-app))', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-primary))', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Cancelar
+                </motion.button>
+                <motion.button 
+                  type="button"
+                  onClick={handleApplyPreset} 
+                  disabled={selectedDisciplines.length === 0}
+                  whileHover={selectedDisciplines.length > 0 ? { scale: 1.01 } : {}} 
+                  whileTap={selectedDisciplines.length > 0 ? { scale: 0.99 } : {}}
+                  style={{ 
+                    padding: '12px 0', borderRadius: 12, 
+                    background: selectedDisciplines.length > 0 ? 'linear-gradient(135deg, #8b5cf6, #6d28d9)' : 'hsl(var(--border-subtle))', 
+                    color: selectedDisciplines.length > 0 ? '#fff' : 'hsl(var(--text-secondary))', 
+                    fontSize: 14, fontWeight: 700, border: 'none', 
+                    cursor: selectedDisciplines.length > 0 ? 'pointer' : 'not-allowed', 
+                    boxShadow: selectedDisciplines.length > 0 ? '0 6px 16px rgba(139,92,246,0.35)' : 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                  }}
+                >
+                  <Sparkles size={16} /> 
+                  {selectedDisciplines.length === 0 
+                    ? 'Nenhuma matéria selecionada' 
+                    : `Carregar Grade (${selectedDisciplines.length} ${selectedDisciplines.length === 1 ? 'matéria' : 'matérias'})`
+                  }
+                </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {/* Modal de confirmação de exclusão de disciplina */}
         {assignmentToDelete && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>

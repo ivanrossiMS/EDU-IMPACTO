@@ -351,6 +351,94 @@ export default function ADMomentosPage() {
     return list.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   }, [chatGroups, equipesList, turmas, isColabInGroup, isColabInEquipe]);
 
+  // Turmas acadêmicas às quais o colaborador atual está efetivamente vinculado
+  const myLinkedTurmaIds = useMemo(() => {
+    const linkedIds = new Set<string>();
+    const myName = String(effectiveUser?.nome || currentUser?.nome || '').trim().toLowerCase();
+
+    // 1. Turmas já identificadas como vinculadas em myStaffGroups
+    (myStaffGroups || []).forEach(item => {
+      if (item.tipo === 'turma' && item.id) {
+        linkedIds.add(String(item.id));
+      }
+    });
+
+    (turmas || []).forEach((t: any) => {
+      const tId = String(t.id);
+      const tNome = String(t.nome || '').trim().toLowerCase();
+      const tProf = String(t.professor || t.dados?.professor || '').trim().toLowerCase();
+      const tProfId = String(t.professorId || t.professor_id || t.dados?.professorId || t.dados?.professor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+
+      // 2. Professor titular da turma
+      if (tProf && (tProf === myName || candidateColabIds.includes(tProf))) {
+        linkedIds.add(tId);
+        return;
+      }
+      if (tProfId && candidateColabIds.includes(tProfId)) {
+        linkedIds.add(tId);
+        return;
+      }
+
+      // 3. Professor de disciplina da turma
+      const disciplinas = t.disciplinas || t.dados?.disciplinas || [];
+      if (Array.isArray(disciplinas)) {
+        const isDiscProf = disciplinas.some((d: any) => {
+          const dProfId = String(d.professorId || d.professor_id || d.funcionarioId || '').replace(/^f_?/, '').trim().toLowerCase();
+          const dProfNome = String(d.professorNome || d.professor_nome || d.professor || '').trim().toLowerCase();
+          return (dProfId && candidateColabIds.includes(dProfId)) || (myName && dProfNome && dProfNome === myName);
+        });
+        if (isDiscProf) {
+          linkedIds.add(tId);
+          return;
+        }
+      }
+
+      // 4. Grupos sincronizados com a turma onde o colaborador atua
+      const matchedGroup = (chatGroups || []).find((g: any) => {
+        return (
+          String(g.syncId || g.id) === `sync-${tId}` ||
+          String(g.syncId || g.id) === tId ||
+          String(g.nome || '').trim().toLowerCase() === tNome
+        );
+      });
+
+      if (matchedGroup) {
+        if (isColabInGroup(matchedGroup)) {
+          linkedIds.add(tId);
+          return;
+        }
+
+        // Vínculo via equipe pedagógica vinculada ao grupo da turma
+        let eqIds = (matchedGroup as any).equipesIds || (matchedGroup as any).dados?.equipesIds || [];
+        if (typeof eqIds === 'string') {
+          try { eqIds = JSON.parse(eqIds); } catch (e) { eqIds = []; }
+        }
+        if (Array.isArray(eqIds) && eqIds.length > 0) {
+          const isMemberOfLinkedEquipe = (equipesList || []).some((e: any) => {
+            const eqId = String(e.id);
+            if (!eqIds.map(String).includes(eqId)) return false;
+            return isColabInEquipe(e);
+          });
+          if (isMemberOfLinkedEquipe) {
+            linkedIds.add(tId);
+            return;
+          }
+        }
+      }
+    });
+
+    // 5. Grupos de turmas digitais onde o colaborador atua diretamente
+    (chatGroups || []).forEach((g: any) => {
+      if (isColabInGroup(g)) {
+        if (g.id) linkedIds.add(String(g.id));
+        if (g.syncId) linkedIds.add(String(g.syncId).replace(/^sync-/, ''));
+        if (g.nome) linkedIds.add(String(g.nome).trim());
+      }
+    });
+
+    return Array.from(linkedIds);
+  }, [myStaffGroups, turmas, chatGroups, equipesList, candidateColabIds, effectiveUser, currentUser, isColabInGroup, isColabInEquipe]);
+
   // Todos os grupos da Equipe Escolar cadastrados (para o Admin Master e fallback)
   const equipeEscolarGrupos = useMemo(() => {
     const list: { id: string; nome: string; raw: any; colabs: any[] }[] = [];
@@ -1035,19 +1123,25 @@ export default function ADMomentosPage() {
     });
   }, [momentosFeed, isMasterAdmin, selectedTurmaId, selectedYear, equipeEscolarGrupos, filteredAcademicTurmas, myStaffGroups, candidateColabIds, chatGroups, turmas, alunos, effectiveUser, currentUser, isColabInGroup]);
 
-  // Marcação de lidos
+  // Marcação de lidos com proteção contra repetição infinita
+  const markedMomentoIdsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!effectiveUser?.id || meusMomentos.length === 0) return;
     
-    // Identifica quais IDs não constam como lidos para este colaborador
+    // Identifica quais IDs não constam como lidos para este colaborador e ainda não foram disparados
     const unreadIds = meusMomentos
       .filter(m => {
+        const mId = String(m.id);
+        if (markedMomentoIdsRef.current.has(mId)) return false;
         const leituras = (m as any).leituras || {};
         return !leituras[effectiveUser.id];
       })
-      .map(m => m.id);
+      .map(m => String(m.id));
 
     if (unreadIds.length > 0) {
+      unreadIds.forEach(id => markedMomentoIdsRef.current.add(id));
+
       fetch('/api/agenda/notificacoes/marcar-lido', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1661,8 +1755,10 @@ export default function ADMomentosPage() {
         onClose={() => setShowDestModal(false)}
         initialSelected={newPost.targetClasses}
         onAdd={res => setNewPost({ ...newPost, targetClasses: res as any })}
-        allowedTurmasIds={isMasterAdmin ? undefined : turmas.map(t => String(t.id))}
-        allowedGruposIds={isMasterAdmin ? undefined : (myStaffGroups.length > 0 ? myStaffGroups.map((g: any) => String(g.id)) : undefined)}
+        allowedTurmasIds={isMasterAdmin ? undefined : myLinkedTurmaIds}
+        currentUserId={effectiveUser?.id}
+        hideFilterTabs={true}
+        hideAllColabsButton={true}
       />
 
     </div>

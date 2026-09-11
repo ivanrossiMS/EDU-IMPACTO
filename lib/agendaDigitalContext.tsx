@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocalStorage } from './useLocalStorage'
 import { useSupabaseArray } from './useSupabaseCollection'
 import { useQueryComunicados, useQueryMomentos } from '@/lib/hooks/useAgendaQueries'
@@ -217,7 +217,9 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const messagesLoading = false;
   
   const momentosQuery = useQueryMomentos('/api/agenda/momentos', 20, { enabled: !isFamilyFetch })
-  const momentosFeed = momentosQuery.data?.pages?.flat() || []
+  const momentosFeed = useMemo(() => {
+    return momentosQuery.data?.pages?.flat() || []
+  }, [momentosQuery.data?.pages])
   const momentosLoading = momentosQuery.isLoading || momentosQuery.isFetching
 
   const setLocalMomentosFeed = useCallback((updater: any) => {

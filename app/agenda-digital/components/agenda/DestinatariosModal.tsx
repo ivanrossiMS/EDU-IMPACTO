@@ -19,6 +19,8 @@ interface DestinatariosModalProps {
   allowedTurmasIds?: string[]
   allowedGruposIds?: string[]
   currentUserId?: string
+  hideFilterTabs?: boolean
+  hideAllColabsButton?: boolean
 }
 
 const DEST_MODAL_STYLES = `
@@ -40,8 +42,8 @@ const DEST_MODAL_STYLES = `
       display: block;
       position: absolute;
       inset: 0;
-      background: rgba(15, 23, 42, 0.45);
-      backdrop-filter: blur(8px);
+      background: rgba(15, 23, 42, 0.65);
+      transform: translateZ(0);
     }
     .dest-modal-container {
       width: 90%;
@@ -106,9 +108,14 @@ const DEST_MODAL_STYLES = `
   }
 `
 
-const GlobalDestStyles = React.memo(function GlobalDestStyles() {
-  return <style dangerouslySetInnerHTML={{ __html: DEST_MODAL_STYLES }} />
-})
+function ensureDestStyles() {
+  if (typeof document === 'undefined') return
+  if (document.getElementById('dest-modal-global-styles')) return
+  const style = document.createElement('style')
+  style.id = 'dest-modal-global-styles'
+  style.innerHTML = DEST_MODAL_STYLES
+  document.head.appendChild(style)
+}
 
 // Utilitário para iniciais dos colaboradores
 function getInitials(name: string): string {
@@ -227,7 +234,11 @@ function getEquipeDepartmentInfo(nome: string, fallbackColor?: string) {
 // Identifica se um grupo pertence à Equipe Escolar
 function isEquipeEscolarGrupo(g: any): boolean {
   if (!g) return false
-  if (g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1) return true
+  if (
+    g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1 ||
+    g.dados?.isEquipeEscolar === true || g.dados?.isEquipeEscolar === 'true' || g.dados?.isEquipeEscolar === 1 ||
+    g.ano === 'Equipe Escolar' || g.dados?.ano === 'Equipe Escolar'
+  ) return true
   const n = String(g.nome || '').toLowerCase()
   if (
     n.includes('coordenação') ||
@@ -270,10 +281,15 @@ export function DestinatariosModal({
   initialSelected = [], 
   allowedTurmasIds, 
   allowedGruposIds, 
-  currentUserId 
+  currentUserId,
+  hideFilterTabs = false,
+  hideAllColabsButton = false
 }: DestinatariosModalProps) {
   const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => setMounted(true), [])
+  React.useEffect(() => {
+    setMounted(true)
+    ensureDestStyles()
+  }, [])
 
   const data = useData()
   const [directTurmas = [], _setT, { loading: loadingTurmas }] = useSupabaseArray<any>('turmas')
@@ -283,13 +299,58 @@ export function DestinatariosModal({
     return directTurmas
   }, [data?.turmas, directTurmas])
 
-  const turmas = useMemo(() => {
-    return allowedTurmasIds ? rawTurmas.filter((t: any) => allowedTurmasIds.includes(String(t.id))) : rawTurmas
-  }, [rawTurmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
-
   const [gruposManuais = [], _setG, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
   const [alunos = [], _setA, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
-  const [colaboradores = [], _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000')
+  const [colaboradores = [], _setC, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
+
+  // As turmas da Agenda Digital são estritamente os grupos ativos da Gestão de Turmas (Imagem 2)
+  const turmas = useMemo(() => {
+    const digitalTurmaGroups = (gruposManuais || []).filter((g: any) => !isEquipeEscolarGrupo(g))
+    
+    let sourceList: any[] = []
+    if (digitalTurmaGroups.length > 0) {
+      sourceList = digitalTurmaGroups.map((g: any) => {
+        const syncId = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
+        const rawTurmaId = syncId ? syncId.replace(/^sync-/, '') : g.id
+        const matchedErp = rawTurmas.find((t: any) => String(t.id) === rawTurmaId || String(t.nome).trim().toLowerCase() === String(g.nome).trim().toLowerCase())
+        
+        const ano = g.ano !== undefined && g.ano !== null && String(g.ano) !== '' 
+          ? String(g.ano) 
+          : (matchedErp?.ano ? String(matchedErp.ano) : (matchedErp?.anoLetivo || '2026'))
+
+        return {
+          id: rawTurmaId,
+          grupoId: g.id,
+          syncId: g.syncId,
+          codigo: matchedErp?.codigo || rawTurmaId,
+          nome: g.nome,
+          ano: String(ano),
+          anoLetivo: String(ano),
+          serie: matchedErp?.serie || g.serie || '',
+          turno: matchedErp?.turno || g.turno || '',
+          cor: g.cor || matchedErp?.cor,
+          alunosIds: g.alunosIds || [],
+          colaboradoresIds: g.colaboradoresIds || [],
+          raw: matchedErp || g
+        }
+      })
+    } else {
+      sourceList = rawTurmas
+    }
+
+    if (allowedTurmasIds && allowedTurmasIds.length > 0) {
+      return sourceList.filter((t: any) => {
+        return (
+          allowedTurmasIds.includes(String(t.id)) ||
+          (t.grupoId && allowedTurmasIds.includes(String(t.grupoId))) ||
+          (t.syncId && allowedTurmasIds.includes(String(t.syncId))) ||
+          allowedTurmasIds.includes(`sync-${t.id}`)
+        )
+      })
+    }
+
+    return sourceList
+  }, [gruposManuais, rawTurmas, allowedTurmasIds ? JSON.stringify(allowedTurmasIds) : null])
 
   // Safety fallback: evita ficar eternamente preso se uma escola não tiver alunos no banco
   const [loadTimeoutPassed, setLoadTimeoutPassed] = useState(false)
@@ -325,14 +386,23 @@ export function DestinatariosModal({
     return Array.from(anos).sort((a, b) => b.localeCompare(a))
   }, [turmas])
 
+  const defaultAno = useMemo(() => {
+    if (availableAnos.length === 0) return ''
+    const currentYear = new Date().getFullYear().toString()
+    if (availableAnos.includes(currentYear)) return currentYear
+    return availableAnos[0] || ''
+  }, [availableAnos])
+
+  const effectiveAno = selectedAno || defaultAno
+
   const filteredTurmas = useMemo(() => {
     if (availableAnos.length === 0) return turmas
-    if (selectedAno === '') return []
+    if (!effectiveAno) return turmas
     return turmas.filter((t: any) => {
       const a = t?.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '')
-      return a === selectedAno
+      return a === effectiveAno
     })
-  }, [turmas, selectedAno, availableAnos])
+  }, [turmas, effectiveAno, availableAnos])
 
   // Estado de itens selecionados
   const [selected, setSelected] = useState<Record<string, { id: string, name: string, type: 'turma' | 'funcionario' | 'aluno' | 'grupo' }>>({})
@@ -362,7 +432,23 @@ export function DestinatariosModal({
     })
 
     ;(colaboradores || []).forEach((c: any) => {
-      cById.set(String(c.id), c)
+      if (!c) return
+      const cId = String(c.id || '').trim()
+      if (cId) {
+        cById.set(cId, c)
+        const cleanId = cId.replace(/^f_?/, '')
+        cById.set(cleanId, c)
+        cById.set(`f_${cleanId}`, c)
+      }
+      if (c.email) {
+        cById.set(String(c.email).trim().toLowerCase(), c)
+      }
+      if (c.nome) {
+        cById.set(String(c.nome).trim().toLowerCase(), c)
+      }
+      if (c.name) {
+        cById.set(String(c.name).trim().toLowerCase(), c)
+      }
     })
 
     ;(gruposManuais || []).forEach((g: any) => {
@@ -371,7 +457,7 @@ export function DestinatariosModal({
       const turmaId = syncId.replace(/^sync-/, '')
       if (!turmaId) return
 
-      let cIds = g.colaboradoresIds || []
+      let cIds = g.colaboradoresIds || g.membrosIds || g.dados?.colaboradoresIds || g.dados?.membrosIds || []
       if (typeof cIds === 'string') {
         try { cIds = JSON.parse(cIds) } catch { cIds = [] }
       }
@@ -379,7 +465,9 @@ export function DestinatariosModal({
 
       const list: any[] = cByTurmaId.get(turmaId) || []
       cIds.forEach((id: any) => {
-        const c = cById.get(String(id))
+        const idStr = String(id).trim()
+        const clean = idStr.replace(/^f_?/, '')
+        const c = cById.get(idStr) || cById.get(clean) || cById.get(`f_${clean}`) || cById.get(idStr.toLowerCase())
         if (c && !list.find((x: any) => x.id === c.id)) list.push(c)
       })
       cByTurmaId.set(turmaId, list)
@@ -452,21 +540,16 @@ export function DestinatariosModal({
 
   // Verificação de carregamento
   const isAnyHookLoading = loadingTurmas || loadingGrupos || loadingAlunos || loadingColabs
+  const hasInitialData = turmas.length > 0 || (colaboradores && colaboradores.length > 0)
   const isWaitingForAlunos = !loadTimeoutPassed && turmas.length > 0 && alunos.length === 0
-  const isWaitingForYear = !loadTimeoutPassed && turmas.length > 0 && availableAnos.length > 0 && selectedAno === ''
 
-  const isLoadingData = (isAnyHookLoading || isWaitingForAlunos || isWaitingForYear) && !loadTimeoutPassed
+  const isLoadingData = !hasInitialData && (isAnyHookLoading || isWaitingForAlunos) && !loadTimeoutPassed
 
   useEffect(() => {
-    if (isOpen && availableAnos.length > 0 && selectedAno === '') {
-      const currentYear = new Date().getFullYear().toString()
-      if (availableAnos.includes(currentYear)) {
-        setSelectedAno(currentYear)
-      } else {
-        setSelectedAno(availableAnos[0])
-      }
+    if (isOpen && availableAnos.length > 0 && selectedAno === '' && defaultAno) {
+      setSelectedAno(defaultAno)
     }
-  }, [isOpen, availableAnos, selectedAno])
+  }, [isOpen, availableAnos, selectedAno, defaultAno])
 
   useEffect(() => {
     if (!isOpen) {
@@ -718,27 +801,57 @@ export function DestinatariosModal({
     const items: any[] = []
     const leafIds = new Set<string>()
 
-    const equipeGroups = (gruposManuais || []).filter((g: any) => {
+    const seenEquipeKeys = new Set<string>()
+    const equipeGroups: any[] = []
+
+    // Grupos da Equipe Escolar vindos de agenda/grupos (todos visíveis para acesso institucional)
+    ;(gruposManuais || []).forEach((g: any) => {
       const isEquipe = isEquipeEscolarGrupo(g)
-      if (!isEquipe) return false
-      if (allowedGruposIds && !allowedGruposIds.includes(String(g.id))) return false
-      return true
+      if (!isEquipe) return
+      const key = String(g.nome || '').trim().toLowerCase()
+      if (key && !seenEquipeKeys.has(key)) {
+        seenEquipeKeys.add(key)
+        equipeGroups.push(g)
+      }
     })
 
     const sortedEquipe = [...equipeGroups].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 
     sortedEquipe.forEach((g: any) => {
-      let cIds = g.colaboradoresIds || []
+      let cIds = g.colaboradoresIds || g.membrosIds || g.dados?.colaboradoresIds || g.dados?.membrosIds || []
       if (typeof cIds === 'string') {
         try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
       }
       
-      const gColabs = (Array.isArray(cIds) ? cIds : []).map((id: any) => colaboradoresById.get(String(id))).filter(Boolean)
+      let gColabs = (Array.isArray(cIds) ? cIds : []).map((id: any) => {
+        if (!id) return null
+        if (typeof id === 'object' && (id.id || id.nome)) return id
+        const idStr = String(id).trim()
+        const clean = idStr.replace(/^f_?/, '')
+        return (
+          colaboradoresById.get(idStr) ||
+          colaboradoresById.get(clean) ||
+          colaboradoresById.get(`f_${clean}`) ||
+          colaboradoresById.get(idStr.toLowerCase()) ||
+          null
+        )
+      }).filter(Boolean)
+
+      if (gColabs.length === 0 && Array.isArray(g.colaboradores) && g.colaboradores.length > 0) {
+        gColabs = g.colaboradores.map((c: any) => {
+          if (!c) return null
+          if (typeof c === 'object' && (c.id || c.nome)) return c
+          const idStr = String(c).trim()
+          const clean = idStr.replace(/^f_?/, '')
+          return colaboradoresById.get(idStr) || colaboradoresById.get(clean) || colaboradoresById.get(`f_${clean}`) || colaboradoresById.get(idStr.toLowerCase()) || null
+        }).filter(Boolean)
+      }
+
       const deptInfo = getEquipeDepartmentInfo(g.nome, g.cor)
 
       const payloads = gColabs.map((c: any) => ({
-        id: `f_${c.id}`,
-        name: c.nome,
+        id: `f_${c.id || c.email || c.nome}`,
+        name: c.nome || c.name || 'Colaborador',
         type: 'funcionario' as const,
         funcao: c.funcao || c.cargo || c.perfil || c.dados?.funcao || c.dados?.cargo || c.dados?.perfil || 'Colaborador',
         email: c.email || '',
@@ -781,7 +894,7 @@ export function DestinatariosModal({
     })).sort((a: any, b: any) => a.name.localeCompare(b.name, 'pt-BR'))
 
     return { equipeListItems: items, equipeLeafIds: leafIds, allSchoolColabs: validColabs }
-  }, [gruposManuais, allowedGruposIds, colaboradores, colaboradoresById, isLoadingData])
+  }, [gruposManuais, colaboradores, colaboradoresById, isLoadingData])
 
   // Contadores selecionados
   const selectedTurmasCount = useMemo(() => {
@@ -1528,9 +1641,7 @@ export function DestinatariosModal({
             {/* ── HEADER ULTRA MODERNO COM GRADIENTE ────────────────────── */}
             <header style={{ 
               height: 72, flexShrink: 0, 
-              background: 'linear-gradient(120deg, #6D5DF6, #4F46E5, #8B5CF6, #3B82F6)',
-              backgroundSize: '300% 300%',
-              animation: 'waveAnimation 8s ease infinite',
+              background: 'linear-gradient(135deg, #6D5DF6 0%, #4F46E5 50%, #7C3AED 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'sticky', top: 0, zIndex: 20 
             }}>
               
@@ -1699,105 +1810,107 @@ export function DestinatariosModal({
                   style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
                 >
                   {/* ── BARRA DE FILTRO RÁPIDO (TODOS / TURMAS / EQUIPE) ──────── */}
-                  <div style={{
-                    display: 'flex',
-                    padding: 4,
-                    background: '#EDF2F7',
-                    borderRadius: 18,
-                    gap: 6,
-                    margin: '16px 24px 8px 24px',
-                    border: '1px solid #E2E8F0',
-                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.03)'
-                  }}>
-                    <button
-                      type="button"
-                      onClick={() => { setViewFilter('todos'); setCurrentCatId(null); }}
-                      style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 6,
-                        padding: '9px 12px',
-                        borderRadius: 14,
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontWeight: 700,
-                        fontSize: 13,
-                        transition: 'all 0.2s',
-                        background: viewFilter === 'todos' ? '#FFFFFF' : 'transparent',
-                        color: viewFilter === 'todos' ? '#0F172A' : '#64748B',
-                        boxShadow: viewFilter === 'todos' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none'
-                      }}
-                    >
-                      <span>Todos</span>
-                      {Object.keys(selected).length > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#F1F5F9', color: '#475569' }}>
-                          {Object.keys(selected).length}
-                        </span>
-                      )}
-                    </button>
+                  {!hideFilterTabs && (
+                    <div style={{
+                      display: 'flex',
+                      padding: 4,
+                      background: '#EDF2F7',
+                      borderRadius: 18,
+                      gap: 6,
+                      margin: '16px 24px 8px 24px',
+                      border: '1px solid #E2E8F0',
+                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.03)'
+                    }}>
+                      <button
+                        type="button"
+                        onClick={() => { setViewFilter('todos'); setCurrentCatId(null); }}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          padding: '9px 12px',
+                          borderRadius: 14,
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          transition: 'all 0.2s',
+                          background: viewFilter === 'todos' ? '#FFFFFF' : 'transparent',
+                          color: viewFilter === 'todos' ? '#0F172A' : '#64748B',
+                          boxShadow: viewFilter === 'todos' ? '0 2px 8px rgba(0,0,0,0.06)' : 'none'
+                        }}
+                      >
+                        <span>Todos</span>
+                        {Object.keys(selected).length > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#F1F5F9', color: '#475569' }}>
+                            {Object.keys(selected).length}
+                          </span>
+                        )}
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => { setViewFilter('turmas'); setCurrentCatId(null); }}
-                      style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 6,
-                        padding: '9px 12px',
-                        borderRadius: 14,
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontWeight: 700,
-                        fontSize: 13,
-                        transition: 'all 0.2s',
-                        background: viewFilter === 'turmas' ? '#FFFFFF' : 'transparent',
-                        color: viewFilter === 'turmas' ? '#4F46E5' : '#64748B',
-                        boxShadow: viewFilter === 'turmas' ? '0 2px 8px rgba(79, 70, 229, 0.12)' : 'none'
-                      }}
-                    >
-                      <GraduationCap size={15} />
-                      <span>Turmas</span>
-                      {selectedTurmasCount > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#EEF2FF', color: '#4F46E5' }}>
-                          {selectedTurmasCount}
-                        </span>
-                      )}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => { setViewFilter('turmas'); setCurrentCatId(null); }}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          padding: '9px 12px',
+                          borderRadius: 14,
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          transition: 'all 0.2s',
+                          background: viewFilter === 'turmas' ? '#FFFFFF' : 'transparent',
+                          color: viewFilter === 'turmas' ? '#4F46E5' : '#64748B',
+                          boxShadow: viewFilter === 'turmas' ? '0 2px 8px rgba(79, 70, 229, 0.12)' : 'none'
+                        }}
+                      >
+                        <GraduationCap size={15} />
+                        <span>Turmas</span>
+                        {selectedTurmasCount > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#EEF2FF', color: '#4F46E5' }}>
+                            {selectedTurmasCount}
+                          </span>
+                        )}
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => { setViewFilter('equipe'); setCurrentCatId(null); }}
-                      style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 6,
-                        padding: '9px 12px',
-                        borderRadius: 14,
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontWeight: 700,
-                        fontSize: 13,
-                        transition: 'all 0.2s',
-                        background: viewFilter === 'equipe' ? '#FFFFFF' : 'transparent',
-                        color: viewFilter === 'equipe' ? '#7C3AED' : '#64748B',
-                        boxShadow: viewFilter === 'equipe' ? '0 2px 8px rgba(124, 58, 237, 0.12)' : 'none'
-                      }}
-                    >
-                      <Shield size={15} />
-                      <span>Equipe</span>
-                      {selectedEquipeCount > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#F5F3FF', color: '#7C3AED' }}>
-                          {selectedEquipeCount}
-                        </span>
-                      )}
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => { setViewFilter('equipe'); setCurrentCatId(null); }}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          padding: '9px 12px',
+                          borderRadius: 14,
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          transition: 'all 0.2s',
+                          background: viewFilter === 'equipe' ? '#FFFFFF' : 'transparent',
+                          color: viewFilter === 'equipe' ? '#7C3AED' : '#64748B',
+                          boxShadow: viewFilter === 'equipe' ? '0 2px 8px rgba(124, 58, 237, 0.12)' : 'none'
+                        }}
+                      >
+                        <Shield size={15} />
+                        <span>Equipe</span>
+                        {selectedEquipeCount > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#F5F3FF', color: '#7C3AED' }}>
+                            {selectedEquipeCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  )}
 
                   {/* ── BARRA DE PESQUISA & SELECIONAR TUDO ─────────────────── */}
                   <div style={{ padding: '12px 24px 12px' }}>
@@ -2056,7 +2169,7 @@ export function DestinatariosModal({
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                       <span style={{ fontSize: 12, fontWeight: 700, color: '#64748B' }}>Ano:</span>
                                       <select
-                                        value={selectedAno}
+                                        value={effectiveAno}
                                         onChange={e => setSelectedAno(e.target.value)}
                                         style={{
                                           height: 32, borderRadius: 10, border: '1px solid #CBD5E1', background: '#FFFFFF',
@@ -2116,7 +2229,7 @@ export function DestinatariosModal({
                                 </div>
 
                                 {/* Colaboradores Individuais */}
-                                {renderAllSchoolColabsSection()}
+                                {!hideAllColabsButton && renderAllSchoolColabsSection()}
                               </div>
                             )}
                           </motion.div>
@@ -2194,10 +2307,7 @@ export function DestinatariosModal({
 
   if (!mounted) return null
   return createPortal(
-    <>
-      <GlobalDestStyles />
-      {modalContent}
-    </>,
+    modalContent,
     document.body
   )
 }
