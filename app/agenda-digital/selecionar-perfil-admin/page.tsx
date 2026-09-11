@@ -4,9 +4,11 @@ import { useApp } from '@/lib/context'
 import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Suspense } from 'react'
+import { Suspense, useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard, Loader2, Target, Settings, Building, Bell, LogOut, ArrowLeft } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
+import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -47,11 +49,51 @@ function SelecionarPerfilAdminContent() {
   const { currentUser, setCurrentUser } = useApp()
   const searchParams = useSearchParams()
   const redirectTarget = searchParams.get('redirect') || 'comunicados'
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Administrador';
 
   return (
     <>
+      {/* Overlay de loading em tela cheia via Portal — cobre 100% da viewport e exibe a animação oficial da logo */}
+      {isLoggingOut && mounted && typeof document !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 99999999,
+            background: 'rgba(10, 15, 36, 0.50)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'all',
+          }}
+        >
+          <ImpactoLoader
+            isLoading={true}
+            style={{
+              position: 'relative',
+              inset: 'auto',
+              background: 'transparent',
+              backdropFilter: 'none',
+              WebkitBackdropFilter: 'none',
+              pointerEvents: 'none',
+              opacity: 1,
+              zIndex: 1,
+            }}
+          />
+        </div>,
+        document.body
+      )}
       <div className="premium-selector-container">
         {/* Dynamic styles block for modern theme design */}
         <style dangerouslySetInnerHTML={{__html: `
@@ -628,14 +670,9 @@ function SelecionarPerfilAdminContent() {
             <span>Trocar Módulo</span>
           </button>
           <button
-            onClick={async (e) => {
-              const btn = e.currentTarget;
-              btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px;"><svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Saindo...</span>';
-              btn.style.opacity = '0.7';
-              btn.style.pointerEvents = 'none';
-
+            onClick={async () => {
+              setIsLoggingOut(true);
               try {
-                setCurrentUser(null);
                 const { removeSettingAsync } = await import('@/lib/context');
                 await removeSettingAsync('currentUser');
                 await removeSettingAsync('activeModule');
@@ -646,6 +683,7 @@ function SelecionarPerfilAdminContent() {
             }}
             className="ad-action-btn ad-btn-logout"
             title="Sair da Conta com segurança"
+            disabled={isLoggingOut}
           >
             <div className="ad-btn-icon-wrap">
               <LogOut size={16} strokeWidth={2.5} />

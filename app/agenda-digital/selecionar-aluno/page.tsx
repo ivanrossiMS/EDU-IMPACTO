@@ -7,8 +7,10 @@ import { getInitials } from '@/lib/utils'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut, ArrowLeft, ShieldCheck, GraduationCap } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
+import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -1002,6 +1004,12 @@ function SelecionarAlunoContent() {
   const isStillLoading = !hydrated || !hasFetched || (currentUser === undefined)
 
   const [loadingCardId, setLoadingCardId] = useState<string | null>(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // 1. Obter metadados do responsável autenticado
   const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
@@ -1070,6 +1078,40 @@ function SelecionarAlunoContent() {
 
   return (
     <>
+      {/* Overlay de loading em tela cheia via Portal — cobre 100% da viewport e exibe a animação oficial da logo */}
+      {isLoggingOut && mounted && typeof document !== 'undefined' && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 99999999,
+            background: 'rgba(10, 15, 36, 0.50)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'all',
+          }}
+        >
+          <ImpactoLoader
+            isLoading={true}
+            style={{
+              position: 'relative',
+              inset: 'auto',
+              background: 'transparent',
+              backdropFilter: 'none',
+              WebkitBackdropFilter: 'none',
+              pointerEvents: 'none',
+              opacity: 1,
+              zIndex: 1,
+            }}
+          />
+        </div>,
+        document.body
+      )}
       <div className="premium-selector-container">
         {/* Dynamic styles block for modern theme design */}
       <style dangerouslySetInnerHTML={{__html: SELECTOR_STYLES}} />
@@ -1216,16 +1258,8 @@ function SelecionarAlunoContent() {
           </button>
         )}
         <button 
-          onClick={async (e) => {
-            const btn = e.currentTarget;
-            btn.innerHTML = '<span style="display:flex;align-items:center;gap:8px;"><svg class="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Saindo...</span>';
-            btn.style.opacity = '0.7';
-            btn.style.pointerEvents = 'none';
-
-            // 1. Limpa todos os caches locais que podem causar resíduos visuais
-            localStorage.clear();
-            sessionStorage.clear();
-
+          onClick={async () => {
+            setIsLoggingOut(true);
             try {
               await performLogout();
             } catch (err) {
@@ -1234,6 +1268,7 @@ function SelecionarAlunoContent() {
           }}
           className="ad-action-btn ad-btn-logout"
           title="Sair da Conta com segurança"
+          disabled={isLoggingOut}
         >
           <div className="ad-btn-icon-wrap">
             <LogOut size={16} strokeWidth={2.5} />
