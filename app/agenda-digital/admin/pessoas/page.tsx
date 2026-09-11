@@ -63,7 +63,7 @@ export default function ADAdminPessoas() {
     if (search && !a.nome.toLowerCase().includes(search.toLowerCase())) return false
     if (filterTurma && a.turma !== filterTurma) return false
     if (filterAno) {
-      const turmaRef = (turmas || []).find(t => t.nome === a.turma)
+      const turmaRef = (turmas || []).find(t => t.nome === a.turma || t.id === a.turma || String(t.codigo) === a.turma)
       if (turmaRef?.ano?.toString() !== filterAno) return false
     }
     const engj = getEngajamento(a.id)

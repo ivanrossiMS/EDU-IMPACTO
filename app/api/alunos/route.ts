@@ -95,9 +95,13 @@ export async function GET(request: Request) {
     const from = (page - 1) * limit
     const to = from + limit - 1
 
+    const isBulk = limit > 50 || all || !pageParam
+
     const queryFields = lightweight
       ? 'id, nome, turma, status, responsavel, responsavel_financeiro, responsavel_pedagogico, dados'
-      : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at'
+      : (isBulk
+          ? 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, dados, updated_at, created_at'
+          : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at')
 
     let query = supabase
       .from('alunos')
@@ -324,20 +328,38 @@ export async function GET(request: Request) {
       let responsaveisTable: any[] = []
 
       if (studentRefsAll.length > 0) {
-        const { data: arLinks } = await supabase
-          .from('aluno_responsavel')
-          .select('aluno_id, responsavel_id, parentesco, resp_financeiro, resp_pedagogico, resp_outro, tipo')
-          .in('aluno_id', studentRefsAll)
+        const chunkSize = 150
+        const linkChunks: string[][] = []
+        for (let i = 0; i < studentRefsAll.length; i += chunkSize) {
+          linkChunks.push(studentRefsAll.slice(i, i + chunkSize))
+        }
 
-        links = arLinks || []
+        const linkResponses = await Promise.all(
+          linkChunks.map(chunk =>
+            supabase
+              .from('aluno_responsavel')
+              .select('aluno_id, responsavel_id, parentesco, resp_financeiro, resp_pedagogico, resp_outro, tipo')
+              .in('aluno_id', chunk)
+          )
+        )
+        links = linkResponses.flatMap(r => r.data || [])
         const respIds = Array.from(new Set(links.map((l: any) => String(l.responsavel_id).trim()).filter(Boolean)))
 
         if (respIds.length > 0) {
-          const { data: respData } = await supabase
-            .from('responsaveis')
-            .select('id, nome, telefone, email, rfid, proibido, dias_acesso, obs')
-            .in('id', respIds)
-          responsaveisTable = respData || []
+          const respChunks: string[][] = []
+          for (let i = 0; i < respIds.length; i += chunkSize) {
+            respChunks.push(respIds.slice(i, i + chunkSize))
+          }
+
+          const respResponses = await Promise.all(
+            respChunks.map(chunk =>
+              supabase
+                .from('responsaveis')
+                .select('id, nome, telefone, email, rfid, proibido, dias_acesso, obs')
+                .in('id', chunk)
+            )
+          )
+          responsaveisTable = respResponses.flatMap(r => r.data || [])
         }
       }
 
@@ -352,7 +374,10 @@ export async function GET(request: Request) {
         )
 
         const rawFoto = student.foto || d.foto || d.avatarUrl || d.fotoUrl || null
-        const resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
+        let resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
+        if (isBulk && resolvedFoto && resolvedFoto.startsWith('data:image/')) {
+          resolvedFoto = null
+        }
 
         const thisStudentRefs = [
           student.id,
@@ -580,43 +605,44 @@ export async function GET(request: Request) {
       s.dados?.codigo ? String(s.dados?.codigo) : null
     ]).filter(Boolean).map(r => String(r).trim())))
 
-    // 2. Busca os vínculos em lotes (chunked) para evitar limite de 1000 linhas e estouro de URL no PostgREST
-    const links: any[] = []
+    // 2. Busca os vínculos em lotes paralelos (chunked + Promise.all)
     const chunkSize = 150
+    const linkChunks: string[][] = []
     for (let i = 0; i < allStudentRefs.length; i += chunkSize) {
-      const chunk = allStudentRefs.slice(i, i + chunkSize)
-      const { data: chunkLinks, error: linksError } = await supabase
-        .from('aluno_responsavel')
-        .select('*')
-        .in('aluno_id', chunk)
-        .limit(10000)
-
-      if (linksError) {
-        console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Links Chunk ${i}): ${linksError.message}\n`)
-      } else if (chunkLinks) {
-        links.push(...chunkLinks)
-      }
+      linkChunks.push(allStudentRefs.slice(i, i + chunkSize))
     }
 
-    // 2.5 Busca os dados dos responsáveis manualmente em lotes
+    const linkResponses = await Promise.all(
+      linkChunks.map(chunk =>
+        supabase
+          .from('aluno_responsavel')
+          .select('*')
+          .in('aluno_id', chunk)
+          .limit(10000)
+      )
+    )
+    const links: any[] = linkResponses.flatMap(r => r.data || [])
+
+    // 2.5 Busca os dados dos responsáveis manualmente em lotes paralelos
     const respIds = Array.from(new Set((links || []).map((l: any) => String(l.responsavel_id).trim()).filter(Boolean)))
     let responsaveis: any[] = []
     
     if (respIds.length > 0) {
+      const respChunks: string[][] = []
       for (let i = 0; i < respIds.length; i += chunkSize) {
-        const chunk = respIds.slice(i, i + chunkSize)
-        const { data: chunkResps, error: respError } = await supabase
-          .from('responsaveis')
-          .select('*')
-          .in('id', chunk)
-          .limit(10000)
-
-        if (respError) {
-          console.error(`\n[${new Date().toISOString()}] Error Alunos GET (Responsaveis Chunk ${i}): ${respError.message}\n`)
-        } else if (chunkResps) {
-          responsaveis.push(...chunkResps)
-        }
+        respChunks.push(respIds.slice(i, i + chunkSize))
       }
+
+      const respResponses = await Promise.all(
+        respChunks.map(chunk =>
+          supabase
+            .from('responsaveis')
+            .select('*')
+            .in('id', chunk)
+            .limit(10000)
+        )
+      )
+      responsaveis = respResponses.flatMap(r => r.data || [])
     }
 
     // 2.7 Busca apenas as turmas associadas aos alunos retornados para resolver nomes e segmentos no servidor de forma otimizada
@@ -735,7 +761,10 @@ export async function GET(request: Request) {
       )
 
       const rawFoto = student.foto || student.dados?.foto || student.dados?.avatarUrl || student.dados?.fotoUrl || null
-      const resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
+      let resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
+      if (isBulk && resolvedFoto && resolvedFoto.startsWith('data:image/')) {
+        resolvedFoto = null
+      }
 
       return {
         ...student,
@@ -751,9 +780,9 @@ export async function GET(request: Request) {
 
     let finalFormattedData = formattedData
     if (foto === 'com_foto') {
-      finalFormattedData = formattedData.filter((s: any) => isValidStudentPhoto(s.foto))
+      finalFormattedData = formattedData.filter((s: any) => isValidStudentPhoto(s.foto) || (isBulk && Boolean(s.dados?.foto || s.dados?.avatarUrl || s.dados?.fotoUrl)))
     } else if (foto === 'sem_foto') {
-      finalFormattedData = formattedData.filter((s: any) => !isValidStudentPhoto(s.foto))
+      finalFormattedData = formattedData.filter((s: any) => !isValidStudentPhoto(s.foto) && !(isBulk && Boolean(s.dados?.foto || s.dados?.avatarUrl || s.dados?.fotoUrl)))
     }
 
     if (turma) {

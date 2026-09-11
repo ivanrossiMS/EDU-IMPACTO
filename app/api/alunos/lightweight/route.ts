@@ -53,7 +53,7 @@ export async function GET(req: Request) {
     let query = supabase
       .from('alunos')
       .select(`
-        id, nome, matricula, turma, status, foto, 
+        id, nome, matricula, turma, status, 
         anoLetivo:dados->>anoLetivo, 
         anoLetivoAlt:dados->>ano_letivo, 
         fotoAlt:dados->>foto, 
@@ -98,21 +98,26 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    let formatted = (data as Record<string, unknown>[] || []).map((aluno: Record<string, unknown>) => ({
-      id: String(aluno.id),
-      nome: String(aluno.nome || ''),
-      matricula: aluno.matricula || '',
-      turma: aluno.turma || '',
-      anoLetivo: (aluno as any).anoLetivo || (aluno as any).anoLetivoAlt || '',
-      foto: (aluno as any).foto || (aluno as any).fotoAlt || (aluno as any).fotoUrlAlt || null,
-      responsaveis: (aluno as any).responsaveis || [],
-      historicoTurmas: (aluno as any).historicoTurmas || [],
-      isIntegralIntermediario: (aluno as any).isIntegralIntermediario,
-      integral_tipo: (aluno as any).integral_tipo,
-      modalidade: (aluno as any).modalidade,
-      turno: (aluno as any).turno,
-      status: aluno.status || 'ativo'
-    }))
+    let formatted = (data as Record<string, unknown>[] || []).map((aluno: Record<string, unknown>) => {
+      const rawFoto = (aluno as any).fotoAlt || (aluno as any).fotoUrlAlt || null
+      const safeFoto = (typeof rawFoto === 'string' && !rawFoto.startsWith('data:image/')) ? rawFoto : null
+
+      return {
+        id: String(aluno.id),
+        nome: String(aluno.nome || ''),
+        matricula: aluno.matricula || '',
+        turma: aluno.turma || '',
+        anoLetivo: (aluno as any).anoLetivo || (aluno as any).anoLetivoAlt || '',
+        foto: safeFoto,
+        responsaveis: (aluno as any).responsaveis || [],
+        historicoTurmas: (aluno as any).historicoTurmas || [],
+        isIntegralIntermediario: (aluno as any).isIntegralIntermediario,
+        integral_tipo: (aluno as any).integral_tipo,
+        modalidade: (aluno as any).modalidade,
+        turno: (aluno as any).turno,
+        status: aluno.status || 'ativo'
+      }
+    })
 
     if (turma) {
       formatted = formatted.filter((aluno: any) =>

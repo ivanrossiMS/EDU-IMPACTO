@@ -900,7 +900,7 @@ export default function LoginPage() {
             Seus dados estão protegidos com<br/>criptografia de ponta.
           </p>
         </div>
-        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginBottom: 20 }}>IMPACTO EDU v3.2.0 • © 2025 Todos os direitos reservados.</p>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginBottom: 20 }}>Desenvolvido por Ivan Rossi © 2025 Todos os direitos reservados</p>
         <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 16px', borderRadius:100, border:'1px solid rgba(16,185,129,0.15)', background: 'rgba(16,185,129,0.05)' }}>
           <div style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 8px #10b981' }} />
           <span style={{ fontSize:11, color:'#34d399', fontWeight:800, letterSpacing:'0.08em' }}>SISTEMA SEGURO</span>
@@ -911,7 +911,7 @@ export default function LoginPage() {
       </div>
 
       <div className="hide-on-mobile" style={{ marginTop:28, textAlign:'center' }}>
-        <p style={{ fontSize:11, color:'rgba(255,255,255,0.13)' }}>IMPACTO EDU v3.2.0 • © 2025 Todos os direitos reservados</p>
+        <p style={{ fontSize:11, color:'rgba(255,255,255,0.13)' }}>Desenvolvido por Ivan Rossi © 2025 Todos os direitos reservados</p>
       </div>
     </div>
   )
