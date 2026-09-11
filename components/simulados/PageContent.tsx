@@ -480,11 +480,12 @@ export function PageContent({
               paddingRight: cIndex < page.length - 1 ? '6mm' : 0
             }}>
             {col.map((block: any, bIndex: number) => {
+              const blockKey = `b-${block.type}-${block.q?.id || block.discName || ''}-${block.alt?.id || (block.chunkIndex !== undefined ? block.chunkIndex : (block.originalIndex !== undefined ? block.originalIndex : bIndex))}`;
               
               if (block.type === 'part_disciplina') {
                 return (
                   <div 
-                    key={`b-${bIndex}`}
+                    key={blockKey}
                     style={{
                       marginTop: block.renderMarginTop || 0,
                       marginBottom: 16,
@@ -507,7 +508,7 @@ export function PageContent({
               if (block.type === 'full') {
                 const q = block.q;
                 return (
-                  <div key={`b-${bIndex}`} className="questao-container alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, breakInside: 'avoid' }}>
+                  <div key={blockKey} className="questao-container alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, breakInside: 'avoid' }}>
 
                     {q.tipo_questao === 'texto_apoio' && (
                       <div className="no-print texto-apoio-badge" style={{
@@ -520,7 +521,7 @@ export function PageContent({
                         alignItems: 'center',
                         gap: 6,
                         padding: '3px 10px',
-                        backgroundColor: '#8b5cf6',
+                        background: '#8b5cf6',
                         color: '#ffffff',
                         fontWeight: 800,
                         borderRadius: '12px',
@@ -539,7 +540,7 @@ export function PageContent({
                       {q.tipo_questao !== 'texto_apoio' && (
                         <div style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          width: '28px', height: '28px', minWidth: '28px', backgroundColor: '#1e293b', color: '#ffffff',
+                          width: '28px', height: '28px', minWidth: '28px', background: '#1e293b', color: '#ffffff',
                           fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
                         }}>
                           {block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : ''}
@@ -1310,7 +1311,7 @@ export function PageContent({
 
               if (block.type === 'part_descritiva_line') {
                 return (
-                  <div key={`b-${bIndex}`} style={{ marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
+                  <div key={blockKey} style={{ marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
                     <div style={{
                       width: '28px',
                       minWidth: '28px',
@@ -1340,7 +1341,7 @@ export function PageContent({
               if (block.type === 'part_enun_txt') {
                 const q = block.q;
                 return (
-                  <div key={`b-${bIndex}`} style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div key={blockKey} style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
 
                     {q.tipo_questao === 'texto_apoio' && block.isFirst && (
                       <div className="no-print texto-apoio-badge" style={{
@@ -1353,7 +1354,7 @@ export function PageContent({
                         alignItems: 'center',
                         gap: 6,
                         padding: '3px 10px',
-                        backgroundColor: '#8b5cf6',
+                        background: '#8b5cf6',
                         color: '#ffffff',
                         fontWeight: 800,
                         borderRadius: '12px',
@@ -1371,7 +1372,7 @@ export function PageContent({
                     {q.tipo_questao !== 'texto_apoio' && (
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: '28px', height: '28px', minWidth: '28px', backgroundColor: block.isFirst ? '#1e293b' : 'transparent', color: block.isFirst ? '#ffffff' : 'transparent',
+                        width: '28px', height: '28px', minWidth: '28px', background: block.isFirst ? '#1e293b' : 'transparent', color: block.isFirst ? '#ffffff' : 'transparent',
                         fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
                       }}>
                         {block.isFirst && block.qIndex !== null && block.qIndex !== undefined ? block.qIndex + 1 : ''}
@@ -1419,13 +1420,13 @@ export function PageContent({
                 const q = block.q;
                 const parts = parseEnunciadoParts(q.enunciado, q.imagens || []);
                 return (
-                  <div key={`b-${bIndex}`} className="alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
+                  <div key={blockKey} className="alt-hover-group" style={{ position: 'relative', marginTop: block.renderMarginTop || 0, display: 'flex', gap: 10 }}>
                     <div style={{
                       display: 'flex',
                       alignItems: block.isFirst ? 'center' : 'flex-end',
                       justifyContent: block.isFirst ? 'center' : 'flex-end',
                       width: '28px', height: '28px', minWidth: '28px',
-                      backgroundColor: block.isFirst ? '#1e293b' : 'transparent',
+                      background: block.isFirst ? '#1e293b' : 'transparent',
                       color: block.isFirst ? '#ffffff' : '#a1a1aa',
                       fontWeight: block.isFirst ? 900 : 500,
                       borderRadius: block.isFirst ? '8px' : '0px',
@@ -1502,7 +1503,7 @@ export function PageContent({
                   const groupJustify = firstAlign === 'left' ? 'flex-start' : firstAlign === 'right' ? 'flex-end' : 'center';
 
                   return (
-                    <div key={`b-${bIndex}`} style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
+                    <div key={blockKey} style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0 }}>
                       <div style={{ width: '28px', minWidth: '28px' }}></div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: groupJustify, width: '100%' }}>
@@ -1697,7 +1698,7 @@ export function PageContent({
 
               if (block.type === 'part_alts_container') {
             return (
-              <div key={bIndex} style={{ padding: '0 40px', marginTop: block.renderMarginTop, fontSize: `${alternativasFontSize}px` }}>
+              <div key={blockKey} style={{ padding: '0 40px', marginTop: block.renderMarginTop, fontSize: `${alternativasFontSize}px` }}>
                 {(() => {
                   const mCols = (block.q.enunciado || '').match(/<meta name="alt-cols" content="(\d+)">/i);
                   const qCols = mCols ? parseInt(mCols[1]) : 1;
@@ -2005,7 +2006,7 @@ export function PageContent({
                 }
                 const totalAlts = alts.length;
                 return (
-                  <div key={`b-${bIndex}`} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0, fontSize: `${alternativasFontSize}px` }}>
+                  <div key={blockKey} className="alt-hover-group" style={{ display: 'flex', gap: 10, marginTop: block.renderMarginTop || 0, fontSize: `${alternativasFontSize}px` }}>
                     <div style={{ width: '28px', minWidth: '28px' }}></div>
                     <div style={{ flex: 1, display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative', zIndex: reorderMenuOpen === `${q.id}-${a.id}` ? 500 : 1 }}>
                       <div 

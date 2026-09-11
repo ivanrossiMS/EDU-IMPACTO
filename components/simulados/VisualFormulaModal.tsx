@@ -135,7 +135,7 @@ export function VisualFormulaModal({
           </button>
         </div>
         
-        <div className="p-4 md:p-6 flex flex-col items-center justify-center bg-gray-50/50" style={{ backgroundColor: '#f8fafc' }}>
+        <div className="p-4 md:p-6 flex flex-col items-center justify-center bg-gray-50/50" style={{ background: '#f8fafc' }}>
           {React.createElement('math-field', {
             ref: mfRef,
             style: { 
@@ -145,7 +145,7 @@ export function VisualFormulaModal({
               minHeight: '80px',
               border: '2px solid #cbd5e1', 
               borderRadius: '12px',
-              backgroundColor: '#ffffff',
+              background: '#ffffff',
               outline: 'none',
               color: '#0f172a',
               boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)'
@@ -156,7 +156,7 @@ export function VisualFormulaModal({
           </p>
         </div>
         
-        <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-3" style={{ backgroundColor: '#ffffff' }}>
+        <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-end gap-3" style={{ background: '#ffffff' }}>
           <button 
             onClick={onClose}
             className="px-5 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -167,7 +167,7 @@ export function VisualFormulaModal({
           <button 
             onClick={handleSave}
             className="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-            style={{ backgroundColor: '#2563eb', color: 'white', cursor: 'pointer', border: 'none', borderRadius: '8px' }}
+            style={{ background: '#2563eb', color: 'white', cursor: 'pointer', border: 'none', borderRadius: '8px' }}
           >
             Inserir Fórmula
           </button>

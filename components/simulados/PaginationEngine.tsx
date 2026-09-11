@@ -981,7 +981,7 @@ export function PaginationEngine({
               <div data-measure data-id={`${q.id}-enunciado`} style={{ display: 'flex', gap: 10 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '28px', height: '28px', minWidth: '28px', backgroundColor: '#1e293b', color: '#ffffff',
+                width: '28px', height: '28px', minWidth: '28px', background: '#1e293b', color: '#ffffff',
                 fontWeight: 900, borderRadius: '8px', fontSize: '11pt', marginTop: '4px'
               }}>
                 {idx + 1}

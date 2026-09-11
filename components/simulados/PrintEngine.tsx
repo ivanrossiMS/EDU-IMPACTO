@@ -152,7 +152,7 @@ export function PrintEngine({ simulado, questoes, config, onComplete }: PrintEng
             width: '24px',
             height: '24px',
             minWidth: '24px',
-            backgroundColor: '#1e293b',
+            background: '#1e293b',
             color: '#ffffff',
             fontWeight: 900,
             borderRadius: '6px',

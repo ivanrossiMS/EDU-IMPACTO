@@ -174,19 +174,19 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
         const isSuperscript = document.queryCommandState('superscript')
         
         const btnBold = toolbarRef.current.querySelector('#btn-bold') as HTMLButtonElement
-        if (btnBold) btnBold.style.backgroundColor = isBold ? '#3b82f6' : 'transparent'
+        if (btnBold) btnBold.style.background = isBold ? '#3b82f6' : 'transparent'
 
         const btnItalic = toolbarRef.current.querySelector('#btn-italic') as HTMLButtonElement
-        if (btnItalic) btnItalic.style.backgroundColor = isItalic ? '#3b82f6' : 'transparent'
+        if (btnItalic) btnItalic.style.background = isItalic ? '#3b82f6' : 'transparent'
 
         const btnUnderline = toolbarRef.current.querySelector('#btn-underline') as HTMLButtonElement
-        if (btnUnderline) btnUnderline.style.backgroundColor = isUnderline ? '#3b82f6' : 'transparent'
+        if (btnUnderline) btnUnderline.style.background = isUnderline ? '#3b82f6' : 'transparent'
 
         const btnSubscript = toolbarRef.current.querySelector('#btn-subscript') as HTMLButtonElement
-        if (btnSubscript) btnSubscript.style.backgroundColor = isSubscript ? '#3b82f6' : 'transparent'
+        if (btnSubscript) btnSubscript.style.background = isSubscript ? '#3b82f6' : 'transparent'
 
         const btnSuperscript = toolbarRef.current.querySelector('#btn-superscript') as HTMLButtonElement
-        if (btnSuperscript) btnSuperscript.style.backgroundColor = isSuperscript ? '#3b82f6' : 'transparent'
+        if (btnSuperscript) btnSuperscript.style.background = isSuperscript ? '#3b82f6' : 'transparent'
       }
     }, 10)
   }
@@ -209,7 +209,7 @@ export function HtmlContent({ html, onBlurHtml, onBackspaceAtStart, editable, ..
     if (toolbarRef.current) {
       const state = document.queryCommandState(command)
       const btn = toolbarRef.current.querySelector(`#btn-${command}`) as HTMLButtonElement
-      if (btn) btn.style.backgroundColor = state ? '#3b82f6' : 'transparent'
+      if (btn) btn.style.background = state ? '#3b82f6' : 'transparent'
     }
 
     // Force save immediately so changes aren't lost if blur doesn't fire naturally
