@@ -276,18 +276,32 @@ export default function LoginPage() {
                 console.log('[Login] Sessão renovada com sucesso via refresh_token.')
                 const { saveSessionSecurely } = await import('@/lib/auth/secureSession')
                 await saveSessionSecurely(refreshData.session)
-              } else if (refreshErr?.message?.includes('invalid') || refreshErr?.message?.includes('not found')) {
-                console.warn('[Login] Sessão expirada no servidor e refresh falhou. Limpando sessão local.');
-                await removeSettingAsync('edu-current-user');
-                if (typeof window !== 'undefined') {
-                  window.localStorage.removeItem('edu-current-user');
+              } else {
+                const errMsg = refreshErr?.message?.toLowerCase() || '';
+                const isNetErr = 
+                  errMsg.includes('load failed') || 
+                  errMsg.includes('fetch failed') || 
+                  errMsg.includes('network') ||
+                  (refreshErr as any)?.name === 'AuthRetryableFetchError';
+
+                if (isNetErr) {
+                  console.warn('[Login] Falha de rede ao tentar renovar sessão. Mantendo dados locais offline:', refreshErr?.message);
+                  // Não desloga! Mantém storedUser para continuidade mesmo em oscilações de rede
+                } else {
+                  console.warn('[Login] Sessão expirada no servidor e refresh falhou. Limpando sessão local:', refreshErr?.message || 'Sem sessão');
+                  await removeSettingAsync('edu-current-user');
+                  if (typeof window !== 'undefined') {
+                    window.localStorage.removeItem('edu-current-user');
+                  }
+                  const { clearSessionSecurely } = await import('@/lib/auth/secureSession');
+                  await clearSessionSecurely().catch(() => {});
+                  setCurrentUser(null);
+                  clearTimeout(timeoutId);
+                  setIsCheckingSavedUser(false);
+                  setStep('login');
+                  hideSplashScreen(300);
+                  return;
                 }
-                setCurrentUser(null);
-                clearTimeout(timeoutId);
-                setIsCheckingSavedUser(false);
-                setStep('login');
-                hideSplashScreen(300);
-                return;
               }
             }
           } catch {
@@ -419,16 +433,11 @@ export default function LoginPage() {
   useEffect(() => {
     if (step === 'choose_system' && pendingAuth?.perfil) {
       setIsProfileLoading(true)
-      fetch('/api/configuracoes/perfis')
-        .then(res => {
-          if (!res.ok) throw new Error(`Perfis HTTP ${res.status}`)
-          return res.json()
-        })
+      fetchPerfisWithCache(2000)
         .then(data => {
           let perfisList = DEFAULT_PERFIS
           if (Array.isArray(data) && data.length > 0) {
              perfisList = data
-             setCachedPerfis(data)
           }
           // Caso não ache, garante um objeto vazio para pelo menos exibir os acessos padrão (liberados)
           const pData = perfisList.find(x => x.nome === pendingAuth.perfil) || ({} as any)
@@ -448,7 +457,7 @@ export default function LoginPage() {
           setIsProfileLoading(false)
         })
         .catch(err => {
-          console.error('Erro ao buscar perfis:', err)
+          console.warn('Falha ao carregar perfis, usando padrão:', err)
           setProfileData({})
           setIsProfileLoading(false)
         })

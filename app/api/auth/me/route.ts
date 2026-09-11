@@ -41,14 +41,52 @@ export async function GET(request: Request) {
   );
 
   let user = null;
+  let isNetworkError = false;
   try {
     const res = await supabase.auth.getUser();
+    if (res.error) {
+      const msg = res.error.message?.toLowerCase() || '';
+      const name = res.error.name || '';
+      const cause = (res.error as any).cause?.message?.toLowerCase() || '';
+      if (
+        name === 'AuthRetryableFetchError' ||
+        msg.includes('fetch failed') ||
+        msg.includes('enotfound') ||
+        msg.includes('load failed') ||
+        msg.includes('timeout') ||
+        msg.includes('econnrefused') ||
+        cause.includes('enotfound') ||
+        cause.includes('fetch failed')
+      ) {
+        isNetworkError = true;
+      }
+    }
     user = res.data?.user || null;
-  } catch (err) {
-    // Refresh token not found ou sessão expirada
+  } catch (err: any) {
+    const msg = err?.message?.toLowerCase() || '';
+    const name = err?.name || '';
+    const cause = err?.cause?.message?.toLowerCase() || '';
+    if (
+      name === 'AuthRetryableFetchError' ||
+      msg.includes('fetch failed') ||
+      msg.includes('enotfound') ||
+      msg.includes('load failed') ||
+      msg.includes('timeout') ||
+      msg.includes('econnrefused') ||
+      cause.includes('enotfound') ||
+      cause.includes('fetch failed')
+    ) {
+      isNetworkError = true;
+    }
   }
 
   if (!user) {
+    if (isNetworkError) {
+      return NextResponse.json(
+        { error: 'Serviço de autenticação temporariamente indisponível (falha de rede/DNS)', isNetworkError: true },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401 });
   }
 

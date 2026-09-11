@@ -36,9 +36,8 @@ export function PeopleSidebar() {
   const handleLogout = async () => {
     try {
       await performLogout()
-      router.push('/login')
     } catch (e) {
-      console.error('Logout error:', e)
+      window.location.replace('/login')
     }
   }
 

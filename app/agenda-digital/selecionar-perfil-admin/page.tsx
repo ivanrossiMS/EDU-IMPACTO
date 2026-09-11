@@ -635,16 +635,13 @@ function SelecionarPerfilAdminContent() {
               btn.style.pointerEvents = 'none';
 
               try {
-                await performLogout();
-                const { supabase } = await import('@/lib/supabase');
-                await supabase.auth.signOut();
                 setCurrentUser(null);
                 const { removeSettingAsync } = await import('@/lib/context');
                 await removeSettingAsync('currentUser');
                 await removeSettingAsync('activeModule');
-                window.location.href = '/login';
+                await performLogout();
               } catch (err) {
-                window.location.href = '/login';
+                window.location.replace('/login');
               }
             }}
             className="ad-action-btn ad-btn-logout"

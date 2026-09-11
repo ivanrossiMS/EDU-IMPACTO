@@ -1074,13 +1074,6 @@ function SelecionarAlunoContent() {
         {/* Dynamic styles block for modern theme design */}
       <style dangerouslySetInnerHTML={{__html: SELECTOR_STYLES}} />
 
-      {/* Full-screen Loading Overlay */}
-      {loadingCardId && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(255, 255, 255, 0.3)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, animation: 'revealUp 0.3s ease-out' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', border: '4px solid rgba(99,102,241,0.2)', borderTopColor: '#6366f1', animation: 'orbRotate 1s linear infinite' }} />
-          <p style={{ color: '#0f172a', fontSize: 18, fontWeight: 800 }}>Entrando...</p>
-        </div>
-      )}
 
       {/* Header section */}
       <header className="premium-welcome-card animate-reveal">
@@ -1233,13 +1226,11 @@ function SelecionarAlunoContent() {
             localStorage.clear();
             sessionStorage.clear();
 
-            // 2. Aciona a API de logout no servidor (mata os cookies HTTPOnly)
             try {
               await performLogout();
-            } catch (err) {}
-
-            // 3. Força o redirecionamento instantâneo para a página inicial de login
-            window.location.href = '/login';
+            } catch (err) {
+              window.location.replace('/login');
+            }
           }}
           className="ad-action-btn ad-btn-logout"
           title="Sair da Conta com segurança"

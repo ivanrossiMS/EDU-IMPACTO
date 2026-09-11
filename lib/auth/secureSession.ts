@@ -89,8 +89,17 @@ export async function restoreSessionSecurely(supabase: SupabaseClient): Promise<
           return true;
         } else if (error) {
           console.warn('[Auth] Error setting session from storage:', error.message);
+          const errMsg = error.message?.toLowerCase() || '';
+          const isNetworkError = errMsg.includes('load failed') || errMsg.includes('fetch failed') || errMsg.includes('network');
+          if (isNetworkError) {
+            const now = Math.floor(Date.now() / 1000);
+            if (!session.expires_at || session.expires_at > now) {
+              console.log('[Auth] Rede offline/instável ao restaurar sessão, mantendo sessão local ativa.');
+              return true;
+            }
+          }
           // Se o refresh_token for explicitamente inválido, limpa
-          if (error.message?.includes('invalid') || error.message?.includes('expired') || (error as any).status === 400) {
+          if (errMsg.includes('invalid') || errMsg.includes('expired') || (error as any).status === 400) {
             await clearSessionSecurely();
           }
         }

@@ -40,10 +40,13 @@ export function SidebarSimulados() {
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
-    try { await performLogout() } catch(e) {}
     setCurrentUserPerfil('');
     setCurrentUser(null);
-    window.location.href = '/login';
+    try {
+      await performLogout()
+    } catch (e) {
+      window.location.replace('/login')
+    }
   }
 
   const overlay = isLoggingOut ? (

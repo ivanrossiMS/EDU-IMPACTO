@@ -622,12 +622,11 @@ export function Sidebar() {
                   onClick={async (e) => {
                     e.stopPropagation();
                     setShowTopMenu(false);
+                    setCurrentUser(null);
                     try {
                       await performLogout();
-                      setCurrentUser(null);
-                      window.location.href = '/login';
                     } catch (err) {
-                      window.location.href = '/login';
+                      window.location.replace('/login');
                     }
                   }}
                   style={{

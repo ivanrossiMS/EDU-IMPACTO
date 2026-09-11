@@ -234,11 +234,10 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           <button
             onClick={async () => {
               try {
-                await performLogout()
                 setCurrentUser?.(null)
-                window.location.href = '/login'
+                await performLogout()
               } catch (err) {
-                window.location.href = '/login'
+                window.location.replace('/login')
               }
             }}
             style={{

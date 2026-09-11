@@ -42,11 +42,10 @@ export default function AgendaDigitalAdminLayout({
   }, [hydrated, currentUser, isAllowed, p, cargo, router])
 
   const { setLoadingPath } = useApp()
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setLoadingPath('logout')
     setCurrentUser(null)
-    performLogout()
-    window.location.href = '/login'
+    await performLogout()
   }
 
   if (!hydrated || !isAllowed) {

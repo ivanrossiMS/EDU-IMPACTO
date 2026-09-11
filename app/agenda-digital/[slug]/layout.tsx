@@ -2660,11 +2660,10 @@ export default function ADInnerLayout({
                 </h2>
                 {currentUser?.cargo === 'Aluno' && (
                   <button 
-                    onClick={() => {
+                    onClick={async () => {
                         setLoadingPath('logout')
-                        performLogout();
                         setCurrentUser(null);
-                        window.location.href = '/login';
+                        await performLogout();
                       }}
                       title="Sair da Conta"
                       style={{
@@ -2803,11 +2802,10 @@ export default function ADInnerLayout({
               </Link>
 
               <button 
-                onClick={() => {
+                onClick={async () => {
                   setLoadingPath('logout')
-                  performLogout();
                   setCurrentUser(null);
-                  window.location.href = '/login';
+                  await performLogout();
                 }}
                 title="Sair da Conta"
                 className="ad-card-action-btn ad-card-logout"

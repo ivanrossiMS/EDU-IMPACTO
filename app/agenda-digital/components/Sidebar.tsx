@@ -719,9 +719,8 @@ export function ADSidebar() {
                   <button 
                     onClick={async () => { 
                       setLoadingPath('logout')
-                      performLogout(); 
                       setCurrentUser(null);
-                      window.location.href = '/login'; 
+                      await performLogout(); 
                     }}
                     style={{
                       flex: 1, height: 32, borderRadius: 8, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -792,11 +791,10 @@ export function ADSidebar() {
                   </button>
                 )}
                 <button 
-                  onClick={() => { 
+                  onClick={async () => { 
                     setLoadingPath('logout')
                     setCurrentUser(null);
-                    performLogout(); 
-                    window.location.href = '/login'; 
+                    await performLogout(); 
                   }}
                   style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', cursor: 'pointer' }}
                 >

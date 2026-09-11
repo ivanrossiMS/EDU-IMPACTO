@@ -4,17 +4,27 @@ import { Preferences } from '@capacitor/preferences';
 import { createClient } from '@/utils/supabase/client';
 
 const LOGOUT_FLAG = 'edu-logout-pending';
+let logoutPromise: Promise<void> | null = null;
 
 /**
  * Performs a complete, non-blocking nuclear logout:
  * 1. Clears window.localStorage and window.sessionStorage FIRST
  * 2. Clears iOS Keychain / Android Keystore
  * 3. Clears Capacitor Native Preferences
- * 4. Calls POST /api/auth/logout to clear HTTP-only server cookies
- * 5. Calls Supabase signOut with 1.5s race timeout (so network hangs never freeze the app)
+ * 4. Calls POST /api/auth/logout to clear HTTP-only server cookies and revoke token
+ * 5. Calls Supabase local signOut with safe timeout and background error suppression
  * 6. Navigates cleanly to /login via replace()
  */
-export async function performLogout() {
+export async function performLogout(): Promise<void> {
+  if (logoutPromise) {
+    return logoutPromise;
+  }
+
+  logoutPromise = executeLogout();
+  return logoutPromise;
+}
+
+async function executeLogout(): Promise<void> {
   console.log('[Auth Logout] Initiating full non-blocking logout...');
 
   // 1. Clear window.localStorage & sessionStorage IMMEDIATELY
@@ -59,14 +69,18 @@ export async function performLogout() {
     console.error('[Auth Logout] Failed to clear server session cookies:', error);
   }
 
-  // 5. Sign out Supabase JS client with 1.5s safeguard timeout
+  // 5. Sign out Supabase JS client locally (server already revoked global session in step 4)
   try {
     const supabase = createClient();
-    const signOutPromise = supabase.auth.signOut({ scope: 'global' });
-    const timeoutPromise = new Promise(resolve => setTimeout(resolve, 1500));
+    const signOutPromise = supabase.auth.signOut({ scope: 'local' })
+      .catch((error) => {
+        // Suppress any lock abortion or cancellation so it never causes unhandled promise rejection
+        console.warn('[Auth Logout] Background signOut notice:', error?.message || error);
+      });
+    const timeoutPromise = new Promise(resolve => setTimeout(resolve, 800));
     await Promise.race([signOutPromise, timeoutPromise]);
   } catch (error) {
-    console.error('[Auth Logout] Supabase signOut error or timeout:', error);
+    console.warn('[Auth Logout] Supabase signOut error or timeout:', error);
   }
 
   // 6. Navigate directly to /login
