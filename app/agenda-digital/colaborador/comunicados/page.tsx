@@ -2098,7 +2098,6 @@ function ColaboradorComunicadosContent() {
           /* Mobile modal card adjustments */
           .ad-destinatarios-modal-card,
           .ad-cobranca-modal-card,
-          .ad-reports-modal-card,
           .ad-forms-modal-card,
           .ad-schedule-modal-card,
           .ad-expanded-comunicado-card {
@@ -2107,20 +2106,6 @@ function ColaboradorComunicadosContent() {
             max-height: 90vh !important;
             border-radius: 24px !important;
             overflow-y: auto !important;
-          }
-
-          /* Relatorios Modal Fullscreen on Mobile */
-          .ad-reports-modal-overlay {
-            padding: 0 !important;
-          }
-          .ad-reports-modal-card {
-            width: 100% !important;
-            max-width: 100% !important;
-            height: 100% !important;
-            max-height: 100dvh !important;
-            border-radius: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
           }
         }
       `}</style>
