@@ -175,9 +175,9 @@ export default function ADAdminDashboard() {
 
   const quickActions = [
     { icon: '📣', label: 'Novo Comunicado', desc: 'Enviar para turmas ou famílias', href: '/agenda-digital/admin/comunicados', color: '#8b5cf6' },
-
     { icon: '📸', label: 'Aprovar Momentos', desc: `${momentosPendentes > 0 ? momentosPendentes + ' pendentes' : 'Sem pendências'}`, href: '/agenda-digital/admin/momentos', color: '#ec4899' },
     { icon: '📅', label: 'Criar Evento', desc: 'Calendário escolar', href: '/agenda-digital/admin/calendario', color: '#10b981' },
+    { icon: '🧪', label: 'Testar Notificações', desc: 'Simulador de push por aluno', href: '/agenda-digital/admin/push-teste', color: '#6366f1' },
   ]
 
   return (

@@ -32,7 +32,8 @@ import {
   UserCog,
   Camera,
   Loader2,
-  MonitorSmartphone
+  MonitorSmartphone,
+  Radio
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -54,6 +55,7 @@ const menuItems = [
   { id: 'calendario', label: 'Calendário', icon: Calendar, href: '/agenda-digital/admin/calendario' },
   { id: 'relatorios', label: 'Relatórios/Formulários', icon: FileText, href: '/agenda-digital/admin/relatorios' },
   { id: 'cobrancas', label: 'Cobranças', icon: DollarSign, href: '/agenda-digital/admin/cobrancas' },
+  { id: 'push-teste', label: 'Testar Notificações', icon: Radio, href: '/agenda-digital/admin/push-teste' },
   { id: 'ajustes', label: 'Ajustes', icon: Settings, href: '/agenda-digital/admin/ajustes' },
 ]
 
@@ -197,6 +199,7 @@ export function ADSidebar() {
         { id: 'calendario', label: 'Agenda', icon: Calendar, href: '/agenda-digital/admin/calendario' },
         { id: 'relatorios', label: 'Relatórios', icon: FileText, href: '/agenda-digital/admin/relatorios' },
         { id: 'cobrancas', label: 'Cobranças', icon: DollarSign, href: '/agenda-digital/admin/cobrancas' },
+        { id: 'push-teste', label: 'Testar Push', icon: Radio, href: '/agenda-digital/admin/push-teste' },
         { id: 'ajustes', label: 'Ajustes', icon: Settings, href: '/agenda-digital/admin/ajustes' },
         { id: 'modulos', label: 'Trocar Módulo', icon: Grid, href: '/login?step=choose_system' }
       ]

@@ -62,7 +62,7 @@ export async function GET(request: Request) {
       if (missingStudentIds.length > 0) {
         const { data: dbAlunos } = await supabase
           .from('alunos')
-          .select('id, nome, turma, foto, imagem1')
+          .select('id, nome, turma, foto, foto_url')
           .in('id', missingStudentIds)
         if (dbAlunos) {
           dbAlunos.forEach((a: any) => {
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
               studentId: aId,
               studentName: al?.nome || aId,
               studentClass: al?.turma || fRecord.turma_id || '',
-              studentPhoto: al?.foto || al?.imagem1 || null,
+              studentPhoto: al?.foto || al?.foto_url || null,
               guardianId: 'frequencia-diario',
               guardianName: sResp || 'Responsável Cadastrado',
               calledAt: sHorario || fRecord.created_at || `${recordDate}T12:00:00-04:00`,
@@ -94,6 +94,27 @@ export async function GET(request: Request) {
               status: 'confirmed',
               source: 'frequencia'
             })
+          }
+        }
+      }
+    }
+
+    // Retroalimentação / Enriquecimento de foto para chamadas que possuem studentId mas vieram sem foto
+    const callsMissingPhoto = rawResult.filter(c => !c.studentPhoto && c.studentId)
+    if (callsMissingPhoto.length > 0) {
+      const studentIdsToFetch = Array.from(new Set(callsMissingPhoto.map(c => String(c.studentId).trim()).filter(Boolean)))
+      if (studentIdsToFetch.length > 0) {
+        const { data: dbAlunosPhotos } = await supabase
+          .from('alunos')
+          .select('id, foto, foto_url')
+          .in('id', studentIdsToFetch)
+        if (dbAlunosPhotos && dbAlunosPhotos.length > 0) {
+          const photoMap = new Map(dbAlunosPhotos.map(p => [String(p.id), p.foto || p.foto_url]))
+          for (const c of callsMissingPhoto) {
+            const p = photoMap.get(String(c.studentId).trim())
+            if (p) {
+              c.studentPhoto = p
+            }
           }
         }
       }
@@ -142,83 +163,73 @@ export async function POST(request: Request) {
       const ids = rows.map((r: any) => r.id)
       
       const supabaseService = getAdminClient()
+
+      // Backfill photo if missing
+      const missingPhotoIds = rows
+        .filter((r: any) => !r.dados?.studentPhoto && r.dados?.studentId)
+        .map((r: any) => String(r.dados.studentId).trim())
+      if (missingPhotoIds.length > 0) {
+        const { data: sPhotos } = await supabaseService.from('alunos').select('id, foto, foto_url').in('id', missingPhotoIds)
+        if (sPhotos) {
+          const map = new Map(sPhotos.map(s => [String(s.id), s.foto || s.foto_url]))
+          rows.forEach((r: any) => {
+            if (!r.dados?.studentPhoto && r.dados?.studentId) {
+              const p = map.get(String(r.dados.studentId).trim())
+              if (p) r.dados.studentPhoto = p
+            }
+          })
+        }
+      }
       
       const { data: existingRows } = await supabaseService.from('saida_calls').select('id, dados').in('id', ids)
       
       const existingStatusMap = new Map((existingRows || []).map(r => {
         let status = null
+        let calledAt = null
         if (typeof r.dados === 'string') {
-          try { status = JSON.parse(r.dados).status } catch(e){}
+          try { 
+            const d = JSON.parse(r.dados)
+            status = d.status 
+            calledAt = d.calledAt
+          } catch(e){}
         } else if (r.dados) {
           status = (r.dados as any).status
+          calledAt = (r.dados as any).calledAt
         }
-        return [r.id, status]
+        return [r.id, { status, calledAt }]
       }))
 
       const { error } = await supabaseService.from('saida_calls').upsert(rows, { onConflict: 'id' })
       if (error) throw new Error(error.message)
       
-      // Processar Notificações de Saída
+      // Processar Notificações de Saída e Chamada de Portaria
       for (const row of rows) {
-        const wasConfirmed = existingStatusMap.get(row.id) === 'confirmed'
+        const existing = existingStatusMap.get(row.id)
         const isConfirmed = row.dados?.status === 'confirmed'
+        const studentId = row.dados?.studentId ? String(row.dados.studentId) : null
 
-        if (isConfirmed && row.dados?.studentId) {
-          try {
-            const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
-            const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
-            
-            const rawStudentId = String(row.dados.studentId).trim()
-            const unpaddedId = rawStudentId.replace(/^0+/, '')
-            const studentTargets = Array.from(new Set([rawStudentId, unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
+        if (isConfirmed && studentId) {
+          await dispatchSaidaConfirmadaPush({
+            callId: row.id,
+            studentId,
+            studentName: row.dados?.studentName,
+            studentClass: row.dados?.studentClass,
+            confirmedAt: row.dados?.confirmedAt,
+            guardianName: row.dados?.guardianName,
+          })
+        } else if ((row.dados?.status === 'waiting' || row.dados?.status === 'called') && !row.dados?.isRevert && studentId) {
+          const isNewCall = !existing
+          const isStatusChanged = existing && existing.status !== row.dados.status
+          const isRecall = existing && existing.status === 'waiting' && existing.calledAt && row.dados.calledAt && (new Date(row.dados.calledAt).getTime() - new Date(existing.calledAt).getTime() > 15000)
 
-            const { data: aluno } = await supabaseService.from('alunos').select('nome, turma').eq('id', rawStudentId).maybeSingle()
-            const nomeAluno = aluno?.nome || row.dados?.studentName || 'o aluno'
-            const turmaAluno = aluno?.turma || row.dados?.studentClass || ''
-
-            const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-            const freqId = `FREQ-${rawStudentId}-${today}`
-            const anoLetivo = new Date().getFullYear().toString()
-            
-            const { data: existingFreq } = await supabaseService.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
-
-            await supabaseService.from('frequencias').upsert({
-              id: freqId,
-              aluno_id: rawStudentId,
-              turma_id: turmaAluno,
-              data: today,
-              presente: existingFreq?.presente ?? true,
-              tempos: existingFreq?.tempos || null,
-              dados: {
-                ...(existingFreq?.dados || {}),
-                saidaHorario: row.dados.confirmedAt || new Date().toISOString(),
-                saidaResponsavel: row.dados.guardianName || '',
-                saidaOrigem: 'manual',
-                anoLetivo,
-                diarioId: `DIARIO-${turmaAluno}-${anoLetivo}`
-              }
+          if (isNewCall || isStatusChanged || isRecall) {
+            await dispatchChamadaPortariaPush({
+              callId: row.id,
+              studentId,
+              studentName: row.dados?.studentName,
+              studentClass: row.dados?.studentClass,
+              calledAt: row.dados?.calledAt,
             })
-            
-            const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
-            if (targetIds.length > 0) {
-              const horaSaida = formatHoraSaida(row.dados?.confirmedAt)
-              const pushItemId = `saida_${row.id}_${Date.now()}`
-
-              sendAgendaPushNotification({
-                type: 'saida',
-                itemId: pushItemId,
-                title: '🎓 Saída Confirmada',
-                message: `A saída de ${nomeAluno} foi confirmada na portaria às ${horaSaida}.`,
-                targetUserIds: targetIds,
-                targetUrl: `/agenda-digital/frequencia`,
-                metadata: {
-                  aluno_id: rawStudentId,
-                  saida_id: String(row.id)
-                }
-              }).catch(e => console.error('Saida Push Error:', e))
-            }
-          } catch (e) {
-            console.error('Saida Push Error:', e)
           }
         }
       }
@@ -233,6 +244,12 @@ export async function POST(request: Request) {
     const todayStr = formatter.format(new Date())
 
     const studentId = row.dados?.studentId ? String(row.dados.studentId) : null
+    if (studentId && !row.dados?.studentPhoto) {
+      const { data: sPhoto } = await supabaseService.from('alunos').select('foto, foto_url').eq('id', studentId).maybeSingle()
+      if (sPhoto?.foto || sPhoto?.foto_url) {
+        row.dados.studentPhoto = sPhoto.foto || sPhoto.foto_url
+      }
+    }
     const incomingStatus = row.dados?.status
     const isRevert = !!row.dados?.isRevert
 
@@ -260,6 +277,8 @@ export async function POST(request: Request) {
     const { data: existingRow } = await supabaseService.from('saida_calls').select('dados').eq('id', row.id).maybeSingle()
     
     let wasConfirmed = false
+    let previousStatus: string | null = null
+    let previousCalledAt: string | null = null
     if (existingRow?.dados) {
       let existingDados: any = {}
       if (typeof existingRow.dados === 'string') {
@@ -268,6 +287,8 @@ export async function POST(request: Request) {
         existingDados = existingRow.dados
       }
       wasConfirmed = existingDados.status === 'confirmed'
+      previousStatus = existingDados.status
+      previousCalledAt = existingDados.calledAt
 
       if ((wasConfirmed || existingDados.status === 'cancelled') && (row.dados.status === 'waiting' || row.dados.status === 'called') && !isRevert) {
         const incomingCalledAt = new Date(row.dados.calledAt || 0).getTime()
@@ -308,62 +329,28 @@ export async function POST(request: Request) {
       }
     }
 
-    if (isConfirmed && data.dados?.studentId) {
-      try {
-        const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
-        const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
-        
-        const rawStudentId = String(data.dados.studentId).trim()
-        const unpaddedId = rawStudentId.replace(/^0+/, '')
-        const studentTargets = Array.from(new Set([rawStudentId, unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
+    if (isConfirmed && studentId) {
+      await dispatchSaidaConfirmadaPush({
+        callId: data.id,
+        studentId,
+        studentName: data.dados?.studentName,
+        studentClass: data.dados?.studentClass,
+        confirmedAt: data.dados?.confirmedAt,
+        guardianName: data.dados?.guardianName,
+      })
+    } else if ((data.dados?.status === 'waiting' || data.dados?.status === 'called') && !isRevert && studentId) {
+      const isNewCall = !existingRow
+      const isStatusChanged = previousStatus && previousStatus !== data.dados.status
+      const isRecall = previousStatus === 'waiting' && previousCalledAt && data.dados.calledAt && (new Date(data.dados.calledAt).getTime() - new Date(previousCalledAt).getTime() > 15000)
 
-        const { data: aluno } = await supabaseService.from('alunos').select('nome, turma').eq('id', rawStudentId).maybeSingle()
-        const nomeAluno = aluno?.nome || data.dados?.studentName || 'o aluno'
-        const turmaAluno = aluno?.turma || data.dados?.studentClass || ''
-
-        const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-        const freqId = `FREQ-${rawStudentId}-${today}`
-        const anoLetivo = new Date().getFullYear().toString()
-        
-        const { data: existingFreq } = await supabaseService.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
-
-        await supabaseService.from('frequencias').upsert({
-          id: freqId,
-          aluno_id: rawStudentId,
-          turma_id: turmaAluno,
-          data: today,
-          presente: existingFreq?.presente ?? true,
-          tempos: existingFreq?.tempos || null,
-          dados: {
-            ...(existingFreq?.dados || {}),
-            saidaHorario: data.dados.confirmedAt || new Date().toISOString(),
-            saidaResponsavel: data.dados.guardianName || '',
-            saidaOrigem: 'manual',
-            anoLetivo,
-            diarioId: `DIARIO-${turmaAluno}-${anoLetivo}`
-          }
+      if (isNewCall || isStatusChanged || isRecall) {
+        await dispatchChamadaPortariaPush({
+          callId: data.id,
+          studentId,
+          studentName: data.dados?.studentName,
+          studentClass: data.dados?.studentClass,
+          calledAt: data.dados?.calledAt,
         })
-
-        const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
-        if (targetIds.length > 0) {
-          const horaSaida = formatHoraSaida(data.dados?.confirmedAt)
-          const pushItemId = `saida_${data.id}_${Date.now()}`
-
-          sendAgendaPushNotification({
-            type: 'saida',
-            itemId: pushItemId,
-            title: '🎓 Saída Confirmada',
-            message: `A saída de ${nomeAluno} foi confirmada na portaria às ${horaSaida}.`,
-            targetUserIds: targetIds,
-            targetUrl: `/agenda-digital/frequencia`,
-            metadata: {
-              aluno_id: rawStudentId,
-              saida_id: String(data.id)
-            }
-          }).catch(e => console.error('Saida Push Error:', e))
-        }
-      } catch (e) {
-        console.error('Saida Push Error:', e)
       }
     }
 
@@ -434,4 +421,147 @@ function formatHoraSaida(rawTime?: string | null): string {
     return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }).format(new Date())
   }
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' }).format(date)
+}
+
+async function dispatchChamadaPortariaPush({
+  callId,
+  studentId,
+  studentName,
+  studentClass,
+  calledAt,
+}: {
+  callId: string
+  studentId: string
+  studentName?: string
+  studentClass?: string
+  calledAt?: string
+}) {
+  try {
+    const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+    const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+    const { formatFriendlyStudentName } = await import('@/lib/studentNameHelper')
+    const supabaseService = getAdminClient()
+
+    const rawStudentId = String(studentId).trim()
+    const unpaddedId = rawStudentId.replace(/^0+/, '')
+    const studentTargets = Array.from(new Set([rawStudentId, unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
+
+    const { data: aluno } = await supabaseService
+      .from('alunos')
+      .select('nome, turma')
+      .or(`id.eq.${rawStudentId},matricula.eq.${rawStudentId}`)
+      .limit(1)
+      .maybeSingle()
+
+    const rawNomeAluno = aluno?.nome || studentName || 'o aluno'
+    const nomeAmigavel = formatFriendlyStudentName(rawNomeAluno)
+
+    const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
+    if (targetIds.length > 0) {
+      const callTime = calledAt ? new Date(calledAt).getTime() : Date.now()
+      const pushItemId = `chamada_${callId}_${callTime}`
+
+      await sendAgendaPushNotification({
+        type: 'saida',
+        itemId: pushItemId,
+        title: '🚗 Chamada de Portaria',
+        message: `${nomeAmigavel} foi chamado na portaria para saída e está se dirigindo ao portão principal.`,
+        targetUserIds: targetIds,
+        targetUrl: `/agenda-digital/${rawStudentId}`,
+        metadata: {
+          aluno_id: rawStudentId,
+          saida_id: String(callId),
+          tipo: 'chamada_portaria',
+        },
+      })
+      console.log(`[API Saida] Push de Chamada de Portaria disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)
+    } else {
+      console.warn(`[API Saida] Nenhum destinatário resolvido para Chamada de Portaria do aluno ${rawStudentId}`)
+    }
+  } catch (err: any) {
+    console.error('[API Saida] Erro ao disparar push de Chamada de Portaria:', err.message)
+  }
+}
+
+async function dispatchSaidaConfirmadaPush({
+  callId,
+  studentId,
+  studentName,
+  studentClass,
+  confirmedAt,
+  guardianName,
+}: {
+  callId: string
+  studentId: string
+  studentName?: string
+  studentClass?: string
+  confirmedAt?: string
+  guardianName?: string
+}) {
+  try {
+    const { sendAgendaPushNotification } = await import('@/lib/server/agendaNotifications')
+    const { getResponsavelIdsForTargets } = await import('@/lib/server/notificationHelper')
+    const { formatFriendlyStudentName } = await import('@/lib/studentNameHelper')
+    const supabaseService = getAdminClient()
+
+    const rawStudentId = String(studentId).trim()
+    const unpaddedId = rawStudentId.replace(/^0+/, '')
+    const studentTargets = Array.from(new Set([rawStudentId, unpaddedId, unpaddedId.padStart(6, '0')].filter(Boolean)))
+
+    const { data: aluno } = await supabaseService
+      .from('alunos')
+      .select('nome, turma')
+      .or(`id.eq.${rawStudentId},matricula.eq.${rawStudentId}`)
+      .limit(1)
+      .maybeSingle()
+
+    const rawNomeAluno = aluno?.nome || studentName || 'o aluno'
+    const nomeAmigavel = formatFriendlyStudentName(rawNomeAluno)
+    const turmaAluno = aluno?.turma || studentClass || ''
+
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+    const freqId = `FREQ-${rawStudentId}-${today}`
+    const anoLetivo = new Date().getFullYear().toString()
+
+    const { data: existingFreq } = await supabaseService.from('frequencias').select('presente, tempos, dados').eq('id', freqId).maybeSingle()
+
+    await supabaseService.from('frequencias').upsert({
+      id: freqId,
+      aluno_id: rawStudentId,
+      turma_id: turmaAluno,
+      data: today,
+      presente: existingFreq?.presente ?? true,
+      tempos: existingFreq?.tempos || null,
+      dados: {
+        ...(existingFreq?.dados || {}),
+        saidaHorario: confirmedAt || new Date().toISOString(),
+        saidaResponsavel: guardianName || '',
+        saidaOrigem: 'manual',
+        anoLetivo,
+        diarioId: `DIARIO-${turmaAluno}-${anoLetivo}`
+      }
+    })
+
+    const targetIds = await getResponsavelIdsForTargets({ targetStudents: studentTargets })
+    if (targetIds.length > 0) {
+      const horaSaida = formatHoraSaida(confirmedAt)
+      const pushItemId = `saida_${callId}_${Date.now()}`
+
+      await sendAgendaPushNotification({
+        type: 'saida',
+        itemId: pushItemId,
+        title: '🎓 Saída Confirmada',
+        message: `A saída de ${nomeAmigavel} foi confirmada na portaria às ${horaSaida}.`,
+        targetUserIds: targetIds,
+        targetUrl: `/agenda-digital/frequencia`,
+        metadata: {
+          aluno_id: rawStudentId,
+          saida_id: String(callId)
+        }
+      })
+      console.log(`[API Saida] Push de Saída Confirmada disparado para ${nomeAmigavel} (${targetIds.length} destinatários)`)
+    }
+  } catch (err: any) {
+    console.error('[API Saida] Erro ao disparar push de Saída Confirmada:', err.message)
+  }
 }

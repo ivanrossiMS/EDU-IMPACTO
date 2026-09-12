@@ -136,6 +136,17 @@ function save(key: string, val: unknown) {
 }
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) }
 function now() { return new Date().toISOString() }
+async function fetchStudentPhotoFromDb(studentId: string): Promise<string | null> {
+  try {
+    const res: any = await (supabase.from('alunos') as any)
+      .select('foto, foto_url')
+      .eq('id', studentId)
+      .maybeSingle()
+    return res?.data?.foto || res?.data?.foto_url || null
+  } catch {
+    return null
+  }
+}
 
 // ─── Context shape ─────────────────────────────────────────────────────────────
 interface SaidaCtx {
@@ -180,7 +191,7 @@ export function useSaida() {
 export function SaidaProvider({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
   // `enabled` gates heavy data fetching (calls list, config) but Realtime channel
   // is ALWAYS active so all clients (including Família/mobile) receive live updates.
-  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled, mergeLocal: false })
+  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled, mergeLocal: false, refreshIntervalMs: 5000 })
   const [logs, setLogs] = useState<SaidaLog[]>([])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG, { enabled })
 
@@ -207,11 +218,15 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
 
   const persistSingleCall = useCallback(async (call: PickupCall) => {
     try {
-      await fetch('/api/saida/calls', {
+      const res = await fetch('/api/saida/calls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(call)
       })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        console.warn('[saidaContext] Falha ao persistir chamada no banco:', res.status, errData)
+      }
     } catch (e) {
       console.error('Failed to persist call', e)
     }
@@ -265,7 +280,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
             const { eventType, new: newRow, old: oldRow } = payload
             
             if (eventType === 'INSERT') {
-              const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
+              let rawDados = newRow.dados || {}
+              if (typeof rawDados === 'string') {
+                try { rawDados = JSON.parse(rawDados) } catch (e) {}
+              }
+              const call = { id: newRow.id, ...rawDados } as PickupCall
               const callStudentId = call.studentId ? String(call.studentId) : null
               setActiveCallsLocal?.((prev: PickupCall[]) => {
                 const arr = prev || []
@@ -293,7 +312,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 return [call, ...arr]
               })
             } else if (eventType === 'UPDATE') {
-              const call = { id: newRow.id, ...(newRow.dados || {}) } as PickupCall
+              let rawDados = newRow.dados || {}
+              if (typeof rawDados === 'string') {
+                try { rawDados = JSON.parse(rawDados) } catch (e) {}
+              }
+              const call = { id: newRow.id, ...rawDados } as PickupCall
               const callStudentId = call.studentId ? String(call.studentId) : null
               setActiveCallsLocal?.((prev: PickupCall[]) => {
                 const arr = prev || []
@@ -501,6 +524,18 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     emit('CALL_STUDENT', { ...call })
     sendBroadcast('CALL_STUDENT', call)
     addLog('CALL', `Chamada: ${studentName} (${studentClass}) — por ${guardianName}`)
+
+    // Se a chamada foi feita sem foto mas temos o studentId, resolve em background
+    if (!studentPhoto && sIdStr) {
+      fetchStudentPhotoFromDb(sIdStr).then(photo => {
+        if (photo) {
+          setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === call.id ? { ...c, studentPhoto: photo } : c))
+          persistSingleCall({ ...call, studentPhoto: photo })
+          sendBroadcast('CALL_STUDENT', { ...call, studentPhoto: photo })
+        }
+      })
+    }
+
     return call
   }, [activeCalls, setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
@@ -528,6 +563,17 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     emit('CALL_STUDENT', { ...call, _remote: false })
     sendBroadcast('CALL_STUDENT', call)
     addLog('BLOCKED', `Acesso bloqueado (${blockType}): ${guardianName} tentou retirar ${studentName} — ${blockReason}`)
+
+    if (!studentPhoto && sIdStr) {
+      fetchStudentPhotoFromDb(sIdStr).then(photo => {
+        if (photo) {
+          setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === call.id ? { ...c, studentPhoto: photo } : c))
+          persistSingleCall({ ...call, studentPhoto: photo })
+          sendBroadcast('CALL_STUDENT', { ...call, studentPhoto: photo })
+        }
+      })
+    }
+
     return call
   }, [setActiveCallsLocal, emit, addLog, sendBroadcast, persistSingleCall])
 
@@ -854,6 +900,16 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
     sendBroadcast('CALL_STUDENT', newCall)
     emit('CONFIRM_PICKUP', { callId: newCall.id, studentId: sIdStr, confirmedAt: currentNow, _remote: false })
     sendBroadcast('CONFIRM_PICKUP', { callId: newCall.id, studentId: sIdStr, confirmedAt: currentNow })
+
+    if (!studentPhoto && sIdStr) {
+      fetchStudentPhotoFromDb(sIdStr).then(photo => {
+        if (photo) {
+          setActiveCallsLocal?.(prev => (prev || []).map(c => c.id === newCall.id ? { ...c, studentPhoto: photo } : c))
+          persistSingleCall({ ...newCall, studentPhoto: photo })
+          sendBroadcast('CALL_STUDENT', { ...newCall, studentPhoto: photo })
+        }
+      })
+    }
     addLog('CONFIRM', `Saída confirmada (Saiu Sozinho): ${studentName}`)
     return newCall
   }, [activeCalls, setActiveCallsLocal, emit, sendBroadcast, persistSingleCall, addLog])

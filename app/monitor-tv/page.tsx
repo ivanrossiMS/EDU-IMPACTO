@@ -4,6 +4,7 @@ import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useVoice } from '@/lib/hooks/useVoice'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
 import { Tv, Clock, User, Nfc, Maximize, Wifi, WifiOff, Loader2 } from 'lucide-react'
 
@@ -58,15 +59,60 @@ function formatName(fullName: string) {
   return assembled
 }
 
+const globalTvPhotoCache = new Map<string, string>()
+
+async function fetchStudentPhotoFromDb(studentId: string): Promise<string | null> {
+  try {
+    const res: any = await (supabase.from('alunos') as any)
+      .select('foto, foto_url')
+      .eq('id', studentId)
+      .maybeSingle()
+    return res?.data?.foto || res?.data?.foto_url || null
+  } catch {
+    return null
+  }
+}
+
 // ── Monitor Card - Full Background Photo ──────────────────────────────────────
 function MonitorStudentCard({ call, index }: { call: PickupCall, index: number }) {
   const { config } = useSaida()
   const [secs, setSecs] = useState(elapsedSec(call.calledAt))
+  const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
+  const [photoError, setPhotoError] = useState(false)
 
   useEffect(() => {
     const iv = setInterval(() => setSecs(elapsedSec(call.calledAt)), 1000)
     return () => clearInterval(iv)
   }, [call.calledAt])
+
+  useEffect(() => {
+    if (call.studentPhoto) {
+      setResolvedPhoto(call.studentPhoto)
+      setPhotoError(false)
+      if (call.studentId) globalTvPhotoCache.set(String(call.studentId), call.studentPhoto)
+      return
+    }
+    if (!call.studentId) return
+
+    const cached = globalTvPhotoCache.get(String(call.studentId))
+    if (cached) {
+      setResolvedPhoto(cached)
+      setPhotoError(false)
+      return
+    }
+
+    let isMounted = true
+    fetchStudentPhotoFromDb(call.studentId).then(p => {
+      if (!isMounted) return
+      if (p) {
+        globalTvPhotoCache.set(String(call.studentId), p)
+        setResolvedPhoto(p)
+        setPhotoError(false)
+      }
+    })
+
+    return () => { isMounted = false }
+  }, [call.studentPhoto, call.studentId])
 
   const mins = Math.floor(secs / 60)
   const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
@@ -81,14 +127,14 @@ function MonitorStudentCard({ call, index }: { call: PickupCall, index: number }
       style={{ animationDelay: animDelay }}
     >
       {/* Background Image / Initials Gradient */}
-      {call.studentPhoto ? (
+      {(resolvedPhoto && !photoError) ? (
         <>
           {/* Blurred Background Backdrop for premium ambient fill */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={call.studentPhoto} alt="" className="tv-card-photo-blur-backdrop" />
+          <img src={resolvedPhoto} alt="" onError={() => setPhotoError(true)} className="tv-card-photo-blur-backdrop" />
           {/* Crisp, uncropped centered foreground photo */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={call.studentPhoto} alt={call.studentName} className="tv-card-photo-bg" />
+          <img src={resolvedPhoto} alt={call.studentName} onError={() => setPhotoError(true)} className="tv-card-photo-bg" />
         </>
       ) : (
         <div className="tv-card-photo-bg-initials" style={{ background: `linear-gradient(135deg, ${accentColor} 0%, #171717 100%)` }}>
@@ -154,6 +200,38 @@ function MonitorSecondaryCard({ call, index }: { call: PickupCall, index: number
   const { config } = useSaida()
   const initials = call.studentName.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
   const secs = elapsedSec(call.calledAt)
+  const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
+  const [photoError, setPhotoError] = useState(false)
+
+  useEffect(() => {
+    if (call.studentPhoto) {
+      setResolvedPhoto(call.studentPhoto)
+      setPhotoError(false)
+      if (call.studentId) globalTvPhotoCache.set(String(call.studentId), call.studentPhoto)
+      return
+    }
+    if (!call.studentId) return
+
+    const cached = globalTvPhotoCache.get(String(call.studentId))
+    if (cached) {
+      setResolvedPhoto(cached)
+      setPhotoError(false)
+      return
+    }
+
+    let isMounted = true
+    fetchStudentPhotoFromDb(call.studentId).then(p => {
+      if (!isMounted) return
+      if (p) {
+        globalTvPhotoCache.set(String(call.studentId), p)
+        setResolvedPhoto(p)
+        setPhotoError(false)
+      }
+    })
+
+    return () => { isMounted = false }
+  }, [call.studentPhoto, call.studentId])
+
   const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
   const urgent = secs > urgentLimit
   const accentColor = urgent ? '#ef4444' : '#06b6d4'
@@ -174,9 +252,9 @@ function MonitorSecondaryCard({ call, index }: { call: PickupCall, index: number
 
       {/* Mini Photo/Initials */}
       <div className="tv-secondary-card-avatar">
-        {call.studentPhoto ? (
+        {(resolvedPhoto && !photoError) ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={call.studentPhoto} alt={call.studentName} className="tv-secondary-card-photo" />
+          <img src={resolvedPhoto} alt={call.studentName} onError={() => setPhotoError(true)} className="tv-secondary-card-photo" />
         ) : (
           <div className="tv-secondary-card-initials" style={{ background: `linear-gradient(135deg, ${accentColor}, #4f46e5)` }}>
             {initials}

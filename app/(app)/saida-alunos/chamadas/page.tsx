@@ -77,6 +77,21 @@ function fmtTime(iso?: string) {
   }
 }
 
+// ── Global photo cache for students ──────────────────────────────────────────
+const globalStudentPhotoCache = new Map<string, string>()
+
+async function fetchStudentPhotoFromDb(studentId: string): Promise<string | null> {
+  try {
+    const res: any = await (supabase.from('alunos') as any)
+      .select('foto, foto_url')
+      .eq('id', studentId)
+      .maybeSingle()
+    return res?.data?.foto || res?.data?.foto_url || null
+  } catch {
+    return null
+  }
+}
+
 // ── Unified call card (Ultra Modern TV-Monitor style) ─────────────────────────
 const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert, onOpenIrmaos }: {
   call:         PickupCall
@@ -89,11 +104,43 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
   const { config } = useSaida()
   const [recalling, setRecalling] = useState(false)
   const [nowTime, setNowTime] = useState(Date.now())
+  const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
+  const [photoError, setPhotoError] = useState(false)
   
   useEffect(() => {
     const iv = setInterval(() => setNowTime(Date.now()), 10000)
     return () => clearInterval(iv)
   }, [])
+
+  // Auto-resolve photo if call was created without photo but student has photo in database
+  useEffect(() => {
+    if (call.studentPhoto) {
+      setResolvedPhoto(call.studentPhoto)
+      setPhotoError(false)
+      if (call.studentId) globalStudentPhotoCache.set(String(call.studentId), call.studentPhoto)
+      return
+    }
+    if (!call.studentId) return
+
+    const cached = globalStudentPhotoCache.get(String(call.studentId))
+    if (cached) {
+      setResolvedPhoto(cached)
+      setPhotoError(false)
+      return
+    }
+
+    let isMounted = true
+    fetchStudentPhotoFromDb(call.studentId).then(p => {
+      if (!isMounted) return
+      if (p) {
+        globalStudentPhotoCache.set(String(call.studentId), p)
+        setResolvedPhoto(p)
+        setPhotoError(false)
+      }
+    })
+
+    return () => { isMounted = false }
+  }, [call.studentPhoto, call.studentId])
   
   const secs = elapsedSec(call.calledAt, nowTime)
 
@@ -141,10 +188,11 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
 
       {/* ── BACKGROUND PHOTO ─────────────────────────────────────── */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 0, background: 'hsl(var(--bg-muted))' }}>
-        {call.studentPhoto ? (
+        {(resolvedPhoto && !photoError) ? (
           <img
-            src={call.studentPhoto}
+            src={resolvedPhoto}
             alt={call.studentName}
+            onError={() => setPhotoError(true)}
             decoding="async" loading="lazy"
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 15%' }}
           />
@@ -1220,6 +1268,13 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
   }, [activeCalls, student.id])
   const alreadyConfirmed = !!confirmedCall
 
+  const studentPhoto = useMemo(() => {
+    const p = student.foto || student.foto_url || student.fotoUrl || student.avatarUrl || student.imagem1 || student.dados?.foto || student.dados?.foto_url || student.dados?.fotoUrl || student.dados?.avatarUrl || null
+    if (p && student.id) globalStudentPhotoCache.set(String(student.id), p)
+    return p
+  }, [student])
+  const [imgError, setImgError] = useState(false)
+
   const initials = useMemo(() => student.nome?.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase(), [student.nome])
 
   const executeSoloExit = useCallback(() => {
@@ -1227,10 +1282,10 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
       student.id,
       student.nome,
       student.turmaNome || student.turma,
-      student.foto || student.imagem1
+      studentPhoto
     )
     showToast(`Saída de ${student.nome} confirmada (Saiu Sozinho)!`, true)
-  }, [confirmSoloExit, student.id, student.nome, student.turmaNome, student.turma, student.foto, student.imagem1, showToast])
+  }, [confirmSoloExit, student.id, student.nome, student.turmaNome, student.turma, studentPhoto, showToast])
   const handleSoloExitClick = useCallback(() => {
     if (alreadyConfirmed) {
       showToast(`Saída de ${student.nome} já foi confirmada hoje.`, false)
@@ -1261,13 +1316,13 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
 
     if (firstPermitted) {
       setIsCalling(true)
-      onCall(student.id, student.nome, student.turmaNome || student.turma, firstPermitted.id, firstPermitted.name, student.foto || student.imagem1)
+      onCall(student.id, student.nome, student.turmaNome || student.turma, firstPermitted.id, firstPermitted.name, studentPhoto)
       setTimeout(() => setIsCalling(false), 2000)
       showToast(`Chamando via ${firstPermitted.name}...`)
     } else {
       showToast('Nenhum responsável autorizado para hoje!', false)
     }
-  }, [blocked, respList, student, onCall, showToast])
+  }, [blocked, respList, student, studentPhoto, onCall, showToast])
 
   return (
     <div style={{
@@ -1286,15 +1341,20 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <div style={{
           width: 68, height: 68, borderRadius: 16, flexShrink: 0,
-          background: (student.foto || student.imagem1) ? 'none' : 'linear-gradient(135deg, #06b6d450, #6366f130)',
+          background: (studentPhoto && !imgError) ? 'none' : 'linear-gradient(135deg, #06b6d450, #6366f130)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontWeight: 900, fontSize: 24, color: '#fff', fontFamily: 'Outfit, sans-serif',
           position: 'relative', overflow: 'hidden',
-          border: (student.foto || student.imagem1) ? '1px solid #e2e8f0' : 'none',
+          border: (studentPhoto && !imgError) ? '1px solid #e2e8f0' : 'none',
         }}>
-          {(student.foto || student.imagem1) ? (
+          {(studentPhoto && !imgError) ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={student.foto || student.imagem1} alt={student.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img 
+              src={studentPhoto} 
+              alt={student.nome} 
+              onError={() => setImgError(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+            />
           ) : (
             initials
           )}
@@ -1357,7 +1417,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
                     }
                     if (!blocked) {
                       setIsCalling(true)
-                      onCall(student.id, student.nome, student.turmaNome || student.turma, g.id, g.name, student.foto || student.imagem1)
+                      onCall(student.id, student.nome, student.turmaNome || student.turma, g.id, g.name, studentPhoto)
                       setTimeout(() => setIsCalling(false), 2000)
                     }
                   }}
@@ -1783,7 +1843,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     setIsSearching(true)
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=5`)
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=5&page=1&withPhoto=true`)
         if (!res.ok) throw new Error('Falha ao buscar')
         const json = await res.json()
         const data = json.data || []
@@ -1816,7 +1876,7 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
     const sId = String(selectedStudent.id)
     const sName = selectedStudent.nome
     const sClass = selectedStudent.turmaNome || selectedStudent.turma
-    const sPhoto = selectedStudent.foto || selectedStudent.imagem1
+    const sPhoto = selectedStudent.foto || selectedStudent.foto_url || selectedStudent.fotoUrl || selectedStudent.avatarUrl || selectedStudent.imagem1 || selectedStudent.dados?.foto || selectedStudent.dados?.avatarUrl || null
     const authPerson = authorizedPerson.trim()
     
     // Registra no histórico de lançamentos de autorização especial (apenas lança no card)
@@ -1944,12 +2004,15 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                         background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 10, fontWeight: 900, color: '#f59e0b',
                       }}>
-                        {a.foto || a.imagem1 ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={a.foto || a.imagem1} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                        ) : (
-                          a.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
-                        )}
+                        {(() => {
+                          const aPhoto = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
+                          return aPhoto ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={aPhoto} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                          ) : (
+                            a.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
+                          )
+                        })()}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 12, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.nome}</div>
@@ -1974,12 +2037,15 @@ function SpecialExitSticker({ showToast }: { showToast: (msg: string, ok?: boole
                 background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 9, fontWeight: 900, color: '#f59e0b', flexShrink: 0,
               }}>
-                {selectedStudent.foto || selectedStudent.imagem1 ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selectedStudent.foto || selectedStudent.imagem1} alt={selectedStudent.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
-                ) : (
-                  selectedStudent.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
-                )}
+                {(() => {
+                  const selPhoto = selectedStudent.foto || selectedStudent.foto_url || selectedStudent.fotoUrl || selectedStudent.avatarUrl || selectedStudent.imagem1 || selectedStudent.dados?.foto || selectedStudent.dados?.avatarUrl || null
+                  return selPhoto ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selPhoto} alt={selectedStudent.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+                  ) : (
+                    selectedStudent.nome.split(' ').slice(0,2).map((n:any)=>n[0]).join('').toUpperCase()
+                  )
+                })()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 800, fontSize: 10.5, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -2566,7 +2632,7 @@ function ChamadasContent() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=10`)
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=10&page=1&withPhoto=true`)
         if (!res.ok) throw new Error('Falha ao buscar alunos')
         const json = await res.json()
         const data = json.data || []
@@ -2580,7 +2646,9 @@ function ChamadasContent() {
           const turmaObj = (turmas || []).find((t: any) => 
             String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma
           )
-          return { ...a, turmaNome: turmaObj?.nome || a.turma }
+          const p = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
+          if (p && a.id) globalStudentPhotoCache.set(String(a.id), p)
+          return { ...a, foto: p, turmaNome: turmaObj?.nome || a.turma }
         })
 
         setSchoolResults(mapped)
@@ -2609,7 +2677,8 @@ function ChamadasContent() {
       c.studentId === studentId && (c.status === 'waiting' || c.status === 'called')
     )
     if (hasActive) { showToast(`${studentName} já está em chamada ativa.`, false); return }
-    callStudent(studentId, studentName, studentClass, guardianId, guardianName, 'manual', undefined, studentPhoto)
+    const effectivePhoto = studentPhoto || (studentId ? globalStudentPhotoCache.get(String(studentId)) : null) || null
+    callStudent(studentId, studentName, studentClass, guardianId, guardianName, 'manual', undefined, effectivePhoto)
     showToast(`${studentName} chamado(a)!`)
     setStudentSearch('')
   }

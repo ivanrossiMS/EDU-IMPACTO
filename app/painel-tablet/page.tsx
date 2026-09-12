@@ -1443,7 +1443,8 @@ function PainelTabletContent() {
                                   const gId = `manual-${a.id}-${i}`
                                   const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
                                   const turmaNome = tObj?.nome || a.turma
-                                  const call = callStudent(a.id, a.nome, turmaNome, gId, g.name, 'manual')
+                                  const aPhoto = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
+                                  const call = callStudent(a.id, a.nome, turmaNome, gId, g.name, 'manual', undefined, aPhoto)
                                   if (!call) showToast(`${a.nome} já em chamada!`, false)
                                   else showToast(`📣 ${a.nome} chamado via ${g.name}!`)
                                 }}

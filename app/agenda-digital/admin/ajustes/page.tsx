@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react'
-import { Settings, Shield, Bell, Smartphone, Palette, Save, Clock, CheckCircle2, Upload, MessageCircle } from 'lucide-react'
+import Link from 'next/link'
+import { Settings, Shield, Bell, Smartphone, Palette, Save, Clock, CheckCircle2, Upload, MessageCircle, Radio, ArrowRight, Sparkles } from 'lucide-react'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { AdminWhatsAppContactsManager } from '@/components/AdminWhatsAppContactsManager'
 
@@ -305,10 +306,48 @@ export default function ADAdminAjustes() {
 
 {activeTab === 'notificacoes' && (
              <div>
-                <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                  <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Notificações Push no App</h3>
-                  <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>Controle quais eventos disparam alertas no celular dos responsáveis.</p>
-                </div>
+                 <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                     <div>
+                       <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Notificações Push no App</h3>
+                       <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>Controle quais eventos disparam alertas no celular dos responsáveis.</p>
+                     </div>
+                     <Link href="/agenda-digital/admin/push-teste" style={{ textDecoration: 'none' }}>
+                       <button className="btn btn-primary btn-sm" style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, fontWeight: 700 }}>
+                         <Radio size={16} /> Testar Disparos de Push <ArrowRight size={14} />
+                       </button>
+                     </Link>
+                   </div>
+                 </div>
+
+                 {/* Banner Destaque para Simulador de Push */}
+                 <div style={{ padding: '20px 32px 0' }}>
+                   <div style={{
+                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
+                     padding: '16px 20px', borderRadius: 14,
+                     background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(124, 58, 237, 0.08) 100%)',
+                     border: '1px solid rgba(99, 102, 241, 0.25)'
+                   }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                       <div style={{ width: 42, height: 42, borderRadius: 12, background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                         <Radio size={22} />
+                       </div>
+                       <div>
+                         <div style={{ fontWeight: 800, fontSize: 15, color: '#4f46e5' }}>
+                           Central de Testes e Simulador de Notificações
+                         </div>
+                         <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
+                           Valide se os celulares de alunos e responsáveis estão recebendo avisos de frequência, comunicados, boletim, momentos e financeiro.
+                         </div>
+                       </div>
+                     </div>
+                     <Link href="/agenda-digital/admin/push-teste" style={{ textDecoration: 'none', flexShrink: 0 }}>
+                       <button className="btn btn-secondary btn-sm" style={{ background: 'hsl(var(--bg-surface))', borderColor: '#4f46e5', color: '#4f46e5', fontWeight: 700 }}>
+                         Abrir Simulador →
+                       </button>
+                     </Link>
+                   </div>
+                 </div>
 
                 <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>

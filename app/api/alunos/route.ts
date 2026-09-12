@@ -89,19 +89,20 @@ export async function GET(request: Request) {
     const turno = url.searchParams.get('turno') || ''
     const autorizadoSairSozinho = url.searchParams.get('autorizadoSairSozinho') // 'true' | 'false' | null
     const foto = url.searchParams.get('foto') || 'todos'
+    const withPhoto = url.searchParams.get('withPhoto') === 'true'
     const observacoesParam = url.searchParams.get('observacoes') || 'todos'
     let integralIntermediario = url.searchParams.get('integralIntermediario') || ''
 
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    const isBulk = limit > 50 || all || !pageParam
+    const isBulk = (limit > 50 || all || (!pageParam && !limitParam)) && !search && !withPhoto
 
     const queryFields = lightweight
       ? 'id, nome, turma, status, responsavel, responsavel_financeiro, responsavel_pedagogico, dados'
       : (isBulk
           ? 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, dados, updated_at, created_at'
-          : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, dados, updated_at, created_at')
+          : 'id, nome, matricula, turma, serie, turno, status, email, data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, telefone, inadimplente, risco_evasao, media, frequencia, obs, unidade, foto, foto_url, dados, updated_at, created_at')
 
     let query = supabase
       .from('alunos')
@@ -373,7 +374,7 @@ export async function GET(request: Request) {
           String(t.nome).toLowerCase() === String(studentTurma).toLowerCase()
         )
 
-        const rawFoto = student.foto || d.foto || d.avatarUrl || d.fotoUrl || null
+        const rawFoto = student.foto || student.imagem1 || student.foto_url || d.foto || d.avatarUrl || d.fotoUrl || null
         let resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
         if (isBulk && resolvedFoto && resolvedFoto.startsWith('data:image/')) {
           resolvedFoto = null
@@ -760,7 +761,7 @@ export async function GET(request: Request) {
         String(t.nome).toLowerCase() === String(studentTurma).toLowerCase()
       )
 
-      const rawFoto = student.foto || student.dados?.foto || student.dados?.avatarUrl || student.dados?.fotoUrl || null
+      const rawFoto = student.foto || student.imagem1 || student.foto_url || student.dados?.foto || student.dados?.avatarUrl || student.dados?.fotoUrl || null
       let resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
       if (isBulk && resolvedFoto && resolvedFoto.startsWith('data:image/')) {
         resolvedFoto = null

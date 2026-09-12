@@ -54,7 +54,12 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
   const searchParams = useSearchParams()
   const { activeCalls, callStudent, cancelCall } = useSaida()
   const [localConfirmed, setLocalConfirmed] = useState(false)
-  const call = activeCalls.find(c => aluno && String(c.studentId) === String(aluno.id))
+  const call = activeCalls.find(c => {
+    if (!aluno?.id || !c.studentId) return false
+    const sId = String(c.studentId).trim()
+    const aId = String(aluno.id).trim()
+    return sId === aId || sId === aId.replace(/^0+/, '') || sId.padStart(6, '0') === aId.padStart(6, '0')
+  })
 
   const espelharRespId = searchParams?.get('espelhar_responsavel');
   const espelharColabId = searchParams?.get('espelhar_colaborador');
@@ -105,8 +110,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           by: call.guardianName || ''
         }))
       } catch (e) {}
-    } else if (call && (call.status === 'waiting' || call.status === 'cancelled')) {
-      // It was explicitly reverted or cancelled.
+    } else if (call && (call.status === 'waiting' || call.status === 'called' || call.status === 'cancelled')) {
+      // It was explicitly active or cancelled.
       if (cachedId && isToday) {
         const calledTime = call.calledAt ? new Date(call.calledAt).getTime() : 0
         
@@ -120,8 +125,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
             // The DB returned an OLD call, but we have a FRESHER cache
             setLocalConfirmed(true)
           }
-        } else if (call.status === 'waiting' && calledTime <= cachedTime) {
-          // The DB returned the SAME call as 'waiting', but its calledAt timestamp is OLDER
+        } else if ((call.status === 'waiting' || call.status === 'called') && calledTime <= cachedTime) {
+          // The DB returned the SAME call as 'waiting'/'called', but its calledAt timestamp is OLDER
           // than our confirmed cache. This means the Operator's DB save failed (DB lag).
           // DO NOT WIPE! KEEP IT CONFIRMED!
           setLocalConfirmed(true)
@@ -135,7 +140,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
         try { localStorage.removeItem(storageKey) } catch(e) {}
       }
     } else {
-      // For 'called', 'special_auth', 'blocked', or !call
+      // For 'special_auth', 'blocked', or !call
       if (isToday) {
         // ALWAYS trust the cache if it's from today!
         setLocalConfirmed(true)
@@ -240,25 +245,61 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
   }, [aluno?.dados, effectiveUser]);
 
   const meusAlunosIds = React.useMemo(() => {
-    return meusAlunos.map((a: any) => String(a.id))
+    return (meusAlunos || []).map((a: any) => String(a.id))
   }, [meusAlunos])
+
+  const allFamilyStudentIds = React.useMemo(() => {
+    const set = new Set<string>()
+    const addId = (rawId: any) => {
+      if (rawId == null) return
+      const s = String(rawId).trim()
+      if (!s) return
+      set.add(s)
+      set.add(s.replace(/^0+/, ''))
+      set.add(s.replace(/^0+/, '').padStart(6, '0'))
+    }
+    addId(aluno?.id)
+    addId(aluno?.matricula)
+    if (Array.isArray(meusAlunos)) {
+      meusAlunos.forEach((a: any) => {
+        addId(a?.id)
+        addId(a?.matricula)
+      })
+    }
+    return set
+  }, [aluno?.id, aluno?.matricula, meusAlunos])
 
   const gId = effectiveUser.id || 'usr-fam';
 
-  // Find all active/recent calls for this guardian
+  // Find all active/recent calls for this guardian or for this family's students
   const myCalls = React.useMemo(() => {
-    const calls = activeCalls.filter(c => 
-      (String(c.guardianId) === String(gId) || (meusAlunosIds.includes(String(c.studentId)) && (c.guardianId === 'special' || c.guardianId === 'special-auth'))) && 
-      (c.status === 'waiting' || c.status === 'called' || c.status === 'special_auth' || c.status === 'confirmed')
-    )
-    // Sort by priority so that waiting/called > confirmed > special_auth
-    const priority: any = { 'waiting': 1, 'called': 2, 'confirmed': 3, 'special_auth': 4 }
+    const calls = activeCalls.filter(c => {
+      const cStudentId = c.studentId ? String(c.studentId).trim() : ''
+      const isMyStudent = cStudentId ? (allFamilyStudentIds.has(cStudentId) || (aluno?.id && String(aluno.id).trim() === cStudentId)) : false
+      const isMyGuardian = gId && c.guardianId && String(c.guardianId).trim() === String(gId).trim()
+
+      if (!isMyStudent && !isMyGuardian) return false
+
+      return (
+        c.status === 'waiting' || 
+        c.status === 'called' || 
+        c.status === 'special_auth' || 
+        c.status === 'confirmed' ||
+        c.status === 'blocked'
+      )
+    })
+    // Sort by priority so that waiting/called > confirmed > special_auth > blocked
+    const priority: any = { 'waiting': 1, 'called': 2, 'confirmed': 3, 'special_auth': 4, 'blocked': 5 }
     return calls.sort((a, b) => (priority[a.status] || 99) - (priority[b.status] || 99))
-  }, [activeCalls, gId, meusAlunosIds])
+  }, [activeCalls, gId, allFamilyStudentIds, aluno?.id])
 
   const isStudentConfirmedToday = useCallback((studentId: string) => {
     if (!studentId) return false;
-    const c = activeCalls.find(ac => String(ac.studentId) === String(studentId) && ac.status === 'confirmed');
+    const sId = String(studentId).trim();
+    const c = activeCalls.find(ac => {
+      const acId = ac.studentId ? String(ac.studentId).trim() : '';
+      return (acId === sId || acId === sId.replace(/^0+/, '') || acId.padStart(6, '0') === sId.padStart(6, '0')) && ac.status === 'confirmed';
+    });
     if (c) return true;
     
     if (typeof window !== 'undefined') {
@@ -281,39 +322,59 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
     const special = new Set<string>()
 
     for (const c of myCalls) {
-      const sId = String(c.studentId)
+      const sId = String(c.studentId).trim()
       if (pending.has(sId) || confirmed.has(sId) || special.has(sId)) continue
       
       if (c.status === 'waiting' || c.status === 'called') {
         pending.add(sId)
+        pending.add(sId.replace(/^0+/, ''))
       } else if (c.status === 'confirmed') {
         confirmed.add(sId)
+        confirmed.add(sId.replace(/^0+/, ''))
       } else if (c.status === 'special_auth') {
         special.add(sId)
+        special.add(sId.replace(/^0+/, ''))
       }
     }
     return [pending, confirmed, special]
   }, [myCalls])
 
-  const pendingCalls = myCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && pendingStudentIds.has(String(c.studentId)))
-  const confirmedCalls = myCalls.filter(c => c.status === 'confirmed' && confirmedStudentIds.has(String(c.studentId)))
-  const specialAuthCalls = myCalls.filter(c => c.status === 'special_auth' && specialStudentIds.has(String(c.studentId)))
+  const pendingCalls = myCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && (
+    pendingStudentIds.has(String(c.studentId).trim()) || pendingStudentIds.has(String(c.studentId).replace(/^0+/, ''))
+  ))
+  const confirmedCalls = myCalls.filter(c => c.status === 'confirmed' && (
+    confirmedStudentIds.has(String(c.studentId).trim()) || confirmedStudentIds.has(String(c.studentId).replace(/^0+/, ''))
+  ))
+  const specialAuthCalls = myCalls.filter(c => c.status === 'special_auth' && (
+    specialStudentIds.has(String(c.studentId).trim()) || specialStudentIds.has(String(c.studentId).replace(/^0+/, ''))
+  ))
 
   const pendingCount = pendingStudentIds.size
   const specialCount = specialStudentIds.size
 
   // Is the current student's call specifically active, confirmed, or special?
-  const myCall = myCalls.find(c => String(c.studentId) === String(aluno?.id))
+  const currentStudentIdStr = aluno?.id ? String(aluno.id).trim() : ''
+  const myCall = myCalls.find(c => {
+    const cStudentId = c.studentId ? String(c.studentId).trim() : ''
+    if (!cStudentId || !currentStudentIdStr) return false
+    return cStudentId === currentStudentIdStr || allFamilyStudentIds.has(cStudentId)
+  }) || call
   const isBlocked = myCall?.status === 'blocked'
 
   // The button for THIS student should be green ONLY if THIS specific student was confirmed
   const isConfirmed = isStudentConfirmedToday(aluno?.id) || localConfirmed
 
-  // We show active state for THIS student if THIS student is in pending calls
-  const isActiveState = pendingStudentIds.has(String(aluno?.id)) || myCall?.status === 'waiting' || myCall?.status === 'called'
+  // We show active state for THIS student if THIS student is in pending calls or direct call is waiting/called
+  const isActiveState = (call && (call.status === 'waiting' || call.status === 'called')) ||
+                        (myCall && (myCall.status === 'waiting' || myCall.status === 'called')) ||
+                        (currentStudentIdStr ? pendingStudentIds.has(currentStudentIdStr) : false) ||
+                        (currentStudentIdStr ? pendingStudentIds.has(currentStudentIdStr.replace(/^0+/, '')) : false)
 
   // We show special auth state for THIS student if THIS student is in special_auth
-  const isSpecialAuth = specialStudentIds.has(String(aluno?.id)) || myCall?.status === 'special_auth'
+  const isSpecialAuth = (call && call.status === 'special_auth') ||
+                        (myCall && myCall.status === 'special_auth') ||
+                        (currentStudentIdStr ? specialStudentIds.has(currentStudentIdStr) : false) ||
+                        (currentStudentIdStr ? specialStudentIds.has(currentStudentIdStr.replace(/^0+/, '')) : false)
 
   // Summary of OTHER students linked to this guardian
   const otherStudentsSummary = useMemo(() => {
@@ -593,12 +654,19 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
   }
 
   if (isActiveState) {
+    const activeCallToDisplay = (myCall && (myCall.status === 'waiting' || myCall.status === 'called')) 
+      ? myCall 
+      : (call && (call.status === 'waiting' || call.status === 'called')) 
+        ? call 
+        : myCalls.find(c => c.status === 'waiting' || c.status === 'called') || myCalls[0]
+
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: '100%', minHeight: 58 }}>
         <button 
-          onClick={() => pendingCalls.forEach(c => {
-             cancelCall(c.id)
-          })}
+          onClick={() => {
+            const toCancel = pendingCalls.length > 0 ? pendingCalls : (activeCallToDisplay ? [activeCallToDisplay] : [])
+            toCancel.forEach(c => cancelCall(c.id))
+          }}
           title="Cancelar chamada"
           style={{
             width: 44, height: '100%', minHeight: 58, borderRadius: 18, cursor: 'pointer',
@@ -633,7 +701,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8, overflow: 'hidden' }}>
             <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{callLabel}</span>
             <span style={{ fontSize: 10, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 1, fontWeight: 600 }}>
-              por {myCalls.length > 0 ? myCalls[0].guardianName?.split(' ')[0] : 'Responsável'} às {formatTime(myCalls.length > 0 ? myCalls[0].calledAt : undefined)}
+              por {activeCallToDisplay?.guardianName ? activeCallToDisplay.guardianName.split(' ')[0] : 'Responsável'} às {formatTime(activeCallToDisplay?.calledAt)}
             </span>
           </div>
         </div>
