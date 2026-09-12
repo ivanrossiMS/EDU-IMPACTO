@@ -7,13 +7,15 @@ import {
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
   Info, Check, Calendar, Camera, Clock, DollarSign, Award,
   Car, FileText, ChevronRight, Search, X, Copy, Terminal,
-  Radio, CheckCheck, Eye
+  Radio, CheckCheck, Eye, Zap, Shield, Laptop
 } from 'lucide-react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { UserAvatar } from '@/components/UserAvatar'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
+import { useApp } from '@/lib/context'
+import { toast } from 'sonner'
 
 // ── Tipos e Presets de Notificação ──────────────────────────────────────────
 type PushCategory =
@@ -269,6 +271,127 @@ const CATEGORY_DEFINITIONS: Record<
 export default function ADAdminPushTestPage() {
   const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const { adAlert } = useAgendaDigital()
+  const { currentUser } = useApp()
+
+  // ── Estado de Diagnóstico Local Deste Aparelho ──
+  const [deviceDiagnostic, setDeviceDiagnostic] = useState<{
+    platform: string
+    permission: string
+    pushSubId: string | null
+    pushToken: string | null
+    pushOptedIn: boolean
+    onesignalId: string | null
+    externalId: string | null
+    loading: boolean
+  }>({
+    platform: 'web',
+    permission: 'checking...',
+    pushSubId: null,
+    pushToken: null,
+    pushOptedIn: false,
+    onesignalId: null,
+    externalId: null,
+    loading: true,
+  })
+  const [isResyncingDevice, setIsResyncingDevice] = useState(false)
+
+  const checkCurrentDevicePush = async () => {
+    if (typeof window === 'undefined') return
+    try {
+      let isNative = false
+      try {
+        isNative = !!(window as any).Capacitor?.isNativePlatform()
+      } catch {}
+
+      const rawPlatform = isNative
+        ? ((window as any).Capacitor?.getPlatform() || 'native')
+        : 'web'
+
+      if (isNative) {
+        try {
+          const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+          const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
+          const nativePerm = await OneSignalNative.Notifications.permissionNative().catch(() => 0)
+          const subId = await OneSignalNative.User.pushSubscription.getIdAsync().catch(() => null)
+          const subToken = await OneSignalNative.User.pushSubscription.getTokenAsync().catch(() => null)
+          const optedIn = await OneSignalNative.User.pushSubscription.getOptedInAsync().catch(() => false)
+          const osId = await OneSignalNative.User.getOnesignalId().catch(() => null)
+          const extId = await OneSignalNative.User.getExternalId().catch(() => null)
+
+          setDeviceDiagnostic({
+            platform: rawPlatform === 'ios' ? 'iOS (iPhone / iPad)' : (rawPlatform === 'android' ? 'Android' : rawPlatform),
+            permission: hasPerm ? 'granted' : (nativePerm === 1 ? 'denied' : 'default'),
+            pushSubId: subId,
+            pushToken: subToken,
+            pushOptedIn: Boolean(optedIn),
+            onesignalId: osId,
+            externalId: extId,
+            loading: false,
+          })
+          return
+        } catch (nativeErr) {
+          console.warn('[DeviceCheck] Erro ao consultar plugin nativo:', nativeErr)
+        }
+      }
+
+      // Web fallback
+      const webPerm = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+      const OS = (window as any).OneSignal
+      const osUser = OS?.User
+      const subId = osUser?.PushSubscription?.id || (window as any).__OS_SUBSCRIPTION_STATE__?.pushSubId || null
+      const optedIn = osUser?.PushSubscription?.optedIn ?? (webPerm === 'granted')
+      const extId = osUser?.externalId || (window as any).__OS_USER_ID__ || null
+
+      setDeviceDiagnostic({
+        platform: 'Navegador Web (PC / Mac)',
+        permission: webPerm,
+        pushSubId: subId,
+        pushToken: null,
+        pushOptedIn: Boolean(optedIn && webPerm === 'granted'),
+        onesignalId: null,
+        externalId: extId,
+        loading: false,
+      })
+    } catch (e) {
+      setDeviceDiagnostic(prev => ({ ...prev, loading: false }))
+    }
+  }
+
+  const handleResyncDevice = async () => {
+    setIsResyncingDevice(true)
+    try {
+      let isNative = false
+      try {
+        isNative = !!(window as any).Capacitor?.isNativePlatform()
+      } catch {}
+
+      if (isNative) {
+        const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+        await OneSignalNative.Notifications.requestPermission(true).catch(() => {})
+        if (OneSignalNative.User?.pushSubscription?.optIn) {
+          await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
+        }
+        if (currentUser?.id) {
+          await OneSignalNative.login(String(currentUser.id)).catch(() => {})
+          if (currentUser.responsavel_id) {
+            OneSignalNative.User.addAlias('responsavel_id', String(currentUser.responsavel_id)).catch(() => {})
+          }
+          if (currentUser.email) {
+            OneSignalNative.User.addAlias('email', String(currentUser.email).toLowerCase().trim()).catch(() => {})
+          }
+        }
+      } else if ((window as any).OneSignal?.User?.PushSubscription?.optIn) {
+        await (window as any).OneSignal.User.PushSubscription.optIn().catch(() => {})
+      }
+
+      await checkCurrentDevicePush()
+      toast.success('Dispositivo re-sincronizado com OneSignal com sucesso!')
+    } catch (err: any) {
+      toast.error(`Erro ao re-sincronizar: ${err?.message || 'Falha'}`)
+    } finally {
+      setIsResyncingDevice(false)
+    }
+  }
 
   // ── Estados de Seleção de Destino ──
   const [searchTerm, setSearchTerm] = useState('')
@@ -331,6 +454,7 @@ export default function ADAdminPushTestPage() {
   useEffect(() => {
     loadConfig()
     loadRecentLogs()
+    checkCurrentDevicePush()
 
     function handleClickOutside(e: MouseEvent) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -532,13 +656,126 @@ export default function ADAdminPushTestPage() {
           )}
 
           <button
-            onClick={() => { loadConfig(); loadRecentLogs(); }}
+            onClick={() => { loadConfig(); loadRecentLogs(); checkCurrentDevicePush(); }}
             className="btn btn-ghost btn-sm"
             title="Atualizar status e histórico"
             style={{ borderRadius: 10, padding: 8 }}
           >
             <RefreshCw size={15} />
           </button>
+        </div>
+      </div>
+
+      {/* ── STATUS DESTE APARELHO (DIAGNÓSTICO LOCAL PUSH) ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.5) 100%)',
+        border: '1px solid rgba(99, 102, 241, 0.25)',
+        borderRadius: 18,
+        padding: '18px 22px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)',
+        backdropFilter: 'blur(12px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 38, height: 38, borderRadius: 12,
+              background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(14, 165, 233, 0.3)',
+            }}>
+              <Smartphone size={20} color="white" />
+            </div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
+                Status Deste Aparelho
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'rgba(99, 102, 241, 0.25)', color: '#a5b4fc', fontWeight: 700 }}>
+                  Diagnóstico em Tempo Real
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                Verificação da permissão e inscrição do OneSignal ativo neste smartphone ou computador.
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleResyncDevice}
+            disabled={isResyncingDevice}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+              borderRadius: 10, border: '1px solid rgba(99, 102, 241, 0.4)',
+              background: 'rgba(99, 102, 241, 0.18)', color: '#c7d2fe',
+              fontSize: 12, fontWeight: 700, cursor: isResyncingDevice ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s'
+            }}
+          >
+            <RefreshCw size={13} style={isResyncingDevice ? { animation: 'spin 1s linear infinite' } : {}} />
+            {isResyncingDevice ? 'Re-sincronizando...' : 'Re-sincronizar Este Aparelho'}
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          {/* Card 1: Aparelho & Sessão */}
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Aparelho / Plataforma
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'white', marginTop: 4 }}>
+              {deviceDiagnostic.platform}
+            </div>
+            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {currentUser?.nome || 'Usuário'} {currentUser?.id ? `(ID: ${String(currentUser.id).slice(0, 8)}...)` : ''}
+            </div>
+          </div>
+
+          {/* Card 2: Permissão no Dispositivo */}
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Permissão do Sistema
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              {deviceDiagnostic.permission === 'granted' ? (
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#34d399', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <CheckCircle2 size={14} /> Concedida
+                </span>
+              ) : deviceDiagnostic.permission === 'denied' ? (
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#f87171', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <AlertTriangle size={14} /> Bloqueada no Sistema
+                </span>
+              ) : (
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Clock size={14} /> Padrão (Não solicitada)
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+              {deviceDiagnostic.permission === 'denied' ? 'Ative em Ajustes > Notificações' : 'Notificações liberadas no aparelho'}
+            </div>
+          </div>
+
+          {/* Card 3: Inscrição OneSignal */}
+          <div style={{ padding: '12px 16px', borderRadius: 12, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Inscrição OneSignal
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              {deviceDiagnostic.pushOptedIn ? (
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#34d399', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <CheckCircle2 size={14} /> Ativo (Inscrito)
+                </span>
+              ) : (
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Clock size={14} /> Não Inscrito / Pendente
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              Sub ID: {deviceDiagnostic.pushSubId ? `${String(deviceDiagnostic.pushSubId).slice(0, 16)}...` : (deviceDiagnostic.pushOptedIn ? 'Ativo no Gateway' : 'Aguardando registro')}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -731,13 +968,21 @@ export default function ADAdminPushTestPage() {
                                 {g.telefone && <span>• {g.telefone}</span>}
                               </div>
                             </div>
-                            <span style={{
-                              fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-                              background: g.temContaAtiva ? 'rgba(16, 185, 129, 0.12)' : 'rgba(100, 116, 139, 0.1)',
-                              color: g.temContaAtiva ? '#10b981' : '#64748b'
-                            }}>
-                              {g.temContaAtiva ? 'Conta no App' : 'Sem Login'}
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                              <span style={{
+                                fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
+                                background: g.temContaAtiva ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.12)',
+                                color: g.temContaAtiva ? '#10b981' : '#64748b',
+                                border: `1px solid ${g.temContaAtiva ? 'rgba(16, 185, 129, 0.3)' : 'rgba(100, 116, 139, 0.2)'}`
+                              }}>
+                                {g.temContaAtiva ? '✓ Conta no App' : 'Sem Login'}
+                              </span>
+                              {g.ultimoAcesso && (
+                                <span style={{ fontSize: 9, color: '#10b981', fontWeight: 600 }}>
+                                  Visto: {new Date(g.ultimoAcesso).toLocaleDateString('pt-BR')}
+                                </span>
+                              )}
+                            </div>
                           </label>
                         )
                       })}

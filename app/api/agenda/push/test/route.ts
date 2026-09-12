@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { sendPushNotification } from '@/lib/server/pushService'
 import { AgendaPushType } from '@/lib/server/agendaNotifications'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
@@ -155,11 +156,23 @@ export async function GET(request: Request) {
         if (rErr) console.warn('[API Push Test] Erro ao buscar responsaveis:', rErr.message)
       }
 
-      // Buscar se existem contas em system_users para esses responsáveis
+      // 1. Buscar se existem contas em system_users para esses responsáveis
       const { data: sysUsers } = await supabase
         .from('system_users')
         .select('id, auth_id, email, nome, ultimo_acesso, created_at, dados')
         .limit(2000)
+
+      // 2. Buscar usuários do Supabase Auth para verificar contas ativas dos responsáveis
+      const supabaseAdmin = getAdminClient()
+      let authUsers: any[] = []
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 })
+        if (listData?.users) {
+          authUsers = listData.users
+        }
+      } catch (authErr: any) {
+        console.warn('[API Push Test GET] Erro ao listar auth.users:', authErr.message)
+      }
 
       responsaveisList = (vinculos || []).map((v: any) => {
         const vIdStr = String(v.responsavel_id).trim()
@@ -177,8 +190,28 @@ export async function GET(request: Request) {
           return (uRespId && (uRespId === vIdStr || uRespId.replace(/^0+/, '') === vIdClean)) || (rEmail && uEmail === rEmail)
         })
 
+        const rPhoneDigits = (rInfo.telefone || rInfo.celular || '').replace(/\D/g, '').slice(-8)
+        const rCpfDigits = (rInfo.dados?.cpf || rInfo.cpf || '').replace(/\D/g, '')
+
+        // Match no Supabase Auth por email, responsavel_id nos metadados, telefone ou CPF
+        const authUser = (authUsers || []).find((u: any) => {
+          const uEmail = (u.email || u.user_metadata?.email || '').toLowerCase().trim()
+          const uMetaRespId = String(u.user_metadata?.responsavel_id || u.user_metadata?.responsavelId || '').trim()
+          const uPhoneDigits = (u.phone || u.user_metadata?.telefone || u.user_metadata?.celular || '').replace(/\D/g, '').slice(-8)
+          const uCpfDigits = (u.user_metadata?.cpf || '').replace(/\D/g, '')
+          return (rEmail && uEmail === rEmail) ||
+                 (uMetaRespId && (uMetaRespId === vIdStr || uMetaRespId.replace(/^0+/, '') === vIdClean)) ||
+                 (rPhoneDigits.length >= 8 && uPhoneDigits.length >= 8 && rPhoneDigits === uPhoneDigits) ||
+                 (rCpfDigits.length >= 11 && uCpfDigits.length >= 11 && rCpfDigits === uCpfDigits)
+        })
+
+        const temContaAtiva = Boolean(sysUser || authUser)
+        const resolvedAuthId = authUser?.id || sysUser?.auth_id || (sysUser ? sysUser.id : null)
+        const resolvedUltimoAcesso = authUser?.last_sign_in_at || sysUser?.ultimo_acesso || null
+
         // NUNCA exibir ID puro — resolver nome real ou papel
         let resolvedNome = (rInfo.nome || '').trim()
+        if (!resolvedNome && authUser?.user_metadata?.nome) resolvedNome = String(authUser.user_metadata.nome).trim()
         if (!resolvedNome && sysUser?.nome) resolvedNome = sysUser.nome.trim()
         if (!resolvedNome && sysUser?.dados?.nome) resolvedNome = String(sysUser.dados.nome).trim()
         if (!resolvedNome && v.resp_financeiro && (aluno as any).responsavel_financeiro) {
@@ -200,16 +233,16 @@ export async function GET(request: Request) {
         return {
           responsavel_id: vIdStr,
           nome: resolvedNome,
-          email: rInfo.email || sysUser?.email || null,
+          email: rInfo.email || sysUser?.email || authUser?.email || null,
           telefone: rInfo.telefone || rInfo.celular || null,
           parentesco: v.parentesco || (v.resp_financeiro ? 'Financeiro' : 'Responsável'),
           isFinanceiro: Boolean(v.resp_financeiro),
           isPedagogico: Boolean(v.resp_pedagogico),
           isOutro: Boolean(v.resp_outro),
           systemUserId: sysUser?.id || null,
-          authId: sysUser?.auth_id || null,
-          temContaAtiva: Boolean(sysUser),
-          ultimoAcesso: sysUser?.ultimo_acesso || null,
+          authId: resolvedAuthId,
+          temContaAtiva,
+          ultimoAcesso: resolvedUltimoAcesso,
         }
       })
 
@@ -381,6 +414,18 @@ export async function POST(request: Request) {
           .select('id, auth_id, email, nome, dados')
           .limit(2000)
 
+        // Buscar usuários do Supabase Auth para mapear auth UUID
+        const supabaseAdmin = getAdminClient()
+        let authUsers: any[] = []
+        try {
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 })
+          if (listData?.users) {
+            authUsers = listData.users
+          }
+        } catch (authErr: any) {
+          console.warn('[API Push Test POST] Erro ao listar auth.users:', authErr.message)
+        }
+
         respIdsToQuery.forEach(rId => {
           const rIdStr = String(rId).trim()
           const rIdClean = rIdStr.replace(/^0+/, '')
@@ -400,9 +445,27 @@ export async function POST(request: Request) {
                    (rEmail && uEmail === rEmail)
           })
 
+          const rPhoneDigits = (rInfo?.telefone || (rInfo as any)?.celular || '').replace(/\D/g, '').slice(-8)
+          const rCpfDigits = ((rInfo as any)?.dados?.cpf || (rInfo as any)?.cpf || '').replace(/\D/g, '')
+
+          const matchedAuthUser = (authUsers || []).find((u: any) => {
+            const uEmail = (u.email || u.user_metadata?.email || '').toLowerCase().trim()
+            const uMetaRespId = String(u.user_metadata?.responsavel_id || u.user_metadata?.responsavelId || '').trim()
+            const uPhoneDigits = (u.phone || u.user_metadata?.telefone || u.user_metadata?.celular || '').replace(/\D/g, '').slice(-8)
+            const uCpfDigits = (u.user_metadata?.cpf || '').replace(/\D/g, '')
+            return (rEmail && uEmail === rEmail) ||
+                   (uMetaRespId && (uMetaRespId === rIdStr || uMetaRespId.replace(/^0+/, '') === rIdClean)) ||
+                   (rPhoneDigits.length >= 8 && uPhoneDigits.length >= 8 && rPhoneDigits === uPhoneDigits) ||
+                   (rCpfDigits.length >= 11 && uCpfDigits.length >= 11 && rCpfDigits === uCpfDigits)
+          })
+
           if (matchedUser) {
             if (matchedUser.id) targetUserIdsSet.add(String(matchedUser.id))
             if (matchedUser.auth_id) targetUserIdsSet.add(String(matchedUser.auth_id))
+          }
+
+          if (matchedAuthUser) {
+            targetUserIdsSet.add(String(matchedAuthUser.id))
           }
 
           if (rEmail) {
@@ -411,6 +474,7 @@ export async function POST(request: Request) {
 
           // Resolver nome amigável real — NUNCA mostrar #ID
           let resolvedNome = (rInfo?.nome || '').trim()
+          if (!resolvedNome && matchedAuthUser?.user_metadata?.nome) resolvedNome = String(matchedAuthUser.user_metadata.nome).trim()
           if (!resolvedNome && matchedUser?.nome) resolvedNome = matchedUser.nome.trim()
           if (!resolvedNome && matchedUser?.dados?.nome) resolvedNome = String(matchedUser.dados.nome).trim()
           if (!resolvedNome && st?.responsavel_financeiro && rIdStr.includes('fin')) {
@@ -430,9 +494,10 @@ export async function POST(request: Request) {
             tipo: 'responsavel',
             id: rIdStr,
             nome: resolvedNome,
-            email: rInfo?.email || matchedUser?.email || null,
-            authId: matchedUser?.auth_id || null,
+            email: rInfo?.email || matchedUser?.email || matchedAuthUser?.email || null,
+            authId: matchedAuthUser?.id || matchedUser?.auth_id || null,
             systemUserId: matchedUser?.id || null,
+            temContaAtiva: Boolean(matchedUser || matchedAuthUser),
           })
         })
       }

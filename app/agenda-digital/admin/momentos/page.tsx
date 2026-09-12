@@ -14,7 +14,7 @@ const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   }, []);
   return mounted ? createPortal(children, document.body) : null;
 };
-import { Image as ImageIcon, X, Filter, Plus, ChevronDown, ChevronUp, Video, Loader2, Check, Camera, Send, Smile, Users, Globe, Upload } from 'lucide-react'
+import { Image as ImageIcon, X, Filter, Plus, ChevronDown, ChevronUp, ChevronRight, Video, Loader2, Check, Camera, Send, Smile, Users, Globe, Upload } from 'lucide-react'
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
@@ -116,6 +116,7 @@ export default function ADAdminMomentos() {
   const submitPost = async () => {
     if (isSubmitting) return
     if (!newPost.mediaFiles.length) return adAlert('Selecione ao menos uma foto ou vídeo para publicar.', 'Atenção')
+    if (!newPost.targetClasses.length) return adAlert('Por favor, selecione ao menos um destinatário (Turma, Grupo ou Aluno) para publicar o momento.', 'Destinatários obrigatórios')
     
     // Validar tamanhos
     const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
@@ -171,7 +172,7 @@ export default function ADAdminMomentos() {
 
       const targetClasses = selectedTurmas.length > 0 
         ? selectedTurmas.map(t => t.name) 
-        : (selectedAlunos.length > 0 || selectedFuncionarios.length > 0 ? [] : ['Toda a Escola']);
+        : [];
         
       const targetClassesIds = selectedTurmas.flatMap(t => {
         const rawId = String(t.id);
@@ -748,6 +749,15 @@ export default function ADAdminMomentos() {
                         <Users size={15} />
                       </div>
                       <label style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b' }}>Visibilidade</label>
+                      {newPost.targetClasses.length > 0 ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#4f46e5', background: '#e0e7ff', padding: '2px 8px', borderRadius: 12 }}>
+                          {newPost.targetClasses.length} selecionado{newPost.targetClasses.length > 1 ? 's' : ''}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', background: '#fee2e2', padding: '2px 8px', borderRadius: 12 }}>
+                          Obrigatório
+                        </span>
+                      )}
                     </div>
                     <button 
                       type="button"
@@ -775,28 +785,50 @@ export default function ADAdminMomentos() {
                     </button>
                   </div>
 
-                  <div style={{ 
-                    background: newPost.targetClasses.length === 0 ? 'linear-gradient(135deg, rgba(238,242,255,0.7) 0%, rgba(245,243,255,0.7) 100%)' : '#f8fafc', 
-                    padding: 12, 
-                    borderRadius: 16, 
-                    border: newPost.targetClasses.length === 0 ? '1.5px solid rgba(99,102,241,0.25)' : '1.5px solid #e2e8f0',
-                    minHeight: 44,
-                    display: 'flex',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: 8,
-                    maxHeight: showAllDestinatarios ? 180 : 'none',
-                    overflowY: showAllDestinatarios ? 'auto' : 'visible'
-                  }}>
+                  <div 
+                    onClick={() => { if (newPost.targetClasses.length === 0) setShowDestModal(true) }}
+                    style={{ 
+                      background: '#f8fafc', 
+                      padding: 12, 
+                      borderRadius: 16, 
+                      border: newPost.targetClasses.length === 0 ? '1.5px dashed #cbd5e1' : '1.5px solid #e2e8f0',
+                      minHeight: 48,
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      cursor: newPost.targetClasses.length === 0 ? 'pointer' : 'default',
+                      maxHeight: showAllDestinatarios ? 180 : 'none',
+                      overflowY: showAllDestinatarios ? 'auto' : 'visible',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={e => {
+                      if (newPost.targetClasses.length === 0) {
+                        e.currentTarget.style.borderColor = '#818cf8'
+                        e.currentTarget.style.background = '#f5f3ff'
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (newPost.targetClasses.length === 0) {
+                        e.currentTarget.style.borderColor = '#cbd5e1'
+                        e.currentTarget.style.background = '#f8fafc'
+                      }
+                    }}
+                  >
                     {newPost.targetClasses.length === 0 ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99, 102, 241, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5', flexShrink: 0 }}>
-                          <Globe size={15} />
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', padding: '2px 4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: 8, background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
+                            <Users size={15} />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ color: '#475569', fontSize: 13, fontWeight: 600 }}>Nenhum destinatário selecionado</span>
+                            <span style={{ color: '#94a3b8', fontSize: 11, fontWeight: 500 }}>Clique para escolher turmas, grupos ou alunos</span>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ color: '#1e1b4b', fontSize: 13, fontWeight: 700 }}>Toda a Escola (padrão)</span>
-                          <span style={{ color: '#6366f1', fontSize: 11, fontWeight: 500 }}>Visível para todas as turmas, alunos e colaboradores</span>
-                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#4f46e5', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                          Selecionar <ChevronRight size={14} />
+                        </span>
                       </div>
                     ) : (
                       <>
@@ -906,32 +938,32 @@ export default function ADAdminMomentos() {
                 <button 
                   type="button"
                   onClick={submitPost} 
-                  disabled={isSubmitting || !newPost.mediaFiles.length}
+                  disabled={isSubmitting || !newPost.mediaFiles.length || !newPost.targetClasses.length}
                   style={{ 
                     padding: '12px 24px', 
                     borderRadius: 14, 
                     border: 'none', 
-                    background: (!newPost.mediaFiles.length) 
+                    background: (!newPost.mediaFiles.length || !newPost.targetClasses.length) 
                       ? '#cbd5e1' 
                       : 'linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #ec4899 100%)', 
                     color: '#ffffff', 
                     fontWeight: 800, 
                     fontSize: 14, 
-                    cursor: (!newPost.mediaFiles.length) ? 'not-allowed' : 'pointer', 
+                    cursor: (!newPost.mediaFiles.length || !newPost.targetClasses.length) ? 'not-allowed' : 'pointer', 
                     display: 'flex', 
                     alignItems: 'center', 
                     gap: 8, 
-                    boxShadow: (!newPost.mediaFiles.length) ? 'none' : '0 6px 20px rgba(124,58,237,0.35)',
+                    boxShadow: (!newPost.mediaFiles.length || !newPost.targetClasses.length) ? 'none' : '0 6px 20px rgba(124,58,237,0.35)',
                     transition: 'all 0.2s ease'
                   }}
                   onMouseEnter={e => {
-                    if (newPost.mediaFiles.length) {
+                    if (newPost.mediaFiles.length && newPost.targetClasses.length) {
                       e.currentTarget.style.transform = 'translateY(-1px)'
                       e.currentTarget.style.boxShadow = '0 8px 24px rgba(124,58,237,0.45)'
                     }
                   }}
                   onMouseLeave={e => {
-                    if (newPost.mediaFiles.length) {
+                    if (newPost.mediaFiles.length && newPost.targetClasses.length) {
                       e.currentTarget.style.transform = 'translateY(0)'
                       e.currentTarget.style.boxShadow = '0 6px 20px rgba(124,58,237,0.35)'
                     }
