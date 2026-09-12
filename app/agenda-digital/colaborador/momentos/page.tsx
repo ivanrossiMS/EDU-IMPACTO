@@ -7,20 +7,7 @@ import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext
 import { useData } from '@/lib/dataContext'
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { PrivacyScreen } from '@capacitor-community/privacy-screen';
-
-const ClientPortal = ({ children }: { children: React.ReactNode }) => {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, []);
-  return mounted ? createPortal(children, document.body) : null;
-};
-import { X, Expand, Play, Heart, MessageCircle, Share2, Filter, Upload, Trash2, Camera, Download, PlayCircle, MoreVertical, Image as ImageIcon, Sparkles, Smile, Star, Send, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Maximize2, Plus, Check, Loader2, Video, Users, Globe } from 'lucide-react'
+import { X, Expand, Play, Heart, MessageCircle, Share2, Filter, Upload, Trash2, Camera, Download, PlayCircle, MoreVertical, Image as ImageIcon, Sparkles, Smile, Star, Send, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Maximize2, Plus, Check, Loader2, Video, Users, Globe, ShieldAlert } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 import { useApp } from '@/lib/context'
@@ -34,31 +21,33 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 import { MomentoLightbox } from '@/components/agenda/MomentoLightbox'
+import { useScreenshotProtection } from '@/hooks/useScreenshotProtection'
+import { PrivacyProtectionModal } from '@/components/agenda/PrivacyProtectionModal'
+
+const ClientPortal = ({ children }: { children: React.ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+  return mounted ? createPortal(children, document.body) : null;
+};
 
 export default function ADMomentosPage() {
   const queryClient = useQueryClient()
   const { momentosFeed, isDataLoading, hasNextPageMomentos, fetchNextPageMomentos } = useAgendaDigital()
   
-  
-  useEffect(() => {
-    let enabled = false;
-    const enablePrivacy = async () => {
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
-        try {
-          await PrivacyScreen.enable();
-          enabled = true;
-        } catch (e) {
-          console.error("PrivacyScreen enable error", e);
-        }
-      }
-    };
-    enablePrivacy();
-    return () => {
-      if (enabled) {
-        PrivacyScreen.disable().catch(console.error);
-      }
-    };
-  }, []);
+  // Proteção ultra moderna contra prints, capturas e gravações de tela
+  const {
+    isModalOpen: isPrivacyModalOpen,
+    closeModal: closePrivacyModal,
+    triggerModal: triggerPrivacyModal,
+    handleContextMenu,
+    handleDragStart
+  } = useScreenshotProtection({ enabled: true, autoEnablePrivacyScreen: true })
   const { currentUser } = useApp()
 
   const searchParams = useSearchParams()
@@ -1303,11 +1292,47 @@ export default function ADMomentosPage() {
             </div>
           </div>
 
-          {/* Action Button */}
-          {!isMirroring && (
-            <button 
-              onClick={() => setShowModal(true)} 
-              className="ad-momentos-btn-novo"
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={triggerPrivacyModal}
+              title="Informações de Privacidade e Proteção contra Prints"
+              style={{
+                height: 48,
+                padding: '0 16px',
+                borderRadius: 16,
+                background: 'rgba(99, 102, 241, 0.12)',
+                border: '1px solid rgba(99, 102, 241, 0.28)',
+                color: '#4f46e5',
+                fontWeight: 700,
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                position: 'relative',
+                zIndex: 2
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)'
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+            >
+              <ShieldAlert size={16} color="#4f46e5" />
+              <span>Ambiente Protegido</span>
+            </button>
+
+            {!isMirroring && (
+              <button 
+                onClick={() => setShowModal(true)} 
+                className="ad-momentos-btn-novo"
               style={{
                 height: 48, 
                 padding: '0 22px', 
@@ -1341,6 +1366,7 @@ export default function ADMomentosPage() {
               <span>Novo Foto/Vídeo</span>
             </button>
           )}
+          </div>
         </div>
 
         {/* FILTRO DE EXIBIÇÃO (Abaixo do card, antes dos momentos) */}
@@ -1674,6 +1700,12 @@ export default function ADMomentosPage() {
         onClose={() => setLightboxOpen(false)}
         media={lightboxMedia}
         initialIndex={lightboxIndex}
+      />
+
+      {/* MODAL ULTRA MODERNO DE PRIVACIDADE CONTRA PRINTS */}
+      <PrivacyProtectionModal
+        isOpen={isPrivacyModalOpen}
+        onClose={closePrivacyModal}
       />
 
       {/* === MODAL: NOVO MOMENTO === */}

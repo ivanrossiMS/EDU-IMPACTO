@@ -9,16 +9,17 @@ import { getAlunoTurmaCursando, getAlunoTodasTurmasEGrupos, getAlunoNomesTurmasE
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import React, { use, useState, useEffect, useMemo } from 'react'
-import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2 } from 'lucide-react'
+import { Image as ImageIcon, Heart, MessageCircle, Send, Sparkles, Star, Smile, Camera, Loader2, ChevronLeft, ChevronRight, X, Maximize2, ShieldAlert } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
-import { PrivacyScreen } from '@capacitor-community/privacy-screen';
 import { useApp } from '@/lib/context'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { getInitials, formatDateTime } from '@/lib/utils'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { MomentoSkeleton } from '../../components/MomentoSkeleton'
 import { MomentoLightbox } from '@/components/agenda/MomentoLightbox'
+import { useScreenshotProtection } from '@/hooks/useScreenshotProtection'
+import { PrivacyProtectionModal } from '@/components/agenda/PrivacyProtectionModal'
 
 export default function ADMomentosPage({ params }: { params: Promise<{ slug: string }>}) {
   const queryClient = useQueryClient()
@@ -30,25 +31,14 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const { currentUser } = useApp()
   const aluno = contextAluno
   
-  useEffect(() => {
-    let enabled = false;
-    const enablePrivacy = async () => {
-      if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) {
-        try {
-          await PrivacyScreen.enable();
-          enabled = true;
-        } catch (e) {
-          console.error("PrivacyScreen enable error", e);
-        }
-      }
-    };
-    enablePrivacy();
-    return () => {
-      if (enabled) {
-        PrivacyScreen.disable().catch(console.error);
-      }
-    };
-  }, []);
+  // Proteção ultra moderna contra prints, capturas e gravações de tela
+  const {
+    isModalOpen: isPrivacyModalOpen,
+    closeModal: closePrivacyModal,
+    triggerModal: triggerPrivacyModal,
+    handleContextMenu,
+    handleDragStart
+  } = useScreenshotProtection({ enabled: true, autoEnablePrivacyScreen: true })
   
   const nomeTurmaDoAluno = (() => {
     if (!aluno) return 'Sem Turma'
@@ -510,9 +500,42 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           </div>
 
           <div style={{ flex: 1, zIndex: 1, minWidth: 0 }}>
-            <h2 className="ad-familiar-momentos-title">
-              Fotos/Vídeos da Turma
-            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
+              <h2 className="ad-familiar-momentos-title" style={{ margin: 0 }}>
+                Fotos/Vídeos da Turma
+              </h2>
+              <button
+                type="button"
+                onClick={triggerPrivacyModal}
+                title="Informações de Privacidade e Proteção contra Prints"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  background: 'rgba(99, 102, 241, 0.1)',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  color: '#4f46e5',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(99, 102, 241, 0.08)'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.18)'
+                  e.currentTarget.style.transform = 'scale(1.03)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'
+                  e.currentTarget.style.transform = 'scale(1)'
+                }}
+              >
+                <ShieldAlert size={14} color="#4f46e5" />
+                <span>Ambiente Protegido</span>
+              </button>
+            </div>
             <p className="ad-familiar-momentos-desc">
               Acompanhe o dia a dia, sorrisos e as atividades incríveis de <strong style={{ color: '#4f46e5', fontWeight: 700 }}>{nomesTurmasEGruposDoAluno}</strong>.
             </p>
@@ -603,13 +626,17 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
             )}
           </div>
         ) : (
-          <div className="ad-momentos-feed-container" style={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 48, 
-            padding: '24px 16px', 
-          }}>
+          <div 
+            className="ad-momentos-feed-container momentos-protected-content" 
+            onContextMenu={handleContextMenu}
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 48, 
+              padding: '24px 16px', 
+            }}
+          >
             {meusMomentos.slice(0, visibleCount).map((m, index) => {
               // Associa uma rotação inicial sutil e fixa com base no index
               const initialRotation = ((index * 3) % 5) - 2;
@@ -863,6 +890,12 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
         onClose={() => setLightboxOpen(false)}
         media={lightboxMedia}
         initialIndex={lightboxIndex}
+      />
+
+      {/* MODAL ULTRA MODERNO DE PRIVACIDADE CONTRA PRINTS */}
+      <PrivacyProtectionModal
+        isOpen={isPrivacyModalOpen}
+        onClose={closePrivacyModal}
       />
     </div>
   )

@@ -9,8 +9,11 @@ import {
   ChevronRight, 
   ZoomIn, 
   ZoomOut, 
-  RotateCcw 
+  RotateCcw,
+  ShieldAlert
 } from 'lucide-react'
+import { useScreenshotProtection } from '@/hooks/useScreenshotProtection'
+import { PrivacyProtectionModal } from './PrivacyProtectionModal'
 
 export interface MomentoLightboxMedia {
   url: string
@@ -41,6 +44,15 @@ export function MomentoLightbox({
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
+
+  // Proteção contra capturas de tela, gravações e prints
+  const {
+    isModalOpen: isPrivacyModalOpen,
+    closeModal: closePrivacyModal,
+    triggerModal: triggerPrivacyModal,
+    handleContextMenu,
+    handleDragStart
+  } = useScreenshotProtection({ enabled: isOpen, autoEnablePrivacyScreen: true })
 
   // Drag tracking refs
   const dragStartRef = useRef({ x: 0, y: 0 })
@@ -346,6 +358,43 @@ export function MomentoLightbox({
 
           {/* Action buttons on top right */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
+            {/* SELO / BOTÃO DE AMBIENTE PROTEGIDO */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                triggerPrivacyModal()
+              }}
+              title="Informações de Privacidade e Proteção contra Prints"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                height: 40,
+                padding: '0 14px',
+                borderRadius: 20,
+                background: 'rgba(99, 102, 241, 0.22)',
+                border: '1px solid rgba(165, 180, 252, 0.35)',
+                color: '#e0e7ff',
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                backdropFilter: 'blur(8px)',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.38)'
+                e.currentTarget.style.transform = 'scale(1.04)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)'
+                e.currentTarget.style.transform = 'scale(1)'
+              }}
+            >
+              <ShieldAlert size={16} color="#a5b4fc" />
+              <span className="hidden sm:inline">Ambiente Protegido</span>
+            </button>
+
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -470,7 +519,7 @@ export function MomentoLightbox({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={handleContextMenu}
           onDoubleClick={(e) => {
             e.stopPropagation()
             handleToggleZoom()
@@ -497,7 +546,7 @@ export function MomentoLightbox({
               controlsList="nodownload"
               autoPlay
               playsInline
-              onContextMenu={(e) => e.preventDefault()}
+              onContextMenu={handleContextMenu}
               style={{
                 maxWidth: '92vw',
                 maxHeight: '85vh',
@@ -526,7 +575,8 @@ export function MomentoLightbox({
                 src={currentItem.url}
                 alt={description || 'Momento'}
                 draggable={false}
-                onContextMenu={(e) => e.preventDefault()}
+                onDragStart={handleDragStart}
+                onContextMenu={handleContextMenu}
                 style={{
                   maxWidth: '92vw',
                   maxHeight: '82vh',
@@ -715,6 +765,12 @@ export function MomentoLightbox({
             ))}
           </div>
         )}
+
+        {/* MODAL ULTRA MODERNO DE PRIVACIDADE CONTRA PRINTS */}
+        <PrivacyProtectionModal
+          isOpen={isPrivacyModalOpen}
+          onClose={closePrivacyModal}
+        />
       </motion.div>
     </AnimatePresence>,
     document.body

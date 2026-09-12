@@ -1792,6 +1792,29 @@ sup {
     max-width: 100% !important;
     display: block !important;
   }
+
+  /* Bloqueio de Privacidade para fotos e vídeos dos Momentos */
+  .momentos-protected-content,
+  .ad-momentos-feed-container,
+  .polaroid-card {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body:has(.momentos-protected-content)::before {
+    content: "🔒 Por questões de privacidade, não é possível salvar, tirar print ou salvar fotos e vídeos (LGPD & Proteção da Criança e do Adolescente).";
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    background: #000000 !important;
+    color: #ffffff !important;
+    font-size: 20px !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    padding: 120px 40px !important;
+    z-index: 99999999 !important;
+  }
 }
+
 
 
