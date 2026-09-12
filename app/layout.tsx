@@ -23,6 +23,7 @@ export const viewport = {
 }
 
 import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoader'
+import { GlobalLogoutOverlay } from '@/components/layout/GlobalLogoutOverlay'
 
 import { KeyboardProvider } from '@/components/providers/KeyboardProvider'
 import { CapacitorResumeGuard } from '@/components/providers/CapacitorResumeGuard'
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <CapacitorResumeGuard />
         <ReactQueryProvider>
           <AppProvider>
+            <GlobalLogoutOverlay />
             <GlobalNotificationProvider />
             <KeyboardProvider>
               <GlobalAccessGuard>

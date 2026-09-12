@@ -35,16 +35,54 @@ const DEST_MODAL_STYLES = `
     overflow: hidden;
   }
   .dest-modal-backdrop {
-    display: none;
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .dest-modal-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 14px 20px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid #E2E8F0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 30;
+  }
+  .dest-modal-btn-cancel,
+  .dest-modal-btn-confirm {
+    flex: 1;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+  .dest-modal-btn-cancel {
+    background: #F1F5F9;
+    color: #475569;
+  }
+  .dest-modal-btn-cancel:hover {
+    background: #E2E8F0;
+  }
+  .dest-modal-btn-confirm {
+    font-weight: 800;
+    color: #FFFFFF;
   }
   @media (min-width: 1024px) {
-    .dest-modal-backdrop {
-      display: block;
-      position: absolute;
-      inset: 0;
-      background: rgba(15, 23, 42, 0.65);
-      transform: translateZ(0);
-    }
     .dest-modal-container {
       width: 90%;
       max-width: 720px;
@@ -54,6 +92,20 @@ const DEST_MODAL_STYLES = `
       border-radius: 28px;
       box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35);
       border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+    .dest-modal-footer {
+      justify-content: flex-end;
+      padding: 16px 24px;
+    }
+    .dest-modal-btn-cancel {
+      flex: none;
+      min-width: 120px;
+      padding: 0 24px;
+    }
+    .dest-modal-btn-confirm {
+      flex: none;
+      min-width: 160px;
+      padding: 0 28px;
     }
   }
   @keyframes orbitSpinCW {
@@ -625,6 +677,66 @@ export function DestinatariosModal({
   // SEPARAÇÃO PRINCIPAL: TURMAS DE ALUNOS & EQUIPE ESCOLAR
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Função utilitária para ordenar turmas rigorosamente por ordem de série e nível
+  const getTurmaSerieWeight = (t: any): number => {
+    const str = `${t?.nome || t?.title || ''} ${t?.serie || ''}`.toUpperCase().trim()
+
+    // 1. Educação Infantil: Berçário, Maternal, Jardim, Pré
+    if (str.includes('BERÇÁRIO') || str.includes('BERCARIO')) {
+      const m = str.match(/BER[ÇC][ÁA]RIO\s*([I|V|X|\d]+)?/)
+      const num = m && m[1] ? (parseInt(m[1], 10) || (m[1] === 'II' ? 2 : 1)) : 1
+      return 10 + num
+    }
+    if (str.includes('MATERNAL')) {
+      const m = str.match(/MATERNAL\s*([I|V|X|\d]+)?/)
+      const num = m && m[1] ? (parseInt(m[1], 10) || (m[1] === 'II' ? 2 : 1)) : 1
+      return 20 + num
+    }
+    if (str.includes('JARDIM')) {
+      const m = str.match(/JARDIM\s*([I|V|X|\d]+)?/)
+      const num = m && m[1] ? (parseInt(m[1], 10) || (m[1] === 'II' ? 2 : 1)) : 1
+      return 30 + num
+    }
+    if (str.includes('PRÉ') || str.includes('PRE')) {
+      const m = str.match(/PR[ÉE][-\s]*ESCOLA\s*([I|V|X|\d]+)?/)
+      const num = m && m[1] ? (parseInt(m[1], 10) || (m[1] === 'II' ? 2 : 1)) : 1
+      return 40 + num
+    }
+
+    // 2. Níveis da Educação Infantil (ex: NÍVEL 1, NÍVEL 2, NÍVEL 4, NÍVEL 5)
+    const nivelMatch = str.match(/N[ÍI]VEL\s*(\d+)/)
+    if (nivelMatch) {
+      return 50 + parseInt(nivelMatch[1], 10)
+    }
+
+    // 3. Anos do Ensino Fundamental (ex: 1º ANO, 2º ANO, ..., 9º ANO)
+    const anoMatch = str.match(/(\d+)º?\s*ANO/)
+    if (anoMatch) {
+      return 100 + parseInt(anoMatch[1], 10)
+    }
+
+    // 4. Séries do Ensino Médio (ex: 1ª SÉRIE, 2ª SÉRIE, 3ª SÉRIE, ou 1º MÉDIO, 2º MÉDIO...)
+    const serieMatch = str.match(/(\d+)[ªº]?\s*(?:S[ÉE]RIE|M[ÉE]DIO)/)
+    if (serieMatch) {
+      return 200 + parseInt(serieMatch[1], 10)
+    }
+
+    // 5. Fallback por número no início do nome
+    const anyNumMatch = str.match(/^(\d+)/)
+    if (anyNumMatch) {
+      return 300 + parseInt(anyNumMatch[1], 10)
+    }
+
+    return 999
+  }
+
+  const compareTurmasBySerie = (a: any, b: any): number => {
+    const wA = getTurmaSerieWeight(a)
+    const wB = getTurmaSerieWeight(b)
+    if (wA !== wB) return wA - wB
+    return (a.nome || a.title || '').localeCompare(b.nome || b.title || '', 'pt-BR', { numeric: true, sensitivity: 'base' })
+  }
+
   // 1. Segmentos Pedagógicos e Turmas de Alunos
   const { turmasListItems, turmasLeafIds } = useMemo(() => {
     const categorias = [
@@ -638,14 +750,14 @@ export function DestinatariosModal({
     const leafIds = new Set<string>()
     
     const mappedCats = categorias.map(cat => {
-      const tList = filteredTurmas.filter(cat.match)
+      const tList = filteredTurmas.filter(cat.match).sort(compareTurmasBySerie)
       return { ...cat, turmas: tList }
     }).filter(c => c.turmas.length > 0)
 
     const catTurmasIds = new Set(mappedCats.flatMap(c => c.turmas.map((t: any) => String(t.id))))
     const restantes = filteredTurmas.filter((t: any) => !catTurmasIds.has(String(t.id)))
     if (restantes.length > 0) {
-      mappedCats.push({ name: 'Outras Turmas', icon: Users, turmas: restantes, match: () => false })
+      mappedCats.push({ name: 'Outras Turmas', icon: Users, turmas: restantes.sort(compareTurmasBySerie), match: () => false })
     }
 
     mappedCats.forEach(cat => {
@@ -686,15 +798,11 @@ export function DestinatariosModal({
         })
         
         const totalPessoas = payloads.length
-        const subtitleParts = [t.turno || 'Turma']
-        if (!isLoadingData && tColabs.length > 0) {
-          subtitleParts.push(`${tColabs.length} colaborador${tColabs.length > 1 ? 'es' : ''}`)
-        }
 
         turmasItems.push({
           id: `t_${t.id}`,
           title: t.nome,
-          subtitle: subtitleParts.join(' • '),
+          subtitle: '',
           countBadge: isLoadingData ? 'Carregando...' : `${totalPessoas} pessoa${totalPessoas !== 1 ? 's' : ''}`,
           type: 'turma',
           icon: Users,
@@ -741,7 +849,7 @@ export function DestinatariosModal({
       const groupCatLeaves = new Set<string>()
       const groupCatPayloads = new Map<string, any>()
 
-      manualStudentGroups.sort((a, b) => a.nome.localeCompare(b.nome)).forEach((g: any) => {
+      manualStudentGroups.sort(compareTurmasBySerie).forEach((g: any) => {
         let cIds = g.colaboradoresIds || []
         if (typeof cIds === 'string') {
           try { cIds = JSON.parse(cIds) } catch(e) { cIds = [] }
@@ -794,7 +902,7 @@ export function DestinatariosModal({
     }
 
     return { turmasListItems: items, turmasLeafIds: leafIds }
-  }, [filteredTurmas, gruposManuais, allowedGruposIds, selectedAno, alunosByTurmaRef, alunosById, colaboradoresById, colaboradoresByTurmaId, isLoadingData])
+  }, [filteredTurmas, gruposManuais, allowedGruposIds ? JSON.stringify(allowedGruposIds) : null, selectedAno, alunosByTurmaRef, alunosById, colaboradoresById, colaboradoresByTurmaId, isLoadingData])
 
   // 2. Grupos Exclusivos da Equipe Escolar
   const { equipeListItems, equipeLeafIds, allSchoolColabs } = useMemo(() => {
@@ -908,7 +1016,8 @@ export function DestinatariosModal({
   // Itens ativos no contexto atual
   const activeItems = useMemo(() => {
     if (currentCatId) {
-      return turmasListItems.find(i => i.id === currentCatId)?.children || []
+      const children = turmasListItems.find(i => i.id === currentCatId)?.children || []
+      return [...children].sort(compareTurmasBySerie)
     }
     if (viewFilter === 'turmas') {
       return turmasListItems
@@ -1228,63 +1337,63 @@ export function DestinatariosModal({
     const isExpanded = expandedId === item.id
 
     return (
-      <motion.div
+      <div
         key={item.id}
         style={{ 
-          borderRadius: 20, 
+          borderRadius: 14, 
           background: isFullySelected ? '#F5F3FF' : '#FFFFFF',
-          border: isFullySelected ? '2px solid #C4B5FD' : '1px solid #E2E8F0',
-          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.03)',
-          transition: 'all 0.2s',
+          border: isFullySelected ? '1.5px solid #818CF8' : '1px solid #E2E8F0',
+          boxShadow: isFullySelected ? '0 3px 12px -2px rgba(99, 102, 241, 0.15)' : '0 1px 3px rgba(15, 23, 42, 0.03)',
+          transition: 'all 0.2s ease',
           overflow: 'hidden'
         }}
       >
         <div 
           onClick={() => setExpandedId(isExpanded ? null : item.id)}
           style={{
-            cursor: 'pointer', padding: '14px 18px',
-            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 14,
+            cursor: 'pointer', padding: '10px 14px',
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12,
           }}
         >
           <div 
             onClick={(e) => { e.stopPropagation(); toggleSelect(item) }}
             style={{ 
-              width: 22, height: 22, flexShrink: 0, borderRadius: 6, 
+              width: 20, height: 20, flexShrink: 0, borderRadius: 6, 
               display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
               background: isFullySelected ? '#4F46E5' : isPartiallySelected ? '#C4B5FD' : '#FFFFFF',
               border: isFullySelected || isPartiallySelected ? 'none' : '2px solid #CBD5E1',
               cursor: 'pointer'
             }}
           >
-            {isFullySelected ? <Check size={14} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{ width: 10, height: 3, background: '#fff', borderRadius: 2 }} /> : null}
+            {isFullySelected ? <Check size={13} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{ width: 9, height: 3, background: '#fff', borderRadius: 2 }} /> : null}
           </div>
 
-          <div style={{
-            width: 44, height: 44, flexShrink: 0, borderRadius: 14,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: '#F8FAFC', color: '#6366F1'
-          }}>
-            <Users size={22} />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, gap: 2 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: isFullySelected ? '#4F46E5' : '#0F172A', lineHeight: 1.2 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+            <span style={{ 
+              fontSize: 13.5, 
+              fontWeight: 700, 
+              color: isFullySelected ? '#4338CA' : '#0F172A', 
+              lineHeight: 1.3,
+              letterSpacing: '-0.2px'
+            }}>
               {item.title}
             </span>
-            {item.subtitle && (
-              <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B', lineHeight: 1.2 }}>
-                {item.subtitle}
-              </span>
-            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             {item.countBadge && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', background: '#F1F5F9', padding: '3px 8px', borderRadius: 10 }}>
+              <span style={{ 
+                fontSize: 11, 
+                fontWeight: 600, 
+                color: isFullySelected ? '#4F46E5' : '#64748B', 
+                background: isFullySelected ? '#EEF2FF' : '#F1F5F9', 
+                padding: '2px 8px', 
+                borderRadius: 8 
+              }}>
                 {item.countBadge}
               </span>
             )}
-            {isExpanded ? <ChevronUp size={18} color="#94A3B8" /> : <ChevronDown size={18} color="#94A3B8" />}
+            {isExpanded ? <ChevronUp size={16} color="#64748B" /> : <ChevronDown size={16} color="#94A3B8" />}
           </div>
         </div>
 
@@ -1297,7 +1406,7 @@ export function DestinatariosModal({
               exit={{ height: 0, opacity: 0 }}
               style={{ overflow: 'hidden' }}
             >
-              <div style={{ padding: '0 16px 16px 16px', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #F1F5F9', paddingTop: 12 }}>
+              <div style={{ padding: '0 14px 12px 14px', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #F1F5F9', paddingTop: 10 }}>
                 {item.people.map((person: any) => {
                   const isPersonSelected = !!selected[person.id]
                   const isColab = person.type === 'funcionario'
@@ -1317,31 +1426,31 @@ export function DestinatariosModal({
                         })
                       }}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
-                        borderRadius: 12, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
+                        borderRadius: 10, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
                         opacity: isCurrentUser ? 0.6 : 1,
-                        background: isPersonSelected ? (isColab ? 'rgba(124,58,237,0.08)' : '#F1F5F9') : 'transparent',
+                        background: isPersonSelected ? (isColab ? 'rgba(124,58,237,0.08)' : '#EEF2FF') : 'transparent',
                         transition: 'all 0.15s'
                       }}
                     >
                       <div style={{ 
-                        width: 18, height: 18, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        width: 17, height: 17, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                         background: isCurrentUser ? '#CBD5E1' : (isPersonSelected ? (isColab ? '#7C3AED' : '#4F46E5') : '#FFFFFF'),
                         border: (isPersonSelected || isCurrentUser) ? 'none' : '2px solid #CBD5E1'
                       }}>
-                        {(isPersonSelected || isCurrentUser) && <Check size={12} color="#fff" strokeWidth={3} />}
+                        {(isPersonSelected || isCurrentUser) && <Check size={11} color="#fff" strokeWidth={3} />}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#1E293B' }}>{person.name}</span>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1E293B' }}>{person.name}</span>
                           {isColab && (
                             <span style={{
-                              fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 10,
+                              fontSize: 8.5, fontWeight: 700, padding: '1px 5px', borderRadius: 8,
                               background: '#F3E8FF', color: '#7C3AED', textTransform: 'uppercase'
                             }}>Colaborador</span>
                           )}
                         </div>
-                        <span style={{ fontSize: 11, color: '#64748B' }}>
+                        <span style={{ fontSize: 10.5, color: '#64748B' }}>
                           {isColab ? (person.funcao || 'Colaborador') : `Aluno • ${person.turmaNome || ''}`}
                         </span>
                       </div>
@@ -1352,7 +1461,7 @@ export function DestinatariosModal({
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
+      </div>
     )
   }
 
@@ -1365,69 +1474,69 @@ export function DestinatariosModal({
     const isExpanded = expandedId === item.id
 
     return (
-      <motion.div
+      <div
         key={item.id}
         style={{
-          borderRadius: 20,
+          borderRadius: 14,
           background: isFullySelected ? dept.bgSoft : '#FFFFFF',
-          border: isFullySelected ? `2px solid ${dept.color}` : '1px solid #E2E8F0',
-          boxShadow: isFullySelected ? `0 8px 20px -4px ${dept.color}25` : '0 2px 8px rgba(15, 23, 42, 0.04)',
-          transition: 'all 0.25s',
+          border: isFullySelected ? `1.5px solid ${dept.color}` : '1px solid #E2E8F0',
+          boxShadow: isFullySelected ? `0 4px 14px -3px ${dept.color}20` : '0 1px 4px rgba(15, 23, 42, 0.03)',
+          transition: 'all 0.2s',
           overflow: 'hidden'
         }}
       >
         <div
           onClick={() => setExpandedId(isExpanded ? null : item.id)}
           style={{
-            cursor: 'pointer', padding: '15px 18px',
-            display: 'flex', alignItems: 'center', gap: 14
+            cursor: 'pointer', padding: '9px 13px',
+            display: 'flex', alignItems: 'center', gap: 10
           }}
         >
           {/* Checkbox do grupo */}
           <div
             onClick={(e) => { e.stopPropagation(); toggleSelect(item) }}
             style={{
-              width: 22, height: 22, flexShrink: 0, borderRadius: 6,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
+              width: 18, height: 18, flexShrink: 0, borderRadius: 5,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s',
               background: isFullySelected ? dept.color : isPartiallySelected ? dept.borderSoft : '#FFFFFF',
-              border: isFullySelected || isPartiallySelected ? 'none' : '2px solid #CBD5E1',
+              border: isFullySelected || isPartiallySelected ? 'none' : '1.5px solid #CBD5E1',
               cursor: 'pointer'
             }}
           >
-            {isFullySelected ? <Check size={14} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{ width: 10, height: 3, background: dept.color, borderRadius: 2 }} /> : null}
+            {isFullySelected ? <Check size={11} color="#fff" strokeWidth={3} /> : isPartiallySelected ? <div style={{ width: 8, height: 2.5, background: dept.color, borderRadius: 2 }} /> : null}
           </div>
 
           {/* Ícone do setor */}
           <div style={{
-            width: 44, height: 44, borderRadius: 14, flexShrink: 0,
+            width: 32, height: 32, borderRadius: 9, flexShrink: 0,
             background: dept.gradient, color: '#FFFFFF',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: `0 4px 12px ${dept.color}35`
+            boxShadow: `0 2px 8px ${dept.color}30`
           }}>
-            <Icon size={22} strokeWidth={2.4} />
+            <Icon size={16} strokeWidth={2.2} />
           </div>
 
           {/* Dados do Setor */}
           <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', letterSpacing: '-0.2px', lineHeight: 1.2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', letterSpacing: '-0.1px', lineHeight: 1.2 }}>
                 {item.title}
               </span>
               <span style={{
-                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                background: dept.badgeBg, color: dept.badgeColor, textTransform: 'uppercase', letterSpacing: 0.5
+                fontSize: 8.5, fontWeight: 700, padding: '1px 6px', borderRadius: 12,
+                background: dept.badgeBg, color: dept.badgeColor, textTransform: 'uppercase', letterSpacing: 0.4
               }}>
                 {dept.tag}
               </span>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B', marginTop: 3 }}>
+            <span style={{ fontSize: 11, fontWeight: 500, color: '#64748B', marginTop: 1, lineHeight: 1.2 }}>
               {item.subtitle}
             </span>
           </div>
 
           {/* Seta indicativa */}
           <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, color: '#94A3B8' }}>
-            {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </div>
         </div>
 
@@ -1438,15 +1547,16 @@ export function DestinatariosModal({
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }}
               style={{ overflow: 'hidden' }}
             >
               <div style={{
-                padding: '12px 16px 16px 16px',
+                padding: '8px 12px 10px 12px',
                 background: isFullySelected ? 'rgba(255,255,255,0.6)' : '#F8FAFC',
                 borderTop: `1px solid ${isFullySelected ? dept.borderSoft : '#EDF2F7'}`,
-                display: 'flex', flexDirection: 'column', gap: 6
+                display: 'flex', flexDirection: 'column', gap: 4
               }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                <span style={{ fontSize: 9.5, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
                   Membros do Setor
                 </span>
 
@@ -1469,43 +1579,43 @@ export function DestinatariosModal({
                         })
                       }}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px',
-                        borderRadius: 12, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', gap: 9, padding: '5px 8px',
+                        borderRadius: 9, cursor: isCurrentUser ? 'not-allowed' : 'pointer',
                         opacity: isCurrentUser ? 0.6 : 1,
                         background: isPersonSelected ? '#FFFFFF' : 'transparent',
                         border: isPersonSelected ? '1px solid #DDD6FE' : '1px solid transparent',
-                        boxShadow: isPersonSelected ? '0 2px 5px rgba(0,0,0,0.03)' : 'none',
+                        boxShadow: isPersonSelected ? '0 1px 3px rgba(0,0,0,0.02)' : 'none',
                         transition: 'all 0.15s'
                       }}
                     >
                       <div style={{
-                        width: 18, height: 18, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                        width: 15, height: 15, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                         background: isCurrentUser ? '#CBD5E1' : (isPersonSelected ? '#7C3AED' : '#FFFFFF'),
-                        border: (isPersonSelected || isCurrentUser) ? 'none' : '2px solid #CBD5E1'
+                        border: (isPersonSelected || isCurrentUser) ? 'none' : '1.5px solid #CBD5E1'
                       }}>
-                        {(isPersonSelected || isCurrentUser) && <Check size={12} color="#fff" strokeWidth={3} />}
+                        {(isPersonSelected || isCurrentUser) && <Check size={10} color="#fff" strokeWidth={3} />}
                       </div>
 
                       <div style={{
-                        width: 30, height: 30, borderRadius: '50%',
+                        width: 24, height: 24, borderRadius: '50%',
                         background: pal.bg, color: pal.text, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 11, fontWeight: 800, flexShrink: 0
+                        fontSize: 9.5, fontWeight: 800, flexShrink: 0
                       }}>
                         {getInitials(person.name)}
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B', lineHeight: 1.2 }}>
                             {person.name}
                           </span>
                           {isCurrentUser && (
-                            <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 10, background: '#E2E8F0', color: '#475569' }}>
+                            <span style={{ fontSize: 8.5, fontWeight: 800, padding: '1px 5px', borderRadius: 8, background: '#E2E8F0', color: '#475569' }}>
                               Você (Autor)
                             </span>
                           )}
                         </div>
-                        <span style={{ fontSize: 11, color: '#64748B' }}>
+                        <span style={{ fontSize: 10, color: '#64748B', lineHeight: 1.2 }}>
                           {person.funcao || 'Colaborador'}
                         </span>
                       </div>
@@ -1516,7 +1626,7 @@ export function DestinatariosModal({
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
+      </div>
     )
   }
 
@@ -1619,22 +1729,36 @@ export function DestinatariosModal({
   const modalContent = (
     <AnimatePresence>
       {isOpen && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 2147483647,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
+        <div
+          key="dest-modal-portal-wrapper"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2147483647,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden'
+          }}
+        >
+          <style>{DEST_MODAL_STYLES}</style>
           
           <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            key="dest-modal-backdrop"
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             onClick={onClose}
             className="dest-modal-backdrop"
           />
 
           <motion.div 
-            initial={{ y: '100%', opacity: 0, scale: 0.95 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: '100%', opacity: 0, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            key="dest-modal-container"
+            initial={{ opacity: 0, scale: 0.96, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 16 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             className="dest-modal-container"
             style={{ zIndex: 2147483647 }}
           >
@@ -1802,11 +1926,7 @@ export function DestinatariosModal({
                   </div>
                 </div>
               ) : (
-                <motion.div
-                  key="dest-loaded-content"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25 }}
+                <div
                   style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
                 >
                   {/* ── BARRA DE FILTRO RÁPIDO (TODOS / TURMAS / EQUIPE) ──────── */}
@@ -1994,40 +2114,40 @@ export function DestinatariosModal({
                                       key={item.id}
                                       onClick={() => toggleSelect(item)}
                                       style={{
-                                        display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px',
-                                        borderRadius: 16, cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: 10, padding: '9px 13px',
+                                        borderRadius: 14, cursor: 'pointer',
                                         background: isPersonSelected ? '#F5F3FF' : '#FFFFFF',
-                                        border: isPersonSelected ? '2px solid #C4B5FD' : '1px solid #E2E8F0',
-                                        boxShadow: '0 1px 4px rgba(0,0,0,0.03)',
-                                        transition: 'all 0.2s'
+                                        border: isPersonSelected ? '1.5px solid #C4B5FD' : '1px solid #E2E8F0',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                                        transition: 'all 0.15s'
                                       }}
                                     >
                                       <div style={{
-                                        width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                        width: 18, height: 18, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                                         background: isPersonSelected ? '#7C3AED' : '#FFFFFF',
-                                        border: isPersonSelected ? 'none' : '2px solid #CBD5E1'
+                                        border: isPersonSelected ? 'none' : '1.5px solid #CBD5E1'
                                       }}>
-                                        {isPersonSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                                        {isPersonSelected && <Check size={11} color="#fff" strokeWidth={3} />}
                                       </div>
 
                                       <div style={{
-                                        width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         background: dept.bgSoft, color: dept.color, flexShrink: 0
                                       }}>
-                                        <dept.icon size={18} />
+                                        <dept.icon size={16} />
                                       </div>
 
                                       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                          <span style={{ fontSize: 14, fontWeight: 700, color: '#0F172A' }}>{item.title || item.name}</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                          <span style={{ fontSize: 13, fontWeight: 700, color: '#0F172A', lineHeight: 1.2 }}>{item.title || item.name}</span>
                                           <span style={{
-                                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                                            fontSize: 8.5, fontWeight: 700, padding: '1px 6px', borderRadius: 12,
                                             background: dept.badgeBg, color: dept.badgeColor, textTransform: 'uppercase'
                                           }}>
                                             {isColab ? (item.funcao || 'Colaborador') : 'Setor da Equipe'}
                                           </span>
                                         </div>
-                                        <span style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                                        <span style={{ fontSize: 11, color: '#64748B', marginTop: 1, lineHeight: 1.2 }}>
                                           {isColab ? (item.email || 'Colaborador da Escola') : `${item.payloads?.length || 0} membros`}
                                         </span>
                                       </div>
@@ -2138,17 +2258,13 @@ export function DestinatariosModal({
                               </div>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                               {activeItems.map((item: any) => renderTurmaCard(item))}
                             </div>
                           </motion.div>
                         ) : (
                           /* Visualização Principal: Ambas as seções juntas na mesma tela */
-                          <motion.div
-                            key="root_unified"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.2 }}
+                          <div
                             style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
                           >
                             {/* ── SEÇÃO 1: TURMAS DE ALUNOS ──────────────────────── */}
@@ -2160,9 +2276,6 @@ export function DestinatariosModal({
                                     <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.2px' }}>
                                       Turmas de Alunos
                                     </h3>
-                                    <span style={{ background: '#EEF2FF', color: '#4F46E5', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>
-                                      {turmasListItems.length} segmentos
-                                    </span>
                                   </div>
 
                                   {availableAnos.length > 0 && (
@@ -2208,23 +2321,17 @@ export function DestinatariosModal({
                             {/* ── SEÇÃO 2: EQUIPE ESCOLAR ────────────────────────── */}
                             {(viewFilter === 'todos' || viewFilter === 'equipe') && (
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 2 }}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                     <Shield size={18} color="#7C3AED" />
                                     <h3 style={{ fontSize: 15, fontWeight: 800, color: '#0F172A', margin: 0, letterSpacing: '-0.2px' }}>
                                       Equipe Escolar
                                     </h3>
-                                    <span style={{ background: '#F5F3FF', color: '#7C3AED', fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 12 }}>
-                                      {equipeListItems.length} setores
-                                    </span>
                                   </div>
-                                  <span style={{ fontSize: 12, fontWeight: 500, color: '#64748B' }}>
-                                    Setores internos da escola
-                                  </span>
                                 </div>
 
                                 {/* Cartões dos setores da Equipe Escolar */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                   {equipeListItems.map((item: any) => renderEquipeCard(item))}
                                 </div>
 
@@ -2232,72 +2339,42 @@ export function DestinatariosModal({
                                 {!hideAllColabsButton && renderAllSchoolColabsSection()}
                               </div>
                             )}
-                          </motion.div>
+                          </div>
                         )}
                       </AnimatePresence>
                     )}
 
                   </div>
-                </motion.div>
+                </div>
               )}
             </div>
 
-            {/* ── FOOTER DE CONFIRMAÇÃO ULTRA MODERNO ────────────────────── */}
-            <div style={{ 
-              position: 'absolute', bottom: 0, left: 0, right: 0, padding: '18px 24px', 
-              background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(12px)',
-              borderTop: '1px solid #E2E8F0',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 30
-            }}>
-              
-              {/* Resumo da Composição */}
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#0F172A' }}>
-                  {Object.keys(selected).length === 0 ? 'Nenhum destinatário selecionado' : `${Object.keys(selected).length} selecionado${Object.keys(selected).length > 1 ? 's' : ''}`}
-                </span>
-                {Object.keys(selected).length > 0 && (
-                  <span style={{ fontSize: 11, fontWeight: 600, color: '#64748B', marginTop: 2 }}>
-                    {[
-                      selectedTurmasCount > 0 ? `${selectedTurmasCount} aluno(s)/turma(s)` : null,
-                      selectedEquipeCount > 0 ? `${selectedEquipeCount} equipe escolar` : null
-                    ].filter(Boolean).join(' • ')}
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <button 
-                  type="button"
-                  onClick={onClose}
-                  style={{ 
-                    padding: '0 20px', height: 46, borderRadius: 14, background: '#F1F5F9', color: '#475569', 
-                    fontSize: 14, fontWeight: 700, border: 'none', cursor: 'pointer', transition: 'background 0.2s' 
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#E2E8F0'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#F1F5F9'}
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="button"
-                  onClick={handleConfirm}
-                  disabled={isLoadingData || Object.keys(selected).length === 0}
-                  style={{
-                    padding: '0 28px', height: 46, borderRadius: 14,
-                    background: (isLoadingData || Object.keys(selected).length === 0) 
-                      ? '#CBD5E1' 
-                      : 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
-                    color: '#fff', fontSize: 14, fontWeight: 800, border: 'none',
-                    cursor: (isLoadingData || Object.keys(selected).length === 0) ? 'not-allowed' : 'pointer',
-                    boxShadow: (isLoadingData || Object.keys(selected).length === 0) 
-                      ? 'none' 
-                      : '0 8px 20px -4px rgba(79, 70, 229, 0.45)',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  Confirmar ({Object.keys(selected).length})
-                </button>
-              </div>
+            {/* ── FOOTER DE CONFIRMAÇÃO ────────────────────── */}
+            <div className="dest-modal-footer">
+              <button 
+                type="button"
+                onClick={onClose}
+                className="dest-modal-btn-cancel"
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button"
+                onClick={handleConfirm}
+                disabled={isLoadingData || Object.keys(selected).length === 0}
+                className="dest-modal-btn-confirm"
+                style={{
+                  background: (isLoadingData || Object.keys(selected).length === 0) 
+                    ? '#CBD5E1' 
+                    : 'linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%)',
+                  cursor: (isLoadingData || Object.keys(selected).length === 0) ? 'not-allowed' : 'pointer',
+                  boxShadow: (isLoadingData || Object.keys(selected).length === 0) 
+                    ? 'none' 
+                    : '0 8px 20px -4px rgba(79, 70, 229, 0.45)'
+                }}
+              >
+                Confirmar
+              </button>
             </div>
           </motion.div>
         </div>

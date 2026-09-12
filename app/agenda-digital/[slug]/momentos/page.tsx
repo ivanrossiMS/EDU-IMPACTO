@@ -357,20 +357,99 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
           opacity: 1;
         }
 
+        .ad-familiar-momentos-header {
+          margin: 24px 16px 32px 16px;
+          padding: 22px 28px;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.9));
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border-radius: 24px;
+          border: 1px solid rgba(255, 255, 255, 0.9);
+          box-shadow: 0 20px 40px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 1);
+          display: flex;
+          align-items: center;
+          gap: 24px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .ad-familiar-momentos-icon {
+          background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(236, 72, 153, 0.12));
+          width: 64px;
+          height: 64px;
+          border-radius: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(255, 255, 255, 0.8);
+          box-shadow: 0 10px 22px rgba(99, 102, 241, 0.12), inset 0 1px 1px rgba(255, 255, 255, 0.9);
+          transform: rotate(-5deg);
+          transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+          flex-shrink: 0;
+        }
+
+        .ad-familiar-momentos-title {
+          font-size: clamp(22px, 3.5vw, 30px);
+          font-weight: 900;
+          font-family: 'Outfit', sans-serif;
+          margin: 0 0 6px 0;
+          letter-spacing: -0.03em;
+          background: linear-gradient(135deg, #1e293b 0%, #4338ca 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.04));
+          line-height: 1.2;
+        }
+
+        .ad-familiar-momentos-desc {
+          font-size: 15px;
+          color: #475569;
+          margin: 0;
+          font-family: 'Outfit', sans-serif;
+          line-height: 1.5;
+          font-weight: 500;
+        }
+
         @media (max-width: 768px) {
-          .ad-momentos-header {
-            margin: 8px 16px 16px 16px !important;
-            padding: 12px 16px !important;
-            gap: 12px !important;
+          .ad-familiar-momentos-header {
+            margin: 12px 14px 20px 14px !important;
+            padding: 16px 18px !important;
+            gap: 16px !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            border-radius: 20px !important;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 1) !important;
           }
-          .ad-momentos-title {
-            font-size: 13px !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
+          .ad-familiar-momentos-icon {
+            width: 52px !important;
+            height: 52px !important;
+            border-radius: 16px !important;
+            transform: rotate(-4deg) !important;
           }
-          .ad-momentos-desc {
-            display: none !important;
+          .ad-familiar-momentos-icon span {
+            font-size: 26px !important;
+          }
+          .ad-familiar-momentos-title {
+            font-size: 18px !important;
+            margin: 0 0 4px 0 !important;
+            line-height: 1.25 !important;
+            letter-spacing: -0.02em !important;
+            white-space: normal !important;
+          }
+          .ad-familiar-momentos-desc {
+            display: block !important;
+            font-size: 12.5px !important;
+            line-height: 1.45 !important;
+            color: #475569 !important;
+          }
+          .ad-momentos-feed-container {
+            gap: 32px !important;
+            padding: 16px 12px !important;
+          }
+          .polaroid-card {
+            padding: 14px 14px 20px 14px !important;
+            border-radius: 18px !important;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.02) !important;
           }
           .ad-hide-mobile { display: none !important; }
         }
@@ -417,67 +496,25 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
 
       <div style={{ position: 'relative', zIndex: 10 }}>
         {/* ULTRA MODERN HEADER */}
-        <div className="ad-momentos-header" style={{ 
-          margin: '24px 16px 32px 16px',
-          padding: '24px 32px',
-          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.85))',
-          backdropFilter: 'none',
-          WebkitBackdropFilter: 'none',
-          borderRadius: '24px',
-          border: '1px solid rgba(255, 255, 255, 0.9)',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,1)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '24px',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
+        <div className="ad-familiar-momentos-header">
           {/* Subtle animated gradient overlay inside the header */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(99,102,241,0.04) 0%, rgba(236,72,153,0.04) 50%, rgba(245,158,11,0.04) 100%)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '6px', background: 'linear-gradient(180deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b)', backgroundSize: '100% 200%', animation: 'gradientMove 3s ease infinite' }} />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(99,102,241,0.04) 0%, rgba(236,72,153,0.04) 50%, rgba(245,158,11,0.03) 100%)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', background: 'linear-gradient(180deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b)', backgroundSize: '100% 200%', animation: 'gradientMove 3s ease infinite', borderRadius: '20px 0 0 20px' }} />
           
-          <div style={{ 
-            background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(236,72,153,0.1))',
-            width: 64, height: 64, borderRadius: '20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            border: '1px solid rgba(255,255,255,0.6)',
-            boxShadow: '0 12px 24px rgba(0,0,0,0.06)',
-            transform: 'rotate(-5deg)',
-            transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            flexShrink: 0
-          }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'rotate(5deg) scale(1.1)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'rotate(-5deg) scale(1)'}
+          <div 
+            className="ad-familiar-momentos-icon"
+            onMouseEnter={e => e.currentTarget.style.transform = 'rotate(5deg) scale(1.08)'}
+            onMouseLeave={e => e.currentTarget.style.transform = 'rotate(-5deg) scale(1)'}
           >
-            <span style={{ fontSize: 32, filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))' }}>📸</span>
+            <span style={{ fontSize: 30, filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.15))' }}>📸</span>
           </div>
 
           <div style={{ flex: 1, zIndex: 1, minWidth: 0 }}>
-            <h2 className="ad-momentos-title" style={{ 
-              fontSize: 'clamp(24px, 4vw, 32px)', 
-              fontWeight: 900, 
-              fontFamily: 'Outfit, sans-serif', 
-              margin: 0, 
-              letterSpacing: '-0.03em', 
-              background: 'linear-gradient(135deg, #1e293b 0%, #4f46e5 100%)', 
-              WebkitBackgroundClip: 'text', 
-              WebkitTextFillColor: 'transparent',
-              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.04))',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}>
+            <h2 className="ad-familiar-momentos-title">
               Fotos/Vídeos da Turma
             </h2>
-            <p className="ad-momentos-desc" style={{ 
-              fontSize: 15, 
-              color: '#475569', 
-              marginTop: 6, 
-              margin: '6px 0 0 0', 
-              fontFamily: 'Outfit, sans-serif',
-              lineHeight: 1.5,
-              fontWeight: 500
-            }}>
-              Acompanhe o dia a dia, sorrisos e as atividades incríveis de <strong style={{ color: '#4f46e5', fontWeight: 800 }}>{nomesTurmasEGruposDoAluno}</strong>.
+            <p className="ad-familiar-momentos-desc">
+              Acompanhe o dia a dia, sorrisos e as atividades incríveis de <strong style={{ color: '#4f46e5', fontWeight: 700 }}>{nomesTurmasEGruposDoAluno}</strong>.
             </p>
           </div>
         </div>
@@ -566,7 +603,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
             )}
           </div>
         ) : (
-          <div style={{ 
+          <div className="ad-momentos-feed-container" style={{ 
             display: 'flex', 
             flexDirection: 'column',
             alignItems: 'center',

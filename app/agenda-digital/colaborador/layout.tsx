@@ -83,14 +83,7 @@ export default function AgendaDigitalColaboradorLayout({
   ]
 
   if (isLoading || !currentUser || currentUser.cargo === 'Aluno') {
-    return (
-      <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        minHeight: '80vh', width: '100%', gap: '24px', fontFamily: 'system-ui, sans-serif'
-      }}>
-         <LoadingGlass />
-      </div>
-    )
+    return <LoadingGlass />
   }
 
   return (

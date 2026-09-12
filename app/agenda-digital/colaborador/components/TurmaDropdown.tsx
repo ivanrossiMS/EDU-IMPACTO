@@ -147,7 +147,7 @@ export function TurmaDropdown({
           ...buttonStyle
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1, overflow: 'hidden' }}>
           {/* Badge Icon */}
           <div style={{
             width: 34,
@@ -167,7 +167,7 @@ export function TurmaDropdown({
             {icon || <SlidersHorizontal size={16} />}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, textAlign: 'left' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0, textAlign: 'left', flex: 1, overflow: 'hidden' }}>
             <span style={{ 
               fontSize: '10px', 
               fontWeight: 800, 
@@ -185,7 +185,7 @@ export function TurmaDropdown({
               overflow: 'hidden', 
               textOverflow: 'ellipsis', 
               whiteSpace: 'nowrap',
-              maxWidth: 180,
+              width: '100%',
               lineHeight: 1.3
             }}>
               {selectedTurmaName}
@@ -193,7 +193,7 @@ export function TurmaDropdown({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 8 }}>
           {/* Badge do Ano Ativo */}
           {selectedAno && selectedAno !== 'todos' && (
             <span style={{

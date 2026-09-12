@@ -49,11 +49,7 @@ export default function AgendaDigitalAdminLayout({
   }
 
   if (!hydrated || !isAllowed) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', width: '100%' }}>
-        <LoadingGlass />
-      </div>
-    )
+    return <LoadingGlass />
   }
 
   const nomeUsuario = currentUser?.nome || 'Administrador'

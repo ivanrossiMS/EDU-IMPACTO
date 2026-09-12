@@ -14,7 +14,7 @@ const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   }, []);
   return mounted ? createPortal(children, document.body) : null;
 };
-import { Image as ImageIcon, X, Filter, Plus, ChevronDown, Video, Loader2, Check, Camera } from 'lucide-react'
+import { Image as ImageIcon, X, Filter, Plus, ChevronDown, ChevronUp, Video, Loader2, Check, Camera, Send, Smile, Users, Globe, Upload } from 'lucide-react'
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
@@ -38,6 +38,7 @@ export default function ADAdminMomentos() {
   const PAGE_SIZE = 15
   const [showModal, setShowModal] = useState(false)
   const [showDestModal, setShowDestModal] = useState(false)
+  const [showAllDestinatarios, setShowAllDestinatarios] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
   const [newPost, setNewPost] = useState({
@@ -114,7 +115,7 @@ export default function ADAdminMomentos() {
 
   const submitPost = async () => {
     if (isSubmitting) return
-    if (!newPost.mediaFiles.length || !newPost.desc) return adAlert('Selecione mídias e preencha a legenda.', 'Atenção')
+    if (!newPost.mediaFiles.length) return adAlert('Selecione ao menos uma foto ou vídeo para publicar.', 'Atenção')
     
     // Validar tamanhos
     const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
@@ -210,6 +211,7 @@ export default function ADAdminMomentos() {
 
       setMomentosFeedLocally?.(prev => [post, ...prev])
       setShowModal(false)
+      setShowAllDestinatarios(false)
       setNewPost({ mediaFiles: [], targetClasses: [], desc: '' })
       adAlert('Momento publicado com sucesso!', '🎉 Sucesso')
 
@@ -482,30 +484,29 @@ export default function ADAdminMomentos() {
       {showModal && (
         <ClientPortal>
           <AnimatePresence>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'none', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-            <motion.div initial={{ scale: 0.93, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.93, opacity: 0, y: 20 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-              style={{ background: '#fff', borderRadius: 24, width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative', boxShadow: '0 32px 64px rgba(0,0,0,0.3)' }}>
+            <motion.div className="ad-momento-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="ad-momento-content" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 15 }} transition={{ duration: 0.2 }}
+              style={{ background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
 
               {isSubmitting && (
-                <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.95)', backdropFilter: 'none', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center' }}>
-                  <div style={{ position: 'relative', width: 80, height: 80 }}>
-                    <Loader2 size={80} color="#7c3aed" style={{ animation: 'spin 1.5s linear infinite', opacity: 0.2 }} />
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#7c3aed', fontSize: 18 }}>
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32, textAlign: 'center' }}>
+                  <div style={{ position: 'relative', width: 84, height: 84 }}>
+                    <Loader2 size={84} color="#7c3aed" style={{ animation: 'spin 1.5s linear infinite', opacity: 0.25 }} />
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: '#7c3aed', fontSize: 20 }}>
                       {Math.round((Object.values(uploadProgress).reduce((a, b) => a + b, 0) / newPost.mediaFiles.length) || 0)}%
                     </div>
                   </div>
-                  <div style={{ fontWeight: 800, color: '#111827', fontSize: 18 }}>Publicando Momento</div>
-                  <div style={{ color: '#6b7280', fontSize: 14, maxWidth: 300 }}>
-                    Enviando {newPost.mediaFiles.length} mídia{newPost.mediaFiles.length !== 1 ? 's' : ''}. Isso pode levar alguns segundos dependendo do tamanho dos vídeos.
+                  <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 19 }}>Publicando Momento...</div>
+                  <div style={{ color: '#64748b', fontSize: 13.5, maxWidth: 320, lineHeight: 1.4 }}>
+                    Otimizando e enviando {newPost.mediaFiles.length} mídia{newPost.mediaFiles.length !== 1 ? 's' : ''}. Aguarde alguns instantes.
                   </div>
                   
                   {/* Lista de arquivos com status */}
-                  <div style={{ width: '100%', maxWidth: 300, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+                  <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
                     {newPost.mediaFiles.map((f, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f8fafc', padding: '8px 12px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f8fafc', padding: '9px 14px', borderRadius: 12, border: '1px solid #e2e8f0' }}>
                         {f.type.includes('video') ? <Video size={16} color="#6366f1" /> : <ImageIcon size={16} color="#ec4899" />}
-                        <div style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                        <div style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
                         {uploadProgress[f.name] === 100 ? <Check size={16} color="#10b981" /> : <Loader2 size={14} className="animate-spin" color="#94a3b8" />}
                       </div>
                     ))}
@@ -513,85 +514,440 @@ export default function ADAdminMomentos() {
                 </div>
               )}
 
-              {/* Modal Header */}
-              <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#111827' }}>Novo Momento</h3>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6b7280' }}>Publique fotos e vídeos no mural da escola</p>
+              {/* Modal Header: Gradiente Ultra Moderno */}
+              <div style={{ 
+                padding: '22px 24px', 
+                flexShrink: 0,
+                background: 'linear-gradient(135deg, #4338ca 0%, #6366f1 45%, #8b5cf6 75%, #ec4899 100%)',
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                <div style={{ position: 'absolute', top: -30, right: 20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.15)', filter: 'blur(20px)', pointerEvents: 'none' }} />
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1 }}>
+                  <div style={{ 
+                    width: 44, height: 44, borderRadius: 14, 
+                    background: 'rgba(255, 255, 255, 0.2)', 
+                    backdropFilter: 'blur(8px)',
+                    border: '1px solid rgba(255, 255, 255, 0.35)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    color: '#ffffff',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                  }}>
+                    <Camera size={22} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1.2 }}>Novo Momento</h3>
+                    <p style={{ margin: '2px 0 0', fontSize: 12.5, color: 'rgba(255, 255, 255, 0.9)', fontWeight: 500 }}>Publique fotos e vídeos no mural da escola</p>
+                  </div>
                 </div>
-                <button onClick={() => setShowModal(false)} style={{ background: '#f3f4f6', border: 'none', borderRadius: 10, padding: 8, cursor: 'pointer', display: 'flex', color: '#374151' }}>
+
+                <button 
+                  onClick={() => { setShowModal(false); setShowAllDestinatarios(false); }} 
+                  style={{ 
+                    background: 'rgba(255, 255, 255, 0.2)', 
+                    border: '1px solid rgba(255, 255, 255, 0.3)', 
+                    borderRadius: 12, 
+                    width: 36, 
+                    height: 36, 
+                    cursor: 'pointer', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    color: '#ffffff',
+                    position: 'relative',
+                    zIndex: 1,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.32)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'}
+                >
                   <X size={18} />
                 </button>
               </div>
 
               {/* Modal Body */}
-              <div style={{ padding: '20px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div style={{ flex: 1, minHeight: 0, padding: '22px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {/* Media upload */}
                 <div>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                    <ImageIcon size={14} /> Mídias (imagens ou vídeos)
-                  </label>
-                  <input type="file" multiple accept="image/*,video/*" id="upload-midia" style={{ display: 'none' }}
-                    onChange={e => { if (e.target.files) setNewPost(p => ({ ...p, mediaFiles: [...p.mediaFiles, ...Array.from(e.target.files!)] })) }} />
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    {newPost.mediaFiles.map((file, i) => (
-                      <div key={i} style={{ width: 76, height: 76, borderRadius: 12, background: '#f3f4f6', border: '1px solid #e5e7eb', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <button onClick={() => setNewPost(p => ({ ...p, mediaFiles: p.mediaFiles.filter((_, idx) => idx !== i) }))}
-                          style={{ position: 'absolute', top: 3, right: 3, width: 18, height: 18, borderRadius: '50%', background: 'rgba(15,23,42,0.85)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-                          <X size={10} />
-                        </button>
-                        {file.type.includes('video')
-                          ? <Video size={24} color="#9ca3af" />
-                          : <img src={URL.createObjectURL(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 8, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
+                        <ImageIcon size={15} />
                       </div>
-                    ))}
-                    <label htmlFor="upload-midia" style={{ width: 76, height: 76, borderRadius: 12, border: '2px dashed #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#9ca3af', background: '#fafafa', transition: 'all 0.2s' }}>
-                      <Plus size={22} />
-                    </label>
+                      <label htmlFor="upload-midia-admin" style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b', cursor: 'pointer' }}>
+                        Mídias (Fotos ou Vídeos)
+                      </label>
+                    </div>
+                    {newPost.mediaFiles.length > 0 ? (
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#6366f1', background: '#e0e7ff', padding: '2px 10px', borderRadius: 12 }}>
+                        {newPost.mediaFiles.length} selecionada{newPost.mediaFiles.length > 1 ? 's' : ''}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', background: '#fee2e2', padding: '2px 8px', borderRadius: 12 }}>
+                        Obrigatório
+                      </span>
+                    )}
                   </div>
+
+                  <input type="file" multiple accept="image/*,video/*" id="upload-midia-admin" style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files) setNewPost(p => ({ ...p, mediaFiles: [...p.mediaFiles, ...Array.from(e.target.files!)] })) }} />
+                  
+                  {newPost.mediaFiles.length === 0 ? (
+                    <label htmlFor="upload-midia-admin" style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      padding: '28px 16px', 
+                      borderRadius: 18, 
+                      border: '2px dashed #cbd5e1', 
+                      background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)', 
+                      cursor: 'pointer', 
+                      transition: 'all 0.2s ease', 
+                      textAlign: 'center', 
+                      gap: 8 
+                    }}>
+                      <div style={{ 
+                        width: 48, height: 48, borderRadius: 14, 
+                        background: 'linear-gradient(135deg, #ede9fe 0%, #fce7f3 100%)', 
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        color: '#7c3aed', 
+                        boxShadow: '0 4px 14px rgba(124, 58, 237, 0.12)' 
+                      }}>
+                        <Upload size={22} />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: '#334155' }}>Toque para escolher fotos ou vídeos</span>
+                        <p style={{ fontSize: 11.5, color: '#64748b', margin: '3px 0 0' }}>JPG, PNG ou MP4 (máximo 50MB)</p>
+                      </div>
+                    </label>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 10 }}>
+                      {newPost.mediaFiles.map((file, i) => (
+                        <div key={i} style={{ 
+                          aspectRatio: '1/1', 
+                          borderRadius: 14, 
+                          overflow: 'hidden', 
+                          position: 'relative', 
+                          background: '#0f172a', 
+                          border: '1.5px solid #e2e8f0', 
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.06)' 
+                        }}>
+                          {file.type.includes('video') ? (
+                            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #1e1b4b, #312e81)' }}>
+                              <Video size={24} color="#a5b4fc" />
+                              <span style={{ fontSize: 9, fontWeight: 700, color: '#c7d2fe', marginTop: 4, textTransform: 'uppercase' }}>Vídeo</span>
+                            </div>
+                          ) : (
+                            <img src={URL.createObjectURL(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Preview" />
+                          )}
+
+                          <button 
+                            type="button"
+                            onClick={() => setNewPost(p => ({ ...p, mediaFiles: p.mediaFiles.filter((_, idx) => idx !== i) }))}
+                            style={{ 
+                              position: 'absolute', top: 5, right: 5, 
+                              width: 22, height: 22, borderRadius: '50%', 
+                              background: 'rgba(15, 23, 42, 0.8)', 
+                              backdropFilter: 'blur(4px)',
+                              border: '1px solid rgba(255,255,255,0.25)', 
+                              color: '#ffffff', 
+                              cursor: 'pointer', 
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.2)' 
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+
+                      <label htmlFor="upload-midia-admin" style={{ 
+                        aspectRatio: '1/1', 
+                        borderRadius: 14, 
+                        border: '2px dashed #c7d2fe', 
+                        background: '#f5f3ff', 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        gap: 4, 
+                        cursor: 'pointer', 
+                        color: '#7c3aed', 
+                        transition: 'all 0.15s ease' 
+                      }}>
+                        <Plus size={22} strokeWidth={2.5} />
+                        <span style={{ fontSize: 11, fontWeight: 700 }}>Mais</span>
+                      </label>
+                    </div>
+                  )}
                 </div>
 
                 {/* Description */}
                 <div>
-                  <label style={{ fontSize: 13, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 8 }}>Legenda</label>
-                  <textarea rows={3} value={newPost.desc} onChange={e => setNewPost({ ...newPost, desc: e.target.value })}
-                    placeholder="Escreva uma legenda para este momento..."
-                    style={{ width: '100%', borderRadius: 12, border: '1.5px solid #e5e7eb', padding: '10px 14px', fontSize: 14, resize: 'none', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#111827' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 8, background: '#fdf2f8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#db2777' }}>
+                        <Smile size={15} />
+                      </div>
+                      <label style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b' }}>Legenda do Momento</label>
+                    </div>
+                    {newPost.desc.trim() ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#10b981', background: '#d1fae5', padding: '2px 8px', borderRadius: 12 }}>
+                        Preenchido
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 12 }}>
+                        Opcional
+                      </span>
+                    )}
+                  </div>
+
+                  <textarea 
+                    rows={3} 
+                    value={newPost.desc} 
+                    onChange={e => setNewPost({ ...newPost, desc: e.target.value })}
+                    placeholder="Escreva uma legenda para este momento (opcional)..."
+                    style={{ 
+                      width: '100%', 
+                      borderRadius: 16, 
+                      border: '1.5px solid #e2e8f0', 
+                      background: '#f8fafc',
+                      padding: '12px 16px', 
+                      fontSize: 14, 
+                      lineHeight: 1.45,
+                      resize: 'none', 
+                      outline: 'none', 
+                      fontFamily: 'inherit', 
+                      boxSizing: 'border-box', 
+                      color: '#0f172a',
+                      transition: 'border-color 0.2s ease, box-shadow 0.2s ease'
+                    }}
+                    onFocus={e => {
+                      e.currentTarget.style.borderColor = '#8b5cf6'
+                      e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.12)'
+                      e.currentTarget.style.background = '#ffffff'
+                    }}
+                    onBlur={e => {
+                      e.currentTarget.style.borderColor = '#e2e8f0'
+                      e.currentTarget.style.boxShadow = 'none'
+                      e.currentTarget.style.background = '#f8fafc'
+                    }}
+                  />
                 </div>
 
                 {/* Target Classes */}
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <label style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>Visibilidade</label>
-                    <button onClick={() => setShowDestModal(true)} style={{ background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#374151' }}>
-                      + Selecionar Turmas
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 8, background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5' }}>
+                        <Users size={15} />
+                      </div>
+                      <label style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b' }}>Visibilidade</label>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => setShowDestModal(true)} 
+                      style={{ 
+                        background: '#ffffff', 
+                        border: '1px solid #c7d2fe', 
+                        borderRadius: 10, 
+                        padding: '5px 12px', 
+                        fontSize: 12, 
+                        fontWeight: 700, 
+                        cursor: 'pointer', 
+                        color: '#4338ca',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f5f3ff'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#ffffff'}
+                    >
+                      <Plus size={13} strokeWidth={2.5} />
+                      <span>{newPost.targetClasses.length === 0 ? 'Selecionar Destinatários' : 'Alterar Destinatários'}</span>
                     </button>
                   </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 40, background: '#f9fafb', padding: 10, borderRadius: 12, border: '1.5px solid #e5e7eb' }}>
-                    {newPost.targetClasses.length === 0
-                      ? <span style={{ color: '#9ca3af', fontSize: 12 }}>Toda a Escola (padrão)</span>
-                      : newPost.targetClasses.map(t => (
-                        <span key={t.id} style={{ background: 'rgba(99,102,241,0.1)', color: '#4f46e5', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-                          {t.name}
-                          <button onClick={() => setNewPost(p => ({ ...p, targetClasses: p.targetClasses.filter(x => x.id !== t.id) }))}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4f46e5', display: 'flex', padding: 0 }}>
-                            <X size={12} />
+
+                  <div style={{ 
+                    background: newPost.targetClasses.length === 0 ? 'linear-gradient(135deg, rgba(238,242,255,0.7) 0%, rgba(245,243,255,0.7) 100%)' : '#f8fafc', 
+                    padding: 12, 
+                    borderRadius: 16, 
+                    border: newPost.targetClasses.length === 0 ? '1.5px solid rgba(99,102,241,0.25)' : '1.5px solid #e2e8f0',
+                    minHeight: 44,
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    maxHeight: showAllDestinatarios ? 180 : 'none',
+                    overflowY: showAllDestinatarios ? 'auto' : 'visible'
+                  }}>
+                    {newPost.targetClasses.length === 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99, 102, 241, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4f46e5', flexShrink: 0 }}>
+                          <Globe size={15} />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ color: '#1e1b4b', fontSize: 13, fontWeight: 700 }}>Toda a Escola (padrão)</span>
+                          <span style={{ color: '#6366f1', fontSize: 11, fontWeight: 500 }}>Visível para todas as turmas, alunos e colaboradores</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {(showAllDestinatarios ? newPost.targetClasses : newPost.targetClasses.slice(0, 3)).map(t => (
+                          <span key={t.id} style={{ 
+                            background: '#ffffff', 
+                            color: '#4f46e5', 
+                            border: '1px solid #c7d2fe',
+                            padding: '4px 10px', 
+                            borderRadius: 20, 
+                            fontSize: 12, 
+                            fontWeight: 700, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: 6,
+                            boxShadow: '0 1px 3px rgba(99,102,241,0.06)'
+                          }}>
+                            {t.name}
+                            <button 
+                              type="button"
+                              onClick={() => setNewPost(p => ({ ...p, targetClasses: p.targetClasses.filter(x => x.id !== t.id) }))}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6366f1', display: 'flex', padding: 0 }}
+                            >
+                              <X size={13} />
+                            </button>
+                          </span>
+                        ))}
+                        {newPost.targetClasses.length > 3 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllDestinatarios(!showAllDestinatarios)}
+                            style={{
+                              background: '#EEF2FF',
+                              color: '#4F46E5',
+                              border: '1px solid #C7D2FE',
+                              padding: '4px 12px',
+                              borderRadius: 20,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 5,
+                              cursor: 'pointer',
+                              boxShadow: '0 1px 2px rgba(79, 70, 229, 0.08)',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#E0E7FF'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#EEF2FF'}
+                          >
+                            {showAllDestinatarios ? (
+                              <>
+                                <ChevronUp size={13} strokeWidth={2.5} />
+                                <span>Mostrar menos</span>
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown size={13} strokeWidth={2.5} />
+                                <span>Mostrar todos ({newPost.targetClasses.length})</span>
+                              </>
+                            )}
                           </button>
-                        </span>
-                      ))}
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
               {/* Modal Footer */}
-              <div style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowModal(false)} disabled={isSubmitting}
-                  style={{ padding: '10px 20px', borderRadius: 12, border: '1.5px solid #e5e7eb', background: '#fff', color: '#374151', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>
+              <div style={{ 
+                padding: '16px 24px calc(16px + env(safe-area-inset-bottom, 0px)) 24px', 
+                flexShrink: 0,
+                borderTop: '1px solid #f1f5f9', 
+                display: 'flex', 
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                background: '#ffffff'
+              }}>
+                <button 
+                  type="button"
+                  onClick={() => { setShowModal(false); setShowAllDestinatarios(false); }} 
+                  disabled={isSubmitting}
+                  style={{ 
+                    padding: '12px 20px', 
+                    borderRadius: 14, 
+                    border: '1.5px solid #e2e8f0', 
+                    background: '#f8fafc', 
+                    color: '#64748b', 
+                    fontWeight: 700, 
+                    cursor: 'pointer', 
+                    fontSize: 14,
+                    transition: 'all 0.15s ease'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = '#f1f5f9'
+                    e.currentTarget.style.color = '#1e293b'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = '#f8fafc'
+                    e.currentTarget.style.color = '#64748b'
+                  }}
+                >
                   Cancelar
                 </button>
-                <button onClick={submitPost} disabled={isSubmitting}
-                  style={{ padding: '10px 24px', borderRadius: 12, border: 'none', background: 'linear-gradient(90deg,#7c3aed,#a855f7,#ec4899)', color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 16px rgba(124,58,237,0.3)' }}>
-                  {isSubmitting ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Publicando...</> : <><Plus size={16} /> Publicar no Mural</>}
+
+                <button 
+                  type="button"
+                  onClick={submitPost} 
+                  disabled={isSubmitting || !newPost.mediaFiles.length}
+                  style={{ 
+                    padding: '12px 24px', 
+                    borderRadius: 14, 
+                    border: 'none', 
+                    background: (!newPost.mediaFiles.length) 
+                      ? '#cbd5e1' 
+                      : 'linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #ec4899 100%)', 
+                    color: '#ffffff', 
+                    fontWeight: 800, 
+                    fontSize: 14, 
+                    cursor: (!newPost.mediaFiles.length) ? 'not-allowed' : 'pointer', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 8, 
+                    boxShadow: (!newPost.mediaFiles.length) ? 'none' : '0 6px 20px rgba(124,58,237,0.35)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={e => {
+                    if (newPost.mediaFiles.length) {
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                      e.currentTarget.style.boxShadow = '0 8px 24px rgba(124,58,237,0.45)'
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (newPost.mediaFiles.length) {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(124,58,237,0.35)'
+                    }
+                  }}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Publicando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={16} />
+                      <span>Publicar no Mural</span>
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>

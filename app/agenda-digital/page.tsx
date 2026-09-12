@@ -97,33 +97,5 @@ function AgendaDigitalIndexContent() {
     fetchSecureStudents();
   }, [currentUserPerfil, currentUser, router, searchParams])
 
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '80vh',
-      width: '100%',
-      background: 'transparent',
-      fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    }}>
-      
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        background: '#ffffff',
-        border: '1px solid rgba(0,0,0,0.05)',
-        borderRadius: '24px',
-        padding: '40px 48px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.04)',
-        maxWidth: '320px',
-        width: '90%',
-        textAlign: 'center'
-      }}>
-        <LoadingGlass />
-      </div>
-    </div>
-  )
+  return <LoadingGlass />
 }

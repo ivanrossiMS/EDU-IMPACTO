@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom'
 import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut, ArrowLeft, ShieldCheck, GraduationCap } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
+import { AppLoadingScreen } from '@/components/AppLoadingScreen'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -1078,38 +1079,13 @@ function SelecionarAlunoContent() {
 
   return (
     <>
-      {/* Overlay de loading em tela cheia via Portal — cobre 100% da viewport e exibe a animação oficial da logo */}
+      {/* Overlay de logout em tela cheia via Portal — exibe imediatamente a tela escura com Impacto Edu animado sem embaçar o fundo */}
       {isLoggingOut && mounted && typeof document !== 'undefined' && createPortal(
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            width: '100vw',
-            height: '100vh',
-            zIndex: 99999999,
-            background: 'rgba(10, 15, 36, 0.50)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'all',
-          }}
-        >
-          <ImpactoLoader
-            isLoading={true}
-            style={{
-              position: 'relative',
-              inset: 'auto',
-              background: 'transparent',
-              backdropFilter: 'none',
-              WebkitBackdropFilter: 'none',
-              pointerEvents: 'none',
-              opacity: 1,
-              zIndex: 1,
-            }}
-          />
-        </div>,
+        <AppLoadingScreen
+          statusText="Encerrando sessão com segurança..."
+          subtitle="Conectando escola e família"
+          style={{ zIndex: 99999999 }}
+        />,
         document.body
       )}
       <div className="premium-selector-container">

@@ -418,7 +418,7 @@ export default function NovoComunicadoModal({
         .ad-nc-input::placeholder { color: #94A3B8; }
         
         .ad-nc-editor {
-          min-height: 180px;
+          min-height: 153px;
           outline: none;
           font-size: 15px;
           line-height: 1.6;

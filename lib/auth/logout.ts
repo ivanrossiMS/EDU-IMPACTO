@@ -16,6 +16,12 @@ let logoutPromise: Promise<void> | null = null;
  * 6. Navigates cleanly to /login via replace()
  */
 export async function performLogout(): Promise<void> {
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('edu:logout-start'));
+    } catch (_) {}
+  }
+
   if (logoutPromise) {
     return logoutPromise;
   }

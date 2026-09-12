@@ -1,6 +1,8 @@
-import { AppLoadingScreen } from '@/components/AppLoadingScreen'
+'use client'
+
+import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 
 export function LoadingGlass() {
-  return <AppLoadingScreen />
+  return <ImpactoLoader isLoading={true} />
 }
 

@@ -246,6 +246,17 @@ function ColaboradorComunicadosContent() {
     return accessibleTurmas
   }, [turmas, userGroups, effectiveUser])
 
+  const allowedTurmasIds = useMemo(() => {
+    return isMasterAdmin ? undefined : turmaOptions.map(t => String(t.id))
+  }, [isMasterAdmin, turmaOptions])
+
+  const allowedGruposIds = useMemo(() => {
+    const isSpecialAdmin = effectiveUser?.perfil === 'administrador' || 
+      String(effectiveUser?.cargo || '').toLowerCase().includes('admin') || 
+      String(effectiveUser?.cargo || '').toLowerCase().includes('diretor')
+    return isSpecialAdmin ? undefined : userGroups.map(g => String(g.id))
+  }, [effectiveUser, userGroups])
+
   const feedTurmaOptions = useMemo(() => {
     if (!effectiveUser?.id) return [];
     const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin']; 
@@ -1792,9 +1803,11 @@ function ColaboradorComunicadosContent() {
         onClose={() => setShowDestModal(false)}
         initialSelected={selectedDest}
         onAdd={(res) => setSelectedDest(res as any)}
-        allowedTurmasIds={isMasterAdmin ? undefined : turmaOptions.map(t => String(t.id))}
-        allowedGruposIds={effectiveUser?.perfil === 'administrador' || String(effectiveUser?.cargo || '').toLowerCase().includes('admin') || String(effectiveUser?.cargo || '').toLowerCase().includes('diretor') ? undefined : userGroups.map(g => String(g.id))}
+        allowedTurmasIds={allowedTurmasIds}
+        allowedGruposIds={allowedGruposIds}
         currentUserId={effectiveUser?.id}
+        hideFilterTabs={true}
+        hideAllColabsButton={true}
       />
 
       <AnimatePresence>

@@ -46,7 +46,7 @@ export function AppLoadingScreen({
         fontFamily: "'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         userSelect: 'none',
         WebkitUserSelect: 'none',
-        zIndex: 999999,
+        zIndex: 99999999,
         overflow: 'hidden',
         padding: '24px',
         ...style,
