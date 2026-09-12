@@ -1787,6 +1787,7 @@ function ColaboradorComunicadosContent() {
         initialData={editComId ? comunicados.find(c => c.id === editComId) : forwardComData}
         currentUser={effectiveUser}
         selectedDest={selectedDest}
+        allowedTurmasIds={allowedTurmasIds}
         onClickSelectDest={() => setShowDestModal(true)}
         onRemoveDest={id => setSelectedDest(prev => prev.filter(x => x.id !== id))}
         onSave={(data, isDraft) => handleEnviar(data, isDraft)}
@@ -1879,6 +1880,8 @@ function ColaboradorComunicadosContent() {
         isOpen={showRelsModal} 
         onClose={() => setShowRelsModal(false)} 
         selectedDest={selectedDest} 
+        currentUser={effectiveUser}
+        allowedTurmasIds={allowedTurmasIds}
         onAdd={(text, payload) => alert('Atenção: Adicione o relatório anexando o PDF gerado ou insira o link no corpo do comunicado.')} 
         onFillDirectly={(payload) => {
           setOpenedReportTaskStr(`ReportTask|payload:${JSON.stringify(payload)}`);

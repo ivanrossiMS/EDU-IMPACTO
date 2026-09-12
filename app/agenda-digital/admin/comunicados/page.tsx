@@ -885,6 +885,7 @@ export default function ADAdminComunicados() {
         isOpen={showRelsModal} 
         onClose={() => setShowRelsModal(false)} 
         selectedDest={selectedDest} 
+        currentUser={currentUser}
         onAdd={(text, payload) => alert('Adicione o relatório anexando o PDF gerado ou insira o link.')} 
         onFillDirectly={(payload) => {
           alert('Ação disponível apenas no painel do colaborador.');

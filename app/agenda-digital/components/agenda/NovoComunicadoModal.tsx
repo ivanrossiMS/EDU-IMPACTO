@@ -61,13 +61,15 @@ export interface NovoComunicadoModalProps {
   selectedDest?: any[];
   onRemoveDest?: (id: string) => void;
   onFillDirectly?: (payload: any) => void;
+  allowedTurmasIds?: string[];
 }
 
 const EMOJIS = ['😀','😂','🥰','😎','🤔','🙌','👍','👏','🔥','🎉','📅','📢','📌','⭐','❤️']
 
 export default function NovoComunicadoModal({
   isOpen, onClose, onSave, initialData, currentUser,
-  onClickSelectDest, selectedDest = [], onRemoveDest, onFillDirectly
+  onClickSelectDest, selectedDest = [], onRemoveDest, onFillDirectly,
+  allowedTurmasIds
 }: NovoComunicadoModalProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -1036,6 +1038,8 @@ export default function NovoComunicadoModal({
         isOpen={showRelsModal}
         onClose={() => setShowRelsModal(false)}
         selectedDest={selectedDest}
+        currentUser={currentUser}
+        allowedTurmasIds={allowedTurmasIds}
         onFillDirectly={onFillDirectly}
         onAdd={(text, payload) => {
           const stringified = JSON.stringify(payload);

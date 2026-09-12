@@ -15,16 +15,30 @@ interface ReportsSelectionModalProps {
   onAdd: (attachmentText: string, payload: any) => void
   onFillDirectly?: (payload: any) => void
   selectedDest?: any[]
+  targetedStudents?: any[]
+  currentUser?: any
+  allowedTurmasIds?: string[]
 }
 
-export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, onFillDirectly }: ReportsSelectionModalProps) {
-  const { currentUser } = useApp()
+export function ReportsSelectionModal({ 
+  isOpen, 
+  onClose, 
+  selectedDest, 
+  onAdd, 
+  onFillDirectly,
+  targetedStudents: propTargetedStudents,
+  currentUser: propCurrentUser,
+  allowedTurmasIds 
+}: ReportsSelectionModalProps) {
+  const { currentUser: contextCurrentUser } = useApp()
+  const effectiveUser = propCurrentUser || contextCurrentUser
   const { templates: contextTemplates = [] } = useRelatorios()
   const [alunos, _sa, { loading: loadingAlunos }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const [gruposManuais, _sg, { loading: loadingGrupos }] = useSupabaseArray<any>('agenda/grupos')
   const [turmas, _st, { loading: loadingTurmas }] = useSupabaseArray<any>('turmas')
+  const [colaboradores, _sc, { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
   
-  const isLoadingData = loadingAlunos || loadingGrupos || loadingTurmas
+  const isLoadingData = loadingAlunos || loadingGrupos || loadingTurmas || loadingColabs
 
   const [step, setStep] = useState<1 | 2>(1)
   const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
@@ -46,98 +60,285 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
   // Load only dynamic context templates
   const allTemplates = contextTemplates.filter(t => t.status === 'ativo')
 
-  const userGroups = React.useMemo(() => {
-    if (!currentUser?.id) return [];
-    return (gruposManuais || []).filter((g: any) => {
-      let colabs = g.colaboradoresIds;
-      if (typeof colabs === 'string') {
-        try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
+  // Mapeamento abrangente de IDs do colaborador atual (f_id, id puro, uid_legacy, email)
+  const candidateColabIds = React.useMemo(() => {
+    const ids = new Set<string>()
+    if (effectiveUser?.id) {
+      const raw = String(effectiveUser.id).trim().toLowerCase()
+      ids.add(raw)
+      ids.add(raw.replace(/^f_?/, ''))
+      ids.add(`f_${raw.replace(/^f_?/, '')}`)
+    }
+    if ((effectiveUser as any)?.uid_legacy) {
+      const raw = String((effectiveUser as any).uid_legacy).trim().toLowerCase()
+      ids.add(raw)
+      ids.add(raw.replace(/^f_?/, ''))
+    }
+    if ((effectiveUser as any)?.auth_id) {
+      ids.add(String((effectiveUser as any).auth_id).trim().toLowerCase())
+    }
+    if (effectiveUser?.email) {
+      ids.add(String(effectiveUser.email).trim().toLowerCase())
+    }
+
+    const matchedColab = (colaboradores || []).find((c: any) => 
+      (c.email && effectiveUser?.email && String(c.email).toLowerCase() === String(effectiveUser.email).toLowerCase()) ||
+      (c.id && effectiveUser?.id && String(c.id).replace(/^f_?/, '').toLowerCase() === String(effectiveUser.id).replace(/^f_?/, '').toLowerCase())
+    )
+    if (matchedColab) {
+      if (matchedColab.id) {
+        const raw = String(matchedColab.id).trim().toLowerCase()
+        ids.add(raw)
+        ids.add(raw.replace(/^f_?/, ''))
+        ids.add(`f_${raw.replace(/^f_?/, '')}`)
       }
-      if (!Array.isArray(colabs)) colabs = [];
-      return colabs.some((id: any) => String(id) === String(currentUser.id));
-    });
-  }, [gruposManuais, currentUser]);
+      if (matchedColab.uid_legacy) {
+        ids.add(String(matchedColab.uid_legacy).trim().toLowerCase())
+      }
+      if (matchedColab.email) {
+        ids.add(String(matchedColab.email).trim().toLowerCase())
+      }
+    }
+    return ids
+  }, [effectiveUser, colaboradores])
 
+  const isColabInIds = React.useCallback((rawIds: any) => {
+    if (!rawIds) return false
+    let arr = rawIds
+    if (typeof arr === 'string') {
+      try { arr = JSON.parse(arr) } catch { arr = [arr] }
+    }
+    if (!Array.isArray(arr)) arr = [arr]
+    return arr.some((id: any) => {
+      const s = String(id || '').trim().toLowerCase()
+      const clean = s.replace(/^f_?/, '')
+      return candidateColabIds.has(s) || candidateColabIds.has(clean) || candidateColabIds.has(`f_${clean}`)
+    })
+  }, [candidateColabIds])
+
+  const isEquipeEscolarGrupo = React.useCallback((g: any): boolean => {
+    if (!g) return false
+    if (
+      g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1 ||
+      g.dados?.isEquipeEscolar === true || g.dados?.isEquipeEscolar === 'true' || g.dados?.isEquipeEscolar === 1 ||
+      g.ano === 'Equipe Escolar' || g.dados?.ano === 'Equipe Escolar'
+    ) return true
+    const n = String(g.nome || '').toLowerCase()
+    return (
+      n.includes('coordenação') || n.includes('coordenacao') || n.includes('direção') || n.includes('direcao') ||
+      n.includes('secretaria') || n.includes('financeiro') || n.includes('inspetor') || n.includes('recepção') ||
+      n.includes('recepcao') || n.includes('portaria') || n.includes('limpeza') || n.includes('equipe escolar') ||
+      n.includes('equipe pedagógica') || n.includes('professores') || n.includes('docentes') || n.includes('colaboradores')
+    )
+  }, [])
+
+  // Unifica todas as fontes de turmas da escola:
+  // 1. Grupos ativos da Agenda Digital (onde turmas como NÍVEL 4 e NÍVEL 5 são geridas)
+  // 2. Turmas acadêmicas cadastradas no ERP
+  const allTurmaSources = React.useMemo(() => {
+    const map = new Map<string, any>()
+    const currentYearStr = new Date().getFullYear().toString()
+
+    // 1. Grupos da Agenda Digital que representam turmas
+    const digitalTurmaGroups = (gruposManuais || []).filter((g: any) => !isEquipeEscolarGrupo(g))
+    digitalTurmaGroups.forEach((g: any) => {
+      const syncId = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
+      const rawTurmaId = syncId ? syncId.replace(/^sync-/, '') : String(g.id)
+      const matchedErp = (turmas || []).find((t: any) => 
+        String(t.id) === rawTurmaId || 
+        String(t.nome).trim().toLowerCase() === String(g.nome).trim().toLowerCase()
+      )
+
+      const ano = g.ano !== undefined && g.ano !== null && String(g.ano).trim() !== ''
+        ? String(g.ano).trim()
+        : (matchedErp?.ano ? String(matchedErp.ano) : (matchedErp?.anoLetivo || currentYearStr))
+
+      const item = {
+        id: String(g.id),
+        rawId: rawTurmaId,
+        grupoId: String(g.id),
+        syncId: g.syncId,
+        codigo: matchedErp?.codigo || g.codigo || rawTurmaId,
+        nome: g.nome,
+        ano: String(ano),
+        anoLetivo: String(ano),
+        serie: matchedErp?.serie || g.serie || '',
+        turno: matchedErp?.turno || g.turno || '',
+        cor: g.cor || matchedErp?.cor,
+        alunosIds: g.alunosIds || [],
+        colaboradoresIds: g.colaboradoresIds || [],
+        professorId: matchedErp?.professorId || matchedErp?.dados?.professorId || g.professorId,
+        professor: matchedErp?.professor || matchedErp?.dados?.professor || g.professor,
+        disciplinas: matchedErp?.disciplinas || matchedErp?.dados?.disciplinas || [],
+        raw: matchedErp || g
+      }
+      map.set(String(g.id), item)
+      if (rawTurmaId && !map.has(rawTurmaId)) {
+        map.set(rawTurmaId, item)
+      }
+    });
+
+    // 2. Turmas do ERP
+    (turmas || []).forEach((t: any) => {
+      const tId = String(t.id)
+      if (!map.has(tId)) {
+        const ano = t.ano !== undefined && t.ano !== null && String(t.ano).trim() !== ''
+          ? String(t.ano).trim()
+          : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || currentYearStr)
+
+        map.set(tId, {
+          id: tId,
+          rawId: tId,
+          grupoId: `sync-${tId}`,
+          syncId: `sync-${tId}`,
+          codigo: t.codigo || tId,
+          nome: t.nome,
+          ano: String(ano),
+          anoLetivo: String(ano),
+          serie: t.serie || '',
+          turno: t.turno || '',
+          cor: t.cor,
+          alunosIds: t.alunosIds || [],
+          colaboradoresIds: t.colaboradoresIds || [],
+          professorId: t.professorId || t.dados?.professorId,
+          professor: t.professor || t.dados?.professor,
+          disciplinas: t.disciplinas || t.dados?.disciplinas || [],
+          raw: t
+        })
+      }
+    })
+
+    return Array.from(new Set(map.values()))
+  }, [gruposManuais, turmas, isEquipeEscolarGrupo])
+
+  // Identifica com precisão cirúrgica quais turmas o usuário atual pode acessar
   const accessibleTurmas = React.useMemo(() => {
-    if (!currentUser?.id) return [];
-    const isMaster = String(currentUser?.cargo || '').toLowerCase().includes('administrador') || String(currentUser?.cargo || '').toLowerCase().includes('diretor') || String(currentUser?.cargo || '').toLowerCase().includes('admin');
-    if (currentUser.perfil === 'administrador' || isMaster || currentUser.perfil === 'admin') return turmas;
-    
-    const globalGroups = userGroups.filter((g: any) => 
-      g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1 ||
-      g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1
-    );
-    
-    const hasGlobalWithoutYear = globalGroups.some((g: any) => {
-      const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
-      return a === '';
-    });
-    
-    if (hasGlobalWithoutYear) return turmas;
-    
-    const globalYears = new Set(globalGroups.map((g: any) => {
-      return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
-    }).filter((a: string) => a !== ''));
+    if (!effectiveUser?.id) return []
 
-    const filtered = turmas.filter((t: any) => {
-       const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
-       if (globalYears.has(tAno)) return true;
-       return userGroups.some((g: any) => String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
-    });
-    return filtered
-  }, [turmas, userGroups, currentUser])
+    // 1. Administrador / Gestão / Coordenação possui acesso total
+    const isMaster = 
+      effectiveUser.perfil === 'administrador' || 
+      effectiveUser.perfil === 'admin' ||
+      ['administrador', 'diretor', 'admin', 'coordenador', 'coordenadora', 'secretaria', 'secretário', 'secretária'].some(p => 
+        String(effectiveUser.cargo || '').toLowerCase().includes(p) ||
+        String(effectiveUser.perfil || '').toLowerCase().includes(p)
+      )
+
+    if (isMaster) return allTurmaSources
+
+    // 2. Se allowedTurmasIds foi passado explicitamente
+    const allowedSet = allowedTurmasIds && allowedTurmasIds.length > 0 
+      ? new Set(allowedTurmasIds.map(String))
+      : null
+
+    // 3. Destinatários já selecionados previamente no comunicado
+    const selectedTurmaIds = new Set(
+      (selectedDest || [])
+        .filter((d: any) => d.type === 'turma' || d.type === 'grupo' || String(d.id || '').startsWith('t_') || String(d.id || '').startsWith('g_'))
+        .map((d: any) => String(d.id).replace(/^[tg]_?/, ''))
+    )
+
+    // 4. Grupos manuais aos quais o professor está associado
+    const myGroups = (gruposManuais || []).filter((g: any) => isColabInIds(g.colaboradoresIds))
+    const hasGlobal = myGroups.some((g: any) => 
+      g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1
+    )
+    if (hasGlobal) return allTurmaSources
+
+    const myName = String(effectiveUser.nome || '').trim().toLowerCase()
+
+    return allTurmaSources.filter((t: any) => {
+      const tId = String(t.id)
+      const rawId = String(t.rawId || '')
+      const grupoId = String(t.grupoId || '')
+      const syncId = String(t.syncId || '')
+      const tNome = String(t.nome || '').trim().toLowerCase()
+
+      // Se consta nas turmas permitidas da sessão
+      if (allowedSet) {
+        if (
+          allowedSet.has(tId) || 
+          (rawId && allowedSet.has(rawId)) || 
+          (grupoId && allowedSet.has(grupoId)) || 
+          (syncId && allowedSet.has(syncId)) ||
+          allowedSet.has(`sync-${tId}`) ||
+          allowedSet.has(`sync-${rawId}`)
+        ) {
+          return true
+        }
+      }
+
+      // Se já estava selecionada como destinatário
+      if (selectedTurmaIds.has(tId) || (rawId && selectedTurmaIds.has(rawId)) || (grupoId && selectedTurmaIds.has(grupoId))) {
+        return true
+      }
+
+      // Vínculo no grupo da turma (colaboradoresIds)
+      if (isColabInIds(t.colaboradoresIds)) return true
+
+      // Vínculo direto como professor da turma
+      const profId = String(t.professorId || '').trim().toLowerCase()
+      if (profId && (candidateColabIds.has(profId) || candidateColabIds.has(profId.replace(/^f_?/, '')))) return true
+
+      const profNome = String(t.professor || '').trim().toLowerCase()
+      if (profNome && myName && (profNome === myName || candidateColabIds.has(profNome))) return true
+
+      // Vínculo nas disciplinas da turma
+      if (Array.isArray(t.disciplinas)) {
+        const hasDisc = t.disciplinas.some((d: any) => {
+          const dProfId = String(d.professorId || d.professor_id || d.funcionarioId || '').replace(/^f_?/, '').trim().toLowerCase()
+          const dProfNome = String(d.professorNome || d.professor_nome || d.professor || '').trim().toLowerCase()
+          return (dProfId && candidateColabIds.has(dProfId)) || (myName && dProfNome && dProfNome === myName)
+        })
+        if (hasDisc) return true
+      }
+
+      // Se algum grupo do professor bate com a turma (id, syncId ou nome)
+      return myGroups.some((g: any) => 
+        String(g.id) === tId || 
+        String(g.id) === grupoId || 
+        (rawId && String(g.syncId || g.id) === `sync-${rawId}`) ||
+        String(g.nome || '').trim().toLowerCase() === tNome
+      )
+    })
+  }, [allTurmaSources, effectiveUser, allowedTurmasIds, selectedDest, gruposManuais, isColabInIds, candidateColabIds])
 
   // Derive available years from students and accessible turmas
   const availableYears = React.useMemo(() => {
     const years = new Set<string>()
-    alunos.forEach((a: any) => {
-      const year = String(a.ano_letivo || a.anoLetivo || a.ano || '')
-      if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
-    })
+    const currentYear = new Date().getFullYear().toString()
+    years.add(currentYear)
+
     accessibleTurmas.forEach((t: any) => {
-      const year = String(t.ano || t.dados?.anoLetivo || '')
+      const year = String(t.ano || t.anoLetivo || t.dados?.anoLetivo || '').trim()
       if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
     })
-    // Include current year as fallback
-    years.add(new Date().getFullYear().toString())
+
+    alunos.forEach((a: any) => {
+      const year = String(a.ano_letivo || a.anoLetivo || a.ano || '').trim()
+      if (year && year !== 'undefined' && year !== 'null' && year !== '') years.add(year)
+    })
+
     return Array.from(years).sort((a, b) => b.localeCompare(a))
   }, [alunos, accessibleTurmas])
 
   // Derive available classes from accessible turmas and students for the selected year
   const availableTurmas = React.useMemo(() => {
     if (!filterYear) return []
+    const currentYearStr = new Date().getFullYear().toString()
     const classMap = new Map<string, string>()
 
     accessibleTurmas.forEach((t: any) => {
-      const tYear = String(t.ano || t.dados?.anoLetivo || new Date().getFullYear().toString())
-      if (tYear === filterYear || filterYear === 'Todos') {
+      const tYear = String(t.ano || t.anoLetivo || t.dados?.anoLetivo || currentYearStr).trim()
+      if (tYear === filterYear || filterYear === 'Todos' || !tYear) {
         classMap.set(String(t.id), t.nome || String(t.id))
       }
     })
     
-    const turmasLower = accessibleTurmas.map((t: any) => ({
-      id: String(t.id).toLowerCase(),
-      codigo: String(t.codigo || '').toLowerCase(),
-      nome: String(t.nome || '').trim().toLowerCase(),
-      original: t
-    }))
-
-    alunos.forEach((a: any) => {
-      const year = String(a.ano_letivo || a.anoLetivo || a.ano || '')
-      if ((year === filterYear || filterYear === 'Todos' || year === '') && (a.turma || (a as any).turmaId)) {
-        const tRef = String(a.turma || (a as any).turmaId).trim()
-        const tRefLower = tRef.toLowerCase()
-        const tMatched = turmasLower.find(t => t.id === tRefLower || t.codigo === tRefLower || t.nome === tRefLower)
-        if (tMatched) {
-          const tObj = tMatched.original
-          const canonicalId = String(tObj.id)
-          const tName = tObj.nome
-          classMap.set(canonicalId, tName)
-        }
-      }
-    })
-    return Array.from(classMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
-  }, [alunos, accessibleTurmas, filterYear])
+    return Array.from(classMap.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+  }, [accessibleTurmas, filterYear])
 
   // Derived selected turma name
   const selectedTurmaName = React.useMemo(() => {
@@ -205,10 +406,18 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
   // Resolver alunos vinculados a uma turma usando as regras completas da escola
   const resolveTurmaAlunos = React.useCallback((selectedTurma: any, year: string) => {
     if (!selectedTurma) return []
-    const tIdStr = String(selectedTurma.id || '')
+    const tIdStr = String(selectedTurma.id || selectedTurma.rawId || '')
     const tAno = selectedTurma.ano !== undefined && selectedTurma.ano !== null && String(selectedTurma.ano).trim() !== ''
       ? String(selectedTurma.ano)
       : (selectedTurma.anoLetivo || selectedTurma.ano_letivo || selectedTurma.dados?.anoLetivo || year || String(new Date().getFullYear()))
+
+    // Alunos diretos do objeto da turma (ex: grupo da Agenda Digital que tem alunosIds)
+    let directAlunosIds: string[] = []
+    let tAlunos = selectedTurma.alunosIds || selectedTurma.dados?.alunosIds || []
+    if (typeof tAlunos === 'string') {
+      try { tAlunos = JSON.parse(tAlunos) } catch { tAlunos = [] }
+    }
+    if (Array.isArray(tAlunos)) directAlunosIds = tAlunos.map(String)
 
     // 1. Procura grupo espelhado em agenda/grupos (sync-{id}, id ou mesmo nome)
     const syncGroup = (gruposManuais || []).find((g: any) => {
@@ -237,8 +446,8 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
     return (alunos || []).filter((a: any) => {
       const aIdStr = String(a.id)
 
-      // Se constar nos alunos vinculados do grupo espelhado (ex: /admin/turmas)
-      if (extraAlunosIds.includes(aIdStr)) return true
+      // Se constar nos alunos vinculados diretos do grupo ou do grupo espelhado
+      if (directAlunosIds.includes(aIdStr) || extraAlunosIds.includes(aIdStr)) return true
 
       // Regra oficial de matricula cursando (inclui Dual-Enrollment de Integral/Intermediário!)
       if (isAlunoCursandoTurma(a, selectedTurma, tAno, turmas)) return true
@@ -326,16 +535,24 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
 
       if (filterTurmaId && filterTurmaId !== 'all') {
         const filterLower = filterTurmaId.trim().toLowerCase();
-        const selectedTurma = (turmas || []).find((t: any) => 
+        const selectedTurma = accessibleTurmas.find((t: any) => 
+          String(t.id).toLowerCase() === filterLower || 
+          String(t.rawId || '').toLowerCase() === filterLower ||
+          String(t.codigo || '').toLowerCase() === filterLower || 
+          String(t.nome).trim().toLowerCase() === filterLower
+        ) || (turmas || []).find((t: any) => 
           String(t.id).toLowerCase() === filterLower || 
           String(t.codigo).toLowerCase() === filterLower || 
           String(t.nome).trim().toLowerCase() === filterLower
         ) || (gruposManuais || []).find((g: any) => 
           String(g.id).toLowerCase() === filterLower || 
+          String(g.syncId || '').toLowerCase() === filterLower ||
           String(g.nome).trim().toLowerCase() === filterLower
         );
         
         resolved = resolveTurmaAlunos(selectedTurma, filterYear)
+      } else if (propTargetedStudents && propTargetedStudents.length > 0) {
+        resolved = propTargetedStudents
       } else if (selectedDest && selectedDest.length > 0) {
         // Se nenhuma turma foi selecionada no modal, mas temos destinatários, 
         // a lista já está filtrada em `resolved`. Não fazemos nada.
@@ -346,7 +563,7 @@ export function ReportsSelectionModal({ isOpen, onClose, selectedDest, onAdd, on
 
       setTargetedStudents(resolved)
     }
-  }, [isOpen, selectedDest, alunos, turmas, gruposManuais, filterYear, filterTurmaId, availableTurmas, resolveTurmaAlunos])
+  }, [isOpen, selectedDest, propTargetedStudents, alunos, turmas, gruposManuais, filterYear, filterTurmaId, accessibleTurmas, availableTurmas, resolveTurmaAlunos])
 
   // Set default date when going to step 2
   useEffect(() => {
