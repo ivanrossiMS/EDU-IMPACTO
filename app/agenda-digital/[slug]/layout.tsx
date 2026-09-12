@@ -426,8 +426,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
 
   const baseBtnStyle: React.CSSProperties = {
     height: '100%',
-    minHeight: 58,
-    borderRadius: 22,
+    minHeight: 56,
+    borderRadius: 20,
     fontWeight: 800,
     fontSize: 16,
     border: 'none',
@@ -564,9 +564,9 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
         color: 'white',
         boxShadow: '0 6px 18px rgba(16, 185, 129, 0.35)',
         animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-        padding: '0 14px',
+        padding: '0 16px',
         height: '100%',
-        minHeight: 58,
+        minHeight: 56,
         alignItems: 'center',
         justifyContent: 'flex-start',
       }}>
@@ -575,8 +575,8 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
         </div>
         <div style={{ width: 1.5, height: 24, background: 'rgba(255, 255, 255, 0.25)', flexShrink: 0, margin: '0 2px' }} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 14, fontWeight: 800 }}>Saída Confirmada!</span>
-          <span style={{ fontSize: 10.5, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
+          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Saída Confirmada!</span>
+          <span style={{ fontSize: 11, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
             {confData.by ? `${confData.by.split(' ')[0]} ` : ''}às {formatTime(confData.time)}
           </span>
         </div>
@@ -589,14 +589,14 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
 
   if (isSpecialAuth) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: '100%', minHeight: 58 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: '100%', minHeight: 56 }}>
         <button 
           onClick={() => specialAuthCalls.forEach(c => {
              cancelCall(c.id)
           })}
           title="Cancelar autorização"
           style={{
-            width: 44, height: '100%', minHeight: 58, borderRadius: 18, cursor: 'pointer',
+            width: 46, height: 56, borderRadius: 16, cursor: 'pointer',
             background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.25)', color: '#ef4444',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s', flexShrink: 0
@@ -612,7 +612,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           flex: 1,
           minWidth: 0,
           height: '100%',
-          minHeight: 58,
+          minHeight: 56,
           borderRadius: 20,
           background: 'linear-gradient(270deg, #f59e0b, #fbbf24, #f59e0b)',
           backgroundSize: '300% 300%',
@@ -620,7 +620,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           color: 'white',
           boxShadow: '0 6px 20px rgba(245, 158, 11, 0.3)',
           cursor: 'default',
-          padding: '0 12px',
+          padding: '0 14px',
           justifyContent: 'flex-start',
           alignItems: 'center',
         }} className="ad-sab-active">
@@ -631,10 +631,10 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
             flexShrink: 0
           }} className="sab-pulse-dot" />
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8, overflow: 'hidden' }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 14.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
               {specialCount > 1 ? 'Autorizações Ativas' : 'Autorização Ativa'}
             </span>
-            <span style={{ fontSize: 10, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 1, fontWeight: 600 }}>
+            <span style={{ fontSize: 10.5, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
               {specialAuthCalls.length > 0 ? (specialAuthCalls[0].guardianName ? specialAuthCalls[0].guardianName.split('—')[0].trim() : 'Aguardando portaria') : 'Aguardando portaria'}
             </span>
           </div>
@@ -661,7 +661,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
         : myCalls.find(c => c.status === 'waiting' || c.status === 'called') || myCalls[0]
 
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', height: '100%', minHeight: 58 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: '100%', minHeight: 56 }}>
         <button 
           onClick={() => {
             const toCancel = pendingCalls.length > 0 ? pendingCalls : (activeCallToDisplay ? [activeCallToDisplay] : [])
@@ -669,7 +669,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           }}
           title="Cancelar chamada"
           style={{
-            width: 44, height: '100%', minHeight: 58, borderRadius: 18, cursor: 'pointer',
+            width: 46, height: 56, borderRadius: 16, cursor: 'pointer',
             background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.25)', color: '#ef4444',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.2s', flexShrink: 0
@@ -685,7 +685,7 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           flex: 1,
           minWidth: 0,
           height: '100%',
-          minHeight: 58,
+          minHeight: 56,
           borderRadius: 20,
           background: 'linear-gradient(45deg, #f59e0b, #fbbf24, #f59e0b)',
           backgroundSize: '200% 200%',
@@ -693,14 +693,14 @@ function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAluno
           color: 'white',
           boxShadow: '0 6px 20px rgba(245, 158, 11, 0.3)',
           cursor: 'default',
-          padding: '0 12px',
+          padding: '0 14px',
           alignItems: 'center',
           justifyContent: 'flex-start',
         }}>
           <Loader2 size={20} className="spin-anim" style={{ flexShrink: 0 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8, overflow: 'hidden' }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{callLabel}</span>
-            <span style={{ fontSize: 10, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 1, fontWeight: 600 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 10, overflow: 'hidden' }}>
+            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{callLabel}</span>
+            <span style={{ fontSize: 10.5, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
               por {activeCallToDisplay?.guardianName ? activeCallToDisplay.guardianName.split(' ')[0] : 'Responsável'} às {formatTime(activeCallToDisplay?.calledAt)}
             </span>
           </div>
@@ -1645,25 +1645,27 @@ export default function ADInnerLayout({
           box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
         }
 
-        /* Actions Row (Chamar aluno, Trocar aluno e Sair - Lado a Lado) */
-        .ad-card-actions-row {
+        /* Actions Layout: Linha 1 Isolada (Hero Call) + Linha 2 Secundária Discreta */
+        .ad-actions-container {
           display: flex;
-          flex-direction: row;
-          align-items: stretch;
+          flex-direction: column;
           gap: 10px;
           width: 100%;
-          margin-top: 4px;
+          margin-top: 6px;
         }
 
-        .ad-call-button-col {
-          flex: 1;
-          min-width: 0;
+        .ad-hero-call-row {
+          width: 100%;
           display: flex;
+        }
+
+        .ad-hero-call-row > * {
+          width: 100% !important;
         }
 
         .ad-premium-cta-btn {
-          height: 58px;
-          border-radius: 22px;
+          height: 56px;
+          border-radius: 20px;
           background: linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #4f46e5 100%);
           color: #ffffff;
           box-shadow: 0 6px 18px rgba(37, 99, 235, 0.28);
@@ -1672,9 +1674,9 @@ export default function ADInnerLayout({
           display: flex;
           align-items: center;
           justify-content: flex-start;
-          gap: 10px;
+          gap: 12px;
           width: 100%;
-          padding: 0 16px;
+          padding: 0 18px;
           font-family: 'Outfit', sans-serif;
           transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
           box-sizing: border-box;
@@ -1710,7 +1712,7 @@ export default function ADInnerLayout({
         }
 
         .ad-call-btn-label {
-          font-size: 17px;
+          font-size: 16.5px;
           font-weight: 800;
           letter-spacing: -0.2px;
           line-height: 1.2;
@@ -1718,77 +1720,65 @@ export default function ADInnerLayout({
           font-family: 'Outfit', sans-serif;
         }
 
-        /* Action Card Buttons (Trocar Aluno & Sair) */
-        .ad-card-action-btn {
-          height: 58px;
-          border-radius: 22px;
+        /* Linha 2: Botões Secundários Ultra Modernos e Discretos */
+        .ad-secondary-actions-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          width: 100%;
+        }
+
+        .ad-discreet-btn {
+          height: 40px;
+          border-radius: 14px;
           display: flex;
-          flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 3px;
-          cursor: pointer;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          text-decoration: none;
-          font-family: 'Outfit', sans-serif;
-          box-sizing: border-box;
-          flex-shrink: 0;
-          user-select: none;
-          padding: 0 12px;
-        }
-
-        .ad-card-action-btn:hover {
-          transform: translateY(-1.5px);
-        }
-
-        .ad-card-action-btn:active {
-          transform: scale(0.97);
-        }
-
-        /* Switch Student Button */
-        .ad-card-switch-student {
-          min-width: 84px;
-          background: #ffffff;
-          border: 1.5px solid rgba(224, 231, 255, 0.9);
-          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.05);
-          color: #4338ca;
-        }
-
-        .ad-card-switch-student:hover {
-          border-color: rgba(99, 102, 241, 0.35);
-          background: #f8faff;
-          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.12);
-        }
-
-        .ad-card-switch-student .ad-action-card-label {
-          font-size: 11.5px;
-          font-weight: 800;
-          letter-spacing: -0.1px;
-          color: #251c8a;
-          white-space: nowrap;
-        }
-
-        /* Logout Button */
-        .ad-card-logout {
-          min-width: 76px;
-          background: #fffafa;
-          border: 1.5px solid rgba(254, 202, 202, 0.8);
-          box-shadow: 0 2px 8px rgba(239, 68, 68, 0.04);
-          color: #ef4444;
-        }
-
-        .ad-card-logout:hover {
-          border-color: rgba(239, 68, 68, 0.35);
-          background: #fef2f2;
-          box-shadow: 0 6px 16px rgba(239, 68, 68, 0.12);
-        }
-
-        .ad-card-logout .ad-action-card-label {
+          gap: 7px;
           font-size: 12px;
-          font-weight: 800;
-          letter-spacing: -0.1px;
-          color: #dc2626;
-          white-space: nowrap;
+          font-weight: 700;
+          cursor: pointer;
+          text-decoration: none;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          user-select: none;
+          box-sizing: border-box;
+          font-family: 'Outfit', sans-serif;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+
+        .ad-discreet-switch {
+          background: rgba(241, 245, 249, 0.85);
+          border: 1px solid rgba(226, 232, 240, 0.95);
+          color: #475569;
+        }
+
+        .ad-discreet-switch:hover {
+          background: rgba(238, 242, 255, 0.9);
+          border-color: rgba(199, 210, 254, 0.9);
+          color: #4f46e5;
+          transform: translateY(-1px);
+        }
+
+        .ad-discreet-switch:active {
+          transform: scale(0.98);
+        }
+
+        .ad-discreet-logout {
+          background: rgba(254, 242, 242, 0.6);
+          border: 1px solid rgba(254, 202, 202, 0.7);
+          color: #64748b;
+        }
+
+        .ad-discreet-logout:hover {
+          background: rgba(254, 242, 242, 0.95);
+          border-color: rgba(252, 165, 165, 0.85);
+          color: #ef4444;
+          transform: translateY(-1px);
+        }
+
+        .ad-discreet-logout:active {
+          transform: scale(0.98);
         }
 
         @media (max-width: 1200px) {
@@ -1888,15 +1878,15 @@ export default function ADInnerLayout({
             width: 10px !important;
             height: 10px !important;
           }
-          .ad-card-actions-row {
+          .ad-actions-container {
             gap: 8px !important;
           }
           .ad-premium-cta-btn {
-            height: 58px !important;
-            padding: 0 12px !important;
-            border-radius: 20px !important;
+            height: 56px !important;
+            padding: 0 14px !important;
+            border-radius: 18px !important;
             justify-content: flex-start !important;
-            gap: 8px !important;
+            gap: 10px !important;
           }
           .ad-call-icon-box {
             width: 36px !important;
@@ -1910,22 +1900,13 @@ export default function ADInnerLayout({
           .ad-call-btn-label {
             font-size: 15.5px !important;
           }
-          .ad-card-action-btn {
-            height: 58px !important;
-            border-radius: 20px !important;
-            padding: 0 6px !important;
+          .ad-secondary-actions-grid {
+            gap: 8px !important;
           }
-          .ad-card-switch-student {
-            min-width: 80px !important;
-          }
-          .ad-card-switch-student .ad-action-card-label {
-            font-size: 11px !important;
-          }
-          .ad-card-logout {
-            min-width: 70px !important;
-          }
-          .ad-card-logout .ad-action-card-label {
+          .ad-discreet-btn {
+            height: 38px !important;
             font-size: 11.5px !important;
+            border-radius: 12px !important;
           }
           .ad-call-btn-arrow {
             display: none !important;
@@ -2814,11 +2795,11 @@ export default function ADInnerLayout({
             </div>
           </div>
 
-          {/* AREA 2: AÇÕES DO CARD - Botão Chamar Aluno, Trocar Aluno e Sair Lado a Lado (Estilo Imagem 1) */}
+          {/* AREA 2: AÇÕES DO CARD - Linha 1: Botão Chamar Aluno Isolado; Linha 2: Trocar Aluno e Sair Discretos */}
           {currentUser && currentUser.cargo !== 'Aluno' && (
-            <div className="ad-card-actions-row">
+            <div className="ad-actions-container">
               {adConfig?.permissoes?.chamadaAlunoPortaria !== false && (
-                <div className="ad-call-button-col">
+                <div className="ad-hero-call-row">
                   <StudentCallButton 
                     aluno={aluno} 
                     currentUser={currentUser} 
@@ -2851,13 +2832,13 @@ export default function ADInnerLayout({
                 </div>
               )}
               
-              <Link 
-                href="/agenda-digital/selecionar-aluno"
-                title="Trocar de Aluno"
-                className="ad-card-action-btn ad-card-switch-student"
-              >
-                <div className="ad-action-card-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+              <div className="ad-secondary-actions-grid">
+                <Link 
+                  href="/agenda-digital/selecionar-aluno"
+                  title="Trocar de Aluno"
+                  className="ad-discreet-btn ad-discreet-switch"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="8.5" cy="7" r="3.5" />
                     <path d="M2.5 19.5c0-3.3 2.7-6 6-6h2" />
                     <path d="M17 5a3.5 3.5 0 0 1 3.5 3.5" />
@@ -2865,24 +2846,22 @@ export default function ADInnerLayout({
                     <path d="M20.5 14.5a3.5 3.5 0 0 1-3.5 3.5" />
                     <polyline points="15 17 17 19 19 17" />
                   </svg>
-                </div>
-                <span className="ad-action-card-label">Trocar aluno</span>
-              </Link>
+                  <span>Trocar aluno</span>
+                </Link>
 
-              <button 
-                onClick={async () => {
-                  setLoadingPath('logout')
-                  setCurrentUser(null);
-                  await performLogout();
-                }}
-                title="Sair da Conta"
-                className="ad-card-action-btn ad-card-logout"
-              >
-                <div className="ad-action-card-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <LogOut size={22} strokeWidth={2.4} />
-                </div>
-                <span className="ad-action-card-label">Sair</span>
-              </button>
+                <button 
+                  onClick={async () => {
+                    setLoadingPath('logout')
+                    setCurrentUser(null);
+                    await performLogout();
+                  }}
+                  title="Sair da Conta"
+                  className="ad-discreet-btn ad-discreet-logout"
+                >
+                  <LogOut size={15} strokeWidth={2.2} />
+                  <span>Sair</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
