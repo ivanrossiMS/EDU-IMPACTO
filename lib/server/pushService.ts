@@ -252,13 +252,16 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ttl: 86400,
   }
 
-  // ── Tentativa 1: OneSignal User Model (external_id) ──
-  // Usuários autenticados no app via OneSignal.login(userId) possuem external_id = userId
-  console.log(`🔔 [PushService] Tentativa 1 (User Model external_id) para ${uniqueTargetUserIds.length} usuário(s)...`)
+  // ── Tentativa 1: OneSignal User Model (external_id + responsavel_id + aluno_id) ──
+  // Usuários autenticados no app via OneSignal.login(userId) possuem external_id = userId.
+  // Responsáveis e alunos também possuem aliases responsavel_id e aluno_id associados ao usuário.
+  console.log(`🔔 [PushService] Tentativa 1 (User Model multi-aliases) para ${uniqueTargetUserIds.length} usuário(s)...`)
   const externalIdPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
       external_id: uniqueTargetUserIds,
+      responsavel_id: uniqueTargetUserIds,
+      aluno_id: uniqueTargetUserIds,
     },
     target_channel: 'push',
   }
@@ -283,22 +286,8 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return resultLegacy
   }
 
-  // ── Tentativa 3 (Fallback): Custom Alias colaborador_id ──
-  console.warn(`⚠️ [PushService] Tentativa 2 retornou 0 inscritos. Executando Tentativa 3: Custom Alias (colaborador_id)...`)
-  const colabPayload: Record<string, any> = {
-    ...commonFields,
-    include_aliases: {
-      colaborador_id: uniqueTargetUserIds,
-    },
-    target_channel: 'push',
-  }
-  const resultColab = await attemptSend(colabPayload, ONESIGNAL_REST_API_KEY)
-  if (resultColab.success && (resultColab.recipients ?? 0) > 0) {
-    console.log(`✅ [PushService] Custom alias colaborador_id entregou com sucesso para ${resultColab.recipients} dispositivo(s)!`)
-    return resultColab
-  }
-
-  // ── Tentativa 4 (Fallback): Custom Alias responsavel_id ──
+  // ── Tentativa 3 (Fallback): Custom Alias responsavel_id ──
+  console.warn(`⚠️ [PushService] Tentativa 2 retornou 0 inscritos. Executando Tentativa 3: Custom Alias (responsavel_id)...`)
   const respPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
@@ -312,7 +301,37 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return resultResp
   }
 
-  // ── Tentativa 5 (Fallback): Custom Alias system_user_id ──
+  // ── Tentativa 4 (Fallback): Custom Alias aluno_id ──
+  console.warn(`⚠️ [PushService] Tentativa 3 retornou 0 inscritos. Executando Tentativa 4: Custom Alias (aluno_id)...`)
+  const alunoPayload: Record<string, any> = {
+    ...commonFields,
+    include_aliases: {
+      aluno_id: uniqueTargetUserIds,
+    },
+    target_channel: 'push',
+  }
+  const resultAluno = await attemptSend(alunoPayload, ONESIGNAL_REST_API_KEY)
+  if (resultAluno.success && (resultAluno.recipients ?? 0) > 0) {
+    console.log(`✅ [PushService] Custom alias aluno_id entregou com sucesso para ${resultAluno.recipients} dispositivo(s)!`)
+    return resultAluno
+  }
+
+  // ── Tentativa 5 (Fallback): Custom Alias colaborador_id ──
+  console.warn(`⚠️ [PushService] Tentativa 4 retornou 0 inscritos. Executando Tentativa 5: Custom Alias (colaborador_id)...`)
+  const colabPayload: Record<string, any> = {
+    ...commonFields,
+    include_aliases: {
+      colaborador_id: uniqueTargetUserIds,
+    },
+    target_channel: 'push',
+  }
+  const resultColab = await attemptSend(colabPayload, ONESIGNAL_REST_API_KEY)
+  if (resultColab.success && (resultColab.recipients ?? 0) > 0) {
+    console.log(`✅ [PushService] Custom alias colaborador_id entregou com sucesso para ${resultColab.recipients} dispositivo(s)!`)
+    return resultColab
+  }
+
+  // ── Tentativa 6 (Fallback): Custom Alias system_user_id ──
   const sysUserPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {

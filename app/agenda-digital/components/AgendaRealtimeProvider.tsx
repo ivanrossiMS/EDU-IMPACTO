@@ -32,6 +32,7 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 import { PushPermissionBanner } from '@/components/agenda/PushPermissionBanner'
+import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 
 interface RealtimeProviderProps {
   children?: React.ReactNode
@@ -92,25 +93,44 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
   useEffect(() => {
     if (!currentUser?.id) return
-    try {
-      const cached = localStorage.getItem(`edu-meus-alunos-${currentUser.id}`)
-      if (cached) {
-        setMeusAlunos(JSON.parse(cached))
-      }
-    } catch(e) {}
+
+    const respMetaId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || ''
+    const userEmail = (currentUser?.email || '').toLowerCase().trim()
+    const possibleKeys = [
+      `edu-meus-alunos-${currentUser.id}`,
+      `edu-meus-alunos-${respMetaId || userEmail}`,
+      `edu-meus-alunos-${userEmail}`
+    ]
+
+    for (const key of possibleKeys) {
+      try {
+        const cached = localStorage.getItem(key)
+        if (cached) {
+          const parsed = JSON.parse(cached)
+          const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.data) ? parsed.data : null)
+          if (list && list.length > 0) {
+            setMeusAlunos(list)
+            break
+          }
+        }
+      } catch (_) {}
+    }
 
     fetch('/api/agenda/meus-alunos', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(data => {
         if (Array.isArray(data)) {
           setMeusAlunos(data)
-          try {
-            localStorage.setItem(`edu-meus-alunos-${currentUser.id}`, JSON.stringify(data))
-          } catch(e) {}
+          possibleKeys.forEach(k => {
+            try {
+              localStorage.setItem(k, JSON.stringify(data))
+              localStorage.setItem(`${k}-meta`, JSON.stringify({ data, ts: Date.now() }))
+            } catch (_) {}
+          })
         }
       })
       .catch(() => {})
-  }, [currentUser?.id])
+  }, [currentUser?.id, (currentUser as any)?.responsavel_id, currentUser?.email])
 
   const [extraStaffIds, setExtraStaffIds] = useState<string[]>([])
 
@@ -504,13 +524,28 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 // Add aliases for responsavel_id, aluno_id, colaborador_id and system_user_id to allow backend to target them
                 if (OS.User && typeof OS.User.addAlias === 'function') {
                   try {
-                    if (currentUser.responsavel_id) {
-                      const p = OS.User.addAlias('responsavel_id', String(currentUser.responsavel_id));
+                    const rId = currentUser.responsavel_id || currentUser.user_metadata?.responsavel_id || (currentUser as any)?.responsavelId || currentUser.id;
+                    if (rId) {
+                      const p = OS.User.addAlias('responsavel_id', String(rId));
                       if (p && p.catch) p.catch(() => {});
                     }
                     if (currentUser.aluno_id) {
                       const p = OS.User.addAlias('aluno_id', String(currentUser.aluno_id));
                       if (p && p.catch) p.catch(() => {});
+                    }
+                    // Adicionar alias aluno_id para TODOS os alunos vinculados ao responsável!
+                    if (Array.isArray(meusAlunos) && meusAlunos.length > 0) {
+                      meusAlunos.forEach(s => {
+                        if (s?.id) {
+                          const pA = OS.User.addAlias('aluno_id', String(s.id));
+                          if (pA && pA.catch) pA.catch(() => {});
+                          const cleanId = String(s.id).replace(/^(a_|_ALU)/, '');
+                          if (cleanId !== String(s.id)) {
+                            const pAClean = OS.User.addAlias('aluno_id', cleanId);
+                            if (pAClean && pAClean.catch) pAClean.catch(() => {});
+                          }
+                        }
+                      });
                     }
                     const colabId = currentUser.colaborador_id || currentUser.system_user_id || currentUser.user_metadata?.colaborador_id || currentUser.user_metadata?.system_user_id || extraStaffIds[0];
                     if (colabId) {
@@ -547,6 +582,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             if (staffIdTag) tags['colaborador_id'] = String(staffIdTag)
             if (hasDualAccess) tags['has_dual_role'] = 'true'
 
+            if (Array.isArray(meusAlunos) && meusAlunos.length > 0) {
+              meusAlunos.forEach(s => {
+                if (s?.id) tags[`aluno_${s.id}`] = 'true'
+                if (s?.turmaNome || s?.turma) tags[`turma_${s.id}`] = String(s.turmaNome || s.turma)
+              })
+            }
+
             if (OS.User && typeof OS.User.addTags === 'function') {
               await OS.User.addTags(tags)
               console.log('[OneSignal] Tags de segmentação atribuídas:', tags)
@@ -577,7 +619,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     gerenciarUsuarioPush()
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, responsavelId, alunoId, turmaNome])
+  }, [currentUser?.id, responsavelId, alunoId, turmaNome, meusAlunos.length])
 
   interface EventMatchResult {
     isTarget: boolean
@@ -639,12 +681,10 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     const { type, id, title, conteudo, autor, match } = params
 
     let profileBadge = ''
-    if (hasDualAccess) {
-      if (match.profileTarget === 'colaborador') {
-        profileBadge = '🏛️ Institucional'
-      } else if (match.targetAlunoNome) {
-        profileBadge = `🎒 Aluno: ${match.targetAlunoNome.split(' ')[0]}`
-      }
+    if (match.profileTarget === 'colaborador') {
+      profileBadge = '🏛️ Institucional'
+    } else if (match.targetAlunoNome) {
+      profileBadge = `🎒 Aluno: ${match.targetAlunoNome.split(' ')[0]}`
     }
 
     let iconNode = <Megaphone size={18} className="text-indigo-600" />
@@ -684,6 +724,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       return [String(val)]
     }
 
+    const norm = (str: any) => String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+
     const evaluateEventTarget = (dados: any): EventMatchResult => {
       if (!dados) return { isTarget: false, profileTarget: null }
 
@@ -719,6 +761,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             const tNome = String(t.nome || '').toLowerCase().trim()
             const tId = String(t.id).toLowerCase().trim()
             const tCod = String(t.codigo || '').toLowerCase().trim()
+            const tNomeNorm = norm(t.nome)
             const belongs = userGroups.some((g: any) => {
               let colabs = g.colaboradoresIds
               if (typeof colabs === 'string') {
@@ -726,13 +769,18 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               }
               if (!Array.isArray(colabs)) colabs = []
               return colabs.some((cid: any) => myCandidateStaffIds.includes(String(cid).replace(/^f_?/, '').trim().toLowerCase())) &&
-                (String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === tNome)
+                (String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === tNome || norm(g.nome) === tNomeNorm)
             })
             if (!belongs) return false
             return alvoTurmas.some(al => {
               const alClean = al.toLowerCase().trim()
-              return alClean === tNome || alClean.includes(tNome) || tNome.includes(alClean) || alClean === tId || alClean === tCod
-            }) || alvoTurmasIds.some(al => al.toLowerCase().trim() === tId || al.toLowerCase().trim() === tCod)
+              const alNorm = norm(al)
+              return alClean === tNome || alClean.includes(tNome) || tNome.includes(alClean) || alClean === tId || alClean === tCod ||
+                (alNorm && tNomeNorm && (alNorm === tNomeNorm || alNorm.includes(tNomeNorm) || tNomeNorm.includes(alNorm)))
+            }) || alvoTurmasIds.some(al => {
+              const alNorm = norm(al)
+              return alNorm === norm(t.id) || alNorm === norm(t.codigo)
+            })
           })
           if (isTeacherTurma) matchesStaff = true
         } else if (isTodos) {
@@ -740,7 +788,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         }
       }
 
-      // 2. Family match
+      // 2. Family match (verifica TODOS os alunos vinculados ao responsável logado)
       let matchingStudent: any = null
       const studentsToCheck: any[] = [...meusAlunos]
       if (alunoObj && !studentsToCheck.some(s => String(s.id) === String(alunoObj.id))) {
@@ -752,25 +800,84 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
       for (const s of studentsToCheck) {
         const sId = String(s.id)
-        const sTurmaNome = String(s.turmaNome || s.turma || '').toLowerCase().trim()
-        const sTurmaId = String(s.turma || '').toLowerCase().trim()
+        const sTurmaNome = String(s.turmaNome || s.turma || '').trim()
+        const sTurmaId = String(s.turma || '').trim()
+        const sTurmaNorm = norm(sTurmaNome)
+        const sTurmaIdNorm = norm(sTurmaId)
 
+        // 2a. Match direto pelo ID do aluno
         if (alvoAlunos.some(aid => {
           const clean = String(aid).replace(/^a_?/, '').replace(/^_ALU/, '').trim()
-          return clean === sId
+          return clean === sId || clean === sId.replace(/^(a_|_ALU)/, '')
         })) {
           matchingStudent = s
           break
         }
-        if (sTurmaNome && (
-          alvoTurmas.some(t => {
-            const tl = t.toLowerCase().trim()
-            return tl === sTurmaNome || tl.includes(sTurmaNome) || sTurmaNome.includes(tl)
-          }) ||
-          alvoTurmasIds.some(t => t.toLowerCase().trim() === sTurmaId)
-        )) {
+
+        // 2b. Match de turma por nome normalizado (ex: "4 ano A - matutino" === "4º Ano A - Matutino") ou código/ID
+        const matchedTurmaDirect = alvoTurmas.some(t => {
+          const tlNorm = norm(t)
+          if (!tlNorm) return false
+          const tlClean = tlNorm.replace(/^turma/, '')
+          return (
+            tlNorm === sTurmaNorm ||
+            tlNorm === sTurmaIdNorm ||
+            (sTurmaNorm.length >= 4 && (tlNorm.includes(sTurmaNorm) || sTurmaNorm.includes(tlNorm))) ||
+            (tlClean.length >= 4 && (sTurmaNorm.includes(tlClean) || tlClean.includes(sTurmaNorm)))
+          )
+        }) || alvoTurmasIds.some(t => {
+          const tlNorm = norm(t)
+          return tlNorm === sTurmaIdNorm || tlNorm === sTurmaNorm
+        })
+
+        if (matchedTurmaDirect) {
           matchingStudent = s
           break
+        }
+
+        // 2c. Match através de isAlunoCursandoTurma com turmasArray (suporte a histórico e duplo vínculo Integral)
+        if (turmasArray && turmasArray.length > 0) {
+          const matchingTurmaInList = turmasArray.find(t => {
+            const tNomeNorm = norm(t.nome)
+            const tIdNorm = norm(t.id)
+            const tCodNorm = norm(t.codigo)
+            return alvoTurmas.some(at => {
+              const atNorm = norm(at)
+              const atClean = atNorm.replace(/^turma/, '')
+              return atNorm === tNomeNorm || atNorm === tIdNorm || atNorm === tCodNorm ||
+                (tNomeNorm.length >= 4 && (atNorm.includes(tNomeNorm) || tNomeNorm.includes(atNorm))) ||
+                (atClean.length >= 4 && (tNomeNorm.includes(atClean) || atClean.includes(tNomeNorm)))
+            }) || alvoTurmasIds.some(atId => norm(atId) === tIdNorm || norm(atId) === tCodNorm)
+          })
+
+          if (matchingTurmaInList && isAlunoCursandoTurma(s, matchingTurmaInList, undefined, turmasArray)) {
+            matchingStudent = s
+            break
+          }
+        }
+
+        // 2d. Match por grupos da agenda em que o aluno é membro
+        if (alvoGrupos.length > 0) {
+          const userGroups = agendaCtx?.chatGroups || []
+          const inGroup = userGroups.some((g: any) => {
+            const gNomeNorm = norm(g.nome || g.dados?.nome)
+            const gIdNorm = norm(g.id)
+            const isTargetGroup = alvoGrupos.some(ag => {
+              const agNorm = norm(ag)
+              return agNorm === gNomeNorm || agNorm === gIdNorm
+            })
+            if (!isTargetGroup) return false
+            let aIds = g.alunosIds || g.dados?.alunosIds || []
+            if (typeof aIds === 'string') {
+              try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+            }
+            if (!Array.isArray(aIds)) aIds = []
+            return aIds.some((aid: any) => String(aid).replace(/^(a_|_ALU)/, '').trim() === sId)
+          })
+          if (inGroup) {
+            matchingStudent = s
+            break
+          }
         }
       }
 

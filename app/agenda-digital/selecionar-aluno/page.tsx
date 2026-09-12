@@ -13,6 +13,7 @@ import { LoadingGlass } from '@/components/LoadingGlass'
 import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { AppLoadingScreen } from '@/components/AppLoadingScreen'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -949,6 +950,15 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
           </div>
         ) : (
           <>
+            {student.unreadCount > 0 && (
+              <div className="unread-indicator-badge" title={`${student.unreadCount} nova(s) notificação(ões) não lida(s)`}>
+                <Bell size={16} strokeWidth={2.4} />
+                <span className="badge-count-bubble">
+                  {student.unreadCount > 99 ? '99+' : student.unreadCount}
+                </span>
+              </div>
+            )}
+
             {pendingAlerts > 0 && (
               <div className="pending-warning-badge" title={`${pendingAlerts} Ocorrências ou pendências`}>
                 <AlertTriangle size={16} strokeWidth={2.4} />
@@ -1017,6 +1027,47 @@ function SelecionarAlunoContent() {
   const emailBusca = (currentUser?.email || '').toLowerCase().trim();
   const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
 
+  const { recentNotifications } = useAgendaNotifications();
+  const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
+
+  // Ouvir eventos realtime de novos comunicados para atualizar o badge do aluno instantaneamente
+  useEffect(() => {
+    const handleNewComunicado = (e: any) => {
+      const payload = e.detail?.new || e.detail?.record || e.detail;
+      if (!payload) return;
+      const alvoAlunos = [
+        ...(Array.isArray(payload.alunosIds) ? payload.alunosIds : []),
+        ...(Array.isArray(payload.targetStudents) ? payload.targetStudents : [])
+      ].map(String);
+
+      const alvoTurmas = [
+        ...(Array.isArray(payload.turmas) ? payload.turmas : []),
+        ...(Array.isArray(payload.targetClasses) ? payload.targetClasses : [])
+      ].map(t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, ''));
+
+      const isTodos = String(payload.destino || '').toLowerCase().trim() === 'todos' || alvoTurmas.includes('todos');
+
+      setUnreadMap(prev => {
+        const next = { ...prev };
+        meusAlunos.forEach(s => {
+          const sId = String(s.id);
+          const sTurmaNorm = String(s.turmaNome || s.turma || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+          const directMatch = alvoAlunos.some(aid => aid.replace(/^(a_|_ALU)/, '') === sId);
+          const turmaMatch = alvoTurmas.some(t => t === sTurmaNorm || (sTurmaNorm.length >= 4 && (t.includes(sTurmaNorm) || sTurmaNorm.includes(t))));
+          if (directMatch || turmaMatch || isTodos) {
+            next[sId] = (next[sId] || 0) + 1;
+          }
+        });
+        return next;
+      });
+    };
+
+    window.addEventListener('ad:comunicados-insert', handleNewComunicado);
+    return () => {
+      window.removeEventListener('ad:comunicados-insert', handleNewComunicado);
+    };
+  }, [meusAlunos]);
+
   useEffect(() => {
     if (hydrated) {
       hideSplashScreen(300);
@@ -1026,19 +1077,27 @@ function SelecionarAlunoContent() {
   useEffect(() => {
     if (!hydrated || !currentUser) return;
 
-    const cacheKey = `edu-meus-alunos-${respId || emailBusca}`;
+    const keysToCheck = [
+      `edu-meus-alunos-${respId || emailBusca}`,
+      `edu-meus-alunos-${currentUser.id}`,
+      `edu-meus-alunos-${emailBusca}`
+    ];
 
     // Step 1: Serve from localStorage cache INSTANTLY (zero latency)
-    try {
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const { data, ts } = JSON.parse(cached);
-        if (Array.isArray(data) && data.length > 0) {
-          setMeusAlunos(data);
-          setHasFetched(true); // Show data immediately, no spinner
+    for (const key of keysToCheck) {
+      try {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const list = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.data) ? parsed.data : null);
+          if (list && list.length > 0) {
+            setMeusAlunos(list);
+            setHasFetched(true); // Show data immediately, no spinner
+            break;
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     // Step 2: Always fire a fresh network request in background
     const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}`;
@@ -1049,15 +1108,18 @@ function SelecionarAlunoContent() {
         if (!Array.isArray(data)) return;
         setMeusAlunos(data);
         setHasFetched(true);
-        // Update localStorage cache with fresh data
-        try {
-          localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }));
-        } catch (_) {}
+        // Update localStorage cache with fresh data across all unified keys
+        keysToCheck.forEach(k => {
+          try {
+            localStorage.setItem(k, JSON.stringify(data));
+            localStorage.setItem(`${k}-meta`, JSON.stringify({ data, ts: Date.now() }));
+          } catch (_) {}
+        });
       })
       .catch(() => {
         setHasFetched(true); // Even on error, stop the spinner
       });
-  }, [hydrated, currentUser?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hydrated, currentUser?.id, respId, emailBusca]);
 
   // Redirecionamento de alunos normais
   useEffect(() => {
@@ -1205,16 +1267,24 @@ function SelecionarAlunoContent() {
                 </p>
               </div>
             ) : (
-              meusAlunos.map((student) => (
-                <StudentCard 
-                  key={student.id} 
-                  student={student} 
-                  loadingCardId={loadingCardId} 
-                  redirectTarget={redirectTarget} 
-                  getForwardParams={getForwardParams} 
-                  setLoadingCardId={setLoadingCardId} 
-                />
-              ))
+              meusAlunos.map((student) => {
+                const notifCount = recentNotifications.filter(n => !n.read && (
+                  n.link?.includes(`/agenda-digital/${student.id}/`) ||
+                  (student.nome && n.title?.toLowerCase().includes(student.nome.split(' ')[0].toLowerCase()))
+                )).length;
+                const totalUnread = (unreadMap[student.id] || 0) + notifCount;
+
+                return (
+                  <StudentCard 
+                    key={student.id} 
+                    student={{ ...student, unreadCount: totalUnread }} 
+                    loadingCardId={loadingCardId} 
+                    redirectTarget={redirectTarget} 
+                    getForwardParams={getForwardParams} 
+                    setLoadingCardId={setLoadingCardId} 
+                  />
+                );
+              })
             )}
           </div>
         </section>

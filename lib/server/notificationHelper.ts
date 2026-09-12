@@ -38,6 +38,59 @@ async function fetchInChunks<T>(
   return results
 }
 
+/**
+ * Normaliza um termo de turma removendo acentuação, caracteres especiais (º, ª, °, hífens, etc.)
+ * e espaços, permitindo comparações resilientes entre formatos variados (ex: "4 ano A - matutino" e "4º Ano A - Matutino").
+ */
+export function normalizeTurmaTerm(term: any): string {
+  if (!term) return ''
+  return String(term)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+export function matchesTurmaTerm(t: any, term: string): boolean {
+  const tl = term.toLowerCase().trim()
+  const tAno = t.ano !== undefined ? String(t.ano) : (t.dados?.anoLetivo || '')
+  if (tl.startsWith('todos:')) {
+    const targetAno = tl.split(':')[1]?.trim()
+    return targetAno === tAno
+  }
+
+  const tId = String(t.id).toLowerCase()
+  const tNome = String(t.nome || '').toLowerCase()
+  const tCod = String(t.codigo || '').toLowerCase()
+
+  if (tl === tId || tl === tNome || tl === tCod || tNome.includes(tl) || tl.includes(tNome)) {
+    return true
+  }
+
+  const tlNorm = normalizeTurmaTerm(term)
+  const tNomeNorm = normalizeTurmaTerm(t.nome)
+  const tCodNorm = normalizeTurmaTerm(t.codigo)
+  const tIdNorm = normalizeTurmaTerm(t.id)
+
+  if (!tlNorm) return false
+
+  if (
+    tlNorm === tNomeNorm ||
+    tlNorm === tCodNorm ||
+    tlNorm === tIdNorm ||
+    (tNomeNorm.length >= 4 && tlNorm.includes(tNomeNorm)) ||
+    (tlNorm.length >= 4 && tNomeNorm.includes(tlNorm))
+  ) {
+    return true
+  }
+
+  const tlNormClean = tlNorm.replace(/^turma/, '')
+  if (tlNormClean && tlNormClean.length >= 4 && (tNomeNorm.includes(tlNormClean) || tlNormClean.includes(tNomeNorm))) {
+    return true
+  }
+
+  return false
+}
 
 export interface TargetParams {
   /** Nomes ou IDs das turmas destinatárias */
@@ -168,20 +221,7 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
         console.error('[NotifHelper] Erro ao buscar turmas:', turmasError.message)
       } else {
         const matchedTurmas = (allTurmas || []).filter((t: any) => {
-          const tId = String(t.id).toLowerCase()
-          const tNome = String(t.nome || '').toLowerCase()
-          const tCod = String(t.codigo || '').toLowerCase()
-          const tAno = t.ano !== undefined ? String(t.ano) : (t.dados?.anoLetivo || '')
-
-          return allGroupTerms.some(turma => {
-            const tl = turma.toLowerCase().trim()
-            if (tl.startsWith('todos:')) {
-              const targetAno = tl.split(':')[1]?.trim()
-              return targetAno === tAno
-            }
-            return tl === tId || tl === tNome || tl === tCod ||
-              tNome.includes(tl) || tl.includes(tNome)
-          })
+          return allGroupTerms.some(turma => matchesTurmaTerm(t, turma))
         })
 
         const matchedTurmaIds = matchedTurmas.map((t: any) => String(t.id))
@@ -254,11 +294,35 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
     // se inscrevem no OneSignal usando o alias 'aluno_id'.
     finalAlunosIds.forEach(id => allResponsavelIds.add(String(id)))
 
-    // ── Mapear IDs de responsáveis/alunos para system_users.id ───────────
-    // Garante que se o usuário logou com seu ID de system_user (Auth UUID), 
-    // a notificação o encontre mesmo se o destino foi especificado como responsavel_id
+    // ── Mapear IDs de responsáveis com a tabela responsaveis ───────────────────
     const rawIds = Array.from(allResponsavelIds)
+    const respEmails = new Set<string>()
+
     if (rawIds.length > 0) {
+      try {
+        const respRecords = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email, user_id, dados', 'id', rawIds)
+        if (respRecords && respRecords.length > 0) {
+          respRecords.forEach((r: any) => {
+            if (r.user_id) allResponsavelIds.add(String(r.user_id))
+            if (r.dados?.auth_id) allResponsavelIds.add(String(r.dados.auth_id))
+            if (r.dados?.user_id) allResponsavelIds.add(String(r.dados.user_id))
+            if (r.email) {
+              const em = String(r.email).toLowerCase().trim()
+              if (em) {
+                respEmails.add(em)
+                allResponsavelIds.add(em)
+              }
+            }
+          })
+        }
+      } catch (respErr) {
+        console.warn('[NotifHelper] Aviso ao buscar dados de responsaveis:', respErr)
+      }
+    }
+
+    // ── Mapear IDs de responsáveis/alunos para system_users.id e auth_id ─────────
+    const expandedRawIds = Array.from(allResponsavelIds)
+    if (expandedRawIds.length > 0) {
       try {
         const { data: sysUsers } = await supabase
           .from('system_users')
@@ -274,11 +338,11 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
             const aId = u.dados?.aluno_id || u.dados?.alunoId
 
             const matches = 
-              rawIds.includes(uId) ||
-              (suAuthId && rawIds.includes(suAuthId)) ||
-              (suEmail && rawIds.includes(suEmail)) ||
-              (rId && rawIds.includes(String(rId))) ||
-              (aId && rawIds.includes(String(aId)))
+              expandedRawIds.includes(uId) ||
+              (suAuthId && expandedRawIds.includes(suAuthId)) ||
+              (suEmail && expandedRawIds.includes(suEmail)) ||
+              (rId && expandedRawIds.includes(String(rId))) ||
+              (aId && expandedRawIds.includes(String(aId)))
 
             if (matches) {
               allResponsavelIds.add(uId)
@@ -289,6 +353,30 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
         }
       } catch (sysErr) {
         console.warn('[NotifHelper] Aviso ao expandir IDs via system_users:', sysErr)
+      }
+
+      // Buscar Auth UUIDs de responsáveis via admin.listUsers para os emails encontrados
+      if (respEmails.size > 0 && supabase.auth?.admin) {
+        try {
+          let page = 1
+          let foundCount = 0
+          while (page <= 5 && foundCount < respEmails.size) {
+            const { data: list } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+            if (!list?.users || list.users.length === 0) break
+            list.users.forEach((u: any) => {
+              const mail = (u.email || '').toLowerCase().trim()
+              const metaRespId = String(u.user_metadata?.responsavel_id || '').trim()
+              if (respEmails.has(mail) || (metaRespId && expandedRawIds.includes(metaRespId))) {
+                foundCount++
+                allResponsavelIds.add(String(u.id))
+              }
+            })
+            if (list.users.length < 1000) break
+            page++
+          }
+        } catch (authListErr) {
+          console.warn('[NotifHelper] Aviso ao listar auth.users para responsáveis:', authListErr)
+        }
       }
     }
 
@@ -664,19 +752,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
 
         if (!turmasError && allTurmas) {
           const matchedTurmas = allTurmas.filter(t => {
-            const tId = String(t.id).toLowerCase()
-            const tNome = String(t.nome || '').toLowerCase()
-            const tCod = String(t.codigo || '').toLowerCase()
-            const tAno = t.ano !== undefined ? String(t.ano) : (t.dados?.anoLetivo || '')
-
-            return allGroupTerms.some(turma => {
-              const tl = turma.toLowerCase().trim()
-              if (tl.startsWith('todos:')) {
-                const targetAno = tl.split(':')[1]?.trim()
-                return targetAno === tAno
-              }
-              return tl === tId || tl === tNome || tl === tCod || tNome.includes(tl) || tl.includes(tNome)
-            })
+            return allGroupTerms.some(turma => matchesTurmaTerm(t, turma))
           });
           
           const matchedTurmaIds = matchedTurmas.map(t => String(t.id))
@@ -685,11 +761,12 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           if (allGrupos && allGrupos.length > 0) {
              matchedTurmas.forEach(t => {
                 const tId = String(t.id);
-                const tNome = String(t.nome || '').trim().toLowerCase();
+                const tNomeNorm = normalizeTurmaTerm(t.nome);
                 const relatedGroup = allGrupos.find((g: any) => {
                   const sId = String(g.dados?.syncId || '');
                   const gId = String(g.id || '');
-                  return sId === `sync-${tId}` || gId === `sync-${tId}` || String(g.dados?.nome || g.nome || '').trim().toLowerCase() === tNome;
+                  const gNomeNorm = normalizeTurmaTerm(g.dados?.nome || g.nome);
+                  return sId === `sync-${tId}` || gId === `sync-${tId}` || (tNomeNorm && gNomeNorm === tNomeNorm);
                 });
                 if (relatedGroup) {
                   let colabs = (relatedGroup as any).dados?.colaboradoresIds || (relatedGroup as any).colaboradoresIds || [];
@@ -718,9 +795,11 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
           if (allGrupos && matchedTurmas.length > 0) {
             matchedTurmas.forEach((t: any) => {
               const tIdStr = String(t.id);
+              const tNomeNorm = normalizeTurmaTerm(t.nome);
               const syncG = allGrupos.find((g: any) => {
                 const gSync = g.dados?.syncId || (String(g.id).startsWith('sync-') ? g.id : '');
-                return gSync === `sync-${tIdStr}` || g.id === `sync-${tIdStr}` || String(g.dados?.nome || (g as any).nome || '').trim().toLowerCase() === String(t.nome || '').trim().toLowerCase();
+                const gNomeNorm = normalizeTurmaTerm(g.dados?.nome || (g as any).nome);
+                return gSync === `sync-${tIdStr}` || g.id === `sync-${tIdStr}` || (tNomeNorm && gNomeNorm === tNomeNorm);
               });
               if (syncG) {
                 let aList = syncG.dados?.alunosIds || (syncG as any).alunosIds || [];
@@ -806,13 +885,33 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         })
       }
 
-      // Mapear responsáveis e alunos para system_users (Auth UUIDs para o OneSignal)
+      // Mapear responsáveis e alunos para Auth UUIDs (OneSignal external_id) e dados de contato
       const allRawIds = new Set<string>()
       mapResponsaveis.forEach(set => set.forEach(id => allRawIds.add(id)))
       const rawIdsArray = Array.from(allRawIds)
 
       if (rawIdsArray.length > 0) {
         try {
+          const respEmails = new Set<string>()
+          const respRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email, user_id, dados', 'id', rawIdsArray)
+          if (respRows && respRows.length > 0) {
+            respRows.forEach((r: any) => {
+              const rIdStr = String(r.id)
+              const uId = r.user_id ? String(r.user_id) : ''
+              const authId = r.dados?.auth_id ? String(r.dados.auth_id) : (r.dados?.user_id ? String(r.dados.user_id) : '')
+              const rEmail = (r.email || '').toLowerCase().trim()
+              if (rEmail) respEmails.add(rEmail)
+
+              mapResponsaveis.forEach((set) => {
+                if (set.has(rIdStr)) {
+                  if (uId) set.add(uId)
+                  if (authId) set.add(authId)
+                  if (rEmail) set.add(rEmail)
+                }
+              })
+            })
+          }
+
           const { data: sysUsers } = await supabase
             .from('system_users')
             .select('id, auth_id, dados, email')
@@ -822,10 +921,12 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             sysUsers.forEach((u: any) => {
               const rId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
               const aId = String(u.dados?.aluno_id || u.dados?.alunoId || '').trim()
+              const uEmail = (u.email || '').toLowerCase().trim()
               
               mapResponsaveis.forEach((set, alunoIdKey) => {
                 if (
                   (rId && set.has(rId)) ||
+                  (uEmail && set.has(uEmail)) ||
                   (aId && (alunoIdKey === aId || alunoIdKey.replace(/^0+/, '') === aId.replace(/^0+/, '')))
                 ) {
                   set.add(String(u.id))
@@ -835,8 +936,36 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
               })
             })
           }
+
+          // Se houver emails de responsáveis, buscar no Supabase Auth para obter o Auth UUID do OneSignal
+          if (respEmails.size > 0 && supabase.auth?.admin) {
+            try {
+              let page = 1
+              let foundCount = 0
+              while (page <= 5 && foundCount < respEmails.size) {
+                const { data: list } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+                if (!list?.users || list.users.length === 0) break
+                list.users.forEach((u: any) => {
+                  const mail = (u.email || '').toLowerCase().trim()
+                  const metaRespId = String(u.user_metadata?.responsavel_id || '').trim()
+                  if (respEmails.has(mail) || (metaRespId && rawIdsArray.includes(metaRespId))) {
+                    foundCount++
+                    mapResponsaveis.forEach((set) => {
+                      if (set.has(mail) || (metaRespId && set.has(metaRespId))) {
+                        set.add(String(u.id))
+                      }
+                    })
+                  }
+                })
+                if (list.users.length < 1000) break
+                page++
+              }
+            } catch (authListErr) {
+              console.warn('[NotifHelper] Erro ao buscar auth.users para comunicados:', authListErr)
+            }
+          }
         } catch (sysErr) {
-          console.warn('[NotifHelper] Erro ao mapear system_users para comunicados:', sysErr)
+          console.warn('[NotifHelper] Erro ao mapear identificadores para comunicados:', sysErr)
         }
       }
 
@@ -952,7 +1081,7 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
     // Se o próprio aluno estiver logado
     if (cleanAuthId === cleanAlunoId) return true;
     
-    // Verifica na tabela aluno_responsavel (pode ser authUserId ou o responsavel_id vindo do metadata)
+    // 1. Verifica na tabela aluno_responsavel por match direto de responsavel_id
     const { data, error } = await supabase
       .from('aluno_responsavel')
       .select('id')
@@ -961,6 +1090,47 @@ export async function checkResponsavelRelationship(authUserId: string, alunoId: 
       .maybeSingle();
       
     if (!error && data) return true;
+
+    // 2. Se authUserId for um Auth UUID, buscar na tabela responsaveis por user_id ou dados->auth_id
+    const candidateRespIds = new Set<string>();
+    const { data: respRows } = await supabase
+      .from('responsaveis')
+      .select('id, dados')
+      .or(`user_id.eq."${authUserId}",dados->>auth_id.eq."${authUserId}",dados->>user_id.eq."${authUserId}"`)
+      .limit(10);
+
+    if (respRows && respRows.length > 0) {
+      respRows.forEach((r: any) => {
+        if (r.id) candidateRespIds.add(String(r.id));
+      });
+    }
+
+    // 3. Checar em system_users se existe vínculo com responsavel_id
+    const { data: sysRows } = await supabase
+      .from('system_users')
+      .select('id, dados')
+      .or(`id.eq."${authUserId}",auth_id.eq."${authUserId}"`)
+      .limit(5);
+
+    if (sysRows && sysRows.length > 0) {
+      sysRows.forEach((s: any) => {
+        const rId = s.dados?.responsavel_id || s.dados?.responsavelId;
+        if (rId) candidateRespIds.add(String(rId));
+      });
+    }
+
+    if (candidateRespIds.size > 0) {
+      const respIdList = Array.from(candidateRespIds);
+      const { data: linkMatch } = await supabase
+        .from('aluno_responsavel')
+        .select('id')
+        .eq('aluno_id', cleanAlunoId)
+        .in('responsavel_id', respIdList)
+        .limit(1)
+        .maybeSingle();
+
+      if (linkMatch) return true;
+    }
     
     return false;
   } catch (err) {

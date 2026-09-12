@@ -65,56 +65,80 @@ export async function GET(request: Request) {
     // ─── Família/Responsável/Colaborador: resolve pelo user.id da sessão ─────────
     // Qualquer usuário (inclusive Colaboradores) pode ter filhos cadastrados.
     // Opcionalmente, eles acessam "meus-alunos" sem `queryAlunoId`.
-    // 1. Tenta responsavel_id do JWT (gravado no login)
-    let responsavelId: string | null = user.user_metadata?.responsavel_id
-      ? String(user.user_metadata.responsavel_id)
-      : null
+    // 1. Coleta todos os identificadores possíveis do responsável
+    const candidateRespIds = new Set<string>()
+    if (user.user_metadata?.responsavel_id) candidateRespIds.add(String(user.user_metadata.responsavel_id))
+    if (user.id) candidateRespIds.add(String(user.id))
 
-    // 2. Fallback: busca na tabela responsaveis pelo email ou nome
-    if (!responsavelId) {
-      let orConditions = []
-      if (user.email) {
-        orConditions.push(`email.eq.${user.email}`)
+    // 2. Busca na tabela responsaveis por user.id, auth_id, email ou nome
+    const respOrConds: string[] = []
+    if (user.id) {
+      respOrConds.push(`user_id.eq.${user.id}`)
+      respOrConds.push(`dados->>auth_id.eq.${user.id}`)
+      respOrConds.push(`dados->>user_id.eq.${user.id}`)
+    }
+    if (user.email) {
+      const em = user.email.toLowerCase().trim()
+      respOrConds.push(`email.ilike.${em}`)
+    }
+    const nomeUser = user.user_metadata?.nome
+    if (nomeUser) {
+      const safeNome = nomeUser.replace(/["%,]/g, '').trim()
+      if (safeNome.length >= 3) {
+        respOrConds.push(`nome.ilike."%${safeNome}%"`)
       }
-      const nomeUser = user.user_metadata?.nome
-      if (nomeUser) {
-        const safeNome = nomeUser.replace(/"/g, '')
-        orConditions.push(`nome.ilike."%${safeNome}%"`)
-      }
+    }
 
-      if (orConditions.length > 0) {
-        const { data: respRow } = await supabase
-          .from('responsaveis')
-          .select('id')
-          .or(orConditions.join(','))
-          .limit(1)
-          .maybeSingle()
-        if (respRow?.id) responsavelId = String(respRow.id)
+    if (respOrConds.length > 0) {
+      const { data: respRows } = await supabase
+        .from('responsaveis')
+        .select('id')
+        .or(respOrConds.join(','))
+        .limit(10)
+      if (respRows) {
+        respRows.forEach((r: any) => { if (r.id) candidateRespIds.add(String(r.id)) })
+      }
+    }
+
+    // 3. Checar em system_users caso o usuário tenha perfil híbrido/colaborador
+    if (user.id || user.email) {
+      const sysConds: string[] = []
+      if (user.id) sysConds.push(`id.eq.${user.id}`, `auth_id.eq.${user.id}`)
+      if (user.email) sysConds.push(`email.ilike.${user.email.toLowerCase().trim()}`)
+      const { data: sysData } = await supabase
+        .from('system_users')
+        .select('id, dados')
+        .or(sysConds.join(','))
+        .limit(5)
+      if (sysData) {
+        sysData.forEach((s: any) => {
+          const rId = s.dados?.responsavel_id || s.dados?.responsavelId
+          if (rId) candidateRespIds.add(String(rId))
+        })
       }
     }
 
     const linkedAlunoIds = new Set<string>()
 
-    if (responsavelId) {
+    if (candidateRespIds.size > 0) {
+      const respIdList = Array.from(candidateRespIds)
       const { data: links } = await supabase
         .from('aluno_responsavel')
         .select('aluno_id')
-        .eq('responsavel_id', responsavelId)
+        .in('responsavel_id', respIdList)
 
       if (links) {
         links.forEach((l: any) => { if (l.aluno_id) linkedAlunoIds.add(String(l.aluno_id)) })
       }
     }
 
-    // 3. Fallback: aluno com user_id = user.id (perfil Aluno com login direto)
-    if (linkedAlunoIds.size === 0) {
-      const { data: alunoRow } = await supabase
-        .from('alunos')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (alunoRow?.id) linkedAlunoIds.add(String(alunoRow.id))
-    }
+    // 4. Fallback: aluno com user_id = user.id (perfil Aluno com login direto)
+    const { data: alunoRow } = await supabase
+      .from('alunos')
+      .select('id')
+      .or(`user_id.eq.${user.id},dados->>auth_id.eq.${user.id}`)
+      .maybeSingle()
+    if (alunoRow?.id) linkedAlunoIds.add(String(alunoRow.id))
 
     if (linkedAlunoIds.size === 0) {
       return NextResponse.json([])
