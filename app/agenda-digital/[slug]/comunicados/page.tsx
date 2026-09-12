@@ -349,7 +349,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   }
 
   return (
-    <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '32px', margin: '-32px', borderRadius: '32px', overflow: 'hidden', background: 'transparent' }}>
+    <div className="ad-comunicados-wrapper" style={{ position: 'relative', minHeight: '85vh', padding: '0px 0px 32px 0px', borderRadius: '32px', overflow: 'hidden', background: 'transparent' }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes pulseGlow {
           0%, 100% {
@@ -412,18 +412,65 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           0%, 100% { opacity: 0.25; transform: scale(1) translate(0px, 0px); }
           50% { opacity: 0.45; transform: scale(1.15) translate(30px, -30px); }
         }
+        .ad-page-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: linear-gradient(135deg, #ffffff 0%, #f0f3ff 50%, #fdf2f8 100%);
+          border: 1.5px solid rgba(224, 231, 255, 0.95);
+          box-shadow: 0 14px 34px -4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(0, 0, 0, 0.03), inset 0 1px 1px #ffffff;
+          border-radius: 22px;
+          padding: 16px 22px;
+          margin-top: 0px;
+          margin-bottom: 20px;
+          gap: 16px;
+          position: relative;
+          box-sizing: border-box;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .ad-com-header-icon-box {
+          width: 44px;
+          height: 44px;
+          border-radius: 14px;
+          background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(236, 72, 153, 0.1));
+          border: 1.5px solid rgba(199, 210, 254, 0.85);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(79, 70, 229, 0.12);
+          color: #4f46e5;
+          flex-shrink: 0;
+          transition: transform 0.25s ease;
+        }
+
+        .ad-com-header-icon-box:hover {
+          transform: scale(1.06);
+        }
+
+        .ad-com-header-title {
+          font-size: 26px !important;
+          font-weight: 900 !important;
+          font-family: 'Outfit', sans-serif !important;
+          margin: 0 !important;
+          line-height: 1.15 !important;
+          letter-spacing: -0.02em !important;
+          background: linear-gradient(135deg, #0f172a 40%, #4f46e5 100%) !important;
+          -webkit-background-clip: text !important;
+          -webkit-text-fill-color: transparent !important;
+        }
+
         .ad-search-input-ultra {
-          width: 220px !important;
-          height: 44px !important;
-          min-height: 44px !important;
-          padding-left: 44px !important;
-          padding-right: 36px !important;
+          width: 200px !important;
+          height: 42px !important;
+          min-height: 42px !important;
+          padding-left: 40px !important;
+          padding-right: 32px !important;
           border-radius: 9999px !important;
-          border: 1.5px solid rgba(99, 102, 241, 0.2) !important;
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 246, 255, 0.85) 100%) !important;
-          backdrop-filter: blur(16px) !important;
-          box-shadow: 0 4px 18px -2px rgba(67, 24, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
-          font-size: 14.5px !important;
+          border: 1.5px solid rgba(203, 213, 225, 0.9) !important;
+          background: #ffffff !important;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+          font-size: 13.5px !important;
           font-weight: 500 !important;
           color: #0f172a !important;
           letter-spacing: -0.01em !important;
@@ -434,13 +481,38 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         .ad-search-input-ultra::placeholder {
           color: #94a3b8 !important;
           font-weight: 400 !important;
-          font-size: 14px !important;
+          font-size: 13.5px !important;
         }
         .ad-search-input-ultra:focus {
+          width: 240px !important;
           background: #ffffff !important;
-          border-color: #6366f1 !important;
-          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.22), 0 0 0 3px rgba(99, 102, 241, 0.12), inset 0 1px 0 #ffffff !important;
+          border-color: #4f46e5 !important;
+          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14), 0 4px 14px rgba(79, 70, 229, 0.08) !important;
         }
+
+        .ad-com-filter-btn {
+          height: 42px !important;
+          border-radius: 12px !important;
+          border: 1.5px solid rgba(203, 213, 225, 0.9) !important;
+          background: #ffffff !important;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          padding: 0 16px !important;
+          font-size: 13.5px !important;
+          font-weight: 700 !important;
+          color: #475569 !important;
+          cursor: pointer !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .ad-com-filter-btn:hover {
+          background: #f8fafc !important;
+          border-color: #cbd5e1 !important;
+          color: #0f172a !important;
+          transform: translateY(-1px) !important;
+        }
+
         @media (max-width: 768px) {
           .ad-comunicados-wrapper {
             margin-top: 0 !important;
@@ -449,46 +521,47 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             margin-right: calc(-50vw + 50%) !important;
             width: 100vw !important;
             border-radius: 0 !important;
-            padding: 24px 16px !important;
+            padding: 0px 16px 24px 16px !important;
           }
           .ad-comunicados-wrapper .ad-page-header { 
-            margin-top: -12px !important; 
+            margin-top: 0px !important; 
             margin-bottom: 16px !important; 
             align-items: center !important; 
             flex-direction: row !important; 
             justify-content: space-between !important; 
             width: 100% !important;
-            gap: 8px !important;
-            padding: 0 4px !important;
+            border-radius: 18px !important;
+            padding: 12px 14px !important;
+            gap: 10px !important;
           }
           .ad-com-filter-btn { display: none !important; }
           .ad-com-actions { width: auto !important; justify-content: flex-end !important; margin-top: 0 !important; align-self: center !important; }
           .ad-com-search { width: auto !important; justify-content: flex-end !important; }
           .ad-com-search input,
           .ad-search-input-ultra { 
-            width: 140px !important; 
+            width: 125px !important; 
             max-width: 100% !important; 
-            height: 40px !important; 
-            min-height: 40px !important;
-            padding-left: 38px !important; 
-            padding-right: 28px !important;
-            font-size: 13.5px !important; 
+            height: 38px !important; 
+            min-height: 38px !important;
+            padding-left: 34px !important; 
+            padding-right: 24px !important;
+            font-size: 12.5px !important; 
             border-radius: 9999px !important; 
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 246, 255, 0.85) 100%) !important;
-            border: 1.5px solid rgba(99, 102, 241, 0.2) !important;
-            box-shadow: 0 4px 14px -2px rgba(67, 24, 255, 0.06) !important;
+            background: #ffffff !important;
+            border: 1.5px solid rgba(203, 213, 225, 0.9) !important;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03) !important;
             color: #0f172a !important;
           }
           .ad-com-search input:focus,
           .ad-search-input-ultra:focus {
-            width: 165px !important;
-            border-color: #6366f1 !important;
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
+            width: 155px !important;
+            border-color: #4f46e5 !important;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
             background: #ffffff !important;
           }
           .ad-com-search svg {
-            width: 15px !important;
-            height: 15px !important;
+            width: 14px !important;
+            height: 14px !important;
             color: #6366f1 !important;
           }
           .ad-com-header-icon-box {
@@ -551,39 +624,29 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
       <div style={{ position: 'relative', zIndex: 1 }}>
 
-        <div className="ad-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="ad-com-header-icon-box" style={{
-              width: 48,
-              height: 48,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(255, 0, 128, 0.15))',
-              border: '1px solid rgba(0, 210, 255, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0, 210, 255, 0.15)'
-            }}>
-              <Bell size={22} color="#00D2FF" />
+        <div className="ad-page-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div className="ad-com-header-icon-box">
+              <Bell size={22} color="#4f46e5" strokeWidth={2.3} />
             </div>
             <div>
-              <h2 className="ad-com-header-title" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', margin: 0, background: 'linear-gradient(135deg, #0f172a 40%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.02))' }}>Comunicados</h2>
-              <p className="ad-text-hide-mobile" style={{ fontSize: 13, color: '#475569', margin: '2px 0 0 0', fontWeight: 500 }}>Avisos pedagógicos e informações oficiais do colégio</p>
+              <h2 className="ad-com-header-title">Comunicados</h2>
+              <p className="ad-text-hide-mobile" style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0', fontWeight: 500 }}>Avisos pedagógicos e informações oficiais do colégio</p>
             </div>
           </div>
           
-          <div className="ad-com-actions" style={{ display: 'flex', gap: 12 }}>
+          <div className="ad-com-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div className="ad-com-search" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <div style={{
                 position: 'absolute',
-                left: 14,
+                left: 13,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 pointerEvents: 'none',
                 zIndex: 3
               }}>
-                <Search size={16} style={{ color: '#6366f1', filter: 'drop-shadow(0 2px 4px rgba(99, 102, 241, 0.2))' }} />
+                <Search size={15} style={{ color: '#6366f1' }} />
               </div>
               <input 
                 className="ad-search-input-ultra" 
@@ -617,24 +680,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                 </button>
               )}
             </div>
-            <button className="btn btn-secondary ad-com-filter-btn" style={{
-              height: 44,
-              borderRadius: 14,
-              border: '1px solid rgba(99, 102, 241, 0.15)',
-              background: 'rgba(255, 255, 255, 0.7)',
-              backdropFilter: 'none',
-              boxShadow: '0 8px 32px rgba(99, 102, 241, 0.04)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '0 18px',
-              fontSize: 14,
-              fontWeight: 600,
-              color: '#475569',
-              cursor: 'pointer',
-              transition: 'all 0.3s'
-            }}>
-              <Filter size={16} /> Filtros
+            <button className="btn btn-secondary ad-com-filter-btn">
+              <Filter size={15} /> Filtros
             </button>
           </div>
         </div>

@@ -1443,22 +1443,31 @@ export default function ADInnerLayout({
         }
 
         .ad-premium-card {
-          background: #ffffff;
+          background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
           border-radius: 24px;
-          box-shadow: 0 4px 16px rgba(15, 12, 36, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
-          border: 1px solid rgba(0, 0, 0, 0.04);
-          padding: 24px 28px;
+          box-shadow: 
+            0 18px 38px -6px rgba(15, 23, 42, 0.12),
+            0 0 28px rgba(99, 102, 241, 0.08),
+            0 4px 12px rgba(0, 0, 0, 0.04),
+            inset 0 1.5px 1px #ffffff,
+            inset 0 -1px 1px rgba(0, 0, 0, 0.02);
+          border: 1.5px solid rgba(226, 232, 240, 0.85);
+          padding: 22px 26px 18px 26px;
           display: flex;
           flex-direction: column;
           gap: 16px;
           position: relative;
-          transition: all 0.3s ease;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .ad-premium-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 12px 30px rgba(99, 102, 241, 0.08), 0 4px 10px rgba(0, 0, 0, 0.02);
-          border-color: rgba(99, 102, 241, 0.15);
+          transform: translateY(-3px);
+          box-shadow: 
+            0 24px 48px -6px rgba(15, 23, 42, 0.16),
+            0 0 36px rgba(99, 102, 241, 0.14),
+            0 8px 18px rgba(0, 0, 0, 0.05),
+            inset 0 1.5px 1px #ffffff;
+          border-color: rgba(199, 210, 254, 0.9);
         }
 
         .ad-premium-card::before {
@@ -1798,13 +1807,19 @@ export default function ADInnerLayout({
             margin-top: 8px !important;
           }
           .ad-premium-card {
-            padding: 16px 14px !important;
+            padding: 14px 14px 12px 14px !important;
             border-radius: 20px !important;
             gap: 12px !important;
             position: relative !important;
             overflow: visible !important;
             display: flex !important;
             flex-direction: column !important;
+            box-shadow: 
+              0 14px 32px -4px rgba(15, 23, 42, 0.12),
+              0 0 20px rgba(99, 102, 241, 0.08),
+              0 4px 10px rgba(0, 0, 0, 0.03),
+              inset 0 1.5px 1px #ffffff !important;
+            border: 1.5px solid rgba(226, 232, 240, 0.85) !important;
           }
           .ad-premium-hero {
             padding: 32px 16px 90px 16px;
@@ -2020,7 +2035,7 @@ export default function ADInnerLayout({
             width: 100% !important;
             max-width: 100vw !important;
             min-width: 0 !important;
-            overflow-x: hidden !important;
+            overflow: visible !important;
           }
           .ad-banner {
             height: 250px !important;
@@ -2870,7 +2885,7 @@ export default function ADInnerLayout({
 
 
       {/* Main Grid containing Page Content */}
-      <div className="ad-main-grid" style={{ marginTop: 24 }}>
+      <div className="ad-main-grid" style={{ marginTop: 12 }}>
 
         {/* Page Content Area */}
         <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
