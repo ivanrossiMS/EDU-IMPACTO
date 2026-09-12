@@ -542,6 +542,8 @@ export interface MaterialOption {
   tipo?: string
 }
 
+const MAX_PARCELAS_MATERIAL = 10
+
 const OPCOES_MATERIAIS: MaterialOption[] = [
   { id: 'mat-n1', nome: 'Taxa de Material (Nível 1)', segmento: 'Nível 1/Nivel 2 • Berçário (N1)', valor: 480.00, tipo: 'anual' },
   { id: 'mat-n2', nome: 'Livros didáticos (Nível 2)', segmento: 'Nível 1/Nivel 2 • Maternal (N2)', valor: 600.00, tipo: 'anual' },
@@ -2863,20 +2865,20 @@ export default function ValoresPage() {
                           </span>
                           <span style={{ fontSize: 10, color: '#64748b' }}>
                             {incluirMaterial
-                              ? `${selectedMaterialIds.length} ${selectedMaterialIds.length === 1 ? 'material selecionado' : 'materiais selecionados'} • Parcelamento em até 5x no cartão`
-                              : 'Opcional (anual) • Parcelamento em até 5x no cartão sem juros'}
+                              ? `${selectedMaterialIds.length} ${selectedMaterialIds.length === 1 ? 'material selecionado' : 'materiais selecionados'} • Parcelamento em até ${MAX_PARCELAS_MATERIAL}x no cartão`
+                              : `Opcional (anual) • Parcelamento em até ${MAX_PARCELAS_MATERIAL}x no cartão sem juros`}
                           </span>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{ fontSize: 13, fontWeight: 900, color: incluirMaterial ? '#6d28d9' : '#334155', display: 'block' }}>
                           {incluirMaterial && selectedMaterialIds.length > 1
-                            ? 'Valores por item (até 5x)'
+                            ? `Valores por item (até ${MAX_PARCELAS_MATERIAL}x)`
                             : fmt(calculations.valorMaterial)}
                         </span>
                         <span style={{ fontSize: 9, color: incluirMaterial ? '#7c3aed' : '#94a3b8', fontWeight: 700 }}>
                           {incluirMaterial
-                            ? (selectedMaterialIds.length > 1 ? '✓ Demonstrados abaixo com parcelamento' : '✓ Incluído na Proposta (em até 5x)')
+                            ? (selectedMaterialIds.length > 1 ? '✓ Demonstrados abaixo com parcelamento' : `✓ Incluído na Proposta (em até ${MAX_PARCELAS_MATERIAL}x)`)
                             : 'Opcional (anual)'}
                         </span>
                       </div>
@@ -2892,7 +2894,7 @@ export default function ValoresPage() {
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: 10, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            Selecione os materiais (parcelamento em até 5x sem juros):
+                            Selecione os materiais (parcelamento em até {MAX_PARCELAS_MATERIAL}x sem juros):
                           </span>
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button
@@ -2971,7 +2973,7 @@ export default function ValoresPage() {
                                     {fmt(opcao.valor)}
                                   </span>
                                   <span style={{ fontSize: 9, color: isSelected ? '#6d28d9' : '#64748b', fontWeight: 700 }}>
-                                    ou até 5x de {fmt(opcao.valor / 5)}
+                                    ou até {MAX_PARCELAS_MATERIAL}x de {fmt(opcao.valor / MAX_PARCELAS_MATERIAL)}
                                   </span>
                                 </div>
                               </div>
@@ -3930,7 +3932,7 @@ export default function ValoresPage() {
                           minHeight={22}
                           padding="3px 8px"
                         >
-                          Até 5x sem juros
+                          Até {MAX_PARCELAS_MATERIAL}x sem juros
                         </PropostaBadge>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3938,10 +3940,18 @@ export default function ValoresPage() {
                           <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#581c87', padding: '3px 0', borderBottom: '1px dashed #f3e8ff' }}>
                             <span style={{ fontWeight: 600 }}>• {m.nome}:</span>
                             <span style={{ fontWeight: 800 }}>
-                              {fmt(m.valor)} <span style={{ fontSize: 9.5, color: '#7e22ce', fontWeight: 600 }}>(5x de {fmt(m.valor / 5)})</span>
+                              {fmt(m.valor)} <span style={{ fontSize: 9.5, color: '#7e22ce', fontWeight: 600 }}>({MAX_PARCELAS_MATERIAL}x de {fmt(m.valor / MAX_PARCELAS_MATERIAL)})</span>
                             </span>
                           </div>
                         ))}
+                        {selectedMaterialIds.length > 1 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#581c87', padding: '4px 0 0', marginTop: 2, borderTop: '1px solid #e9d5ff', fontWeight: 800 }}>
+                            <span>Total Materiais:</span>
+                            <span>
+                              {fmt(calculations.valorMaterial)} <span style={{ fontSize: 9.5, color: '#7e22ce', fontWeight: 600 }}>({MAX_PARCELAS_MATERIAL}x de {fmt(calculations.valorMaterial / MAX_PARCELAS_MATERIAL)})</span>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -4538,7 +4548,7 @@ export default function ValoresPage() {
                   </div>
                 </div>
                 <span style={{ fontSize: 10, fontWeight: 800, color: '#e9d5ff', background: 'rgba(255, 255, 255, 0.12)', border: '1px solid rgba(255, 255, 255, 0.2)', padding: '2px 8px', borderRadius: 12 }}>
-                  Anual
+                  Até {MAX_PARCELAS_MATERIAL}x no cartão
                 </span>
               </div>
               <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -4548,7 +4558,10 @@ export default function ValoresPage() {
                       <span style={{ fontSize: 11, fontWeight: 800, color: '#1e293b', display: 'block' }}>{item.nome}</span>
                       <span style={{ fontSize: 9, color: '#64748b' }}>{item.segmento}</span>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>{fmt(item.valor)}</span>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: 13, fontWeight: 900, color: '#7c3aed', display: 'block' }}>{fmt(item.valor)}</span>
+                      <span style={{ fontSize: 9, color: '#6b21a8', fontWeight: 600 }}>até {MAX_PARCELAS_MATERIAL}x de {fmt(item.valor / MAX_PARCELAS_MATERIAL)}</span>
+                    </div>
                   </div>
                 ))}
               </div>
