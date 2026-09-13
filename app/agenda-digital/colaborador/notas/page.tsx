@@ -244,7 +244,15 @@ export default function ColaboradorNotasPage() {
       }
 
       return true
-    }).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+    }).sort((a, b) => {
+      const turmaA = a.turmaDisplay || ''
+      const turmaB = b.turmaDisplay || ''
+      const turmaComp = turmaA.localeCompare(turmaB, 'pt-BR', { numeric: true, sensitivity: 'base' })
+      if (turmaComp !== 0) {
+        return turmaComp
+      }
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' })
+    })
   }, [studentsWithGrades, searchTerm, filterPerformance])
 
   // Overall Class Statistics

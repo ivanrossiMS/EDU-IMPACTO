@@ -452,7 +452,13 @@ export default function ColaboradorFrequenciaPage() {
       )
     }
 
-    return list.sort((a, b) => (a.aluno.nome || '').localeCompare(b.aluno.nome || ''))
+    return list.sort((a, b) => {
+      const turmaA = a.turma?.nome || ''
+      const turmaB = b.turma?.nome || ''
+      const turmaComp = turmaA.localeCompare(turmaB, 'pt-BR', { numeric: true, sensitivity: 'base' })
+      if (turmaComp !== 0) return turmaComp
+      return (a.aluno.nome || '').localeCompare(b.aluno.nome || '', 'pt-BR', { sensitivity: 'base' })
+    })
   }, [selectedDate, modalTurmaId, activeTurmas, allAlunos, frequenciasAlunosVinculados, entradaCatracaMap, saidaCalls, studentSearchTerm, selectedAno, turmas])
 
   const statsNoDia = useMemo(() => {

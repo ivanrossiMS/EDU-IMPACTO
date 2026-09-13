@@ -239,11 +239,13 @@ export default function ColaboradorOcorrenciasPage() {
 
       return true
     }).sort((a, b) => {
-      // Sort students with occurrences first, then by name
-      if (b.totalOcorrencias !== a.totalOcorrencias) {
-        return b.totalOcorrencias - a.totalOcorrencias
+      const turmaA = a.turmaDisplay || ''
+      const turmaB = b.turmaDisplay || ''
+      const turmaComp = turmaA.localeCompare(turmaB, 'pt-BR', { numeric: true, sensitivity: 'base' })
+      if (turmaComp !== 0) {
+        return turmaComp
       }
-      return (a.nome || '').localeCompare(b.nome || '')
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' })
     })
   }, [studentsWithOcorrencias, searchTerm])
 

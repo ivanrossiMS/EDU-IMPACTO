@@ -104,8 +104,10 @@ export function TurmaDropdown({
     if (lower.includes('fundamental i') || lower.includes('fundamental 1') || lower.includes('fund 1')) return 2
     if (lower.includes('fundamental ii') || lower.includes('fundamental 2') || lower.includes('fund 2')) return 3
     if (lower.includes('medio') || lower.includes('médio')) return 4
-    if (lower.includes('equipe')) return 5
-    return 6
+    if (lower.includes('turma')) return 5
+    if (lower.includes('grupo')) return 6
+    if (lower.includes('equipe')) return 7
+    return 8
   }
 
   // Determinar ícone da categoria
@@ -118,6 +120,15 @@ export function TurmaDropdown({
         bg: 'rgba(124, 58, 237, 0.1)',
         border: 'rgba(124, 58, 237, 0.2)',
         label: 'Equipe Escolar'
+      }
+    }
+    if (lower.includes('grupo')) {
+      return {
+        icon: Users,
+        color: '#059669',
+        bg: 'rgba(5, 150, 105, 0.1)',
+        border: 'rgba(5, 150, 105, 0.2)',
+        label: catName
       }
     }
     return {

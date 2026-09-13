@@ -170,34 +170,50 @@ export default function FuncionariosPage() {
     setUserCreateResult(null)
     const payload = { ...form }
 
-    if (modal === 'add') {
-      const generatedId = newId('F')
-      setFuncionarios(prev => {
-        const safePrev = prev || []
-        // Inner Guard
-        if (safePrev.some(f => f.nome.toLowerCase() === form.nome.trim().toLowerCase() || f.id === generatedId)) return safePrev
-        const next = [...safePrev, { ...payload, id: generatedId } as any]
-        logSystemAction('RH (Funcionários)', 'Cadastro', `Contratação: ${payload.nome} (${payload.cargo})`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesDepois: payload })
-        return next
-      })
-    } else if (editingId) {
-      const funcAntigo = funcionarios.find(f => f.id === editingId)
-      setFuncionarios(prev => prev.map(f => f.id === editingId ? { ...f, ...payload } as any : f))
-      logSystemAction('RH (Funcionários)', 'Edição', `Atualização do cadastro de ${payload.nome}`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesAntes: funcAntigo, detalhesDepois: payload })
-    }
+    try {
+      if (modal === 'add') {
+        const generatedId = newId('F')
+        await setFuncionarios(prev => {
+          const safePrev = prev || []
+          // Inner Guard
+          if (safePrev.some(f => f.nome.toLowerCase() === form.nome.trim().toLowerCase() || f.id === generatedId)) return safePrev
+          const next = [...safePrev, { ...payload, id: generatedId } as any]
+          logSystemAction('RH (Funcionários)', 'Cadastro', `Contratação: ${payload.nome} (${payload.cargo})`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesDepois: payload })
+          return next
+        })
+      } else if (editingId) {
+        const funcAntigo = funcionarios.find(f => f.id === editingId)
+        await setFuncionarios(prev => prev.map(f => f.id === editingId ? { ...f, ...payload } as any : f))
+        logSystemAction('RH (Funcionários)', 'Edição', `Atualização do cadastro de ${payload.nome}`, { registroId: form.codigo, nomeRelacionado: form.nome, detalhesAntes: funcAntigo, detalhesDepois: payload })
+      }
 
-    // --- Auto-create / update system user if perfilSistema is selected ---
-    const pSistema = (payload as any).perfilSistema
-    if (pSistema && form.email.trim()) {
-      // Notification that access will be configured automatically by the background sync
-      setUserCreateResult({ ok: true, msg: `✅ Acesso ao sistema será sincronizado! Login: ${form.email.trim()} · Perfil: ${pSistema}` })
+      // --- Auto-create / update system user if perfilSistema is selected ---
+      const pSistema = (payload as any).perfilSistema
+      if (pSistema && form.email.trim()) {
+        const emailChanged = modal === 'edit' && editingId && (() => {
+          const funcAntigo = funcionarios.find(f => f.id === editingId);
+          return funcAntigo?.email && funcAntigo.email.trim().toLowerCase() !== form.email.trim().toLowerCase();
+        })();
+
+        const msg = emailChanged
+          ? `✅ E-mail e acesso atualizados com sucesso! O mesmo acesso foi mantido com o novo login: ${form.email.trim()} · Perfil: ${pSistema}`
+          : modal === 'add'
+            ? `✅ Funcionário e acesso cadastrados com sucesso! Login: ${form.email.trim()} · Perfil: ${pSistema}`
+            : `✅ Alterações salvas com sucesso! Login: ${form.email.trim()} · Perfil: ${pSistema}`;
+
+        setUserCreateResult({ ok: true, msg })
+        setIsSaving(false)
+        // Don't close modal immediately — show result to user
+        return
+      }
+
       setIsSaving(false)
-      // Don't close modal immediately — show result to user
-      return
+      closeModal()
+    } catch (err: any) {
+      console.error(err)
+      alert(err.message || 'Erro ao salvar alterações do funcionário.')
+      setIsSaving(false)
     }
-
-    setIsSaving(false)
-    closeModal()
   }
 
   const handleDelete = () => {

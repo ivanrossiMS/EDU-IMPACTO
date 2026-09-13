@@ -12,6 +12,7 @@ import { ChevronLeft, ChevronRight, Filter, Calendar, Sparkles, Smile, Star, Hea
 import { createPortal } from 'react-dom'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { TurmaDropdown } from '../components/TurmaDropdown'
+import { useCollaboratorTurmas } from '../hooks/useCollaboratorTurmas'
 import { SelecionarGruposModal } from '@/components/agenda/SelecionarGruposModal'
 
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -183,111 +184,34 @@ export default function ADCalendarioPage() {
     }
   });
   
-  const { currentUser } = useApp()
-
-  const searchParams = useSearchParams()
-  const espelharColabId = searchParams?.get('espelhar_colaborador')
-  const espelharPerfil = searchParams?.get('espelhar_perfil')
-  const isMirroring = !!espelharColabId
-  const effectiveUser = useMemo(() => {
-    if (espelharColabId) {
-      return {
-        ...currentUser,
-        id: espelharColabId,
-        nome: searchParams?.get('espelhar_nome') || 'Colaborador',
-        cargo: searchParams?.get('espelhar_cargo') || 'Colaborador',
-        perfil: espelharPerfil || 'colaborador'
-      }
-    }
-    return currentUser
-  }, [currentUser, espelharColabId, searchParams])
+  const {
+    effectiveUser,
+    isMirrorMode: isMirroring,
+    isMasterAdmin,
+    isEquipeEscolar,
+    turmas: vinculatedTurmas,
+    turmasDoAno,
+    userGroups,
+    vinculatedGroups,
+    groupsDoAno,
+    activeTurmas,
+    activeGrupos,
+    turmaOptions,
+    selectedTurmaId,
+    setSelectedTurmaId,
+    selectedTurmaName,
+    selectedAno,
+    setSelectedAno,
+    anosLetivos,
+    anoVigente,
+    isLoading: isLoadingTurmas
+  } = useCollaboratorTurmas({ includeGroups: true })
 
   const [sysUsers] = useSupabaseArray<any>('configuracoes/usuarios')
   const usuariosAtivos = sysUsers || []
-  const turmasNomes = turmas.map((t: any) => t.nome)
-
   const { chatGroups = [] } = useAgendaDigital()
-  const [selectedAno, setSelectedAno] = useState<string>('todos')
-  const [selectedTurmaId, setSelectedTurmaId] = useState<string>('all')
+  const searchParams = useSearchParams()
 
-  const anosLetivos = useMemo(() => {
-    const anos = new Set<string>();
-    cfgCalendarioLetivo.forEach((c: any) => c.ano && anos.add(String(c.ano)));
-    turmas.forEach(t => {
-      if (t.ano) anos.add(String(t.ano));
-      if (t.ano_letivo) anos.add(String(t.ano_letivo));
-    });
-    return Array.from(anos).sort().reverse();
-  }, [turmas, cfgCalendarioLetivo])
-
-  const turmaOptions = React.useMemo(() => {
-    if (!effectiveUser?.id) return [];
-    const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
-    const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']; 
-    const perfilStr = effectiveUser?.perfil || ''; 
-    const cargoStr = effectiveUser?.cargo || ''; 
-    const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase());
-    
-    let baseTurmas = [];
-    if (effectiveUser.perfil === 'administrador' || isMaster || effectiveUser.perfil === 'admin') {
-      baseTurmas = turmas;
-    } else {
-      const userGroups = (chatGroups || []).filter((g: any) => {
-        let colabs = g.colaboradoresIds;
-        if (typeof colabs === 'string') {
-          try { colabs = JSON.parse(colabs); } catch(e) { colabs = []; }
-        }
-        if (!Array.isArray(colabs)) colabs = [];
-        return colabs.some((id: any) => String(id) === String(effectiveUser.id));
-      });
-
-      const globalGroups = userGroups.filter((g: any) => g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1);
-      const hasGlobalWithoutYear = globalGroups.some((g: any) => {
-        const a = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
-        return a === '';
-      });
-      
-      if (hasGlobalWithoutYear) {
-        baseTurmas = turmas;
-      } else {
-        const globalYears = new Set(globalGroups.map((g: any) => {
-          return g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '');
-        }).filter((a: string) => a !== ''));
-
-        baseTurmas = turmas.filter((t: any) => {
-           const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
-           if (globalYears.has(tAno)) return true;
-           return userGroups.some((g: any) => String(g.syncId || g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === String(t.nome).trim().toLowerCase())
-        });
-      }
-    }
-
-    if (selectedAno !== 'todos') {
-      return baseTurmas.filter(t => {
-        const tAno = t.ano !== undefined ? String(t.ano) : (t.anoLetivo || t.ano_letivo || t.dados?.anoLetivo || '');
-        return tAno === selectedAno;
-      });
-    }
-
-    return baseTurmas;
-  }, [turmas, chatGroups, effectiveUser, selectedAno])
-
-  const selectedTurmaName = React.useMemo(() => {
-    if (selectedTurmaId === 'all') return 'Todas as turmas'
-    const t = turmas.find(x => String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId))
-    return t ? t.nome : 'Selecione uma turma'
-  }, [selectedTurmaId, turmas])
-
-  const activeTurmas = React.useMemo(() => {
-    if (selectedTurmaId === 'all') return turmaOptions
-    const t = turmas.find(x => String(x.id) === String(selectedTurmaId) || String(x.codigo) === String(selectedTurmaId))
-    return t ? [t] : []
-  }, [selectedTurmaId, turmaOptions, turmas])
-
-      
-  
-    
-  
   const hoje = new Date()
   const [viewDate, setViewDate] = useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1))
   const [selectedDay, setSelectedDay] = useState<string | null>(todayStr())
@@ -364,74 +288,86 @@ export default function ADCalendarioPage() {
   // Filter events targeted to this student's class
   
   const eventosFiltrados = useMemo(() => {
+    const norm = (s: any) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+    const myNameNorm = norm(effectiveUser?.nome)
+
     return (eventosAgenda || []).filter(e => {
       if (filtroTipo !== 'todos' && e.tipo !== filtroTipo) return false
 
-      const isParaMim = (e as any).visibilidadeUsuario && effectiveUser?.nome && String((e as any).visibilidadeUsuario).toLowerCase().trim() === String(effectiveUser.nome).toLowerCase().trim()
+      // 1. Mensagem/Evento direcionado individualmente para o usuário
+      const visUser = (e as any).visibilidadeUsuario
+      const isParaMim = Boolean(visUser && myNameNorm && (norm(visUser) === myNameNorm || norm(visUser).includes(myNameNorm) || myNameNorm.includes(norm(visUser))))
       if (isParaMim) return true
-      
+
       let targets: any = e.turmas || []
       if (typeof targets === 'string') {
         try { targets = JSON.parse(targets) } catch(err) { targets = [targets] }
       }
       if (!Array.isArray(targets)) targets = []
-      
-      if (targets.length === 0 && !isParaMim) return false // No targets specified
-      
-      const targetTodosAno = targets.find((t: string) => t.startsWith('TODOS:'))
+
+      if (targets.length === 0 && !isParaMim) return false
+
+      // 2. Eventos gerais com ano (ex: TODOS:2026)
+      const targetTodosAno = targets.find((t: string) => typeof t === 'string' && t.startsWith('TODOS:'))
       if (targetTodosAno) {
         const anoTarget = targetTodosAno.split(':')[1]
-        if (selectedAno !== 'todos' && selectedAno === anoTarget) return true
-        if (selectedAno === 'todos' && activeTurmas.some(at => (at.ano !== undefined ? String(at.ano) : (at.anoLetivo || at.ano_letivo || at.dados?.anoLetivo || '')) === anoTarget)) return true
-      }
-      
-      if (targets.some((t: string) => t.toLowerCase() === 'todos' || t.toLowerCase() === 'toda a escola' || t.toLowerCase() === 'todas')) {
+        if (selectedAno !== 'todos' && selectedAno !== anoTarget) return false
         return true
       }
-      
-      // Administrador / Diretor / Coordenador Master visualiza todos os eventos de turmas e grupos
-      const perfisAdmin = ['Diretor Geral', 'Administrador', 'Admin', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']
-      const cargosAdmin = ['Administrador Master', 'Diretor Geral', 'Coordenador', 'Coordenadora', 'Secretaria', 'Secretário', 'Auxiliar Administrativo', 'Diretor', 'Diretora']
-      const perfilStr = effectiveUser?.perfil || ''
-      const cargoStr = effectiveUser?.cargo || ''
-      const isMaster = perfisAdmin.some(p => p.toLowerCase() === perfilStr.toLowerCase()) || 
-                       cargosAdmin.some(c => c.toLowerCase() === cargoStr.toLowerCase()) || 
-                       effectiveUser?.perfil === 'administrador' || 
-                       effectiveUser?.perfil === 'admin'
-      if (isMaster) return true
 
-      // Turmas onde o colaborador atua
-      const matchTurma = targets.some((tc: string) => {
-        const tcl = tc.toLowerCase().trim()
-        return activeTurmas.some(at => 
-          tcl.includes(at.nome.toLowerCase().trim()) || 
-          at.nome.toLowerCase().trim().includes(tcl)
-        )
+      // 3. Eventos gerais para toda a escola
+      const isGlobalEvent = targets.some((t: any) => {
+        const tl = norm(t)
+        return tl === 'todos' || tl === 'toda a escola' || tl === 'todas'
+      })
+      if (isGlobalEvent) return true
+
+      // 4. Se for Administrador Master e "Todos" estiver selecionado
+      if (isMasterAdmin && selectedTurmaId === 'all') {
+        return true
+      }
+
+      // 5. Alvos ativos a considerar conforme a seleção do usuário
+      const targetTurmasToMatch = selectedTurmaId === 'all' ? turmasDoAno : activeTurmas
+      const targetGruposToMatch = selectedTurmaId === 'all' ? groupsDoAno : activeGrupos
+
+      // Match com as turmas vinculadas
+      const matchTurma = targets.some((tc: any) => {
+        const tclNorm = norm(tc)
+        const tclStr = String(tc).trim()
+        return targetTurmasToMatch.some(at => {
+          const atId = String(at.id || '').trim()
+          const atCod = String(at.codigo || '').trim()
+          const atNomeNorm = norm(at.nome)
+          return (
+            (atId && atId === tclStr) ||
+            (atCod && atCod === tclStr) ||
+            (atNomeNorm && tclNorm && (atNomeNorm === tclNorm || atNomeNorm.includes(tclNorm) || tclNorm.includes(atNomeNorm)))
+          )
+        })
       })
       if (matchTurma) return true
 
-      // Grupos da Equipe Escolar onde o colaborador é membro
-      const userStaffGroups = (chatGroups || []).filter((g: any) => {
-        let colabs = g.colaboradoresIds
-        if (typeof colabs === 'string') {
-          try { colabs = JSON.parse(colabs) } catch(e) { colabs = [] }
-        }
-        if (!Array.isArray(colabs)) colabs = []
-        return colabs.some((id: any) => String(id) === String(effectiveUser?.id))
-      })
-
-      const matchStaffGroup = targets.some((tc: string) => {
-        const tcl = tc.toLowerCase().trim()
-        return userStaffGroups.some((g: any) => {
-          const gName = (g.nome || '').toLowerCase().trim()
-          return gName === tcl || tcl.includes(gName) || gName.includes(tcl) || String(g.id) === tc
+      // Match com os grupos vinculados
+      const matchGrupo = targets.some((tc: any) => {
+        const tclNorm = norm(tc)
+        const tclStr = String(tc).trim()
+        return targetGruposToMatch.some((ag: any) => {
+          const agId = String(ag.id || '').trim()
+          const agSync = String(ag.syncId || '').replace(/^sync-/, '').trim()
+          const agNomeNorm = norm(ag.nome)
+          return (
+            (agId && agId === tclStr) ||
+            (agSync && agSync === tclStr) ||
+            (agNomeNorm && tclNorm && (agNomeNorm === tclNorm || agNomeNorm.includes(tclNorm) || tclNorm.includes(agNomeNorm)))
+          )
         })
       })
-      if (matchStaffGroup) return true
+      if (matchGrupo) return true
 
       return false
     })
-  }, [eventosAgenda, filtroTipo, activeTurmas, chatGroups, effectiveUser, selectedAno])
+  }, [eventosAgenda, filtroTipo, effectiveUser, selectedAno, selectedTurmaId, isMasterAdmin, turmasDoAno, activeTurmas, groupsDoAno, activeGrupos])
 
 
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
@@ -544,15 +480,15 @@ export default function ADCalendarioPage() {
     .sort((a, b) => (a.data + a.horaInicio) < (b.data + b.horaInicio) ? -1 : 1)
     .slice(0, 5)
 
-  const [aniversariantes, setAniversariantes] = useState<any[]>([])
+  const [rawAniversariantes, setRawAniversariantes] = useState<any[]>([])
   const [loadingNivers, setLoadingNivers] = useState(false)
-  const niversCacheRef = useRef<Record<number, any[]>>({})
+  const rawNiversCacheRef = useRef<Record<number, any[]>>({})
 
   useEffect(() => {
     const mesView = month + 1
 
-    if (niversCacheRef.current[mesView]) {
-      setAniversariantes(niversCacheRef.current[mesView])
+    if (rawNiversCacheRef.current[mesView]) {
+      setRawAniversariantes(rawNiversCacheRef.current[mesView])
       setLoadingNivers(false)
       return
     }
@@ -569,52 +505,11 @@ export default function ADCalendarioPage() {
         const todos = await req.json()
         if (isCancelled) return
         
-        // Filter birthdays only for peers in the SAME CLASS or teachers
-        const niversMes = (todos || []).filter((p: any) => {
-          const data = p.dataNasc || p.data_nascimento || p.nascimento
-          if (!data) return false
-          
-          let m = -1
-          if (data.includes('-')) m = parseInt(data.split('-')[1])
-          else if (data.includes('/')) m = parseInt(data.split('/')[1])
-          if (m !== mesView) return false
-          
-          if (p.tipo === 'Aluno') {
-            const pTurmaRaw = String(p.turma || '').trim()
-            const pNomeTurma = String(p.turma_nome || '').trim().toLowerCase()
-            const pTurmaObj = turmas.find((t: any) => String(t.id) === pTurmaRaw || String(t.codigo) === pTurmaRaw || String(t.nome).toLowerCase() === pNomeTurma)
-            return activeTurmas.some(at => {
-              const atId = String(at.id || '').trim()
-              const atNome = String(at.nome || '').trim().toLowerCase()
-              const atCodigo = String(at.codigo || '').trim()
-              return (
-                (pTurmaRaw && (pTurmaRaw === atId || (atCodigo && pTurmaRaw === atCodigo))) ||
-                (pNomeTurma && (pNomeTurma === atNome || pNomeTurma.includes(atNome) || atNome.includes(pNomeTurma))) ||
-                (pTurmaObj && (String(pTurmaObj.id) === atId || String(pTurmaObj.codigo) === atCodigo || String(pTurmaObj.nome).toLowerCase() === atNome))
-              )
-            })
-          }
-          return true // Keep teachers visible
-        }).map((p: any) => {
-          const data = p.dataNasc || p.data_nascimento || p.nascimento
-          let dia = -1
-          if (data.includes('-')) dia = parseInt(data.split('-')[2])
-          else if (data.includes('/')) dia = parseInt(data.split('/')[0])
-          
-          let isProximo = false
-          if (mesView === (hoje.getMonth() + 1)) {
-            const diaHoje = hoje.getDate()
-            isProximo = dia === diaHoje
-          }
-          return { ...p, dia, isProximo }
-        }).sort((a: any, b: any) => a.dia - b.dia)
-
-        if (!isCancelled) {
-          niversCacheRef.current[mesView] = niversMes
-          setAniversariantes(niversMes)
-        }
+        const list = Array.isArray(todos) ? todos : []
+        rawNiversCacheRef.current[mesView] = list
+        setRawAniversariantes(list)
       } catch (e) {
-        console.error(e)
+        console.error('Erro ao buscar aniversariantes:', e)
       } finally {
         if (!isCancelled) setLoadingNivers(false)
       }
@@ -622,7 +517,91 @@ export default function ADCalendarioPage() {
 
     fetchNivers()
     return () => { isCancelled = true }
-  }, [month, activeTurmas, turmas])
+  }, [month])
+
+  // Filtragem dos aniversariantes do mês vinculados ao professor (ou da turma/grupo selecionado)
+  const aniversariantes = useMemo(() => {
+    const mesView = month + 1
+    const norm = (s: any) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+
+    // Alvos para filtro de aniversariantes: se 'all', turmas e grupos vinculados deste ano; se específico, o selecionado
+    const targetTurmas = selectedTurmaId === 'all' ? turmasDoAno : activeTurmas
+    const targetGrupos = selectedTurmaId === 'all' ? groupsDoAno : activeGrupos
+
+    return (rawAniversariantes || []).filter((p: any) => {
+      const data = p.dataNasc || p.data_nascimento || p.nascimento
+      if (!data) return false
+
+      let m = -1
+      if (data.includes('-')) m = parseInt(data.split('-')[1])
+      else if (data.includes('/')) m = parseInt(data.split('/')[1])
+      if (m !== mesView) return false
+
+      // Professores e equipe escolar visíveis para integração da equipe
+      if (p.tipo !== 'Aluno') {
+        return true
+      }
+
+      // Se for Administrador Master e "Todos" estiver selecionado, exibe todos os alunos das turmas do ano
+      if (isMasterAdmin && selectedTurmaId === 'all') {
+        return true
+      }
+
+      // Alunos: verificar se pertencem às turmas vinculadas do professor
+      const pTurmaRaw = String(p.turma || p.dados?.turma || '').trim()
+      const pTurmaNomeNorm = norm(p.turma_nome || p.turmaNome || p.dados?.turma_nome || '')
+      const pTurmaRawNorm = norm(pTurmaRaw)
+      const pTurmasArr = Array.isArray(p.turmas) ? p.turmas : []
+
+      // 1. Match com as turmas vinculadas
+      const matchTurma = targetTurmas.some(at => {
+        const atId = String(at.id || '').trim()
+        const atCodigo = String(at.codigo || '').trim()
+        const atNomeNorm = norm(at.nome)
+
+        return (
+          (pTurmaRaw && (pTurmaRaw === atId || pTurmaRaw === atCodigo)) ||
+          (pTurmaRawNorm && (pTurmaRawNorm === atNomeNorm || pTurmaRawNorm.includes(atNomeNorm) || atNomeNorm.includes(pTurmaRawNorm))) ||
+          (pTurmaNomeNorm && (pTurmaNomeNorm === atNomeNorm || pTurmaNomeNorm.includes(atNomeNorm) || atNomeNorm.includes(pTurmaNomeNorm))) ||
+          pTurmasArr.some((pt: any) => {
+            const ptStr = String(pt).trim()
+            const ptNorm = norm(pt)
+            return ptStr === atId || ptStr === atCodigo || (ptNorm && (ptNorm === atNomeNorm || ptNorm.includes(atNomeNorm) || atNomeNorm.includes(ptNorm)))
+          })
+        )
+      })
+
+      if (matchTurma) return true
+
+      // 2. Match com grupos vinculados onde o aluno é membro
+      const pIdClean = String(p.id || '').replace(/^(a_|_ALU)/, '').trim().toLowerCase()
+      const matchGrupo = targetGrupos.some((g: any) => {
+        let aIds = g.alunosIds || g.dados?.alunosIds || g.membrosIds || []
+        if (typeof aIds === 'string') {
+          try { aIds = JSON.parse(aIds) } catch { aIds = [] }
+        }
+        if (!Array.isArray(aIds)) aIds = []
+        return aIds.some((id: any) => {
+          const clean = String(id).replace(/^(a_|_ALU)/, '').trim().toLowerCase()
+          return clean === pIdClean || clean === String(p.id).toLowerCase()
+        })
+      })
+
+      return matchGrupo
+    }).map((p: any) => {
+      const data = p.dataNasc || p.data_nascimento || p.nascimento
+      let dia = -1
+      if (data.includes('-')) dia = parseInt(data.split('-')[2])
+      else if (data.includes('/')) dia = parseInt(data.split('/')[0])
+
+      let isProximo = false
+      if (mesView === (hoje.getMonth() + 1)) {
+        const diaHoje = hoje.getDate()
+        isProximo = dia === diaHoje
+      }
+      return { ...p, dia, isProximo }
+    }).sort((a: any, b: any) => a.dia - b.dia)
+  }, [rawAniversariantes, month, hoje, selectedTurmaId, turmasDoAno, activeTurmas, groupsDoAno, activeGrupos, isMasterAdmin])
 
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -1262,8 +1241,8 @@ export default function ADCalendarioPage() {
                       <div style={{ fontSize: 13, fontWeight: 900, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {p.nome}
                       </div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>
-                        {p.tipo}
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {p.turma_nome || p.turma || (p.tipo === 'Aluno' ? 'Aluno' : (p.cargo || 'Colaborador'))}
                       </div>
                     </div>
 
@@ -1402,10 +1381,10 @@ export default function ADCalendarioPage() {
           turmasSel: prev.turmasSel.includes(t) ? prev.turmasSel.filter(item => item !== t) : [...prev.turmasSel, t]
         }))}
         onChangeSelected={(selected) => setVisibilidade(prev => ({ ...prev, turmasSel: selected }))}
-        turmas={turmas}
-        grupos={chatGroups}
+        turmas={isMasterAdmin ? turmas : vinculatedTurmas}
+        grupos={isMasterAdmin ? chatGroups : vinculatedGroups}
         anosLetivos={anosLetivos}
-        initialAno={modalAnoLetivo || (selectedAno !== 'todos' ? selectedAno : '2026')}
+        initialAno={modalAnoLetivo || (selectedAno !== 'todos' ? selectedAno : anoVigente || '2026')}
       />
 
       {/* 👤 Modal de Seleção de Usuário Único */}

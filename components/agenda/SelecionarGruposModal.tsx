@@ -68,18 +68,15 @@ export function SelecionarGruposModal({
     }
   }, [isOpen, initialAno, anosLetivos])
 
-  // Grupos da Equipe Escolar
+  // Grupos da Equipe Escolar e Grupos de Atividades
   const equipeEscolarGrupos = useMemo(() => {
     return (grupos || [])
-      .filter((g: any) => {
-        const isEquipe = g?.isEquipeEscolar === true || g?.isEquipeEscolar === 'true' || g?.isEquipeEscolar === 1
-        return isEquipe && g?.nome
-      })
+      .filter((g: any) => g && g.nome)
       .map((g: any) => ({
         id: g.id || g.nome,
         nome: String(g.nome).trim(),
         cor: g.cor || '#6366f1',
-        isEquipeEscolar: true,
+        isEquipeEscolar: Boolean(g?.isEquipeEscolar === true || g?.isEquipeEscolar === 'true' || g?.isEquipeEscolar === 1 || String(g.ano || '').toLowerCase() === 'equipe escolar'),
         colaboradoresCount: Array.isArray(g.colaboradoresIds) ? g.colaboradoresIds.length : 0,
       }))
       .filter((v, i, a) => a.findIndex(item => item.nome.toLowerCase() === v.nome.toLowerCase()) === i)

@@ -10,7 +10,16 @@ import { compareTurmasBySerie } from '@/lib/studentTurmaUtils'
 import { getTurmaSchedule } from '@/lib/frequenciaEngine'
 import { TurmaOption } from '../components/TurmaDropdown'
 
-export function useCollaboratorTurmas() {
+function normalizeStr(str: any): string {
+  return String(str || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+export function useCollaboratorTurmas(options?: { includeGroups?: boolean }) {
+  const includeGroups = options?.includeGroups ?? false
   const { currentUser } = useApp()
   const searchParams = useSearchParams()
   const { turmas = [], turmasLoading = false, cfgCalendarioLetivo = [] } = useData()
@@ -57,59 +66,108 @@ export function useCollaboratorTurmas() {
     addId(effectiveUser?.id)
     addId((effectiveUser as any)?.uid_legacy)
     addId((effectiveUser as any)?.auth_id)
+    addId((effectiveUser as any)?.colaborador_id)
+    addId((effectiveUser as any)?.system_user_id)
+    addId((effectiveUser as any)?.usuarioId)
+    addId((effectiveUser as any)?.dados?.id)
+    addId((effectiveUser as any)?.dados?.auth_id)
+    addId((effectiveUser as any)?.dados?.uid_legacy)
+
     addId(currentUser?.id)
     addId((currentUser as any)?.uid_legacy)
     addId((currentUser as any)?.auth_id)
+    addId((currentUser as any)?.colaborador_id)
+    addId((currentUser as any)?.system_user_id)
+    addId((currentUser as any)?.usuarioId)
+    addId((currentUser as any)?.dados?.id)
+    addId((currentUser as any)?.dados?.auth_id)
+    addId((currentUser as any)?.dados?.uid_legacy)
 
-    const effEmail = String(effectiveUser?.email || '').trim().toLowerCase()
-    const effCpf = String((effectiveUser as any)?.cpf || '').replace(/\D/g, '')
-    const effNome = String(effectiveUser?.nome || '').trim().toLowerCase()
-    const curEmail = String(currentUser?.email || '').trim().toLowerCase()
+    const effEmail = String(effectiveUser?.email || (effectiveUser as any)?.dados?.email || '').trim().toLowerCase()
+    const effCpf = String((effectiveUser as any)?.cpf || (effectiveUser as any)?.dados?.cpf || '').replace(/\D/g, '')
+    const effNome = normalizeStr(effectiveUser?.nome || (effectiveUser as any)?.dados?.nome || '')
+    const curEmail = String(currentUser?.email || (currentUser as any)?.dados?.email || '').trim().toLowerCase()
 
     ;(colaboradores || []).forEach((c: any) => {
-      const cEmail = String(c.email || '').trim().toLowerCase()
-      const cCpf = String(c.cpf || '').replace(/\D/g, '')
-      const cNome = String(c.nome || '').trim().toLowerCase()
-      const cId = String(c.id || '').trim().toLowerCase()
-      const cLegacy = String(c.uid_legacy || '').trim().toLowerCase()
+      const cEmail = String(c.email || c.dados?.email || '').trim().toLowerCase()
+      const cCpf = String(c.cpf || c.dados?.cpf || '').replace(/\D/g, '')
+      const cNome = normalizeStr(c.nome || c.dados?.nome || '')
+      const cId = String(c.id || c.dados?.id || '').trim().toLowerCase()
+      const cLegacy = String(c.uid_legacy || c.dados?.uid_legacy || '').trim().toLowerCase()
+      const cAuthId = String(c.auth_id || c.dados?.auth_id || '').trim().toLowerCase()
 
       const match = (
         (effEmail && cEmail && effEmail === cEmail) ||
         (curEmail && cEmail && curEmail === cEmail) ||
         (effCpf && cCpf && effCpf === cCpf) ||
-        (effectiveUser?.id && cId && (String(effectiveUser.id).toLowerCase() === cId || String(effectiveUser.id).toLowerCase() === cLegacy)) ||
-        (effNome && cNome && effNome === cNome)
+        (effectiveUser?.id && (cId === String(effectiveUser.id).toLowerCase() || cLegacy === String(effectiveUser.id).toLowerCase() || cAuthId === String(effectiveUser.id).toLowerCase())) ||
+        (currentUser?.id && (cId === String(currentUser.id).toLowerCase() || cLegacy === String(currentUser.id).toLowerCase() || cAuthId === String(currentUser.id).toLowerCase())) ||
+        (effNome && cNome && (effNome === cNome || effNome.includes(cNome) || cNome.includes(effNome)))
       )
 
       if (match) {
         addId(c.id)
+        addId(c.dados?.id)
         addId(c.uid_legacy)
+        addId(c.dados?.uid_legacy)
         addId(c.auth_id)
+        addId(c.dados?.auth_id)
+        addId(c.colaborador_id || c.dados?.colaborador_id)
+        addId(c.usuarioId || c.dados?.usuarioId)
+        addId(c.system_user_id || c.dados?.system_user_id)
       }
     })
 
     return Array.from(ids)
   }, [colaboradores, effectiveUser, currentUser])
 
-  // Grupos de turma aos quais o colaborador está vinculado em agenda/grupos
-  // (Exclui grupos globais gerais como "Geral" ou "Equipe Escolar" para NÃO associar todas as turmas indevidamente)
-  const userGroups = useMemo(() => {
-    if (candidateColabIds.length === 0) return []
-    return (chatGroups || []).filter((g: any) => {
-      if (g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1) {
+  // Helper para verificar se o colaborador atual é membro de um grupo de chatGroups
+  const isColabMemberOfGroup = (g: any) => {
+    if (!g) return false
+    if (g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1 || g.dados?.isGlobalAccess === true) {
+      return true
+    }
+    const myNameNorm = normalizeStr(effectiveUser?.nome || currentUser?.nome || '')
+
+    const checkList = (raw: any) => {
+      if (!raw) return false
+      let arr = raw
+      if (typeof arr === 'string') {
+        try { arr = JSON.parse(arr) } catch { arr = [arr] }
+      }
+      if (!Array.isArray(arr)) arr = [arr]
+      return arr.some((item: any) => {
+        if (!item) return false
+        if (typeof item === 'object') {
+          const itemId = String(item.id || item.usuarioId || item.colaborador_id || '').replace(/^f_?/, '').trim().toLowerCase()
+          const itemNome = normalizeStr(item.nome || item.name || '')
+          if (itemId && candidateColabIds.includes(itemId)) return true
+          if (myNameNorm && itemNome && (itemNome === myNameNorm || itemNome.includes(myNameNorm) || myNameNorm.includes(itemNome))) return true
+          return false
+        }
+        const s = String(item).trim().toLowerCase()
+        const clean = s.replace(/^f_?/, '')
+        if (candidateColabIds.includes(clean) || candidateColabIds.includes(s)) return true
+        if (myNameNorm && (normalizeStr(s) === myNameNorm || normalizeStr(s).includes(myNameNorm) || myNameNorm.includes(normalizeStr(s)))) return true
         return false
-      }
-      let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds || g.funcionariosIds || g.dados?.funcionariosIds
-      if (typeof colabs === 'string') {
-        try { colabs = JSON.parse(colabs) } catch (e) { colabs = [] }
-      }
-      if (!Array.isArray(colabs)) colabs = []
-      return colabs.some((id: any) => {
-        const clean = String(id).replace(/^f_?/, '').trim().toLowerCase()
-        return candidateColabIds.includes(clean) || candidateColabIds.includes(String(id).trim().toLowerCase())
       })
-    })
-  }, [chatGroups, candidateColabIds])
+    }
+
+    if (checkList(g.colaboradoresIds || g.dados?.colaboradoresIds)) return true
+    if (checkList(g.funcionariosIds || g.dados?.funcionariosIds)) return true
+    if (checkList(g.membrosIds || g.dados?.membrosIds)) return true
+    if (checkList(g.usuariosIds || g.dados?.usuariosIds)) return true
+    if (checkList(g.colaboradores || g.dados?.colaboradores)) return true
+    if (checkList(g.professoresIds || g.dados?.professoresIds)) return true
+
+    return false
+  }
+
+  // Grupos aos quais o colaborador está vinculado em agenda/grupos
+  const userGroups = useMemo(() => {
+    if (candidateColabIds.length === 0 && !effectiveUser?.nome) return []
+    return (chatGroups || []).filter((g: any) => isColabMemberOfGroup(g))
+  }, [chatGroups, candidateColabIds, effectiveUser, currentUser])
 
   // Determina se o usuário atual pertence à Equipe Escolar ou possui privilégios administrativos
   const isEquipeEscolar = useMemo(() => {
@@ -160,31 +218,29 @@ export function useCollaboratorTurmas() {
       )
 
       if (!isEq) return false
-
-      let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds || g.funcionariosIds || g.dados?.funcionariosIds
-      if (typeof colabs === 'string') {
-        try { colabs = JSON.parse(colabs) } catch { colabs = [] }
-      }
-      if (!Array.isArray(colabs)) colabs = []
-
-      return colabs.some((id: any) => {
-        const clean = String(id).replace(/^f_?/, '').trim().toLowerCase()
-        return candidateColabIds.includes(clean) || candidateColabIds.includes(String(id).trim().toLowerCase())
-      })
+      return isColabMemberOfGroup(g)
     })
 
     if (isInEquipeGroup) return true
 
     // 3. Vínculo do colaborador na tabela agenda/equipes
+    const myNameNorm = normalizeStr(effectiveUser?.nome || currentUser?.nome || '')
     const isInAgendaEquipes = (equipes || []).some((eq: any) => {
-      let membros = eq.membrosIds || eq.colaboradoresIds || eq.dados?.membrosIds
+      let membros = eq.membrosIds || eq.colaboradoresIds || eq.dados?.membrosIds || eq.dados?.colaboradoresIds || []
       if (typeof membros === 'string') {
         try { membros = JSON.parse(membros) } catch { membros = [] }
       }
       if (!Array.isArray(membros)) membros = []
       return membros.some((id: any) => {
-        const clean = String(id).replace(/^f_?/, '').trim().toLowerCase()
-        return candidateColabIds.includes(clean) || candidateColabIds.includes(String(id).trim().toLowerCase())
+        if (!id) return false
+        if (typeof id === 'object') {
+          const mId = String(id.id || id.usuarioId || '').replace(/^f_?/, '').trim().toLowerCase()
+          const mNome = normalizeStr(id.nome || id.name || '')
+          return (mId && candidateColabIds.includes(mId)) || (myNameNorm && mNome && mNome === myNameNorm)
+        }
+        const s = String(id).trim().toLowerCase()
+        const clean = s.replace(/^f_?/, '')
+        return candidateColabIds.includes(clean) || candidateColabIds.includes(s) || (myNameNorm && normalizeStr(s) === myNameNorm)
       })
     })
 
@@ -193,14 +249,14 @@ export function useCollaboratorTurmas() {
 
   // Retorna as turmas base: se for equipe escolar, todas as turmas; se for professor, apenas as vinculadas
   const baseTurmas = useMemo(() => {
-    if (!effectiveUser?.id) return []
+    if (!effectiveUser?.id && !currentUser?.id) return []
 
     // Se o colaborador faz parte da Equipe Escolar, tem visão de todas as turmas escolares
     if (isEquipeEscolar) {
       return [...turmas].sort(compareTurmasBySerie)
     }
 
-    const effNome = String(effectiveUser?.nome || '').trim().toLowerCase()
+    const effNomeNorm = normalizeStr(effectiveUser?.nome || currentUser?.nome || '')
     const effTurmasIds = new Set<string>()
 
     // Vínculos explícitos no cadastro do colaborador/usuário
@@ -220,16 +276,18 @@ export function useCollaboratorTurmas() {
       }
     }
     addExplicitTurmas(effectiveUser)
+    addExplicitTurmas(currentUser)
     const matchingColab = (colaboradores || []).find((c: any) => 
       candidateColabIds.includes(String(c.id).trim().toLowerCase()) ||
-      candidateColabIds.includes(String(c.id).replace(/^f_?/, '').trim().toLowerCase())
+      candidateColabIds.includes(String(c.id).replace(/^f_?/, '').trim().toLowerCase()) ||
+      (effNomeNorm && normalizeStr(c.nome || c.dados?.nome) === effNomeNorm)
     )
     addExplicitTurmas(matchingColab)
 
     const matchedTurmas = turmas.filter((t: any) => {
       const tId = String(t.id).trim()
       const tCodigo = String(t.codigo || '').trim()
-      const tNome = String(t.nome || '').trim().toLowerCase()
+      const tNomeNorm = normalizeStr(t.nome || '')
 
       // 1. Vínculo explícito no cadastro
       if (effTurmasIds.has(tId) || (tCodigo && effTurmasIds.has(tCodigo))) {
@@ -241,13 +299,13 @@ export function useCollaboratorTurmas() {
         const gSyncId = String(g.syncId || '').replace(/^sync-/, '').trim()
         const gId = String(g.id || '').replace(/^sync-/, '').trim()
         const gTurmaId = String(g.turmaId || g.turma_id || g.dados?.turmaId || g.dados?.turma_id || '').trim()
-        const gNome = String(g.nome || '').trim().toLowerCase()
+        const gNomeNorm = normalizeStr(g.nome || '')
 
         return (
           (gSyncId && gSyncId === tId) ||
           (gId && gId === tId) ||
           (gTurmaId && gTurmaId === tId) ||
-          (gNome && gNome === tNome)
+          (gNomeNorm && tNomeNorm && (gNomeNorm === tNomeNorm || gNomeNorm.includes(tNomeNorm) || tNomeNorm.includes(gNomeNorm)))
         )
       })
       if (matchGroup) return true
@@ -256,8 +314,8 @@ export function useCollaboratorTurmas() {
       const profId = String(t.professor_id || t.dados?.professor_id || t.professorId || '').replace(/^f_?/, '').trim().toLowerCase()
       if (profId && candidateColabIds.includes(profId)) return true
 
-      const profNome = String(t.professor || t.dados?.professor || '').toLowerCase().trim()
-      if (profNome && effNome && (profNome === effNome || candidateColabIds.includes(profNome))) return true
+      const profNome = normalizeStr(t.professor || t.dados?.professor || '')
+      if (profNome && effNomeNorm && (profNome === effNomeNorm || profNome.includes(effNomeNorm) || effNomeNorm.includes(profNome) || candidateColabIds.includes(profNome))) return true
 
       // t.professoresIds ou t.colaboradoresIds na turma
       const checkArrayOrString = (raw: any) => {
@@ -268,8 +326,12 @@ export function useCollaboratorTurmas() {
         }
         if (!Array.isArray(arr)) arr = [arr]
         return arr.some((id: any) => {
+          if (!id) return false
           const clean = String(id).replace(/^f_?/, '').trim().toLowerCase()
-          return candidateColabIds.includes(clean)
+          if (candidateColabIds.includes(clean)) return true
+          const norm = normalizeStr(id)
+          if (effNomeNorm && norm && (norm === effNomeNorm || norm.includes(effNomeNorm) || effNomeNorm.includes(norm))) return true
+          return false
         })
       }
       if (checkArrayOrString(t.professoresIds || t.dados?.professoresIds)) return true
@@ -279,9 +341,9 @@ export function useCollaboratorTurmas() {
       const disciplinas = t.disciplinas || t.dados?.disciplinas
       if (Array.isArray(disciplinas)) {
         const hasDisc = disciplinas.some((d: any) => {
-          const dProfId = String(d.professorId || d.professor_id || d.funcionarioId || '').replace(/^f_?/, '').trim().toLowerCase()
-          const dProfNome = String(d.professorNome || d.professor_nome || d.professor || '').trim().toLowerCase()
-          return (dProfId && candidateColabIds.includes(dProfId)) || (dProfNome && effNome && dProfNome === effNome)
+          const dProfId = String(d.professorId || d.professor_id || d.funcionarioId || d.dados?.professorId || '').replace(/^f_?/, '').trim().toLowerCase()
+          const dProfNome = normalizeStr(d.professorNome || d.professor_nome || d.professor || d.dados?.professor || '')
+          return (dProfId && candidateColabIds.includes(dProfId)) || (effNomeNorm && dProfNome && (dProfNome === effNomeNorm || dProfNome.includes(effNomeNorm) || effNomeNorm.includes(dProfNome)))
         })
         if (hasDisc) return true
       }
@@ -290,7 +352,16 @@ export function useCollaboratorTurmas() {
     })
 
     return [...matchedTurmas].sort(compareTurmasBySerie)
-  }, [turmas, userGroups, effectiveUser, candidateColabIds, colaboradores])
+  }, [turmas, userGroups, effectiveUser, currentUser, candidateColabIds, colaboradores, isEquipeEscolar])
+
+  // Grupos vinculados ao colaborador (quando includeGroups está habilitado)
+  const vinculatedGroups = useMemo(() => {
+    if (!includeGroups) return []
+    if (isEquipeEscolar) {
+      return chatGroups || []
+    }
+    return userGroups
+  }, [includeGroups, isEquipeEscolar, chatGroups, userGroups])
 
   const anosLetivos = useMemo(() => {
     const anos = new Set<string>()
@@ -298,12 +369,19 @@ export function useCollaboratorTurmas() {
       const anyT = t as any
       if (anyT.ano) anos.add(String(anyT.ano))
       if (anyT.ano_letivo) anos.add(String(anyT.ano_letivo))
+      if (anyT.dados?.anoLetivo) anos.add(String(anyT.dados.anoLetivo))
     })
+    if (includeGroups) {
+      vinculatedGroups.forEach((g: any) => {
+        const gAno = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
+        if (gAno && gAno !== 'todos') anos.add(String(gAno))
+      })
+    }
     if (anos.size === 0) {
       cfgCalendarioLetivo.forEach((c: any) => c.ano && anos.add(String(c.ano)))
     }
     return Array.from(anos).sort().reverse()
-  }, [baseTurmas, cfgCalendarioLetivo])
+  }, [baseTurmas, includeGroups, vinculatedGroups, cfgCalendarioLetivo])
 
   const anoVigente = useMemo(() => {
     const vigente = cfgCalendarioLetivo.find((c: any) => c.status === 'Aberto' || c.isVigente)
@@ -332,41 +410,109 @@ export function useCollaboratorTurmas() {
     })
   }, [baseTurmas, effectiveAno])
 
+  // Grupos filtrados pelo ano letivo
+  const groupsDoAno = useMemo(() => {
+    if (!includeGroups) return []
+    if (effectiveAno === 'todos') return vinculatedGroups
+    return vinculatedGroups.filter((g: any) => {
+      const gAno = g.ano !== undefined ? String(g.ano) : (g.anoLetivo || g.ano_letivo || g.dados?.anoLetivo || '')
+      return !gAno || gAno === 'todos' || String(gAno) === String(effectiveAno)
+    })
+  }, [includeGroups, effectiveAno, vinculatedGroups])
+
   const activeTurmas = useMemo(() => {
     if (selectedTurmaId === 'all') return turmasDoAno
+    if (selectedTurmaId.startsWith('grupo_')) return []
     return turmasDoAno.filter(t => String(t.id) === String(selectedTurmaId) || String(t.codigo) === String(selectedTurmaId))
   }, [turmasDoAno, selectedTurmaId])
 
-  // Se a turma selecionada não pertencer mais às turmas do ano, reseta para 'all'
+  const activeGrupos = useMemo(() => {
+    if (!includeGroups) return []
+    if (selectedTurmaId === 'all') return groupsDoAno
+    if (selectedTurmaId.startsWith('grupo_')) {
+      const gId = selectedTurmaId.replace(/^grupo_/, '')
+      return groupsDoAno.filter((g: any) => String(g.id) === gId || String(g.nome) === gId)
+    }
+    return []
+  }, [includeGroups, selectedTurmaId, groupsDoAno])
+
+  // Se a turma selecionada não pertencer mais às turmas/grupos do ano, reseta para 'all'
   useEffect(() => {
     if (selectedTurmaId !== 'all') {
-      const exists = turmasDoAno.some(t => String(t.id) === String(selectedTurmaId) || String(t.codigo) === String(selectedTurmaId))
-      if (!exists) {
-        setSelectedTurmaId('all')
+      if (selectedTurmaId.startsWith('grupo_')) {
+        const gId = selectedTurmaId.replace(/^grupo_/, '')
+        const existsG = groupsDoAno.some((g: any) => String(g.id) === gId || String(g.nome) === gId)
+        if (!existsG) setSelectedTurmaId('all')
+      } else {
+        const existsT = turmasDoAno.some(t => String(t.id) === String(selectedTurmaId) || String(t.codigo) === String(selectedTurmaId))
+        if (!existsT) setSelectedTurmaId('all')
       }
     }
-  }, [turmasDoAno, selectedTurmaId])
+  }, [turmasDoAno, groupsDoAno, selectedTurmaId])
 
   const selectedTurmaName = useMemo(() => {
-    if (baseTurmas.length === 0) return 'Nenhuma turma vinculada'
-    if (selectedTurmaId === 'all') return isEquipeEscolar ? 'Todas as Turmas' : 'Todas as turmas vinculadas'
+    if (baseTurmas.length === 0 && (!includeGroups || vinculatedGroups.length === 0)) return 'Nenhuma opção vinculada'
+    if (selectedTurmaId === 'all') {
+      if (includeGroups) {
+        return isEquipeEscolar ? 'Todos (Equipe e Turmas)' : 'Todas as turmas e grupos'
+      }
+      return isEquipeEscolar ? 'Todas as Turmas' : 'Todas as turmas vinculadas'
+    }
+    if (selectedTurmaId.startsWith('grupo_')) {
+      const gId = selectedTurmaId.replace(/^grupo_/, '')
+      const foundG = (chatGroups || []).find((g: any) => String(g.id) === gId || String(g.nome) === gId)
+      return foundG ? (foundG.nome || 'Grupo Selecionado') : 'Grupo Selecionado'
+    }
     const found = turmasDoAno.find(t => String(t.id) === String(selectedTurmaId) || String(t.codigo) === String(selectedTurmaId))
     return found ? found.nome : 'Selecione uma turma'
-  }, [selectedTurmaId, turmasDoAno, baseTurmas.length, isEquipeEscolar])
+  }, [selectedTurmaId, turmasDoAno, baseTurmas.length, isEquipeEscolar, includeGroups, vinculatedGroups.length, chatGroups])
 
   const turmaOptions: TurmaOption[] = useMemo(() => {
-    return turmasDoAno.map(t => {
+    const opts: TurmaOption[] = []
+    const seenNames = new Set<string>()
+
+    // 1. Turmas Acadêmicas
+    turmasDoAno.forEach(t => {
       const anyT = t as any
       const schedule = getTurmaSchedule(t)
       const seg = anyT.dados?.segmento || anyT.segmento || schedule?.segmento || anyT.serie || ''
-      return {
+      opts.push({
         id: String(t.id),
         nome: t.nome,
-        categoria: seg ? String(seg) : 'Geral',
+        categoria: seg ? String(seg) : (isEquipeEscolar ? 'Turmas' : 'Minhas Turmas'),
         badge: t.turno ? String(t.turno) : undefined
-      }
+      })
+      seenNames.add(normalizeStr(t.nome))
     })
-  }, [turmasDoAno])
+
+    // 2. Grupos de Atividades / Equipe Escolar (se includeGroups estiver habilitado)
+    if (includeGroups) {
+      groupsDoAno.forEach((g: any) => {
+        const gName = String(g.nome || g.dados?.nome || '').trim()
+        if (!gName) return
+
+        // Se o grupo é espelho/sync de uma turma já incluída, evitar duplicidade
+        const gSyncTurmaId = String(g.syncId || '').replace(/^sync-/, '').trim()
+        if (gSyncTurmaId && turmasDoAno.some(t => String(t.id) === gSyncTurmaId)) return
+        if (seenNames.has(normalizeStr(gName))) return
+
+        const isEq = Boolean(
+          g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1 || g.dados?.isEquipeEscolar === true ||
+          String(g.ano || '').toLowerCase() === 'equipe escolar' ||
+          String(g.categoria || '').toLowerCase().includes('equipe')
+        )
+
+        opts.push({
+          id: `grupo_${g.id}`,
+          nome: gName,
+          categoria: isEq ? 'Equipe Escolar' : 'Meus Grupos',
+          badge: isEq ? 'Equipe' : 'Grupo'
+        })
+      })
+    }
+
+    return opts
+  }, [turmasDoAno, includeGroups, groupsDoAno, isEquipeEscolar])
 
   return {
     effectiveUser,
@@ -375,7 +521,11 @@ export function useCollaboratorTurmas() {
     isEquipeEscolar,
     turmas: baseTurmas,
     turmasDoAno,
+    userGroups,
+    vinculatedGroups,
+    groupsDoAno,
     activeTurmas,
+    activeGrupos,
     turmaOptions,
     selectedTurmaId,
     setSelectedTurmaId,
