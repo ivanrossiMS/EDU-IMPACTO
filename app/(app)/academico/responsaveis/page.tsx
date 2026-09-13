@@ -214,9 +214,9 @@ export default function ResponsaveisPage() {
 
 
   return (
-    <div className="page-container" style={{ padding: 24, background: '#f8fafc', minHeight: '100vh' }}>
+    <div className="page-container responsaveis-page-container" style={{ padding: 24, background: '#f8fafc', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div className="responsaveis-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             Responsáveis
@@ -224,39 +224,41 @@ export default function ResponsaveisPage() {
           </h1>
           <p style={{ fontSize: 14, color: '#64748b', marginTop: 4 }}>Gerenciamento de pais e responsáveis do sistema</p>
         </div>
-        <button
-          onClick={handleNovoResponsavel}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '12px',
-            padding: '10px 20px',
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.4)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.3)';
-          }}
-        >
-          <Plus size={16} /> Novo Responsável
-        </button>
+        <div className="responsaveis-header-actions">
+          <button
+            onClick={handleNovoResponsavel}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '10px 20px',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.4)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.3)';
+            }}
+          >
+            <Plus size={16} /> Novo Responsável
+          </button>
+        </div>
       </div>
 
       {/* Toolbar */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-        <div style={{ position: 'relative', flex: 1 }}>
+      <div className="responsaveis-toolbar" style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 0, width: '100%' }}>
           <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
           <input
             className="form-input"
@@ -269,17 +271,19 @@ export default function ResponsaveisPage() {
             }}
           />
         </div>
-        <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
-          <Filter size={16} /> Filtros
-        </button>
-        <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
-          <Download size={16} /> Exportar
-        </button>
+        <div className="responsaveis-toolbar-actions" style={{ display: 'flex', gap: 8 }}>
+          <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
+            <Filter size={16} /> Filtros
+          </button>
+          <button className="neo-btn neo-btn-secondary" style={{ gap: 8 }}>
+            <Download size={16} /> Exportar
+          </button>
+        </div>
       </div>
 
       {/* Table */}
-      <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div className="glass-card responsaveis-table-card" style={{ padding: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 750 }}>
           <thead>
             <tr style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', color: '#fff' }}>
               <th style={{ textAlign: 'left', padding: '14px 16px', fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>ID</th>

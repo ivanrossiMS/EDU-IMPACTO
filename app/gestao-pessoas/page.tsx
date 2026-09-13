@@ -105,7 +105,7 @@ export default function GestaoPessoasDashboard() {
   }
 
   return (
-    <div style={{ padding: '48px', maxWidth: 1600, margin: '0 auto', minHeight: '100%', background: '#f8fafc', position: 'relative', overflow: 'hidden', fontFamily: "'Inter', sans-serif" }}>
+    <div className="gp-page-container" style={{ padding: '48px', maxWidth: 1600, margin: '0 auto', minHeight: '100%', background: '#f8fafc', position: 'relative', overflow: 'hidden', fontFamily: "'Inter', sans-serif" }}>
       
       {/* Decoração de Fundo */}
       <div style={{ position: 'absolute', top: -200, right: -100, width: 600, height: 600, background: 'radial-gradient(circle, rgba(99,102,241,0.06) 0%, transparent 60%)', filter: 'blur(60px)', pointerEvents: 'none' }} />
@@ -143,15 +143,16 @@ export default function GestaoPessoasDashboard() {
         initial={{ opacity: 0, y: -20 }} 
         animate={{ opacity: 1, y: 0 }} 
         transition={{ duration: 0.6 }}
+        className="gp-header"
         style={{ marginBottom: 40 }}
       >
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%)', color: '#4f46e5', padding: '8px 16px', borderRadius: 100, fontSize: 13, fontWeight: 700, marginBottom: 16 }}>
+        <div className="gp-header-badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, #e0e7ff 0%, #ede9fe 100%)', color: '#4f46e5', padding: '8px 16px', borderRadius: 100, fontSize: 13, fontWeight: 700, marginBottom: 16 }}>
           <Sparkles size={16} /> Ecossistema IMPACTO EDU
         </div>
-        <h1 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 44, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', margin: 0, lineHeight: 1.1 }}>
+        <h1 className="gp-header-title" style={{ fontFamily: "'Outfit', sans-serif", fontSize: 44, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', margin: 0, lineHeight: 1.1 }}>
           Gestão de Pessoas
         </h1>
-        <p style={{ fontSize: 17, color: '#64748b', maxWidth: 650, marginTop: 12, lineHeight: 1.6 }}>
+        <p className="gp-header-desc" style={{ fontSize: 17, color: '#64748b', maxWidth: 650, marginTop: 12, lineHeight: 1.6 }}>
           Acompanhe os principais indicadores organizacionais, gerencie o bem-estar da equipe e garanta um ambiente seguro e em conformidade com as normas institucionais.
         </p>
       </motion.div>
@@ -164,10 +165,10 @@ export default function GestaoPessoasDashboard() {
           Sincronizando dados da central...
         </div>
       ) : (
-        <motion.div variants={containerVariants} initial="hidden" animate="show" style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+        <motion.div variants={containerVariants} initial="hidden" animate="show" className="gp-content-container" style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
           
           {/* Métricas Principais (KPIs) */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24 }}>
+          <div className="gp-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24 }}>
             {[
               { label: 'Colaboradores Ativos', value: stats.colaboradores, icon: Users, color: '#4f46e5', bg: '#e0e7ff', link: '/gestao-pessoas/colaboradores', adminOnly: true },
               { label: 'Pesquisas em Andamento', value: stats.pesquisasAtivas, icon: PieChart, color: '#0ea5e9', bg: '#e0f2fe', link: '/gestao-pessoas/pesquisa-clima' },
@@ -178,7 +179,7 @@ export default function GestaoPessoasDashboard() {
                 key={i} 
                 variants={itemVariants}
                 onClick={() => router.push(c.link)} 
-                className="kpi-card"
+                className="kpi-card gp-kpi-card"
                 style={{ 
                   borderRadius: 24, padding: 28, cursor: 'pointer',
                   display: 'flex', flexDirection: 'column', gap: 20, position: 'relative', overflow: 'hidden'
@@ -186,28 +187,28 @@ export default function GestaoPessoasDashboard() {
               >
                 <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: c.bg, opacity: 0.5, filter: 'blur(30px)' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', zIndex: 1 }}>
-                  <div style={{ width: 56, height: 56, borderRadius: 16, background: c.bg, color: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div className="gp-kpi-icon-box" style={{ width: 56, height: 56, borderRadius: 16, background: c.bg, color: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <c.icon size={28} strokeWidth={2.5} />
                   </div>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+                  <div className="gp-kpi-arrow" style={{ width: 36, height: 36, borderRadius: '50%', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
                     <ArrowRight size={18} />
                   </div>
                 </div>
                 <div style={{ zIndex: 1, marginTop: 4 }}>
-                  <div style={{ fontSize: 44, fontWeight: 900, color: '#0f172a', fontFamily: "'Outfit', sans-serif", lineHeight: 1, letterSpacing: '-0.02em' }}>
+                  <div className="gp-kpi-value" style={{ fontSize: 44, fontWeight: 900, color: '#0f172a', fontFamily: "'Outfit', sans-serif", lineHeight: 1, letterSpacing: '-0.02em' }}>
                     {c.value}
                   </div>
-                  <div style={{ fontSize: 15, color: '#64748b', fontWeight: 600, marginTop: 8 }}>{c.label}</div>
+                  <div className="gp-kpi-label" style={{ fontSize: 15, color: '#64748b', fontWeight: 600, marginTop: 8 }}>{c.label}</div>
                 </div>
               </motion.div>
             ))}
           </div>
 
           {/* Seção de Listas Dinâmicas (3 colunas) */}
-          <motion.div variants={itemVariants} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
+          <motion.div variants={itemVariants} className="gp-sections-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 24 }}>
             
             {/* Lista de Denúncias */}
-            <div style={{ borderRadius: 24, padding: 28, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column' }}>
+            <div className="gp-section-card" style={{ borderRadius: 24, padding: 28, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <h3 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <ShieldAlert size={20} color="#f43f5e" />
@@ -247,7 +248,7 @@ export default function GestaoPessoasDashboard() {
             </div>
 
             {/* Lista de Atendimentos */}
-            <div style={{ borderRadius: 24, padding: 28, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column' }}>
+            <div className="gp-section-card" style={{ borderRadius: 24, padding: 28, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <h3 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <HeartPulse size={20} color="#10b981" />
@@ -287,7 +288,7 @@ export default function GestaoPessoasDashboard() {
             </div>
 
             {/* Lista de Pesquisas */}
-            <div style={{ borderRadius: 24, padding: 28, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column' }}>
+            <div className="gp-section-card" style={{ borderRadius: 24, padding: 28, background: '#fff', border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <h3 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Activity size={20} color="#0ea5e9" />
@@ -330,28 +331,28 @@ export default function GestaoPessoasDashboard() {
 
           {/* Grid de Módulos (Navegação Principal) */}
           <motion.div variants={itemVariants} style={{ marginTop: 16 }}>
-            <h2 style={{ fontFamily: "'Outfit', sans-serif", fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h2 className="gp-modules-heading" style={{ fontFamily: "'Outfit', sans-serif", fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
               <Zap size={24} color="#3b82f6" />
               Explorar Módulos
             </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
+            <div className="gp-modules-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
               {modules.map((mod, idx) => (
                 <div 
                   key={idx} 
-                  className="module-card"
+                  className="module-card gp-module-card"
                   onClick={() => router.push(mod.link)}
                   style={{ 
                     borderRadius: 20, padding: 24, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 16
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div className="module-icon-box" style={{ width: 52, height: 52, borderRadius: 14, background: mod.bg, color: mod.color, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
+                    <div className="module-icon-box gp-module-icon-box" style={{ width: 52, height: 52, borderRadius: 14, background: mod.bg, color: mod.color, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}>
                       <mod.icon size={26} strokeWidth={2} />
                     </div>
                   </div>
                   <div>
-                    <h3 style={{ margin: '0 0 6px 0', fontSize: 18, fontWeight: 700, color: '#1e293b' }}>{mod.title}</h3>
-                    <p style={{ margin: 0, fontSize: 14, color: '#64748b', lineHeight: 1.5 }}>{mod.desc}</p>
+                    <h3 className="gp-module-title" style={{ margin: '0 0 6px 0', fontSize: 18, fontWeight: 700, color: '#1e293b' }}>{mod.title}</h3>
+                    <p className="gp-module-desc" style={{ margin: 0, fontSize: 14, color: '#64748b', lineHeight: 1.5 }}>{mod.desc}</p>
                   </div>
                 </div>
               ))}

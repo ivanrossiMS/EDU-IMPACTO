@@ -366,7 +366,7 @@ export default function UsuariosPage() {
           animation: shimmer 1.5s infinite linear;
         }
       `}} />
-      <div className="page-header">
+      <div className="page-header usuarios-header">
         <div>
           <h1 className="page-title">Usuários & Acessos</h1>
           <p className="page-subtitle">Controle de usuários, perfis, permissões e auditoria de acesso</p>
@@ -374,7 +374,7 @@ export default function UsuariosPage() {
         <button className="btn btn-primary btn-sm" onClick={openAddUser}><Plus size={13} />Novo Usuário</button>
       </div>
 
-      <div className="tab-list" style={{ marginBottom: 20, width: 'fit-content' }}>
+      <div className="tab-list usuarios-tab-list" style={{ marginBottom: 20 }}>
         <button className={`tab-trigger ${tab === 'tipos-conta' ? 'active' : ''}`} onClick={() => setTab('tipos-conta')}><Layers size={12} />Tipos de Conta</button>
         <button className={`tab-trigger ${tab === 'usuarios' ? 'active' : ''}`} onClick={() => setTab('usuarios')}>
           <Shield size={12} />Colaboradores
@@ -405,18 +405,18 @@ export default function UsuariosPage() {
           </div>
         ) : (
           <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ position: 'relative' }}>
-                  <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                  <input
-                    type="text"
-                    placeholder="Buscar colaborador..."
-                    value={colabSearch}
-                    onChange={(e) => { setColabSearch(e.target.value); setColabPage(1); }}
-                    style={{ padding: '8px 12px 8px 32px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, width: 250, fontWeight: 500 }}
-                  />
-                </div>
+          <div className="usuarios-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div className="usuarios-toolbar-search-wrap" style={{ position: 'relative' }}>
+                <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar colaborador..."
+                  value={colabSearch}
+                  onChange={(e) => { setColabSearch(e.target.value); setColabPage(1); }}
+                  style={{ padding: '8px 12px 8px 32px', borderRadius: 8, border: '1px solid #cbd5e1', background: '#ffffff', color: '#0f172a', fontSize: 13, width: 250, fontWeight: 500 }}
+                />
+              </div>
+              <div className="usuarios-toolbar-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <select 
                   value={colabLimit} 
                   onChange={(e) => { setColabLimit(Number(e.target.value)); setColabPage(1); }}
@@ -426,9 +426,9 @@ export default function UsuariosPage() {
                   <option value={50} style={{ color: '#0f172a', background: '#ffffff' }}>50 por pág.</option>
                   <option value={100} style={{ color: '#0f172a', background: '#ffffff' }}>100 por pág.</option>
                 </select>
-              </div>
-              <div style={{ fontSize: 13, color: '#64748b' }}>
-                Total: <strong style={{ color: '#0f172a' }}>{colabTotal}</strong>
+                <div style={{ fontSize: 13, color: '#64748b' }}>
+                  Total: <strong style={{ color: '#0f172a' }}>{colabTotal}</strong>
+                </div>
               </div>
             </div>
             <div className="table-container">

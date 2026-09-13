@@ -434,7 +434,7 @@ export default function NotasPage() {
   if (!turmaSel) {
     return (
       <div style={{ animation: 'fadeIn 0.3s ease' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div className="notas-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <button style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer' }} onClick={() => setAnoLetivoSel(null)}>
               <ArrowLeft size={20} />
@@ -448,6 +448,7 @@ export default function NotasPage() {
             </div>
           </div>
           <button 
+            className="notas-btn-importar"
             onClick={handleOpenImportModal}
             style={{ height: '46px', padding: '0 24px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(37, 99, 235, 0.2)' }}
           >
@@ -457,8 +458,8 @@ export default function NotasPage() {
         </div>
 
         {/* Barra de Filtros */}
-        <div style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap', alignItems:'center', padding:'16px', background:'#fff', borderRadius:12, border:'1px solid #e2e8f0' }}>
-          <div style={{ position:'relative', flex:1, minWidth:250 }}>
+        <div className="notas-filter-bar" style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap', alignItems:'center', padding:'16px', background:'#fff', borderRadius:12, border:'1px solid #e2e8f0' }}>
+          <div className="notas-filter-search" style={{ position:'relative', flex:1, minWidth:250 }}>
             <Search size={16} style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', color:'#94a3b8' }} />
             <input 
               className="form-input" 
@@ -468,7 +469,7 @@ export default function NotasPage() {
               onChange={e => setFiltroBusca(e.target.value)} 
             />
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div className="notas-filter-controls" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <Calendar size={16} style={{ color: '#64748b' }} />
             <select 
               className="form-input" 
@@ -492,7 +493,7 @@ export default function NotasPage() {
         </div>
 
         {/* Listagem de Turmas em Tabela */}
-        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <div className="notas-table-container" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
               <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>

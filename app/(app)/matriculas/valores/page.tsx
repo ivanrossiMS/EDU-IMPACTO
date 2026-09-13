@@ -1902,7 +1902,7 @@ export default function ValoresPage() {
           boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
           overflow: 'hidden'
         }}>
-          <div style={{
+          <div className="valores-header-card" style={{
             background: 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 50%, #f0fdf4 100%)',
             padding: '24px 28px',
             borderBottom: '1px solid #e2e8f0',
@@ -1950,7 +1950,7 @@ export default function ValoresPage() {
             </div>
 
             {/* Ações do Topo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div className="valores-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', background: '#ffffff', padding: '4px', borderRadius: 12, border: '1px solid #cbd5e1', gap: 4, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                 {['2027', '2026', '2028'].map(ano => {
                   const isCur = anoLetivo === ano

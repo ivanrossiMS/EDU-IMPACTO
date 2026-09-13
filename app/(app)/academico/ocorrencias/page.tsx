@@ -980,9 +980,9 @@ export default function OcorrenciasPage() {
     }
 
     return (
-      <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+      <div className="ocorrencias-page-container" style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
         {/* Header Ultra Moderno */}
-        <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="ocorrencias-header" style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <Sparkles size={20} style={{ color: '#2563eb' }} />
@@ -992,7 +992,7 @@ export default function OcorrenciasPage() {
             <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Monitore o comportamento e aplique medidas pedagógicas.</p>
           </div>
           
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div className="ocorrencias-header-toggle" style={{ display: 'flex', gap: '12px' }}>
             <div style={{ display: 'flex', background: '#fff', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
               <button 
                 onClick={() => setModoHome('turma')}
@@ -1028,7 +1028,7 @@ export default function OcorrenciasPage() {
 
 
         {/* Segundo nível: tipos + reincidentes */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:20, marginBottom:32 }}>
+        <div className="ocorrencias-cards-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:20, marginBottom:32 }}>
           {/* Tipos mais frequentes */}
           <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontWeight:800, fontSize:14, color: '#0f172a', marginBottom:16, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1150,7 +1150,7 @@ export default function OcorrenciasPage() {
         </div>
 
         {/* Filtros */}
-        <div style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div className="ocorrencias-filter-bar" style={{ background: '#fff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', gap: '12px', flex: 1 }}>
             <div style={{ position:'relative', flex: 1, maxWidth: '400px' }}>
               {isLoadingTurmas ? (

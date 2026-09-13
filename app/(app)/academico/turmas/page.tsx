@@ -586,9 +586,9 @@ export default function TurmasPage() {
   const seriesDisponiveis = selectedNivel?.series || []
 
   return (
-    <div style={{ padding: '24px', background: '#f8fafc', minHeight: '100vh' }}>
+    <div className="turmas-page-container" style={{ padding: '24px', background: '#f8fafc', minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div className="turmas-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontFamily: 'Outfit,sans-serif', fontWeight: 900, fontSize: 28, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
             Gestão de Turmas
@@ -597,7 +597,7 @@ export default function TurmasPage() {
           <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0 0' }}>Gerencie as turmas e organizações escolares</p>
         </div>
         
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="turmas-header-actions" style={{ display: 'flex', gap: '12px' }}>
           <button 
             onClick={() => setIsImportModalOpen(true)}
             className="neo-btn neo-btn-secondary"
@@ -616,35 +616,36 @@ export default function TurmasPage() {
       </div>
 
       {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+      <div className="turmas-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '24px' }}>
         {/* Total de Turmas */}
-        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', padding: '10px', borderRadius: '8px' }}>
+        <div className="turmas-kpi-card" style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div className="turmas-kpi-card-inner" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="turmas-kpi-icon" style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', padding: '10px', borderRadius: '8px', flexShrink: 0 }}>
               <School size={20} />
             </div>
-            <div>
-              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Total de Turmas</p>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalTurmas ?? totalItens}</h3>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p className="turmas-kpi-label" style={{ fontSize: 12, color: '#64748b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Total de Turmas</p>
+              <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalTurmas ?? totalItens}</h3>
             </div>
           </div>
         </div>
         
         {/* Alunos Matriculados (Total Único Real de Alunos Ativos) */}
-        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '10px', borderRadius: '8px' }}>
+        <div className="turmas-kpi-card" style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div className="turmas-kpi-card-inner" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="turmas-kpi-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '10px', borderRadius: '8px', flexShrink: 0 }}>
               <Users size={20} />
             </div>
-            <div>
-              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Alunos Matriculados</p>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosMatriculados ?? 0}</h3>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p className="turmas-kpi-label" style={{ fontSize: 12, color: '#64748b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Alunos Matriculados</p>
+              <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosMatriculados ?? 0}</h3>
             </div>
           </div>
         </div>
 
         {/* Alunos INTEGRAL / INTERMEDIÁRIO (Novo Card!) */}
         <div 
+          className="turmas-kpi-card"
           onClick={handleOpenIntegralModal}
           style={{ 
             background: '#fff', 
@@ -667,30 +668,30 @@ export default function TurmasPage() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '10px', borderRadius: '8px' }}>
+            <div className="turmas-kpi-card-inner" style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0, flex: 1 }}>
+              <div className="turmas-kpi-icon" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '10px', borderRadius: '8px', flexShrink: 0 }}>
                 <Sparkles size={20} />
               </div>
-              <div>
-                <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Integral / Intermediário</p>
-                <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosIntegral ?? 0}</h3>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p className="turmas-kpi-label" style={{ fontSize: 12, color: '#64748b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Integral / Intermed.</p>
+                <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>{stats?.totalAlunosIntegral ?? 0}</h3>
               </div>
             </div>
-            <span style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: 600, background: 'rgba(139, 92, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
+            <span className="turmas-kpi-badge" style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: 600, background: 'rgba(139, 92, 246, 0.08)', padding: '4px 8px', borderRadius: '6px' }}>
               Ver alunos &rarr;
             </span>
           </div>
         </div>
 
         {/* Vagas Ocupadas */}
-        <div style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '10px', borderRadius: '8px' }}>
+        <div className="turmas-kpi-card" style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div className="turmas-kpi-card-inner" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="turmas-kpi-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '10px', borderRadius: '8px', flexShrink: 0 }}>
               <BookOpen size={20} />
             </div>
-            <div>
-              <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Vagas Ocupadas</p>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <p className="turmas-kpi-label" style={{ fontSize: 12, color: '#64748b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Vagas Ocupadas</p>
+              <h3 className="turmas-kpi-value" style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', margin: 0 }}>
                 {stats?.vagasOcupadasPercent ?? 0}%
               </h3>
             </div>

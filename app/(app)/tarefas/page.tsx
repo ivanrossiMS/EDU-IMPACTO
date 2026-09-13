@@ -118,7 +118,7 @@ export default function TarefasPage() {
   }
 
   return (
-    <div suppressHydrationWarning style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="tarefas-page-container" suppressHydrationWarning style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       {isLoading && (
         <div style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', background:'rgba(255,255,255,0.7)', zIndex:150, display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(4px)' }}>
           <div style={{ textAlign:'center', color:'hsl(var(--text-muted))' }}>
@@ -129,14 +129,14 @@ export default function TarefasPage() {
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+      <div className="tarefas-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div>
           <h1 style={{ fontSize: '32px', fontWeight: 800, color: 'hsl(var(--text-primary))', letterSpacing: '-0.5px', marginBottom: '4px' }}>Minhas Tarefas</h1>
           <p style={{ fontSize: '14px', color: 'hsl(var(--text-muted))' }}>
             Gerencie suas atividades e acompanhe o progresso da equipe.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div className="tarefas-header-actions" style={{ display: 'flex', gap: '12px' }}>
           <button className="btn btn-secondary" style={{ borderRadius: '12px', padding: '10px 20px' }}>
             <Brain size={16} /> IA: Priorizar
           </button>
@@ -147,42 +147,45 @@ export default function TarefasPage() {
       </div>
 
       {/* KPI Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '32px' }}>
+      <div className="tarefas-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '32px' }}>
         {[
           { label: 'Urgentes', value: urgentes, color: '#ef4444', icon: <AlertTriangle size={24} />, bg: 'rgba(239,68,68,0.05)' },
           { label: 'Pendentes', value: pendentes, color: '#f59e0b', icon: <Clock size={24} />, bg: 'rgba(245,158,11,0.05)' },
           { label: 'Em andamento', value: andamento, color: '#3b82f6', icon: <Clock size={24} />, bg: 'rgba(59,130,246,0.05)' },
           { label: 'Concluídas', value: concluidas, color: '#10b981', icon: <CheckCircle size={24} />, bg: 'rgba(16,185,129,0.05)' },
         ].map(c => (
-          <div key={c.label} style={{ background: 'hsl(var(--bg-surface))', padding: '24px', borderRadius: '16px', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.01)' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.color }}>
+          <div key={c.label} className="tarefas-kpi-card" style={{ background: 'hsl(var(--bg-surface))', padding: '24px', borderRadius: '16px', border: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', gap: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.01)' }}>
+            <div className="tarefas-kpi-icon" style={{ width: '48px', height: '48px', borderRadius: '12px', background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.color, flexShrink: 0 }}>
               {c.icon}
             </div>
-            <div>
-              <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{c.label}</div>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif' }}>{c.value}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="tarefas-kpi-label" style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{c.label}</div>
+              <div className="tarefas-kpi-value" style={{ fontSize: '28px', fontWeight: 800, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif' }}>{c.value}</div>
             </div>
           </div>
         ))}
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', gap: '8px', background: 'hsl(var(--bg-muted))', padding: '4px', borderRadius: '12px' }}>
-          {(['todas', 'pendente', 'em-andamento', 'concluida'] as const).map(s => (
-            <button 
-              key={s} 
-              className={`btn btn-sm ${filtroStatus === s ? 'btn-primary' : 'btn-ghost'}`} 
-              style={{ borderRadius: '8px', border: 'none', boxShadow: filtroStatus === s ? '0 1px 3px 0 rgba(0,0,0,0.1)' : 'none' }} 
-              onClick={() => setFiltroStatus(s)}
-            >
-              {s === 'todas' ? 'Todas' : S_CONFIG[s as Status].label.split(' ')[1]}
-            </button>
-          ))}
+      <div className="tarefas-filters-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div className="tarefas-status-tabs" style={{ display: 'flex', gap: '8px', background: 'hsl(var(--bg-muted))', padding: '4px', borderRadius: '12px' }}>
+          {(['todas', 'pendente', 'em-andamento', 'concluida'] as const).map(s => {
+            const label = s === 'todas' ? 'Todas' : (s === 'em-andamento' ? 'Em andamento' : s === 'pendente' ? 'Pendentes' : 'Concluídas')
+            return (
+              <button 
+                key={s} 
+                className={`btn btn-sm ${filtroStatus === s ? 'btn-primary' : 'btn-ghost'}`} 
+                style={{ borderRadius: '8px', border: 'none', boxShadow: filtroStatus === s ? '0 1px 3px 0 rgba(0,0,0,0.1)' : 'none' }} 
+                onClick={() => setFiltroStatus(s)}
+              >
+                {label}
+              </button>
+            )
+          })}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '14px', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Apenas minhas tarefas</span>
-          <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px' }}>
+        <div className="tarefas-switch-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: 'hsl(var(--text-secondary))', whiteSpace: 'nowrap' }}>Apenas minhas tarefas</span>
+          <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
             <input type="checkbox" checked={apenasMinhas} onChange={e => setApenasMinhas(e.target.checked)} style={{ opacity: 0, width: 0, height: 0 }} />
             <span style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, background: apenasMinhas ? '#2563eb' : '#cbd5e1', transition: '.4s', borderRadius: '24px' }}>
               <span style={{ position: 'absolute', content: '""', height: '18px', width: '18px', left: apenasMinhas ? '22px' : '3px', bottom: '3px', background: 'white', transition: '.4s', borderRadius: '50%' }}></span>
@@ -198,7 +201,7 @@ export default function TarefasPage() {
             <div style={{ fontWeight: 800, fontSize: '18px', color: 'hsl(var(--text-primary))' }}>Nova Tarefa</div>
             <button className="btn btn-ghost btn-icon btn-sm" onClick={() => { setShowNew(false); setForm(BLANK) }}><X size={18} /></button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
+          <div className="tarefas-form-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label className="form-label">Título *</label>

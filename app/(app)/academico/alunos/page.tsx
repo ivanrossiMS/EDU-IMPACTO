@@ -1889,21 +1889,21 @@ export default function AlunosPage() {
         }
       `}</style>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 20 }}>
+      <div className="alunos-page-container" style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: 20 }}>
         
         {/* HEADER SECTION */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(37, 99, 235, 0.3)' }}>
+        <div className="alunos-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <div className="alunos-header-info" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div className="alunos-header-icon" style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(37, 99, 235, 0.3)' }}>
               <Users size={28} color="#fff" />
             </div>
             <div>
-              <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Gestão de Alunos</h1>
-              <p style={{ fontSize: 14, color: '#64748b', margin: 0, marginTop: 2 }}>Controle completo da secretaria escolar</p>
+              <h1 className="alunos-header-title" style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif' }}>Gestão de Alunos</h1>
+              <p className="alunos-header-subtitle" style={{ fontSize: 14, color: '#64748b', margin: 0, marginTop: 2 }}>Controle completo da secretaria escolar</p>
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className="alunos-header-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <button 
               type="button"
               onClick={() => setIsHelpModalOpen(true)}
@@ -1919,7 +1919,7 @@ export default function AlunosPage() {
         </div>
 
         {/* KPI METRIC CARDS */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+        <div className="alunos-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
           {[
             {
               id: 'total',
@@ -1985,7 +1985,7 @@ export default function AlunosPage() {
             <div
               key={kpi.id}
               onClick={kpi.onClick}
-              className="glass-card"
+              className="glass-card alunos-kpi-card"
               style={{
                 borderRadius: 20,
                 padding: '18px 20px',
@@ -2015,6 +2015,7 @@ export default function AlunosPage() {
               }}
             >
               <div
+                className="alunos-kpi-icon"
                 style={{
                   width: 48,
                   height: 48,
@@ -2033,6 +2034,7 @@ export default function AlunosPage() {
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                   <div
+                    className="alunos-kpi-value"
                     style={{
                       fontSize: 26,
                       fontWeight: 900,
@@ -2066,6 +2068,7 @@ export default function AlunosPage() {
                   )}
                 </div>
                 <div
+                  className="alunos-kpi-label"
                   style={{
                     fontSize: 13,
                     fontWeight: 700,
@@ -2079,6 +2082,7 @@ export default function AlunosPage() {
                   {kpi.label}
                 </div>
                 <div
+                  className="alunos-kpi-sub"
                   style={{
                     fontSize: 11,
                     color: 'hsl(var(--text-muted, #64748b))',

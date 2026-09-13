@@ -390,14 +390,14 @@ export default function ConteudosTarefasPage() {
   }
 
   return (
-    <div style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+    <div className="conteudos-page-container" style={{ padding: '32px', background: '#f8fafc', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
 
       
       {!turmaSel ? (
         /* ================= VISTA HOME (LISTA DE TURMAS) ================= */
         <div>
           {/* Header */}
-          <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="conteudos-header" style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                 <Sparkles size={20} style={{ color: '#2563eb' }} />
@@ -414,43 +414,45 @@ export default function ConteudosTarefasPage() {
           </div>
 
           {/* Barra de Filtros */}
-          <div style={{ background: '#fff', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <div style={{ width: '120px' }}>
-              <select 
-                className="form-input" 
-                style={{ height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}
-                value={filtroAno}
-                onChange={e => setFiltroAno(e.target.value)}
-              >
-                <option value="todos">Todos os Anos</option>
-                {(cfgCalendarioLetivo && cfgCalendarioLetivo.length > 0) ? (
-                  [...cfgCalendarioLetivo].sort((a,b) => Number(b.ano) - Number(a.ano)).map((c: any) => (
-                    <option key={c.id} value={c.ano}>{c.ano}</option>
-                  ))
-                ) : (
-                  <>
-                    <option value="2026">2026</option>
-                    <option value="2025">2025</option>
-                  </>
-                )}
-              </select>
+          <div className="conteudos-filter-bar" style={{ background: '#fff', padding: '16px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+            <div className="conteudos-filter-selects" style={{ display: 'flex', gap: '16px' }}>
+              <div style={{ width: '120px' }}>
+                <select 
+                  className="form-input" 
+                  style={{ height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                  value={filtroAno}
+                  onChange={e => setFiltroAno(e.target.value)}
+                >
+                  <option value="todos">Todos os Anos</option>
+                  {(cfgCalendarioLetivo && cfgCalendarioLetivo.length > 0) ? (
+                    [...cfgCalendarioLetivo].sort((a,b) => Number(b.ano) - Number(a.ano)).map((c: any) => (
+                      <option key={c.id} value={c.ano}>{c.ano}</option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="2026">2026</option>
+                      <option value="2025">2025</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div style={{ width: '150px' }}>
+                <select 
+                  className="form-input" 
+                  style={{ height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                  value={filtroSeg}
+                  onChange={e => setFiltroSeg(e.target.value)}
+                >
+                  <option value="todos">Todos Segmentos</option>
+                  {cfgNiveisEnsino.map((n: any) => (
+                    <option key={n.id} value={n.nome}>{n.nome}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div style={{ width: '150px' }}>
-              <select 
-                className="form-input" 
-                style={{ height: '40px', borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px' }}
-                value={filtroSeg}
-                onChange={e => setFiltroSeg(e.target.value)}
-              >
-                <option value="todos">Todos Segmentos</option>
-                {cfgNiveisEnsino.map((n: any) => (
-                  <option key={n.id} value={n.nome}>{n.nome}</option>
-                ))}
-              </select>
-            </div>
-
-            <div style={{ flex: 1, position: 'relative' }}>
+            <div className="conteudos-filter-search" style={{ flex: 1, position: 'relative' }}>
               <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
               <input 
                 className="form-input" 
@@ -463,7 +465,7 @@ export default function ConteudosTarefasPage() {
           </div>
 
           {/* Tabela de Turmas */}
-          <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          <div className="conteudos-table-container" style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>

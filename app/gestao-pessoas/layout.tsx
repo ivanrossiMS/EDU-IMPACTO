@@ -165,7 +165,7 @@ function GestaoPessoasLayoutInner({ children }: { children: React.ReactNode }) {
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#f8fafc' }}>
       <PeopleSidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: isMobile ? 80 : 0 }}>
+        <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 85px)' : 0 }}>
           {children}
         </main>
       </div>

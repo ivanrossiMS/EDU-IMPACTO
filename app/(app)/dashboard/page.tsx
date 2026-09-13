@@ -32,8 +32,8 @@ function Sparkline({ color, path }: { color: string, path: string }) {
   const endY = pathParts[pathParts.length - 1]
 
   return (
-    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '40px' }}>
-      <svg width="100%" height="40" viewBox="0 0 100 40" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+    <div className="dashboard-sparkline-container">
+      <svg width="100%" height="100%" viewBox="0 0 100 40" preserveAspectRatio="none" style={{ overflow: 'visible', display: 'block' }}>
         <defs>
           <linearGradient id={`grad-${color.replace('#','')}`} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity="0.2" />
@@ -234,24 +234,14 @@ export default function DashboardPage() {
   // Orders summary logic moved to backend API (/api/administrativo/pedidos-summary)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
+    <div className="dashboard-container">
 
       {/* ═══ Top Row (4 KPIs) ══════════════════════════════════════════════ */}
       <div className="dashboard-kpi-grid">
         {kpiCards.map((kpi) => (
           <div 
             key={kpi.label} 
-            style={{ 
-              background: 'hsl(var(--bg-surface))',
-              padding: '24px', 
-              borderRadius: '24px',
-              position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
-              border: '1px solid hsl(var(--border-subtle))',
-              display: 'flex', flexDirection: 'column',
-              minHeight: '160px'
-            }}
+            className="dashboard-kpi-card"
           >
             {/* Top Accent Gradient Bar */}
             <div style={{
@@ -263,24 +253,21 @@ export default function DashboardPage() {
               background: kpi.gradient,
             }} />
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
-              <div>
-                <span style={{ fontSize: '13px', fontWeight: 800, color: kpi.color, display: 'block', marginBottom: '8px' }}>
+            <div className="dashboard-kpi-content">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span className="dashboard-kpi-label" style={{ color: kpi.color }}>
                   {kpi.label}
                 </span>
-                <div style={{ fontSize: '38px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif', lineHeight: 1 }}>
-                  {loadKpis ? <Loader2 className="animate-spin" size={32} color={kpi.color} style={{ margin: '3px 0' }} /> : kpi.value}
+                <div className="dashboard-kpi-value">
+                  {loadKpis ? <Loader2 className="animate-spin" size={24} color={kpi.color} style={{ margin: '3px 0' }} /> : kpi.value}
                 </div>
-                <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 600, marginTop: '10px' }}>
+                <div className="dashboard-kpi-sub">
                   {kpi.sub}
                 </div>
               </div>
-              <div style={{ 
-                width: 48, height: 48, 
+              <div className="dashboard-kpi-icon" style={{ 
                 background: kpi.bgIcon,
-                borderRadius: '16px', 
                 border: `1px solid ${kpi.color}25`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', 
                 color: kpi.color,
                 boxShadow: `0 8px 16px ${kpi.color}15`
               }}>
@@ -297,26 +284,10 @@ export default function DashboardPage() {
       <div className="dashboard-main-grid">
 
         {/* ── Coluna 1: Pedido de Livros ──────────────────────────── */}
-        <div style={{ 
-          background: 'hsl(var(--bg-surface))', 
-          borderRadius: '24px', 
-          overflow: 'hidden', 
-          boxShadow: '0 4px 20px rgba(0,0,0,0.03)', 
-          border: '1px solid hsl(var(--border-subtle))', 
-          display: 'flex', 
-          flexDirection: 'column', 
-          height: '100%' 
-        }}>
+        <div className="dashboard-card" style={{ height: '100%' }}>
           {/* Header Ultra Moderno com Gradiente */}
-          <div style={{ 
+          <div className="dashboard-card-header" style={{ 
             background: 'linear-gradient(135deg, #1e3a8a 0%, #2563eb 45%, #06b6d4 100%)', 
-            padding: '16px 22px', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
-            position: 'relative', 
-            overflow: 'hidden',
-            borderBottom: '1px solid rgba(255,255,255,0.15)'
           }}>
             {/* Efeito sutil de luz glass reflexiva */}
             <div style={{ 
@@ -380,7 +351,7 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+          <div className="dashboard-card-body">
             {loadOrders ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                 <Loader2 className="animate-spin" size={32} color="#3b82f6" />
@@ -388,21 +359,21 @@ export default function DashboardPage() {
             ) : (
               <>
             <div className="dashboard-books-grid">
-              <div style={{ background: 'hsl(var(--bg-elevated))', padding: '16px', borderRadius: '16px' }}>
-                <div style={{ fontSize: '11px', color: 'hsl(var(--text-secondary))', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Total</div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: 'hsl(var(--text-primary))', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.totalOrders}</div>
+              <div className="dashboard-book-stat" style={{ background: 'hsl(var(--bg-elevated))' }}>
+                <div className="dashboard-book-stat-label" style={{ color: 'hsl(var(--text-secondary))' }}>Total</div>
+                <div className="dashboard-book-stat-value" style={{ color: 'hsl(var(--text-primary))' }}>{ordersSummary.totalOrders}</div>
               </div>
-              <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '16px', borderRadius: '16px' }}>
-                <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Pendentes</div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: '#ef4444', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.pendenteCount}</div>
+              <div className="dashboard-book-stat" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
+                <div className="dashboard-book-stat-label" style={{ color: '#ef4444' }}>Pendentes</div>
+                <div className="dashboard-book-stat-value" style={{ color: '#ef4444' }}>{ordersSummary.pendenteCount}</div>
               </div>
-              <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '16px', borderRadius: '16px' }}>
-                <div style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Pedido Feito</div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: '#f59e0b', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.preparadoCount}</div>
+              <div className="dashboard-book-stat" style={{ background: 'rgba(245, 158, 11, 0.1)' }}>
+                <div className="dashboard-book-stat-label" style={{ color: '#f59e0b' }}>Pedido Feito</div>
+                <div className="dashboard-book-stat-value" style={{ color: '#f59e0b' }}>{ordersSummary.preparadoCount}</div>
               </div>
-              <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '16px', borderRadius: '16px' }}>
-                <div style={{ fontSize: '11px', color: '#10b981', fontWeight: 800, textTransform: 'uppercase', marginBottom: 4 }}>Entregues</div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: '#10b981', fontFamily: 'Outfit, sans-serif' }}>{ordersSummary.entregueCount}</div>
+              <div className="dashboard-book-stat" style={{ background: 'rgba(16, 185, 129, 0.1)' }}>
+                <div className="dashboard-book-stat-label" style={{ color: '#10b981' }}>Entregues</div>
+                <div className="dashboard-book-stat-value" style={{ color: '#10b981' }}>{ordersSummary.entregueCount}</div>
               </div>
             </div>
 
@@ -428,7 +399,7 @@ export default function DashboardPage() {
 
                   return (
                     <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0px', background: 'transparent' }}>
-                      <div style={{ width: 44, height: 44, borderRadius: '16px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: iconColor }}>
+                      <div className="dashboard-recent-icon" style={{ background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: iconColor }}>
                         <IconComponent size={20} strokeWidth={2} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0, borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 14, paddingTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -461,17 +432,10 @@ export default function DashboardPage() {
         {/* ── Coluna Central: Tarefas e Agenda ──────────────────────────── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {/* Tarefas */}
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', border: '1px solid hsl(var(--border-subtle))' }}>
+          <div className="dashboard-card">
             {/* Header Ultra Moderno com Gradiente */}
-            <div style={{ 
+            <div className="dashboard-card-header" style={{ 
               background: 'linear-gradient(135deg, #065f46 0%, #059669 45%, #14b8a6 100%)', 
-              padding: '16px 22px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              position: 'relative', 
-              overflow: 'hidden',
-              borderBottom: '1px solid rgba(255,255,255,0.15)'
             }}>
               {/* Efeito sutil de luz glass reflexiva */}
               <div style={{ 
@@ -556,14 +520,14 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div className="dashboard-card-body">
               {loadContext ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                   <Loader2 className="animate-spin" size={32} color="#10b981" />
                 </div>
               ) : (
                 <>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
+              <div className="dashboard-tab-bar" style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
             <div 
               onClick={() => setFiltroTarefas('todas')}
               style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, background: filtroTarefas === 'todas' ? 'rgba(139, 92, 246, 0.1)' : 'transparent', padding: filtroTarefas === 'todas' ? '6px 14px' : '6px 0', borderRadius: '20px', transition: 'all 0.2s' }}
@@ -622,17 +586,10 @@ export default function DashboardPage() {
           </div>
 
         {/* ── Coluna 3: Agenda ──────────────────────────── */}
-        <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', border: '1px solid hsl(var(--border-subtle))' }}>
+        <div className="dashboard-card" style={{ height: '100%', position: 'relative' }}>
           {/* Header Ultra Moderno com Gradiente */}
-          <div style={{ 
+          <div className="dashboard-card-header" style={{ 
             background: 'linear-gradient(135deg, #4c1d95 0%, #7c3aed 45%, #a855f7 100%)', 
-            padding: '16px 22px', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
-            position: 'relative', 
-            overflow: 'hidden',
-            borderBottom: '1px solid rgba(255,255,255,0.15)'
           }}>
             {/* Efeito sutil de luz glass reflexiva */}
             <div style={{ 
@@ -696,7 +653,7 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+          <div className="dashboard-card-body">
             {loadContext ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                 <Loader2 className="animate-spin" size={32} color="#8b5cf6" />
@@ -704,7 +661,7 @@ export default function DashboardPage() {
             ) : (
               <>
           {/* Week View */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))', overflowX: 'auto', gap: 12 }} className="no-scrollbar">
+          <div className="dashboard-agenda-strip no-scrollbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid hsl(var(--border-subtle))', overflowX: 'auto', gap: 12 }}>
             {[0, 1, 2, 3, 4, 5, 6].map((offset) => {
               const d = new Date(hoje);
               d.setDate(hoje.getDate() + offset);
@@ -773,17 +730,10 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           
           {/* Aniversariantes */}
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column' }}>
+          <div className="dashboard-card">
             {/* Header Ultra Moderno com Gradiente */}
-            <div style={{ 
+            <div className="dashboard-card-header" style={{ 
               background: 'linear-gradient(135deg, #9d174d 0%, #ec4899 45%, #f43f5e 100%)', 
-              padding: '16px 22px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              position: 'relative', 
-              overflow: 'hidden',
-              borderBottom: '1px solid rgba(255,255,255,0.15)'
             }}>
               {/* Efeito sutil de luz glass reflexiva */}
               <div style={{ 
@@ -846,7 +796,7 @@ export default function DashboardPage() {
               </button>
             </div>
 
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div className="dashboard-card-body">
               {loadAniv ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                   <Loader2 className="animate-spin" size={32} color="#ec4899" />
@@ -891,17 +841,10 @@ export default function DashboardPage() {
           </div>
 
           {/* Ocorrências Recentes */}
-          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', display: 'flex', flexDirection: 'column' }}>
+          <div className="dashboard-card">
             {/* Header Ultra Moderno com Gradiente */}
-            <div style={{ 
+            <div className="dashboard-card-header" style={{ 
               background: 'linear-gradient(135deg, #9a3412 0%, #ea580c 45%, #f59e0b 100%)', 
-              padding: '16px 22px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              position: 'relative', 
-              overflow: 'hidden',
-              borderBottom: '1px solid rgba(255,255,255,0.15)'
             }}>
               {/* Efeito sutil de luz glass reflexiva */}
               <div style={{ 
@@ -963,7 +906,7 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+            <div className="dashboard-card-body">
               {loadOcorr ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0' }}>
                   <Loader2 className="animate-spin" size={32} color="#f59e0b" />
@@ -1023,7 +966,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Active Users Banner ═══════════════════════════════════════════ */}
-      <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: '24px', padding: '32px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid hsl(var(--border-subtle))', flexWrap: 'wrap', gap: 24, position: 'relative', overflow: 'hidden' }}>
+      <div className="dashboard-engagement-banner">
         {/* Top Accent Bar */}
         <div style={{
           position: 'absolute',
@@ -1039,30 +982,30 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 32, flex: 1 }}>
+        <div className="dashboard-engagement-left">
           
           {/* Circular Progress */}
-          <div style={{ position: 'relative', width: 90, height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="dashboard-engagement-circle">
             <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
               <circle cx="50" cy="50" r="45" fill="none" stroke="#f1f5f9" strokeWidth="8" />
               <circle cx="50" cy="50" r="45" fill="none" stroke="#8b5cf6" strokeWidth="8" strokeDasharray="282.74" strokeDashoffset={282.74 - (282.74 * (statsUsuarios.totalGeral > 0 ? statsUsuarios.total / statsUsuarios.totalGeral : 0))} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease' }} />
             </svg>
             <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: '20px', fontWeight: 900, color: '#4c1d95', fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.totalGeral > 0 ? Math.round((statsUsuarios.total / statsUsuarios.totalGeral) * 100) : 0}<span style={{ fontSize: '12px' }}>%</span></span>
+              <span className="dashboard-engagement-pct" style={{ fontSize: '20px', fontWeight: 900, color: '#4c1d95', fontFamily: 'Outfit, sans-serif' }}>{statsUsuarios.totalGeral > 0 ? Math.round((statsUsuarios.total / statsUsuarios.totalGeral) * 100) : 0}<span style={{ fontSize: '12px' }}>%</span></span>
             </div>
           </div>
 
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 8 }}>Engajamento do Sistema</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <div style={{ fontSize: '32px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: '#6d28d9' }}>{statsUsuarios.total}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="dashboard-engagement-title" style={{ fontSize: '14px', fontWeight: 800, color: 'hsl(var(--text-primary))', marginBottom: 8 }}>Engajamento do Sistema</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <div className="dashboard-engagement-count" style={{ fontSize: '32px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: '#6d28d9' }}>{statsUsuarios.total}</div>
               <div style={{ fontSize: '14px', fontWeight: 600, color: 'hsl(var(--text-secondary))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.totalGeral} ativos</div>
             </div>
-            <div style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', marginTop: 6, fontWeight: 600 }}>Já realizaram o primeiro acesso à plataforma</div>
+            <div className="dashboard-engagement-sub" style={{ fontSize: '12px', color: 'hsl(var(--text-muted))', marginTop: 6, fontWeight: 600 }}>Já realizaram o primeiro acesso à plataforma</div>
           </div>
 
           {/* Wavy Line decoration */}
-          <div style={{ flex: 1, height: 60, marginLeft: 20, position: 'relative' }}>
+          <div className="dashboard-engagement-wave">
             <svg viewBox="0 0 200 60" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
               <defs>
                 <linearGradient id="wave-grad" x1="0" y1="0" x2="0" y2="1">
@@ -1077,40 +1020,40 @@ export default function DashboardPage() {
 
         </div>
         
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <div className="dashboard-engagement-cards">
           {/* Card Colaboradores */}
-          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)', position: 'relative', overflow: 'hidden' }}>
+          <div className="dashboard-role-card">
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #7c3aed, #a855f7)' }} />
-            <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} color="#8b5cf6" /> Colaboradores</div>
+            <div className="dashboard-role-label" style={{ color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={14} color="#8b5cf6" /> Colaboradores</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#4c1d95' }}>{statsUsuarios.colab}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
+              <div className="dashboard-role-value" style={{ fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#4c1d95' }}>{statsUsuarios.colab}</div>
+              <div className="dashboard-role-total" style={{ fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.colabTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+            <div className="dashboard-role-progress" style={{ width: '100%', background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.colabTotal > 0 ? (statsUsuarios.colab / statsUsuarios.colabTotal) * 100 : 0}%`, height: '100%', background: '#8b5cf6' }} />
             </div>
           </div>
           {/* Card Alunos */}
-          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)', position: 'relative', overflow: 'hidden' }}>
+          <div className="dashboard-role-card">
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #2563eb, #60a5fa)' }} />
-            <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} color="#3b82f6" /> Alunos</div>
+            <div className="dashboard-role-label" style={{ color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><GraduationCap size={14} color="#3b82f6" /> Alunos</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#1d4ed8' }}>{statsUsuarios.alunos}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
+              <div className="dashboard-role-value" style={{ fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#1d4ed8' }}>{statsUsuarios.alunos}</div>
+              <div className="dashboard-role-total" style={{ fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.alunosTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+            <div className="dashboard-role-progress" style={{ width: '100%', background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.alunosTotal > 0 ? (statsUsuarios.alunos / statsUsuarios.alunosTotal) * 100 : 0}%`, height: '100%', background: '#3b82f6' }} />
             </div>
           </div>
           {/* Card Responsáveis */}
-          <div style={{ background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: '20px', padding: '16px 20px', minWidth: 160, boxShadow: '0 4px 10px rgba(0,0,0,0.01)', position: 'relative', overflow: 'hidden' }}>
+          <div className="dashboard-role-card">
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #059669, #34d399)' }} />
-            <div style={{ fontSize: '12px', color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color="#10b981" /> Responsáveis</div>
+            <div className="dashboard-role-label" style={{ color: 'hsl(var(--text-secondary))', fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color="#10b981" /> Responsáveis</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-              <div style={{ fontSize: '24px', fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#047857' }}>{statsUsuarios.resps}</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
+              <div className="dashboard-role-value" style={{ fontWeight: 900, fontFamily: 'Outfit, sans-serif', color: '#047857' }}>{statsUsuarios.resps}</div>
+              <div className="dashboard-role-total" style={{ fontWeight: 600, color: 'hsl(var(--text-muted))', fontFamily: 'Outfit, sans-serif' }}>/ {statsUsuarios.respsTotal}</div>
             </div>
-            <div style={{ width: '100%', height: 4, background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
+            <div className="dashboard-role-progress" style={{ width: '100%', background: 'hsl(var(--bg-hover))', borderRadius: 2, marginTop: 12, overflow: 'hidden' }}>
               <div style={{ width: `${statsUsuarios.respsTotal > 0 ? (statsUsuarios.resps / statsUsuarios.respsTotal) * 100 : 0}%`, height: '100%', background: '#10b981' }} />
             </div>
           </div>

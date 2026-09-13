@@ -731,7 +731,33 @@ function TurmasBadgeList({ turmas }: { turmas: string[] }) {
            .ad-calendar-summary-cards { grid-template-columns: 1fr 1fr !important; }
         }
         @media (max-width: 640px) {
-           .ad-calendar-summary-cards { grid-template-columns: 1fr !important; }
+           .ad-calendar-summary-cards { 
+             grid-template-columns: repeat(2, 1fr) !important; 
+             gap: 8px !important;
+             margin-bottom: 16px !important;
+           }
+           .ad-calendar-summary-cards .calendar-card {
+             padding: 10px 12px !important;
+             gap: 10px !important;
+             border-radius: 14px !important;
+           }
+           .ad-calendar-summary-cards .calendar-card > div:first-child {
+             width: 36px !important;
+             height: 36px !important;
+             min-width: 36px !important;
+             border-radius: 10px !important;
+           }
+           .ad-calendar-summary-cards .calendar-card > div:first-child svg {
+             width: 18px !important;
+             height: 18px !important;
+           }
+           .ad-calendar-summary-cards .calendar-card div:last-child > div:first-child {
+             font-size: 20px !important;
+           }
+           .ad-calendar-summary-cards .calendar-card div:last-child > div:last-child {
+             font-size: 11px !important;
+             margin-top: 2px !important;
+           }
         }
         .calendar-card {
            background: #ffffff;
