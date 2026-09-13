@@ -218,23 +218,62 @@ export function ComunicadoViewModal({
   const [showDestinatariosModal, setShowDestinatariosModal] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [viewportHeight, setViewportHeight] = useState('100%')
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [keyboardOffset, setKeyboardOffset] = useState(0)
 
+  // Scroll locking on document body/html while modal is active
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const originalBodyOverflow = document.body.style.overflow
+    const originalHtmlOverflow = document.documentElement.style.overflow
+
+    document.body.style.overflow = 'hidden'
+    document.documentElement.style.overflow = 'hidden'
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow
+      document.documentElement.style.overflow = originalHtmlOverflow
+    }
+  }, [])
+
+  // Viewport and virtual keyboard listener for mobile (especially iOS Safari)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const onResize = () => {
+
+    const handleViewportChange = () => {
       if (window.visualViewport) {
-        setViewportHeight(`${window.visualViewport.height}px`)
+        // Difference between outer window and visualViewport
+        const diff = Math.max(0, Math.round(window.innerHeight - window.visualViewport.height))
+        // Only consider it a virtual keyboard if difference > 50px
+        setKeyboardOffset(diff > 50 ? diff : 0)
+      } else {
+        setKeyboardOffset(0)
       }
     }
+
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', onResize)
-      onResize() // initial check
-    } else {
-      setViewportHeight(`${window.innerHeight}px`)
+      window.visualViewport.addEventListener('resize', handleViewportChange)
+      window.visualViewport.addEventListener('scroll', handleViewportChange)
+      handleViewportChange()
     }
-    return () => window.visualViewport?.removeEventListener('resize', onResize)
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportChange)
+        window.visualViewport.removeEventListener('scroll', handleViewportChange)
+      }
+    }
   }, [])
+
+  // Safely scroll comments without moving the layout viewport or window
+  const scrollToBottom = (smooth = true) => {
+    if (bodyRef.current) {
+      bodyRef.current.scrollTo({
+        top: bodyRef.current.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      })
+    }
+  }
 
 
   const adminThreads = useMemo(() => {
@@ -422,7 +461,7 @@ export function ComunicadoViewModal({
         setMessages(prev => [...prev, data])
         setNewMessage('')
         setPendingAnexos([])
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+        setTimeout(() => scrollToBottom(true), 100)
       }
     } catch (e) {
       console.error('Error sending message', e)
@@ -551,11 +590,17 @@ export function ComunicadoViewModal({
         exit={{opacity: 0}} 
         style={{ 
           position: 'fixed', 
-          top: 0, left: 0, right: 0, 
-          height: viewportHeight,
-          background: 'rgba(15, 23, 42, 0.4)', 
-          backdropFilter: 'blur(8px)', zIndex: 99999, 
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'center'
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(15, 23, 42, 0.5)', 
+          backdropFilter: 'blur(8px)', 
+          WebkitBackdropFilter: 'blur(8px)',
+          zIndex: 99999, 
+          display: 'flex', 
+          alignItems: 'flex-start', 
+          justifyContent: 'center',
+          overflow: 'hidden'
         }} 
       >
         <style dangerouslySetInnerHTML={{__html: `
@@ -569,12 +614,24 @@ export function ComunicadoViewModal({
             flex-direction: column;
             box-shadow: 0 24px 64px rgba(0,0,0,0.2);
             overflow: hidden;
+            position: relative;
           }
           @media (min-width: 768px) {
             .cvm-modal-container {
               border-radius: 24px;
               max-height: 92vh;
+              height: 92vh;
               margin-top: 4vh;
+            }
+          }
+          @media (max-width: 767px) {
+            .cvm-modal-container {
+              width: 100% !important;
+              height: 100% !important;
+              max-width: 100% !important;
+              max-height: 100% !important;
+              border-radius: 0 !important;
+              margin: 0 !important;
             }
           }
           .cvm-header {
@@ -588,7 +645,7 @@ export function ComunicadoViewModal({
             color: #fff;
             position: sticky;
             top: 0;
-            z-index: 10;
+            z-index: 20;
             overflow: hidden;
           }
           .cvm-header-bg {
@@ -618,11 +675,19 @@ export function ComunicadoViewModal({
           .cvm-body {
             flex: 1;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
             padding: 32px 24px;
             background: #f8fafc;
             display: flex;
             flex-direction: column;
             gap: 24px;
+          }
+          @media (max-width: 767px) {
+            .cvm-body {
+              padding: 20px 16px;
+              gap: 16px;
+            }
           }
           .cvm-footer {
             flex-shrink: 0;
@@ -632,10 +697,11 @@ export function ComunicadoViewModal({
             padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
             position: sticky;
             bottom: 0;
-            z-index: 10;
+            z-index: 20;
             display: flex;
             align-items: center;
             gap: 12px;
+            box-shadow: 0 -4px 12px rgba(0,0,0,0.03);
           }
           .cvm-avatar-area {
             display: flex;
@@ -660,26 +726,40 @@ export function ComunicadoViewModal({
             display: flex;
             align-items: center;
             padding: 4px 16px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+          }
+          .cvm-input-area:focus-within {
+            background: #ffffff;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
           }
           .cvm-input-area input {
             flex: 1;
             background: transparent;
             border: none;
             outline: none;
-            font-size: 14px;
+            font-size: 16px;
             padding: 10px 0;
+            color: #0f172a;
+          }
+          .cvm-input-area input::placeholder {
+            color: #94a3b8;
+            font-size: 14px;
           }
         `}} />
 
         <motion.div 
           className="cvm-modal-container"
           style={{ 
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            paddingBottom: keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+            transition: 'padding-bottom 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
           }} 
-          initial={{scale: 0.95, y: 20}} 
-          animate={{scale: 1, y: 0}} 
-          exit={{scale: 0.95, y: 20}} 
-          transition={{ type: "spring", stiffness: 300, damping: 25 }}
+          initial={{scale: 0.98, opacity: 0}} 
+          animate={{scale: 1, opacity: 1}} 
+          exit={{scale: 0.98, opacity: 0}} 
+          transition={{ duration: 0.2, ease: "easeOut" }}
         >
           {/* HEADER */}
           <div className="cvm-header">
@@ -725,7 +805,7 @@ export function ComunicadoViewModal({
           </div>
 
           {/* BODY */}
-          <div className="cvm-body">
+          <div className="cvm-body" ref={bodyRef}>
             
             {/* Title & Text Content Wrapped in Rounded Card */}
             <div style={{
@@ -1213,11 +1293,11 @@ export function ComunicadoViewModal({
                   value={newMessage}
                   disabled={isSending}
                   onChange={e => setNewMessage(e.target.value)}
-                  onFocus={(e) => {
+                  onFocus={() => {
                     setIsInputFocused(true);
                     setTimeout(() => {
-                      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                    }, 300);
+                      scrollToBottom(true);
+                    }, 250);
                   }}
                   onBlur={() => setIsInputFocused(false)}
                   onKeyDown={e => {

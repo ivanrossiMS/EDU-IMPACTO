@@ -1200,82 +1200,185 @@ export default function ADMomentosPage() {
         <div className="floating-icon" style={{ top: '52%', left: '12%', color: 'rgba(245, 158, 11, 0.35)', animation: 'floatRandom 14s ease-in-out infinite 2.8s' }}><Star size={28} fill="rgba(245, 158, 11, 0.15)" /></div>
       </div>
 
+      <style dangerouslySetInnerHTML={{ __html: `
+        .ad-momentos-header {
+          margin: 20px 16px 16px 16px !important;
+          padding: 16px 22px !important;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(246, 248, 255, 0.86) 100%) !important;
+          backdrop-filter: blur(20px) !important;
+          -webkit-backdrop-filter: blur(20px) !important;
+          border-radius: 22px !important;
+          border: 1.5px solid rgba(255, 255, 255, 0.95) !important;
+          box-shadow: 0 14px 34px -8px rgba(99, 102, 241, 0.12), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 0 #ffffff !important;
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+          gap: 16px !important;
+          position: relative !important;
+          overflow: visible !important;
+          z-index: 30 !important;
+        }
+
+        .ad-momentos-icon-box {
+          background: linear-gradient(135deg, #ffffff 0%, #e0e7ff 100%) !important;
+          width: 42px !important;
+          height: 42px !important;
+          border-radius: 14px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border: 1.5px solid rgba(255, 255, 255, 1) !important;
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12) !important;
+          flex-shrink: 0 !important;
+          font-size: 20px !important;
+        }
+
+        .ad-badge-ambiente-protegido {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 4px !important;
+          padding: 2.5px 8px !important;
+          border-radius: 999px !important;
+          background: rgba(99, 102, 241, 0.08) !important;
+          border: 1px solid rgba(99, 102, 241, 0.2) !important;
+          color: #4f46e5 !important;
+          font-size: 10px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.02em !important;
+          cursor: pointer !important;
+          transition: all 0.2s ease !important;
+          box-shadow: 0 1px 2px rgba(99, 102, 241, 0.05) !important;
+        }
+        .ad-badge-ambiente-protegido:hover {
+          background: rgba(99, 102, 241, 0.16) !important;
+          border-color: rgba(99, 102, 241, 0.35) !important;
+          transform: translateY(-0.5px) !important;
+        }
+
+        .ad-momentos-title {
+          font-size: 20px !important;
+          font-weight: 900 !important;
+          font-family: 'Outfit', sans-serif !important;
+          margin: 0 !important;
+          letter-spacing: -0.02em !important;
+          line-height: 1.25 !important;
+          background: linear-gradient(135deg, #0f172a 0%, #4f46e5 100%) !important;
+          -webkit-background-clip: text !important;
+          -webkit-text-fill-color: transparent !important;
+        }
+
+        .ad-momentos-desc {
+          font-size: 12.5px !important;
+          color: #64748b !important;
+          margin: 3px 0 0 0 !important;
+          font-family: 'Outfit', sans-serif !important;
+          line-height: 1.4 !important;
+          font-weight: 500 !important;
+        }
+
+        .ad-momentos-btn-novo {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          height: 32px !important;
+          min-height: 32px !important;
+          border-radius: 999px !important;
+          padding: 0 14px !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.02em !important;
+          background: linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #ec4899 100%) !important;
+          color: #ffffff !important;
+          border: none !important;
+          box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+          cursor: pointer !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          white-space: nowrap !important;
+          flex-shrink: 0 !important;
+        }
+        .ad-momentos-btn-novo:hover {
+          transform: translateY(-1px) scale(1.02) !important;
+          box-shadow: 0 6px 18px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+        }
+        .ad-momentos-btn-novo:active {
+          transform: scale(0.97) !important;
+        }
+
+        @media (max-width: 768px) {
+          .ad-momentos-header {
+            margin: 12px 10px 14px 10px !important;
+            padding: 12px 14px !important;
+            border-radius: 18px !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 8px 10px !important;
+          }
+          .ad-momentos-icon-box {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 11px !important;
+            font-size: 18px !important;
+          }
+          .ad-badge-ambiente-protegido {
+            font-size: 9px !important;
+            padding: 1.5px 6px !important;
+          }
+          .ad-momentos-title {
+            font-size: 15px !important;
+            letter-spacing: -0.01em !important;
+            line-height: 1.2 !important;
+          }
+          .ad-momentos-desc {
+            font-size: 11.5px !important;
+            line-height: 1.35 !important;
+          }
+          .ad-momentos-btn-novo {
+            width: auto !important;
+            height: 30px !important;
+            min-height: 30px !important;
+            padding: 0 12px !important;
+            font-size: 11.5px !important;
+            border-radius: 999px !important;
+          }
+        }
+      `}} />
+
       <div style={{ position: 'relative', zIndex: 10 }}>
         {/* ULTRA MODERN HEADER CARD */}
-        <div className="ad-momentos-header" style={{ 
-          margin: '20px 16px 16px 16px',
-          padding: '20px 24px',
-          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92))',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          borderRadius: '24px',
-          border: '1px solid rgba(255, 255, 255, 0.9)',
-          boxShadow: '0 16px 36px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255,255,255,1)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '16px',
-          position: 'relative',
-          overflow: 'visible',
-          zIndex: 30
-        }}>
+        <div className="ad-momentos-header">
           {/* Background Gradients Layer */}
           <div style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', overflow: 'hidden', pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(135deg, rgba(99,102,241,0.03) 0%, rgba(236,72,153,0.03) 50%, rgba(245,158,11,0.02) 100%)', pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', background: 'linear-gradient(180deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b)', backgroundSize: '100% 200%', animation: 'gradientMove 3s ease infinite' }} />
+            <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: 'linear-gradient(180deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b)' }} />
           </div>
           
-          {/* Main Info: Icon + Title + Description */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', position: 'relative', zIndex: 1, minWidth: 0, flex: 1 }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(236,72,153,0.12))',
-              width: 50, height: 50, borderRadius: '16px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '1px solid rgba(255,255,255,0.7)',
-              boxShadow: '0 8px 16px rgba(99,102,241,0.1)',
-              flexShrink: 0
-            }}>
-              <span style={{ fontSize: 26, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}>📸</span>
+          {/* Main Info: Icon + Badge + Title + Description */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', zIndex: 1, minWidth: 0, flex: 1 }}>
+            <div className="ad-momentos-icon-box">
+              <span>📸</span>
             </div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <span style={{ 
-                  fontSize: 10, 
-                  fontWeight: 800, 
-                  letterSpacing: '0.05em', 
-                  textTransform: 'uppercase', 
-                  color: '#6366f1',
-                  background: 'rgba(99, 102, 241, 0.08)',
-                  padding: '2px 8px',
-                  borderRadius: 6
-                }}>
-                  Mural Escolar
-                </span>
+                <button
+                  type="button"
+                  onClick={triggerPrivacyModal}
+                  title="Informações de Privacidade e Proteção contra Prints"
+                  className="ad-badge-ambiente-protegido"
+                >
+                  <ShieldAlert size={11} strokeWidth={2.5} />
+                  <span>Ambiente Protegido</span>
+                </button>
               </div>
-              <h2 className="ad-momentos-title" style={{ 
-                fontSize: 'clamp(18px, 3.5vw, 26px)', 
-                fontWeight: 900, 
-                fontFamily: 'Outfit, sans-serif', 
-                margin: 0, 
-                letterSpacing: '-0.02em', 
-                lineHeight: 1.25,
-                background: 'linear-gradient(135deg, #0f172a 0%, #4f46e5 100%)', 
-                WebkitBackgroundClip: 'text', 
-                WebkitTextFillColor: 'transparent',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis'
-              }}>
+
+              <h2 className="ad-momentos-title">
                 {isMasterAdmin ? 'Fotos/Vídeos Institucionais' : 'Fotos/Vídeos da Equipe Escolar'}
               </h2>
-              <p className="ad-momentos-desc" style={{ 
-                fontSize: 13, 
-                color: '#64748b', 
-                margin: '3px 0 0 0', 
-                fontFamily: 'Outfit, sans-serif',
-                lineHeight: 1.4,
-                fontWeight: 500
-              }}>
+
+              <p className="ad-momentos-desc ad-desktop-only">
                 {isMasterAdmin ? (
                   selectedTurmaId === 'all' ? (
                     <>Publicações da <strong style={{ color: '#4f46e5', fontWeight: 700 }}>Equipe Escolar</strong> e de todas as turmas.</>
@@ -1293,81 +1396,35 @@ export default function ADMomentosPage() {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <button
+          {/* Action Button: Compact + Novo */}
+          {!isMirroring && (
+            <button 
+              onClick={() => setShowModal(true)} 
+              className="ad-momentos-btn-novo"
               type="button"
-              onClick={triggerPrivacyModal}
-              title="Informações de Privacidade e Proteção contra Prints"
-              style={{
-                height: 48,
-                padding: '0 16px',
-                borderRadius: 16,
-                background: 'rgba(99, 102, 241, 0.12)',
-                border: '1px solid rgba(99, 102, 241, 0.28)',
-                color: '#4f46e5',
-                fontWeight: 700,
-                fontSize: 13,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                position: 'relative',
-                zIndex: 2
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)'
-                e.currentTarget.style.transform = 'translateY(-1px)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)'
-                e.currentTarget.style.transform = 'translateY(0)'
-              }}
             >
-              <ShieldAlert size={16} color="#4f46e5" />
-              <span>Ambiente Protegido</span>
-            </button>
-
-            {!isMirroring && (
-              <button 
-                onClick={() => setShowModal(true)} 
-                className="ad-momentos-btn-novo"
-              style={{
-                height: 48, 
-                padding: '0 22px', 
-                border: 'none', 
-                borderRadius: 16, 
-                cursor: 'pointer',
-                background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #ec4899 100%)',
-                color: '#fff', 
-                fontWeight: 700, 
-                fontSize: 14, 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                gap: 8,
-                boxShadow: '0 6px 20px rgba(124, 58, 237, 0.35)', 
-                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-                flexShrink: 0,
-                position: 'relative',
-                zIndex: 2
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-1px)'
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(124, 58, 237, 0.45)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(124, 58, 237, 0.35)'
-              }}
-            >
-              <Plus size={18} strokeWidth={2.5} /> 
-              <span>Novo Foto/Vídeo</span>
+              <Plus size={14} strokeWidth={2.5} /> 
+              <span className="ad-desktop-only">Novo Foto/Vídeo</span>
+              <span className="ad-mobile-only">Novo</span>
             </button>
           )}
-          </div>
+
+          {/* Mobile Description spanning under top row */}
+          <p className="ad-momentos-desc ad-mobile-only" style={{ width: '100%', margin: '4px 0 0 0', paddingLeft: 48 }}>
+            {isMasterAdmin ? (
+              selectedTurmaId === 'all' ? (
+                <>Publicações da <strong style={{ color: '#4f46e5', fontWeight: 700 }}>Equipe Escolar</strong> e de todas as turmas.</>
+              ) : (
+                <>Publicações de <strong style={{ color: '#4f46e5', fontWeight: 700 }}>{selectedFilterName}</strong>.</>
+              )
+            ) : (
+              selectedTurmaId === 'all' ? (
+                <>Fotos e vídeos compartilhados com seus grupos e enviados por você.</>
+              ) : (
+                <>Fotos e vídeos de <strong style={{ color: '#4f46e5', fontWeight: 700 }}>{selectedFilterName}</strong>.</>
+              )
+            )}
+          </p>
         </div>
 
         {/* FILTRO DE EXIBIÇÃO (Abaixo do card, antes dos momentos) */}

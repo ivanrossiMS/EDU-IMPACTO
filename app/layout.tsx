@@ -19,7 +19,8 @@ export const viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#0d1117'
+  themeColor: '#0d1117',
+  interactiveWidget: 'resizes-content'
 }
 
 import { GlobalNavigationLoader } from '@/components/layout/GlobalNavigationLoader'

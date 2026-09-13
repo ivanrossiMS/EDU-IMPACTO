@@ -1377,28 +1377,42 @@ select option {
   border-color: rgba(99, 102, 241, 0.3) !important;
 }
 
+.ad-mobile-only { display: none !important; }
+.ad-desktop-only { display: block !important; }
+
 @media (max-width: 768px) {
+  .ad-mobile-only { display: block !important; }
+  .ad-desktop-only { display: none !important; }
+
   .ad-momentos-header {
-    margin: 16px 12px 14px 12px !important;
-    padding: 16px 16px !important;
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 14px !important;
+    margin: 12px 10px 14px 10px !important;
+    padding: 12px 14px !important;
+    border-radius: 18px !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px 10px !important;
   }
   .ad-momentos-title {
-    font-size: 18px !important;
-    letter-spacing: -0.02em !important;
-    line-height: 1.25 !important;
+    font-size: 15px !important;
+    letter-spacing: -0.01em !important;
+    line-height: 1.2 !important;
   }
   .ad-momentos-desc {
-    font-size: 13px !important;
-    line-height: 1.4 !important;
+    font-size: 11.5px !important;
+    line-height: 1.35 !important;
   }
   .ad-momentos-btn-novo {
-    width: 100% !important;
+    width: auto !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    padding: 0 12px !important;
+    font-size: 11.5px !important;
+    border-radius: 999px !important;
   }
   .ad-momentos-filter-container {
-    margin: 0 12px 18px 12px !important;
+    margin: 0 10px 16px 10px !important;
   }
 }
 

@@ -81,27 +81,27 @@ const getAnexoType = (anexoStr: any) => {
   const { name, url, mime } = parsed;
   
   if (name.startsWith('Formulário:')) {
-    return { label: 'Formulário', icon: <FileText size={16} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
+    return { label: 'Formulário', icon: <FileText size={13} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
   }
   if (name.startsWith('Tarefa de Relatório:')) {
-    return { label: 'Tarefa de Relatório', icon: <ClipboardList size={16} strokeWidth={2} color="#10b981" />, color: 'rgba(16,185,129,0.1)', textColor: '#10b981' };
+    return { label: 'Tarefa de Relatório', icon: <ClipboardList size={13} strokeWidth={2} color="#10b981" />, color: 'rgba(16,185,129,0.1)', textColor: '#10b981' };
   }
   if (name.startsWith('Relatório:') || name.startsWith('Relatório Personalizado:') || url.startsWith('payload:')) {
-    return { label: 'Relatório', icon: <FileBarChart size={16} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
+    return { label: 'Relatório', icon: <FileBarChart size={13} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
   }
   if (name.toLowerCase().endsWith('.pdf')) {
-    return { label: 'PDF', icon: <FileText size={16} strokeWidth={2} color="#ef4444" />, color: 'rgba(239,68,68,0.1)', textColor: '#ef4444' };
+    return { label: 'PDF', icon: <FileText size={13} strokeWidth={2} color="#ef4444" />, color: 'rgba(239,68,68,0.1)', textColor: '#ef4444' };
   }
   const isImg = url.startsWith('data:image/') || mime.startsWith('image/') || name.toLowerCase().endsWith('.png') || name.toLowerCase().endsWith('.jpg') || name.toLowerCase().endsWith('.jpeg') || name.toLowerCase().endsWith('.webp') || name.toLowerCase().endsWith('.gif');
   if (isImg) {
-    return { label: 'Imagem', icon: <ImageIcon size={16} strokeWidth={2} color="#10b981" />, color: 'rgba(16,185,129,0.1)', textColor: '#10b981' };
+    return { label: 'Imagem', icon: <ImageIcon size={13} strokeWidth={2} color="#10b981" />, color: 'rgba(16,185,129,0.1)', textColor: '#10b981' };
   }
   const isVid = mime.startsWith('video/') || url.includes('.mov') || url.includes('.mp4') || name.toLowerCase().endsWith('.mov') || name.toLowerCase().endsWith('.mp4');
   if (isVid) {
-    return { label: 'Vídeo', icon: <Video size={16} strokeWidth={2} color="#f59e0b" />, color: 'rgba(245,158,11,0.1)', textColor: '#f59e0b' };
+    return { label: 'Vídeo', icon: <Video size={13} strokeWidth={2} color="#f59e0b" />, color: 'rgba(245,158,11,0.1)', textColor: '#f59e0b' };
   }
   
-  return { label: 'Anexo', icon: <Paperclip size={16} strokeWidth={2} color="#64748b" />, color: 'rgba(100,116,139,0.1)', textColor: '#64748b' };
+  return { label: 'Anexo', icon: <Paperclip size={13} strokeWidth={2} color="#64748b" />, color: 'rgba(100,116,139,0.1)', textColor: '#64748b' };
 };
 
 function ColaboradorComunicadosContent() {
@@ -845,16 +845,16 @@ function ColaboradorComunicadosContent() {
         }
         .ad-search-input-ultra {
           width: 100% !important;
-          height: 48px !important;
-          min-height: 48px !important;
-          padding-left: 48px !important;
-          padding-right: 44px !important;
+          height: 34px !important;
+          min-height: 34px !important;
+          padding-left: 36px !important;
+          padding-right: 32px !important;
           border-radius: 9999px !important;
-          border: 1.5px solid rgba(99, 102, 241, 0.2) !important;
-          background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(244, 246, 255, 0.85) 100%) !important;
-          backdrop-filter: blur(16px) !important;
-          box-shadow: 0 4px 18px -2px rgba(67, 24, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
-          font-size: 15px !important;
+          border: 1.5px solid rgba(203, 213, 225, 0.8) !important;
+          background: rgba(255, 255, 255, 0.85) !important;
+          backdrop-filter: blur(12px) !important;
+          box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+          font-size: 13px !important;
           font-weight: 500 !important;
           color: #0f172a !important;
           letter-spacing: -0.01em !important;
@@ -865,13 +865,130 @@ function ColaboradorComunicadosContent() {
         .ad-search-input-ultra::placeholder {
           color: #94a3b8 !important;
           font-weight: 400 !important;
-          font-size: 14.5px !important;
+          font-size: 12.5px !important;
         }
         .ad-search-input-ultra:focus {
           background: #ffffff !important;
           border-color: #6366f1 !important;
-          box-shadow: 0 8px 24px -4px rgba(99, 102, 241, 0.22), 0 0 0 3px rgba(99, 102, 241, 0.12), inset 0 1px 0 #ffffff !important;
+          box-shadow: 0 4px 14px -2px rgba(99, 102, 241, 0.18), 0 0 0 2.5px rgba(99, 102, 241, 0.12) !important;
         }
+        .badge-status {
+          font-size: 8px !important;
+          padding: 2px 6px !important;
+          line-height: 1.2 !important;
+        }
+        .ad-com-author {
+          font-size: 11px !important;
+        }
+        .ad-page-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(245, 247, 255, 0.72) 100%) !important;
+          backdrop-filter: blur(20px) !important;
+          -webkit-backdrop-filter: blur(20px) !important;
+          border: 1.5px solid rgba(255, 255, 255, 0.95) !important;
+          box-shadow: 0 16px 36px -10px rgba(99, 102, 241, 0.14), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 0 #ffffff !important;
+          border-radius: 24px !important;
+          padding: 14px 20px !important;
+          margin-bottom: 24px !important;
+          gap: 16px !important;
+          position: relative !important;
+          box-sizing: border-box !important;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+
+        .ad-com-header-icon-box {
+          width: 42px !important;
+          height: 42px !important;
+          border-radius: 14px !important;
+          background: linear-gradient(135deg, #ffffff 0%, #e0e7ff 100%) !important;
+          border: 1.5px solid rgba(255, 255, 255, 1) !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.16) !important;
+          color: #4f46e5 !important;
+          flex-shrink: 0 !important;
+          transition: transform 0.25s ease !important;
+        }
+        .ad-com-header-icon-box:hover {
+          transform: scale(1.06) !important;
+        }
+
+        .ad-com-header-title {
+          font-size: 24px !important;
+          font-weight: 900 !important;
+          font-family: 'Outfit', sans-serif !important;
+          margin: 0 !important;
+          line-height: 1.15 !important;
+          letter-spacing: -0.02em !important;
+          background: linear-gradient(135deg, #0f172a 40%, #4f46e5 100%) !important;
+          -webkit-background-clip: text !important;
+          -webkit-text-fill-color: transparent !important;
+        }
+
+        .ad-com-filter-btn {
+          height: 32px !important;
+          min-height: 32px !important;
+          border-radius: 9999px !important;
+          border: 1.5px solid rgba(224, 231, 255, 0.9) !important;
+          background: rgba(255, 255, 255, 0.8) !important;
+          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.06) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          padding: 0 14px !important;
+          font-size: 12px !important;
+          font-weight: 600 !important;
+          color: #475569 !important;
+          cursor: pointer !important;
+          transition: all 0.2s !important;
+        }
+        .ad-com-filter-btn:hover {
+          background: #ffffff !important;
+          color: #1e293b !important;
+          border-color: #6366f1 !important;
+          transform: translateY(-1px) !important;
+        }
+
+        .ad-com-btn-novo {
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          height: 32px !important;
+          min-height: 32px !important;
+          border-radius: 999px !important;
+          padding: 0 14px !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.02em !important;
+          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+          color: #ffffff !important;
+          border: none !important;
+          box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+          cursor: pointer !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          white-space: nowrap !important;
+        }
+        .ad-com-btn-novo:hover {
+          transform: translateY(-1px) scale(1.02) !important;
+          box-shadow: 0 6px 18px rgba(79, 70, 229, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+        }
+        .ad-com-btn-novo:active {
+          transform: scale(0.97) !important;
+        }
+
+        .ad-feed-card {
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
+          transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .ad-feed-card:hover {
+          transform: translateY(-2px) !important;
+          box-shadow: 0 16px 36px -6px rgba(99, 102, 241, 0.14), inset 0 1px 1px #ffffff !important;
+        }
+
         .ad-mobile-only { display: none !important; }
         .ad-desktop-only { display: block !important; }
         @media (max-width: 768px) {
@@ -888,13 +1005,14 @@ function ColaboradorComunicadosContent() {
           }
           .ad-comunicados-wrapper .ad-page-header { 
             margin-top: 0 !important; 
-            margin-bottom: 12px !important; 
+            margin-bottom: 16px !important; 
             align-items: center !important; 
             flex-direction: row !important; 
             width: 100% !important;
             justify-content: space-between !important;
-            gap: 8px !important;
-            padding: 0 !important;
+            border-radius: 18px !important;
+            padding: 10px 14px !important;
+            gap: 10px !important;
           }
           .ad-page-header > div:first-child {
             order: 1 !important;
@@ -910,7 +1028,7 @@ function ColaboradorComunicadosContent() {
             flex-direction: row !important; 
             align-items: center !important; 
             justify-content: flex-end !important;
-            gap: 12px !important; 
+            gap: 8px !important; 
             margin-top: 0 !important; 
           }
           .ad-com-actions > button {
@@ -929,11 +1047,24 @@ function ColaboradorComunicadosContent() {
             color: #6366f1 !important;
           }
           .ad-com-header-icon-box {
-            display: none !important;
+            display: flex !important;
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 11px !important;
+          }
+          .ad-com-header-icon-box svg {
+            width: 17px !important;
+            height: 17px !important;
           }
           .ad-com-header-title {
-            font-size: 24px !important;
+            font-size: 19px !important;
             font-weight: 800 !important;
+          }
+          .ad-com-btn-novo {
+            height: 30px !important;
+            min-height: 30px !important;
+            padding: 0 12px !important;
+            font-size: 11.5px !important;
           }
           
           .ad-com-timeline-node { width: 36px !important; margin-right: 8px !important; }
@@ -947,11 +1078,13 @@ function ColaboradorComunicadosContent() {
           
           .ad-feed-card { padding: 12px 12px !important; gap: 8px !important; }
           .ad-com-card-title { font-size: 14px !important; }
+          .ad-com-author { font-size: 11px !important; }
           
-          /* Badges 30% smaller */
+          /* Badges smaller */
           .badge-status {
-            font-size: 9px !important;
-            padding: 2px 8px !important;
+            font-size: 8px !important;
+            padding: 1.5px 6px !important;
+            line-height: 1.2 !important;
           }
         }
       `}} />
@@ -986,38 +1119,28 @@ function ColaboradorComunicadosContent() {
 
       <div style={{ position: 'relative', zIndex: 1 }}>
 
-        <div className="ad-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+        <div className="ad-page-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div className="ad-com-header-icon-box" style={{
-              width: 48,
-              height: 48,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, rgba(0, 210, 255, 0.15), rgba(255, 0, 128, 0.15))',
-              border: '1px solid rgba(0, 210, 255, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0, 210, 255, 0.15)'
-            }}>
-              <Bell size={22} color="#00D2FF" style={{ animation: 'floatBg 4s ease-in-out infinite' }} />
+            <div className="ad-com-header-icon-box">
+              <Bell size={20} strokeWidth={2.2} />
             </div>
             <div>
-              <h2 className="ad-com-header-title" style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', margin: 0, background: 'linear-gradient(135deg, #0f172a 40%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.02))' }}>Comunicados</h2>
+              <h2 className="ad-com-header-title">Comunicados</h2>
             </div>
           </div>
           
-          <div className="ad-com-actions" style={{ display: 'flex', gap: 12 }}>
-            <div className="ad-com-search ad-desktop-only" style={{ position: 'relative', display: 'flex', alignItems: 'center', width: 260 }}>
+          <div className="ad-com-actions" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="ad-com-search ad-desktop-only" style={{ position: 'relative', display: 'flex', alignItems: 'center', width: 230 }}>
               <div style={{
                 position: 'absolute',
-                left: 16,
+                left: 12,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 pointerEvents: 'none',
                 zIndex: 3
               }}>
-                <Search size={18} style={{ color: '#6366f1', filter: 'drop-shadow(0 2px 4px rgba(99, 102, 241, 0.25))' }} />
+                <Search size={15} style={{ color: '#6366f1' }} />
               </div>
               <input 
                 className="ad-search-input-ultra" 
@@ -1032,9 +1155,9 @@ function ColaboradorComunicadosContent() {
                   aria-label="Limpar busca"
                   style={{
                     position: 'absolute',
-                    right: 12,
-                    width: 24,
-                    height: 24,
+                    right: 8,
+                    width: 20,
+                    height: 20,
                     borderRadius: '50%',
                     border: 'none',
                     background: 'rgba(99, 102, 241, 0.1)',
@@ -1047,36 +1170,19 @@ function ColaboradorComunicadosContent() {
                     transition: 'all 0.2s'
                   }}
                 >
-                  <X size={13} />
+                  <X size={11} />
                 </button>
               )}
             </div>
-            <button className="btn btn-secondary ad-com-filter-btn" style={{
-              height: 44,
-              borderRadius: 14,
-              border: '1px solid rgba(99, 102, 241, 0.15)',
-              background: 'rgba(255, 255, 255, 0.7)',
-              backdropFilter: 'none',
-              boxShadow: '0 8px 32px rgba(99, 102, 241, 0.04)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '0 18px',
-              fontSize: 14,
-              fontWeight: 600,
-              color: '#475569',
-              cursor: 'pointer',
-              transition: 'all 0.3s'
-            }}>
-              <Filter size={16} /> Filtros
+            <button className="ad-com-filter-btn" type="button">
+              <Filter size={14} /> Filtros
             </button>
             {!isMirroring && (
-<button className="btn btn-primary" onClick={handleNovo} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 44, borderRadius: 14, padding: '0 18px', fontSize: 14, fontWeight: 600 }}>
-              <Plus size={16} />
-              <span className="ad-desktop-only">Novo Comunicado</span>
-              <span className="ad-mobile-only">Novo</span>
-            </button>
-)}
+              <button className="ad-com-btn-novo" onClick={handleNovo} type="button">
+                <Plus size={14} strokeWidth={2.5} />
+                <span>Novo</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1279,16 +1385,20 @@ function ColaboradorComunicadosContent() {
                     cursor: 'pointer', 
                     transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)', 
                     position: 'relative',
-                    background: isRead ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.85)',
-                    border: '1px solid',
-                    borderColor: isRead ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.18)',
+                    background: isRead 
+                      ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.7) 0%, rgba(248, 250, 255, 0.6) 100%)' 
+                      : 'linear-gradient(145deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 255, 0.8) 100%)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1.5px solid',
+                    borderColor: isRead ? 'rgba(224, 231, 255, 0.7)' : 'rgba(224, 231, 255, 0.95)',
                     boxShadow: isRead 
-                      ? '0 2px 10px -4px rgba(0,0,0,0.04)' 
-                      : '0 12px 32px -8px rgba(99,102,241,0.08), inset 0 0 0 1px rgba(255,255,255,0.8)',
+                      ? '0 4px 14px -3px rgba(99, 102, 241, 0.05), inset 0 1px 1px #ffffff' 
+                      : '0 12px 28px -6px rgba(99, 102, 241, 0.09), inset 0 1px 1px #ffffff',
                     display: 'flex', 
                     flexDirection: 'column', 
                     padding: '24px 28px',
-                    borderRadius: 24,
+                    borderRadius: 22,
                     gap: 16,
                     overflow: 'hidden'
                   }}
@@ -1329,17 +1439,17 @@ function ColaboradorComunicadosContent() {
                     e.currentTarget.style.transform = 'translateY(-3px)';
                     e.currentTarget.style.borderColor = '#6366f1';
                     e.currentTarget.style.boxShadow = isRead 
-                      ? '0 12px 24px rgba(99,102,241,0.06)' 
-                      : '0 20px 40px rgba(99,102,241,0.14), inset 0 0 0 1px rgba(255,255,255,1)';
+                      ? '0 10px 24px rgba(99,102,241,0.08), inset 0 1px 1px #ffffff' 
+                      : '0 18px 36px -6px rgba(99, 102, 241, 0.16), inset 0 1px 1px #ffffff';
                     const overlay = e.currentTarget.querySelector('.card-hover-overlay') as HTMLElement;
                     if (overlay) overlay.style.opacity = '1';
                   }}
                   onMouseLeave={e => {
                     e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = isRead ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.18)';
+                    e.currentTarget.style.borderColor = isRead ? 'rgba(224, 231, 255, 0.7)' : 'rgba(224, 231, 255, 0.95)';
                     e.currentTarget.style.boxShadow = isRead 
-                      ? '0 2px 10px -4px rgba(0,0,0,0.04)' 
-                      : '0 12px 32px -8px rgba(99,102,241,0.08), inset 0 0 0 1px rgba(255,255,255,0.8)';
+                      ? '0 4px 14px -3px rgba(99, 102, 241, 0.05), inset 0 1px 1px #ffffff' 
+                      : '0 12px 28px -6px rgba(99, 102, 241, 0.09), inset 0 1px 1px #ffffff';
                     const overlay = e.currentTarget.querySelector('.card-hover-overlay') as HTMLElement;
                     if (overlay) overlay.style.opacity = '0';
                   }}
@@ -1354,36 +1464,36 @@ function ColaboradorComunicadosContent() {
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
-                    <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                      <UserAvatar userId={c.autorId} name={c.autor} fotoUrl={c.autorFoto} size={62} />
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <UserAvatar userId={c.autorId} name={c.autor} fotoUrl={c.autorFoto} size={56} />
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
-                          <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          {c.fixado && <Pin size={13} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
+                          <h3 className="ad-com-card-title" style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
                         </div>
-                        <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
+                        <div className="ad-com-author" style={{ fontSize: 11, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 4, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
                           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
                         </div>
                       </div>
                     </div>
                     
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                          {/* Priority badges */}
-                         {c.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>Alta Prioridade</span>}
-                         {c.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)' }}>Urgente</span>}
+                         {c.prioridade === 'alta' && <span className="badge badge-status" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', padding: '2px 6px', fontSize: '8px' }}>Alta Prioridade</span>}
+                         {c.prioridade === 'urgente' && <span className="badge badge-status" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)', padding: '2px 6px', fontSize: '8px' }}>Urgente</span>}
                          
                          {/* Status Badge */}
                          {!isRead ? (
-                           <span className="badge badge-status" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '4px 12px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
+                           <span className="badge badge-status" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 2px 8px rgba(0,210,255,0.25)', padding: '2px 6px', fontSize: '8px', fontWeight: 800, letterSpacing: 0.4, lineHeight: 1.2 }}>NOVO</span>
                          ) : (
-                           <span className="badge badge-neutral badge-status" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', fontWeight: 600 }}>LIDO</span>
+                           <span className="badge badge-neutral badge-status" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 6px', fontSize: '8px', fontWeight: 600, letterSpacing: 0.4, lineHeight: 1.2 }}>LIDO</span>
                          )}
                        </div>
 
                        {/* Attachments Section */}
                        {c.anexos && c.anexos.length > 0 && (
-<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                            {(() => {
                              let reportCount = 0;
                              let firstReportTypeInfo: any = null;
@@ -1414,14 +1524,14 @@ function ColaboradorComunicadosContent() {
                                       background: typeInfo.color, 
                                       display: 'flex', 
                                       alignItems: 'center', 
-                                      justifyContent: 'center',
-                                      width: 32,
-                                      height: 32,
-                                      borderRadius: '10px',
-                                      border: `1px solid ${typeInfo.textColor}3a`,
-                                      boxShadow: `0 2px 8px ${typeInfo.color}`,
-                                   }}>
-                                     {typeInfo.icon}
+                                      justifyContent: 'center', 
+                                      width: 24, 
+                                      height: 24, 
+                                      borderRadius: '7px', 
+                                      border: `1px solid ${typeInfo.textColor}3a`, 
+                                      boxShadow: `0 2px 6px ${typeInfo.color}`, 
+                                   }}> 
+                                     {typeInfo.icon} 
                                    </div>
                                  );
                                });
@@ -1434,39 +1544,31 @@ function ColaboradorComunicadosContent() {
                                       background: typeInfo.color, 
                                       display: 'flex', 
                                       alignItems: 'center', 
-                                      justifyContent: 'center',
-                                      width: 32,
-                                      height: 32,
-                                      borderRadius: '10px',
-                                      border: `1px solid ${typeInfo.textColor}3a`,
-                                      boxShadow: `0 2px 8px ${typeInfo.color}`,
-                                   }}>
-                                     {typeInfo.icon}
+                                      justifyContent: 'center', 
+                                      width: 24, 
+                                      height: 24, 
+                                      borderRadius: '7px', 
+                                      border: `1px solid ${typeInfo.textColor}3a`, 
+                                      boxShadow: `0 2px 6px ${typeInfo.color}`, 
+                                   }}> 
+                                     {typeInfo.icon} 
                                    </div>
                                  ))}
 
                                  <div 
-                                    title={`${reportCount} Relatórios Individuais`} 
-                                    style={{ 
-                                      background: firstReportTypeInfo?.color || 'rgba(99,102,241,0.1)', 
-                                      display: 'flex', 
-                                      alignItems: 'center', 
-                                      justifyContent: 'center',
-                                      height: 32,
-                                      padding: '0 12px',
-                                      borderRadius: '10px',
-                                      border: `1px solid ${firstReportTypeInfo?.textColor || '#6366f1'}3a`,
-                                      boxShadow: `0 2px 8px ${firstReportTypeInfo?.color || 'rgba(99,102,241,0.2)'}`,
-                                      gap: 6
-                                   }}>
-                                   {firstReportTypeInfo?.icon}
-                                   <span style={{ 
-                                     fontSize: 12, 
-                                     fontWeight: 800, 
-                                     color: firstReportTypeInfo?.textColor || '#6366f1' 
-                                   }}>
-                                     +{reportCount - 1}
-                                   </span>
+                                     title={firstReportTypeInfo?.label || 'Relatório'} 
+                                     style={{ 
+                                       background: firstReportTypeInfo?.color || 'rgba(99,102,241,0.1)', 
+                                       display: 'flex', 
+                                       alignItems: 'center', 
+                                       justifyContent: 'center', 
+                                       width: 24, 
+                                       height: 24, 
+                                       borderRadius: '7px', 
+                                       border: `1px solid ${firstReportTypeInfo?.textColor || '#6366f1'}3a`, 
+                                       boxShadow: `0 2px 6px ${firstReportTypeInfo?.color || 'rgba(99,102,241,0.2)'}`, 
+                                    }}> 
+                                     {firstReportTypeInfo?.icon} 
                                  </div>
                                </>
                              );

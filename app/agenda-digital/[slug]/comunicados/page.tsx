@@ -68,24 +68,24 @@ const getAnexoType = (anexoStr: string) => {
   const { name, url, mime } = parsed;
   
   if (name.startsWith('Formulário:')) {
-    return { label: 'Formulário', icon: <FileText size={16} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
+    return { label: 'Formulário', icon: <FileText size={13} strokeWidth={2} color="#3b82f6" />, color: 'rgba(59,130,246,0.1)', textColor: '#3b82f6' };
   }
   if (name.startsWith('Relatório:') || name.startsWith('Relatório Personalizado:') || url.startsWith('payload:')) {
-    return { label: 'Relatório', icon: <FileBarChart size={16} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
+    return { label: 'Relatório', icon: <FileBarChart size={13} strokeWidth={2} color="#8b5cf6" />, color: 'rgba(139,92,246,0.1)', textColor: '#8b5cf6' };
   }
   if (name.toLowerCase().endsWith('.pdf')) {
-    return { label: 'PDF', icon: <FileText size={16} strokeWidth={2} color="#ef4444" />, color: 'rgba(239,68,68,0.1)', textColor: '#ef4444' };
+    return { label: 'PDF', icon: <FileText size={13} strokeWidth={2} color="#ef4444" />, color: 'rgba(239,68,68,0.1)', textColor: '#ef4444' };
   }
   const isImg = url.startsWith('data:image/') || mime.startsWith('image/') || name.toLowerCase().endsWith('.png') || name.toLowerCase().endsWith('.jpg') || name.toLowerCase().endsWith('.jpeg') || name.toLowerCase().endsWith('.webp') || name.toLowerCase().endsWith('.gif');
   if (isImg) {
-    return { label: 'Imagem', icon: <ImageIcon size={16} strokeWidth={2} color="#10b981" />, color: 'rgba(16,185,129,0.1)', textColor: '#10b981' };
+    return { label: 'Imagem', icon: <ImageIcon size={13} strokeWidth={2} color="#10b981" />, color: 'rgba(16,185,129,0.1)', textColor: '#10b981' };
   }
   const isVid = mime.startsWith('video/') || url.includes('.mov') || url.includes('.mp4') || name.toLowerCase().endsWith('.mov') || name.toLowerCase().endsWith('.mp4');
   if (isVid) {
-    return { label: 'Vídeo', icon: <Video size={16} strokeWidth={2} color="#f59e0b" />, color: 'rgba(245,158,11,0.1)', textColor: '#f59e0b' };
+    return { label: 'Vídeo', icon: <Video size={13} strokeWidth={2} color="#f59e0b" />, color: 'rgba(245,158,11,0.1)', textColor: '#f59e0b' };
   }
   
-  return { label: 'Anexo', icon: <Paperclip size={16} strokeWidth={2} color="#64748b" />, color: 'rgba(100,116,139,0.1)', textColor: '#64748b' };
+  return { label: 'Anexo', icon: <Paperclip size={13} strokeWidth={2} color="#64748b" />, color: 'rgba(100,116,139,0.1)', textColor: '#64748b' };
 };
 
 import { useApp } from '@/lib/context'
@@ -416,40 +416,42 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          background: linear-gradient(135deg, #ffffff 0%, #f0f3ff 50%, #fdf2f8 100%);
-          border: 1.5px solid rgba(224, 231, 255, 0.95);
-          box-shadow: 0 14px 34px -4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(0, 0, 0, 0.03), inset 0 1px 1px #ffffff;
-          border-radius: 22px;
-          padding: 16px 22px;
-          margin-top: 0px;
-          margin-bottom: 20px;
-          gap: 16px;
-          position: relative;
-          box-sizing: border-box;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          background: linear-gradient(135deg, rgba(255, 255, 255, 0.88) 0%, rgba(245, 247, 255, 0.72) 100%) !important;
+          backdrop-filter: blur(20px) !important;
+          -webkit-backdrop-filter: blur(20px) !important;
+          border: 1.5px solid rgba(255, 255, 255, 0.95) !important;
+          box-shadow: 0 16px 36px -10px rgba(99, 102, 241, 0.14), 0 4px 12px rgba(0, 0, 0, 0.02), inset 0 1.5px 0 #ffffff !important;
+          border-radius: 24px !important;
+          padding: 14px 20px !important;
+          margin-top: 0px !important;
+          margin-bottom: 24px !important;
+          gap: 16px !important;
+          position: relative !important;
+          box-sizing: border-box !important;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
 
         .ad-com-header-icon-box {
-          width: 44px;
-          height: 44px;
-          border-radius: 14px;
-          background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(236, 72, 153, 0.1));
-          border: 1.5px solid rgba(199, 210, 254, 0.85);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 4px 12px rgba(79, 70, 229, 0.12);
-          color: #4f46e5;
-          flex-shrink: 0;
-          transition: transform 0.25s ease;
+          width: 42px !important;
+          height: 42px !important;
+          border-radius: 14px !important;
+          background: linear-gradient(135deg, #ffffff 0%, #e0e7ff 100%) !important;
+          border: 1.5px solid rgba(255, 255, 255, 1) !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          box-shadow: 0 6px 16px rgba(99, 102, 241, 0.16) !important;
+          color: #4f46e5 !important;
+          flex-shrink: 0 !important;
+          transition: transform 0.25s ease !important;
         }
 
         .ad-com-header-icon-box:hover {
-          transform: scale(1.06);
+          transform: scale(1.06) !important;
         }
 
         .ad-com-header-title {
-          font-size: 26px !important;
+          font-size: 24px !important;
           font-weight: 900 !important;
           font-family: 'Outfit', sans-serif !important;
           margin: 0 !important;
@@ -462,15 +464,16 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
         .ad-search-input-ultra {
           width: 200px !important;
-          height: 42px !important;
-          min-height: 42px !important;
-          padding-left: 40px !important;
-          padding-right: 32px !important;
+          height: 34px !important;
+          min-height: 34px !important;
+          padding-left: 36px !important;
+          padding-right: 30px !important;
           border-radius: 9999px !important;
-          border: 1.5px solid rgba(203, 213, 225, 0.9) !important;
-          background: #ffffff !important;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
-          font-size: 13.5px !important;
+          border: 1.5px solid rgba(203, 213, 225, 0.8) !important;
+          background: rgba(255, 255, 255, 0.85) !important;
+          backdrop-filter: blur(12px) !important;
+          box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+          font-size: 13px !important;
           font-weight: 500 !important;
           color: #0f172a !important;
           letter-spacing: -0.01em !important;
@@ -481,36 +484,27 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         .ad-search-input-ultra::placeholder {
           color: #94a3b8 !important;
           font-weight: 400 !important;
-          font-size: 13.5px !important;
+          font-size: 12.5px !important;
         }
         .ad-search-input-ultra:focus {
-          width: 240px !important;
+          width: 230px !important;
           background: #ffffff !important;
-          border-color: #4f46e5 !important;
-          box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14), 0 4px 14px rgba(79, 70, 229, 0.08) !important;
+          border-color: #6366f1 !important;
+          box-shadow: 0 4px 14px -2px rgba(99, 102, 241, 0.18), 0 0 0 2.5px rgba(99, 102, 241, 0.12) !important;
         }
 
-        .ad-com-filter-btn {
-          height: 42px !important;
-          border-radius: 12px !important;
-          border: 1.5px solid rgba(203, 213, 225, 0.9) !important;
-          background: #ffffff !important;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03) !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 8px !important;
-          padding: 0 16px !important;
-          font-size: 13.5px !important;
-          font-weight: 700 !important;
-          color: #475569 !important;
-          cursor: pointer !important;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        .ad-feed-card {
+          backdrop-filter: blur(16px) !important;
+          -webkit-backdrop-filter: blur(16px) !important;
+          transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
         }
-        .ad-com-filter-btn:hover {
-          background: #f8fafc !important;
-          border-color: #cbd5e1 !important;
-          color: #0f172a !important;
-          transform: translateY(-1px) !important;
+        .ad-feed-card:hover {
+          transform: translateY(-2px) !important;
+          box-shadow: 0 16px 36px -6px rgba(99, 102, 241, 0.14), inset 0 1px 1px #ffffff !important;
+        }
+
+        .ad-com-author {
+          font-size: 11px !important;
         }
 
         @media (max-width: 768px) {
@@ -531,7 +525,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             justify-content: space-between !important; 
             width: 100% !important;
             border-radius: 18px !important;
-            padding: 12px 14px !important;
+            padding: 10px 14px !important;
             gap: 10px !important;
           }
           .ad-com-filter-btn { display: none !important; }
@@ -542,7 +536,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             width: 125px !important; 
             max-width: 100% !important; 
             height: 38px !important; 
-            min-height: 38px !important;
+            min-height: 38px !important; 
             padding-left: 34px !important; 
             padding-right: 24px !important;
             font-size: 12.5px !important; 
@@ -565,17 +559,18 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             color: #6366f1 !important;
           }
           .ad-com-header-icon-box {
-            width: 40px !important;
-            height: 40px !important;
-            border-radius: 12px !important;
+            display: flex !important;
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 11px !important;
             flex-shrink: 0 !important;
           }
           .ad-com-header-icon-box svg {
-            width: 18px !important;
-            height: 18px !important;
+            width: 17px !important;
+            height: 17px !important;
           }
           .ad-com-header-title {
-            font-size: 20px !important;
+            font-size: 19px !important;
             font-weight: 800 !important;
           }
           
@@ -589,7 +584,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           .ad-com-timeline-dot { right: -5px !important; width: 10px !important; height: 10px !important; top: 28px !important; border-width: 2px !important; }
           
           .ad-feed-card { padding: 16px 16px !important; gap: 12px !important; }
-          .ad-com-card-title { font-size: 15px !important; }
+          .ad-com-card-title { font-size: 14px !important; }
+          .ad-com-author { font-size: 11px !important; }
           .ad-hide-mobile { display: none !important; }
         }
       `}} />
@@ -625,13 +621,12 @@ export default function ADComunicadosPage({ params }: { params: any }) {
       <div style={{ position: 'relative', zIndex: 1 }}>
 
         <div className="ad-page-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="ad-com-header-icon-box">
-              <Bell size={22} color="#4f46e5" strokeWidth={2.3} />
+              <Bell size={20} color="#4f46e5" strokeWidth={2.2} />
             </div>
             <div>
               <h2 className="ad-com-header-title">Comunicados</h2>
-              <p className="ad-text-hide-mobile" style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0', fontWeight: 500 }}>Avisos pedagógicos e informações oficiais do colégio</p>
             </div>
           </div>
           
@@ -829,13 +824,25 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                   className="card ad-feed-card" 
                   style={{ 
                     flex: 1, 
-                    background: c._isNew ? 'rgba(255, 255, 255, 0.95)' : (isRead ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.85)'), 
-                    backdropFilter: 'none',
-                    borderRadius: 24, 
+                    background: c._isNew 
+                      ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.96) 0%, rgba(248, 250, 255, 0.9) 100%)' 
+                      : (isRead 
+                          ? 'linear-gradient(145deg, rgba(255, 255, 255, 0.7) 0%, rgba(248, 250, 255, 0.6) 100%)' 
+                          : 'linear-gradient(145deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 255, 0.8) 100%)'), 
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    borderRadius: 22, 
                     padding: '24px 28px',
                     cursor: 'pointer',
-                    border: c._isNew ? '2px solid #4f46e5' : (isRead ? '1px solid rgba(15, 23, 42, 0.05)' : '1px solid rgba(99, 102, 241, 0.15)'),
-                    boxShadow: c._isNew ? '0 10px 40px -5px rgba(99, 102, 241, 0.4)' : (isRead ? 'none' : '0 12px 32px -8px rgba(99,102,241,0.08)'),
+                    border: '1.5px solid',
+                    borderColor: c._isNew 
+                      ? '#6366f1' 
+                      : (isRead ? 'rgba(224, 231, 255, 0.7)' : 'rgba(224, 231, 255, 0.95)'),
+                    boxShadow: c._isNew 
+                      ? '0 16px 36px -6px rgba(99, 102, 241, 0.28), inset 0 1px 1px #ffffff' 
+                      : (isRead 
+                          ? '0 4px 14px -3px rgba(99, 102, 241, 0.05), inset 0 1px 1px #ffffff' 
+                          : '0 12px 28px -6px rgba(99, 102, 241, 0.09), inset 0 1px 1px #ffffff'),
                     transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
                     position: 'relative',
                     overflow: 'hidden',
@@ -903,17 +910,19 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     e.currentTarget.style.transform = 'translateY(-3px)';
                     e.currentTarget.style.borderColor = '#6366f1';
                     e.currentTarget.style.boxShadow = isRead 
-                      ? '0 12px 24px rgba(99,102,241,0.06)' 
-                      : '0 20px 40px rgba(99,102,241,0.14), inset 0 0 0 1px rgba(255,255,255,1)';
+                      ? '0 10px 24px rgba(99,102,241,0.08), inset 0 1px 1px #ffffff' 
+                      : '0 18px 36px -6px rgba(99, 102, 241, 0.16), inset 0 1px 1px #ffffff';
                     const overlay = e.currentTarget.querySelector('.card-hover-overlay') as HTMLElement;
                     if (overlay) overlay.style.opacity = '1';
                   }}
                   onMouseLeave={e => {
                     e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = isRead ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.18)';
-                    e.currentTarget.style.boxShadow = isRead 
-                      ? '0 2px 10px -4px rgba(0,0,0,0.04)' 
-                      : '0 12px 32px -8px rgba(99,102,241,0.08), inset 0 0 0 1px rgba(255,255,255,0.8)';
+                    e.currentTarget.style.borderColor = c._isNew ? '#6366f1' : (isRead ? 'rgba(224, 231, 255, 0.7)' : 'rgba(224, 231, 255, 0.95)');
+                    e.currentTarget.style.boxShadow = c._isNew
+                      ? '0 16px 36px -6px rgba(99, 102, 241, 0.28), inset 0 1px 1px #ffffff'
+                      : (isRead 
+                          ? '0 4px 14px -3px rgba(99, 102, 241, 0.05), inset 0 1px 1px #ffffff' 
+                          : '0 12px 28px -6px rgba(99, 102, 241, 0.09), inset 0 1px 1px #ffffff');
                     const overlay = e.currentTarget.querySelector('.card-hover-overlay') as HTMLElement;
                     if (overlay) overlay.style.opacity = '0';
                   }}
@@ -928,35 +937,35 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                   )}
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
-                    <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                      <UserAvatar userId={c.autorId} name={c.autor} fotoUrl={c.autorFoto} size={62} />
+                    <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                      <UserAvatar userId={c.autorId} name={c.autor} fotoUrl={c.autorFoto} size={56} />
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          {c.fixado && <Pin size={14} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
-                          <h3 className="ad-com-card-title" style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                          {c.fixado && <Pin size={13} color="#f59e0b" style={{ fill: '#f59e0b' }} />}
+                          <h3 className="ad-com-card-title" style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#0f172a', lineHeight: 1.2, letterSpacing: -0.3 }}>{c.titulo}</h3>
                         </div>
-                        <div style={{ fontSize: 13, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
+                        <div className="ad-com-author" style={{ fontSize: 11, color: '#64748b', display: 'flex', flexWrap: 'nowrap', gap: 4, alignItems: 'center', lineHeight: 1.2, minWidth: 0 }}>
                           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Por <strong style={{ color: '#334155', fontWeight: 600 }}>{abbreviateName(c.autor)}</strong></span>
                         </div>
                       </div>
                     </div>
                     
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                          {/* Status Badge */}
                          {!isRead ? (
-                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(0,210,255,0.3)', padding: '2px 8px', fontSize: '9px', fontWeight: 800, letterSpacing: 0.5 }}>NOVO</span>
+                           <span className="badge" style={{ background: 'linear-gradient(135deg, #00d2ff, #ff0080)', color: '#fff', border: 'none', boxShadow: '0 2px 8px rgba(0,210,255,0.25)', padding: '2px 6px', fontSize: '8px', fontWeight: 800, letterSpacing: 0.4, lineHeight: 1.2 }}>NOVO</span>
                          ) : (
-                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 8px', fontSize: '9px', fontWeight: 600 }}>Lido</span>
+                           <span className="badge badge-neutral" style={{ background: 'transparent', color: '#64748b', border: '1px solid rgba(0,0,0,0.12)', padding: '2px 6px', fontSize: '8px', fontWeight: 600, letterSpacing: 0.4, lineHeight: 1.2 }}>Lido</span>
                          )}
                          {/* Priority badges */}
-                         {c.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>Alta Prioridade</span>}
-                         {c.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)' }}>Urgente</span>}
+                         {c.prioridade === 'alta' && <span className="badge" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)', padding: '2px 6px', fontSize: '8px' }}>Alta Prioridade</span>}
+                         {c.prioridade === 'urgente' && <span className="badge" style={{ background: 'rgba(249,115,22,0.1)', color: '#f97316', border: '1px solid rgba(249,115,22,0.2)', padding: '2px 6px', fontSize: '8px' }}>Urgente</span>}
                        </div>
 
                        {/* Attachments Section */}
                        {c.anexos && c.anexos.length > 0 && (
-                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                            {c.anexos.map((anexo: string, idx: number) => {
                              const typeInfo = getAnexoType(anexo);
                              if (!typeInfo) return null;
@@ -965,14 +974,14 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                                   background: typeInfo.color, 
                                   display: 'flex', 
                                   alignItems: 'center', 
-                                  justifyContent: 'center',
-                                  width: 32,
-                                  height: 32,
-                                  borderRadius: '10px',
-                                  border: `1px solid ${typeInfo.textColor}3a`,
-                                  boxShadow: `0 2px 8px ${typeInfo.color}`,
-                               }}>
-                                 {typeInfo.icon}
+                                  justifyContent: 'center', 
+                                  width: 24, 
+                                  height: 24, 
+                                  borderRadius: '7px', 
+                                  border: `1px solid ${typeInfo.textColor}3a`, 
+                                  boxShadow: `0 2px 6px ${typeInfo.color}`, 
+                               }}> 
+                                 {typeInfo.icon} 
                                </div>
                              );
                            })}
