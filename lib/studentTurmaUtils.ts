@@ -766,5 +766,145 @@ export function getAlunoTurnoDisplay(aluno: any, turmas: any[] = [], grupos: any
   return turmaObj?.turno || 'Vespertino';
 }
 
+/**
+ * Auxiliary conversion from Roman numerals to Arabic number (I-VI).
+ */
+export function romanToNumber(r: string): number | null {
+  if (!r) return null
+  const map: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6 }
+  return map[r.toUpperCase()] ?? null
+}
 
+export function parseNumberOrRoman(str: string): number {
+  if (!str) return 1
+  const trimmed = str.trim().toUpperCase()
+  const num = parseInt(trimmed, 10)
+  if (!isNaN(num)) return num
+  return romanToNumber(trimmed) || 1
+}
 
+export function getTurmaString(t: any): string {
+  if (!t) return ''
+  if (typeof t === 'string') return t
+  return `${t.nome || t.title || t.turma || t.label || ''} ${t.serie || t.dados?.serie || ''} ${t.categoria || ''}`
+}
+
+export function getTurnoWeight(str: string): number {
+  const s = (str || '').toUpperCase()
+  if (s.includes('MATUTINO') || s.includes('MANHÃ') || s.includes('MANHA')) return 1
+  if (s.includes('VESPERTINO') || s.includes('TARDE')) return 2
+  if (s.includes('NOTURNO') || s.includes('NOITE')) return 3
+  if (s.includes('INTEGRAL') || s.includes('INTERMEDIÁRIO') || s.includes('INTERMEDIARIO')) return 4
+  return 5
+}
+
+/**
+ * Calculates a numerical pedagogical weight for a class/turma/grupo so they can be
+ * sorted strictly in school grade order (Infantil -> Fund 1 -> Fund 2 -> Médio -> Equipe/Outros).
+ */
+export function getTurmaSerieWeight(t: any): number {
+  if (!t) return 900
+  if (t?.isEquipeEscolar) return 990
+  const raw = getTurmaString(t)
+  const str = raw.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+
+  if (str.includes('EQUIPE ESCOLAR')) return 990
+
+  // 1. Berçário
+  if (str.includes('BERCARIO')) {
+    const m = str.match(/BERCARIO\s*([IVX\d]+)?/)
+    const num = m && m[1] ? parseNumberOrRoman(m[1]) : 1
+    return 10 + num
+  }
+
+  // 2. Maternal
+  if (str.includes('MATERNAL')) {
+    const m = str.match(/MATERNAL\s*([IVX\d]+)?/)
+    const num = m && m[1] ? parseNumberOrRoman(m[1]) : 1
+    return 20 + num
+  }
+
+  // 3. Jardim
+  if (str.includes('JARDIM')) {
+    const m = str.match(/JARDIM\s*([IVX\d]+)?/)
+    const num = m && m[1] ? parseNumberOrRoman(m[1]) : 1
+    return 30 + num
+  }
+
+  // 4. Pré-Escola
+  if (str.includes('PRE') || str.includes('PRE-ESCOLA') || str.includes('PRE ESCOLA')) {
+    const m = str.match(/PRE(?:-|\s)*ESCOLA\s*([IVX\d]+)?/) || str.match(/PRE\s*([IVX\d]+)?/)
+    const num = m && m[1] ? parseNumberOrRoman(m[1]) : 1
+    return 40 + num
+  }
+
+  // 5. Níveis da Educação Infantil (ex: NÍVEL 1, NÍVEL 2, NÍVEL 4, NÍVEL 5)
+  const nivelMatch = str.match(/NIVEL\s*(\d+)/)
+  if (nivelMatch) {
+    return 50 + parseInt(nivelMatch[1], 10)
+  }
+
+  // 6. Ensino Médio (prioridade antes de fundamental para casos como '1º ANO MÉDIO' ou '1ª SÉRIE')
+  const isMedio = str.includes('MEDIO') || str.includes('E.M') || /\bEM\b/.test(str) || str.includes('SERIE')
+  if (isMedio) {
+    const serieMatch = str.match(/(\d+)[ªºa-z]?\s*(?:SERIE|ANO|MEDIO)/) || str.match(/(?:SERIE|ANO|MEDIO)\s*(\d+)/)
+    if (serieMatch) {
+      return 200 + parseInt(serieMatch[1], 10)
+    }
+    if (str.includes('TERCEIRAO')) return 203
+    if (str.includes('PRE-VESTIBULAR') || str.includes('PRE VESTIBULAR') || /\bPV\b/.test(str)) return 204
+    if (str.includes('EXTENSIVO')) return 205
+    return 200
+  }
+
+  // 7. Anos do Ensino Fundamental (ex: 1º ANO, 2º ANO, ..., 9º ANO)
+  const anoMatch = str.match(/(\d+)[ºªa-z]?\s*ANO/)
+  if (anoMatch) {
+    return 100 + parseInt(anoMatch[1], 10)
+  }
+
+  // 8. Fallback por número no início do nome
+  const anyNumMatch = str.match(/^(\d+)/)
+  if (anyNumMatch) {
+    return 300 + parseInt(anyNumMatch[1], 10)
+  }
+
+  return 900
+}
+
+/**
+ * Comparator function to sort classes/groups strictly in school grade order.
+ * Order: Infantil (Berçário -> Maternal -> Jardim -> Pré -> Níveis 1..5)
+ *      -> Fundamental I (1º Ano .. 5º Ano)
+ *      -> Fundamental II (6º Ano .. 9º Ano)
+ *      -> Ensino Médio (1ª Série .. 3ª Série / Terceirão)
+ * Tie-breaker 1: Turma letter (e.g. 8º Ano A before 8º Ano B)
+ * Tie-breaker 2: Shift (Matutino -> Vespertino -> Noturno -> Integral)
+ * Tie-breaker 3: Alphabetical localeCompare
+ */
+export function compareTurmasBySerie(a: any, b: any): number {
+  const wA = getTurmaSerieWeight(a)
+  const wB = getTurmaSerieWeight(b)
+  if (wA !== wB) return wA - wB
+
+  // Desempate por letra da turma (ex: 8º ANO A vs 8º ANO B)
+  const strA = getTurmaString(a).toUpperCase()
+  const strB = getTurmaString(b).toUpperCase()
+
+  const letterMatchA = strA.match(/(?:ANO|S[ÉE]RIE|N[ÍI]VEL\s*\d+)\s+([A-Z])\b/)
+  const letterMatchB = strB.match(/(?:ANO|S[ÉE]RIE|N[ÍI]VEL\s*\d+)\s+([A-Z])\b/)
+  const letterA = letterMatchA ? letterMatchA[1] : ''
+  const letterB = letterMatchB ? letterMatchB[1] : ''
+  if (letterA && letterB && letterA !== letterB) {
+    return letterA.localeCompare(letterB)
+  }
+
+  // Desempate por Turno (Matutino -> Vespertino -> Noturno -> Integral)
+  const tA = getTurnoWeight(strA)
+  const tB = getTurnoWeight(strB)
+  if (tA !== tB) return tA - tB
+
+  const nomeA = a?.nome || a?.title || a?.turma || strA
+  const nomeB = b?.nome || b?.title || b?.turma || strB
+  return String(nomeA).localeCompare(String(nomeB), 'pt-BR', { numeric: true, sensitivity: 'base' })
+}

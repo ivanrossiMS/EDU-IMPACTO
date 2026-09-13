@@ -16,7 +16,9 @@ export async function GET(request: Request) {
     const fromDate = url.searchParams.get('from')
     const toDate = url.searchParams.get('to')
     const studentId = url.searchParams.get('studentId')
-    let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(300)
+    const limitParam = url.searchParams.get('limit')
+    const limit = limitParam ? parseInt(limitParam, 10) : 1000
+    let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(limit)
     
     if (studentId) {
       query = query.eq('dados->>studentId', studentId)

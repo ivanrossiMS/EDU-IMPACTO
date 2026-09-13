@@ -13,6 +13,7 @@ import { UpdatingIndicator } from '@/components/skeletons/States'
 import { useApiQuery } from '@/hooks/useApi'
 import { useQueryClient } from '@tanstack/react-query'
 import ImportarTurmasModal from '@/components/turmas/ImportarTurmasModal'
+import { compareTurmasBySerie } from '@/lib/studentTurmaUtils'
 
 const getTurnoBadgeStyle = (turno: string) => {
   const t = (turno || '').toLowerCase()
@@ -778,7 +779,7 @@ export default function TurmasPage() {
                 <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: '#64748b' }}>Nenhuma turma encontrada.</td>
               </tr>
             ) : (
-              turmas.map(turma => (
+              [...turmas].sort(compareTurmasBySerie).map(turma => (
                 <tr key={turma.id} style={{ borderBottom: '1px solid #e2e8f0', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                   <td style={{ padding: '14px 16px', fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>{turma.id}</td>
                   <td 

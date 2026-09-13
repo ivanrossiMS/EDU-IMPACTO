@@ -76,9 +76,11 @@ export default function AgendaDigitalColaboradorLayout({
 
   const navItems = [
     { label: 'Comunicados', href: '/agenda-digital/colaborador/comunicados', icon: <Bell size={18} /> },
-
     { label: 'Mídia', href: '/agenda-digital/colaborador/momentos', icon: <ImageIcon size={18} /> },
     { label: 'Calendário', href: '/agenda-digital/colaborador/calendario', icon: <Calendar size={18} /> },
+    { label: 'Frequência', href: '/agenda-digital/colaborador/frequencia', icon: <FileText size={18} /> },
+    { label: 'Notas', href: '/agenda-digital/colaborador/notas', icon: <Briefcase size={18} /> },
+    { label: 'Ocorrências', href: '/agenda-digital/colaborador/ocorrencias', icon: <AlertTriangle size={18} /> },
     { label: 'Meu Perfil', href: '/agenda-digital/colaborador/perfil', icon: <UserCog size={18} /> },
   ]
 

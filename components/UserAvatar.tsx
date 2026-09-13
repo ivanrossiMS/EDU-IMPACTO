@@ -26,15 +26,15 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
     try {
       let foto = null;
 
-      if (userId) {
+      if (userId && typeof userId === 'string' && userId.trim() !== '') {
         try {
-          const res = await fetch(`/api/user-photo?id=${userId}`);
+          const res = await fetch(`/api/user-photo?id=${encodeURIComponent(userId)}`);
           if (res.ok) {
             const json = await res.json();
-            if (json.foto) foto = json.foto;
+            if (json && json.foto) foto = json.foto;
           }
-        } catch (e) {
-          console.error('[UserAvatar] Error fetching photo from API:', e);
+        } catch {
+          // Falha de rede silenciosa: não gera console.error para evitar popups no dev overlay
         }
       }
 
@@ -44,18 +44,20 @@ async function fetchUserPhoto(userId?: string, name?: string): Promise<string | 
           photoCache[userId] = foto;
           try {
             localStorage.setItem(`edu-profile-extra-${userId}`, JSON.stringify({ foto }));
-          } catch (e) {}
+          } catch {}
         }
         if (name) {
           photoCache[`name:${name}`] = foto;
           try {
             localStorage.setItem(`edu-profile-extra-name-${name}`, JSON.stringify({ foto }));
-          } catch (e) {}
+          } catch {}
         }
         return foto;
       }
-    } catch (err) {
-      console.error('Error fetching user photo:', err);
+    } catch {
+      // Fallback silencioso
+    } finally {
+      delete pendingPromises[cacheKey];
     }
     photoCache[cacheKey] = null;
     return null;
@@ -107,15 +109,21 @@ export function UserAvatar({
           if (name) photoCache[`name:${name}`] = data.foto;
           foundLocal = true;
         }
-      } catch (e) {}
+      } catch {}
     }
 
-    // Call fallback db fetch
-    fetchUserPhoto(userId, name).then((resolvedFoto) => {
-      if (resolvedFoto) {
-        setFoto(resolvedFoto);
-      }
-    });
+    // Call fallback db fetch only if not found locally
+    if (!foundLocal && (userId || name)) {
+      fetchUserPhoto(userId, name)
+        .then((resolvedFoto) => {
+          if (resolvedFoto) {
+            setFoto(resolvedFoto);
+          }
+        })
+        .catch(() => {
+          // Ignora silenciosamente qualquer erro de fetch
+        });
+    }
   }, [userId, name, fotoUrl]);
 
   if (foto && foto !== 'undefined') {

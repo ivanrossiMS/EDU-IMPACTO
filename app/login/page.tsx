@@ -1176,11 +1176,51 @@ export default function LoginPage() {
   // ────────────────────────────────────────────────────────────────
   // STEP: Escolher Sistema (ERP vs Agenda)
   // ────────────────────────────────────────────────────────────────
+  const greetingFirstName = (() => {
+    const raw = pendingAuth?.nome || currentUser?.nome || ''
+    if (raw && typeof raw === 'string' && raw.trim()) {
+      const clean = raw.replace(/\./g, ' ').trim().split(' ')[0]
+      if (clean) return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase()
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = JSON.parse(localStorage.getItem('edu-current-user') || '{}')
+        if (stored?.nome && typeof stored.nome === 'string' && stored.nome.trim()) {
+          const clean = stored.nome.replace(/\./g, ' ').trim().split(' ')[0]
+          if (clean) return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase()
+        }
+      } catch {}
+    }
+    return ''
+  })()
+
   const ChooseSystemContent = (
     <div className="login-form-wrapper" style={{ width:'100%', maxWidth:540, position:'relative', zIndex:1, animation:'fadeSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both' }}>
       <div style={{ marginBottom:36, textAlign:'center' }}>
         <h2 style={{ fontFamily:"'Outfit',sans-serif", fontSize:32, fontWeight:900, color:'#fff', letterSpacing:'-0.02em', marginBottom:8 }}>Acesso Autorizado</h2>
-        <p style={{ fontSize:15, color:'rgba(255,255,255,0.45)' }}>Bem-vindo. Onde você deseja entrar?</p>
+        <p style={{ fontSize:15, color:'rgba(255,255,255,0.45)', lineHeight: 1.6 }}>
+          {greetingFirstName ? (
+            <>
+              Bem-vindo,{' '}
+              <span
+                style={{
+                  fontFamily: "'Outfit', sans-serif",
+                  fontSize: 20,
+                  fontWeight: 900,
+                  color: '#ffffff',
+                  letterSpacing: '-0.02em',
+                  textShadow: '0 0 20px rgba(255,255,255,0.35)',
+                  display: 'inline'
+                }}
+              >
+                {greetingFirstName}
+              </span>
+              . Onde você deseja entrar?
+            </>
+          ) : (
+            'Bem-vindo. Onde você deseja entrar?'
+          )}
+        </p>
       </div>
 
       <div style={{ display:'flex', gap:20, flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' }}>

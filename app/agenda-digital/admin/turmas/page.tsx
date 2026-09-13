@@ -4,15 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { useData } from '@/lib/dataContext'
 import { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { LoadingGlass } from '@/components/LoadingGlass'
-import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { isAlunoCursandoTurma, compareTurmasBySerie, getTurmaSerieWeight } from '@/lib/studentTurmaUtils'
 import { 
   BookOpen, Users, Search, Plus, 
   ArrowLeft, X, Trash2, Check,
   Layers, Link2, UserCheck, ChevronRight,
   Shield, Building, GraduationCap, DollarSign,
   Phone, FileText, Pencil, CheckCircle2, AlertCircle,
-  Unlink
+  Unlink, UserPlus, CheckSquare, Square, Filter, Sparkles
 } from 'lucide-react'
 import { UserAvatar } from '@/components/UserAvatar'
 
@@ -40,7 +41,10 @@ type EquipeGrupo = {
 }
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
-const DEFAULT_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#0ea5e9', '#14b8a6'];
+const DEFAULT_COLORS = [
+  '#4f46e5', '#7c3aed', '#ec4899', '#f43f5e', '#f97316', 
+  '#eab308', '#10b981', '#06b6d4', '#3b82f6', '#64748b'
+]
 
 const ICONES_EQUIPE = [
   { id: 'Shield', label: 'Direção', icon: Shield },
@@ -60,13 +64,12 @@ function getIconComponent(iconeId: string) {
 }
 
 // ─── Sugestões pré-configuradas de equipes ────────────────────────────────────
-const SUGESTOES_EQUIPES = [
-  { nome: 'Direção', icone: 'Shield', cor: '#ec4899' },
-  { nome: 'Coordenação Fund. 1', icone: 'GraduationCap', cor: '#6366f1' },
-  { nome: 'Coordenação Fund. 2', icone: 'GraduationCap', cor: '#8b5cf6' },
-  { nome: 'Coordenação Ens. Médio', icone: 'GraduationCap', cor: '#a855f7' },
-  { nome: 'Secretaria Escolar', icone: 'FileText', cor: '#3b82f6' },
+const EQUIPES_PREDEFINIDAS = [
+  { nome: 'Coordenação Pedagógica', icone: 'GraduationCap', cor: '#4f46e5' },
+  { nome: 'Secretaria Escolar', icone: 'Building', cor: '#06b6d4' },
+  { nome: 'Direção Escolar', icone: 'Shield', cor: '#7c3aed' },
   { nome: 'Financeiro', icone: 'DollarSign', cor: '#10b981' },
+  { nome: 'Inspetores & Apoio', icone: 'Users', cor: '#f97316' },
   { nome: 'Recepção', icone: 'Phone', cor: '#f59e0b' },
 ]
 
@@ -76,7 +79,12 @@ export default function ADAdminTurmas() {
   const [alunos] = useSupabaseArray<any>('alunos/lightweight?limit=2000');
   const [grupos, setGrupos] = useSupabaseArray<GrupoDigital>('agenda/grupos');
   const [equipes, setEquipes] = useSupabaseArray<EquipeGrupo>('agenda/equipes');
-  const [funcionarios] = useSupabaseArray<any>('configuracoes/usuarios');
+  const [funcionarios] = useSupabaseArray<any>('configuracoes/usuarios?type=colaboradores&limit=1000');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // ── Estado de navegação ─────────────────────────────────────────────────────
   const [telaAtual, setTelaAtual] = useState<'lista' | 'detalhe-grupo'>('lista')
@@ -100,8 +108,162 @@ export default function ADAdminTurmas() {
   const [buscaColab, setBuscaColab] = useState('')
   const [isLoaded, setIsLoaded] = useState(false)
 
+  // ── Estado de Atribuição em Massa de Colaboradores ──────────────────────────
+  const [showVincularMassa, setShowVincularMassa] = useState(false)
+  const [colabSelecionadoId, setColabSelecionadoId] = useState<string | null>(null)
+  const [turmasSelecionadasIds, setTurmasSelecionadasIds] = useState<string[]>([])
+  const [buscaColabMassa, setBuscaColabMassa] = useState('')
+  const [buscaTurmaMassa, setBuscaTurmaMassa] = useState('')
+  const [segmentoFiltroMassa, setSegmentoFiltroMassa] = useState<'todos' | 'infantil' | 'fund1' | 'fund2' | 'medio' | 'equipe'>('todos')
+  const [salvandoMassa, setSalvandoMassa] = useState(false)
+  const [sucessoMassa, setSucessoMassa] = useState<string | null>(null)
+
+  // Travar o scroll da tela e da página quando o modal de vincular em massa estiver aberto
+  useEffect(() => {
+    if (!showVincularMassa) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const scrollContainer = document.querySelector('.ad-main-scroll') as HTMLElement | null;
+    const originalScrollOverflow = scrollContainer?.style.overflowY || '';
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    if (scrollContainer) {
+      scrollContainer.style.overflowY = 'hidden';
+    }
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      if (scrollContainer) {
+        scrollContainer.style.overflowY = originalScrollOverflow;
+      }
+    };
+  }, [showVincularMassa]);
+
+  // Filtro seguro exclusivo para colaboradores (garante que alunos e responsáveis jamais apareçam)
+  const apenasColaboradores = useMemo(() => {
+    return (funcionarios || []).filter((f: any) => {
+      if (!f || !f.id || !f.nome) return false;
+      const idStr = String(f.id);
+      if (idStr.startsWith('virtual-') || idStr.startsWith('resp-')) return false;
+      const p = String(f.perfil || '').toLowerCase();
+      const c = String(f.cargo || '').toLowerCase();
+      if (p.includes('aluno') || p.includes('família') || p.includes('familia') || p.includes('responsável') || p.includes('responsavel')) return false;
+      if (c.includes('aluno') || c.includes('família') || c.includes('familia') || c.includes('responsável') || c.includes('responsavel')) return false;
+      return true;
+    });
+  }, [funcionarios]);
+
   // ── Dados derivados ──────────────────────────────────────────────────────────
   const activeGrupo = useMemo(() => (grupos || []).find(g => g.id === activeGrupoId), [grupos, activeGrupoId])
+
+  // Lista geral de grupos ordenados por série
+  const allGruposOrdenados = useMemo(() => {
+    return [...(grupos || [])].sort(compareTurmasBySerie)
+  }, [grupos])
+
+  // Colaborador atualmente selecionado para atribuição em massa
+  const colabSelecionadoInfo = useMemo(() => {
+    if (!colabSelecionadoId) return null
+    return apenasColaboradores.find((f: any) => f.id === colabSelecionadoId) || null
+  }, [colabSelecionadoId, apenasColaboradores])
+
+  // Turmas originais do colaborador selecionado (para comparar alterações)
+  const turmasOriginaisDoColab = useMemo(() => {
+    if (!colabSelecionadoId) return []
+    return (grupos || []).filter(g => (g.colaboradoresIds || []).includes(colabSelecionadoId)).map(g => g.id)
+  }, [colabSelecionadoId, grupos])
+
+  const qtdAdicionadas = useMemo(() => {
+    return turmasSelecionadasIds.filter(id => !turmasOriginaisDoColab.includes(id)).length
+  }, [turmasSelecionadasIds, turmasOriginaisDoColab])
+
+  const qtdRemovidas = useMemo(() => {
+    return turmasOriginaisDoColab.filter(id => !turmasSelecionadasIds.includes(id)).length
+  }, [turmasSelecionadasIds, turmasOriginaisDoColab])
+
+  // Filtragem de turmas para o modal de massa
+  const turmasFiltradasMassa = useMemo(() => {
+    return allGruposOrdenados.filter(g => {
+      if (anoParaImportar && g.ano && String(g.ano) !== String(anoParaImportar)) {
+        return false
+      }
+      if (buscaTurmaMassa.trim()) {
+        const q = buscaTurmaMassa.toLowerCase().trim()
+        const nomeMatch = (g.nome || '').toLowerCase().includes(q)
+        const anoMatch = (g.ano || '').toLowerCase().includes(q)
+        if (!nomeMatch && !anoMatch) return false
+      }
+      if (segmentoFiltroMassa !== 'todos') {
+        const peso = getTurmaSerieWeight(g)
+        if (segmentoFiltroMassa === 'infantil' && (peso < 10 || peso > 59)) return false
+        if (segmentoFiltroMassa === 'fund1' && (peso < 101 || peso > 105)) return false
+        if (segmentoFiltroMassa === 'fund2' && (peso < 106 || peso > 109)) return false
+        if (segmentoFiltroMassa === 'medio' && (peso < 200 || peso > 299)) return false
+        if (segmentoFiltroMassa === 'equipe' && !g.isEquipeEscolar && peso < 900) return false
+      }
+      return true
+    })
+  }, [allGruposOrdenados, anoParaImportar, buscaTurmaMassa, segmentoFiltroMassa])
+
+  // Ações do modal em massa
+  const handleSelectColabParaMassa = (id: string) => {
+    setColabSelecionadoId(id)
+    const turmasDoColab = (grupos || [])
+      .filter(g => (g.colaboradoresIds || []).includes(id))
+      .map(g => g.id)
+    setTurmasSelecionadasIds(turmasDoColab)
+    setBuscaTurmaMassa('')
+    setSegmentoFiltroMassa('todos')
+  }
+
+  const handleToggleTurmaMassa = (grupoId: string) => {
+    setTurmasSelecionadasIds(prev => 
+      prev.includes(grupoId) ? prev.filter(id => id !== grupoId) : [...prev, grupoId]
+    )
+  }
+
+  const handleSelecionarTodasVisiveis = () => {
+    const idsVisiveis = turmasFiltradasMassa.map(g => g.id)
+    setTurmasSelecionadasIds(prev => Array.from(new Set([...prev, ...idsVisiveis])))
+  }
+
+  const handleDesmarcarTodasVisiveis = () => {
+    const idsVisiveisSet = new Set(turmasFiltradasMassa.map(g => g.id))
+    setTurmasSelecionadasIds(prev => prev.filter(id => !idsVisiveisSet.has(id)))
+  }
+
+  const handleSalvarVinculosMassa = async () => {
+    if (!colabSelecionadoId) return
+    setSalvandoMassa(true)
+    try {
+      const novosGrupos = (grupos || []).map(g => {
+        const deveEstar = turmasSelecionadasIds.includes(g.id)
+        const colsAtuais = g.colaboradoresIds || []
+        const esta = colsAtuais.includes(colabSelecionadoId)
+
+        if (deveEstar && !esta) {
+          return { ...g, colaboradoresIds: [...colsAtuais, colabSelecionadoId] }
+        } else if (!deveEstar && esta) {
+          return { ...g, colaboradoresIds: colsAtuais.filter((id: string) => id !== colabSelecionadoId) }
+        }
+        return g
+      })
+      await setGrupos(novosGrupos)
+      setSucessoMassa('Vínculos atualizados com sucesso!')
+      setTimeout(() => {
+        setSucessoMassa(null)
+        setShowVincularMassa(false)
+        setColabSelecionadoId(null)
+      }, 900)
+    } catch (err) {
+      console.error('Erro ao salvar vínculos em massa:', err)
+    } finally {
+      setSalvandoMassa(false)
+    }
+  }
 
   // ── Resolver colaboradores efetivos de um grupo ───────────────────────────────
   const resolveColaboradoresGrupo = (grupo: GrupoDigital): string[] => {
@@ -138,8 +300,9 @@ export default function ADAdminTurmas() {
         ano: String(t.ano),
       }
     })
+    novos.sort(compareTurmasBySerie)
     // Preservar grupos criados manualmente
-    const gruposManuais = (grupos || []).filter(g => !g.syncId && !g.id.startsWith('sync-'))
+    const gruposManuais = (grupos || []).filter(g => !g.syncId && !g.id.startsWith('sync-')).sort(compareTurmasBySerie)
     setGrupos([...gruposManuais, ...novos])
   }
 
@@ -175,7 +338,7 @@ export default function ADAdminTurmas() {
 
   // Busca colaboradores
   const searchResultsAlunos = buscaAluno.length > 2 ? (alunos || []).filter(a => a.nome.toLowerCase().includes(buscaAluno.toLowerCase())).slice(0, 5) : []
-  const searchResultsColabs = buscaColab.length > 0 ? (funcionarios || []).filter((f: any) => f.nome.toLowerCase().includes(buscaColab.toLowerCase())).slice(0, 10) : []
+  const searchResultsColabs = buscaColab.length > 0 ? (apenasColaboradores || []).filter((f: any) => f.nome.toLowerCase().includes(buscaColab.toLowerCase())).slice(0, 10) : []
 
   if (!isLoaded) return (
     <div className="flex items-center justify-center h-full text-slate-500 font-medium">
@@ -195,9 +358,9 @@ export default function ADAdminTurmas() {
       if (turmaERP) return isAlunoCursandoTurma(a, turmaERP, activeGrupo.ano || turmaERP?.ano)
       return (activeGrupo.alunosIds || []).includes(a.id) || isAlunoCursandoTurma(a, activeGrupo, activeGrupo.ano)
     })
-    const colsDiretos = (funcionarios || []).filter((u: any) => (activeGrupo.colaboradoresIds || []).includes(u.id))
+    const colsDiretos = (apenasColaboradores || []).filter((u: any) => (activeGrupo.colaboradoresIds || []).includes(u.id))
     const todosCols = resolveColaboradoresGrupo(activeGrupo)
-    const todosFuncionarios = (funcionarios || []).filter((u: any) => todosCols.includes(u.id))
+    const todosFuncionarios = (apenasColaboradores || []).filter((u: any) => todosCols.includes(u.id))
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -330,7 +493,7 @@ export default function ADAdminTurmas() {
                         {searchResultsColabs.map((f: any) => (
                           <div key={f.id} onClick={() => adicionarColaboradorDireto(f.id)} style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border-subtle))', cursor: 'pointer' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <UserAvatar userId={f.id} name={f.nome} size={30} />
+                              <UserAvatar userId={f.id} name={f.nome} size={30} fotoUrl={f.foto || f.fotoUrl || f.avatarUrl} />
                               <div>
                                 <div style={{ fontWeight: 700, fontSize: 13 }}>{f.nome}</div>
                                 <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{f.cargo}</div>
@@ -354,7 +517,7 @@ export default function ADAdminTurmas() {
                       {colsDiretos.map((u: any) => (
                         <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(0,0,0,0.02)', borderRadius: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <UserAvatar userId={u.id} name={u.nome} size={36} />
+                            <UserAvatar userId={u.id} name={u.nome} size={36} fotoUrl={u.foto || u.fotoUrl || u.avatarUrl} />
                             <div>
                               <div style={{ fontWeight: 700, fontSize: 14 }}>{u.nome}</div>
                               <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{u.cargo || 'Colaborador'}</div>
@@ -462,6 +625,16 @@ export default function ADAdminTurmas() {
             <option value="">Todos Anos</option>
             {cfgCalendarioLetivo.map((c: any) => <option key={c.ano} value={c.ano}>{c.ano}</option>)}
           </select>
+          <motion.button 
+            whileHover={{ scale: 1.04 }} 
+            whileTap={{ scale: 0.96 }} 
+            onClick={() => { setShowVincularMassa(true); setColabSelecionadoId(null); setBuscaColabMassa(''); setBuscaTurmaMassa(''); }} 
+            className="btn btn-secondary" 
+            style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, fontWeight: 700, border: '1.5px solid #c7d2fe', background: 'rgba(99, 102, 241, 0.08)', color: '#4f46e5' }}
+            title="Selecionar um colaborador e atribuir múltiplas turmas de uma vez"
+          >
+            <UserPlus size={16} /> Vincular em Massa
+          </motion.button>
           <button onClick={handleAutoSync} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, fontWeight: 700 }}>
             <DownloadCloud size={16} /> Sincronizar ERP
           </button>
@@ -505,6 +678,11 @@ export default function ADAdminTurmas() {
           })
         }
 
+        // Ordenar as turmas de cada ano rigorosamente por ordem de série / nível escolar
+        Object.keys(gruposPorAno).forEach(chave => {
+          gruposPorAno[chave].sort(compareTurmasBySerie)
+        })
+
         if ((grupos || []).length === 0) {
           return (
             <div style={{ background: 'white', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.02)', padding: '60px 0', textAlign: 'center' }}>
@@ -536,7 +714,7 @@ export default function ADAdminTurmas() {
                     </thead>
                     <tbody>
                       {gruposPorAno[ano].map(g => {
-                        const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (funcionarios || []).some((f: any) => f.id === colId))
+                        const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (apenasColaboradores || []).some((f: any) => f.id === colId))
                         const turmaERP = turmas.find(t => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome)
                         const alunosDoGrupoCount = (alunos || []).filter((a: any) => {
                           if (turmaERP) return isAlunoCursandoTurma(a, turmaERP, g.ano || turmaERP?.ano)
@@ -572,8 +750,8 @@ export default function ADAdminTurmas() {
                             <td style={{ padding: '16px 20px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: -6 }}>
                                 {todosColabs.slice(0, 4).map((colId, idx) => {
-                                  const info = (funcionarios || []).find((f: any) => f.id === colId)
-                                  return <div key={colId} style={{ marginLeft: idx > 0 ? -10 : 0, border: '2px solid white', borderRadius: '50%', zIndex: 10 - idx }}><UserAvatar userId={colId} name={info?.nome || 'C'} size={28} /></div>
+                                  const info = (apenasColaboradores || []).find((f: any) => f.id === colId)
+                                  return <div key={colId} style={{ marginLeft: idx > 0 ? -10 : 0, border: '2px solid white', borderRadius: '50%', zIndex: 10 - idx }}><UserAvatar userId={colId} name={info?.nome || 'C'} size={28} fotoUrl={info?.foto || info?.fotoUrl || info?.avatarUrl} /></div>
                                 })}
                                 {todosColabs.length > 4 && <div style={{ marginLeft: -10, width: 28, height: 28, borderRadius: 14, background: 'hsl(var(--bg-muted))', border: '2px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800 }}>+{todosColabs.length - 4}</div>}
                                 {todosColabs.length === 0 && <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>Nenhum</span>}
@@ -671,6 +849,518 @@ export default function ADAdminTurmas() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Modal Atribuição de Colaborador em Massa ────────────── */}
+      {mounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showVincularMassa && (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              style={{ 
+                position: 'fixed', 
+                top: 0, left: 0, right: 0, bottom: 0, 
+                width: '100vw',
+                height: '100vh',
+                background: 'rgba(15, 23, 42, 0.85)', 
+                backdropFilter: 'blur(8px)', 
+                WebkitBackdropFilter: 'blur(8px)',
+                zIndex: 9999999, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                padding: 20,
+                boxSizing: 'border-box'
+              }}
+              onClick={e => {
+                if (e.target === e.currentTarget) {
+                  setShowVincularMassa(false);
+                  setColabSelecionadoId(null);
+                  setSucessoMassa(null);
+                }
+              }}
+            >
+              <motion.div 
+                initial={{ scale: 0.95, y: 16 }} 
+                animate={{ scale: 1, y: 0 }} 
+                exit={{ scale: 0.95, y: 16 }} 
+                transition={{ duration: 0.2 }}
+                style={{ 
+                  background: 'white', 
+                  borderRadius: 24, 
+                  width: '100%', 
+                  maxWidth: 720, 
+                  maxHeight: '90vh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+                  overflow: 'hidden',
+                  position: 'relative'
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+              {/* Top Modal Header */}
+              <div style={{ 
+                padding: '20px 24px', 
+                borderBottom: '1px solid #f1f5f9', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                background: 'linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ 
+                    width: 40, height: 40, borderRadius: 12, 
+                    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    color: 'white', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)' 
+                  }}>
+                    <UserPlus size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: '#0f172a', fontFamily: 'Outfit, sans-serif' }}>
+                      Vincular Colaborador em Massa
+                    </h3>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>
+                      {colabSelecionadoInfo 
+                        ? `Selecione as turmas para ${colabSelecionadoInfo.nome}`
+                        : 'Escolha um colaborador para gerenciar os vínculos com múltiplas turmas'
+                      }
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => { setShowVincularMassa(false); setColabSelecionadoId(null); setSucessoMassa(null); }} 
+                  style={{ 
+                    width: 32, height: 32, borderRadius: 16, 
+                    border: '1px solid #e2e8f0', background: 'white', 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                    cursor: 'pointer', color: '#64748b' 
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Success Notification Alert */}
+              {sucessoMassa && (
+                <div style={{ 
+                  margin: '12px 24px 0', 
+                  padding: '10px 16px', 
+                  borderRadius: 12, 
+                  background: 'rgba(16, 185, 129, 0.1)', 
+                  border: '1px solid rgba(16, 185, 129, 0.25)', 
+                  color: '#059669', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 8, 
+                  fontSize: 13, 
+                  fontWeight: 700 
+                }}>
+                  <CheckCircle2 size={16} />
+                  {sucessoMassa}
+                </div>
+              )}
+
+              {/* Modal Body */}
+              <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {!colabSelecionadoInfo ? (
+                  /* ─── PASSO 1: ESCOLHER COLABORADOR ─── */
+                  <div>
+                    <div style={{ position: 'relative', marginBottom: 16 }}>
+                      <Search size={16} style={{ position: 'absolute', left: 14, top: 12, color: '#94a3b8' }} />
+                      <input
+                        className="form-input"
+                        placeholder="Buscar colaborador por nome, cargo ou perfil..."
+                        value={buscaColabMassa}
+                        onChange={e => setBuscaColabMassa(e.target.value)}
+                        style={{ paddingLeft: 42, width: '100%', borderRadius: 14, fontSize: 13, height: 42 }}
+                        autoFocus
+                      />
+                      {buscaColabMassa && (
+                        <button 
+                          onClick={() => setBuscaColabMassa('')}
+                          style={{ position: 'absolute', right: 12, top: 12, border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                        >
+                          <X size={15} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 420, overflowY: 'auto' }}>
+                      {(() => {
+                        const listaFiltrada = (apenasColaboradores || [])
+                          .filter((f: any) => {
+                            if (!buscaColabMassa.trim()) return true
+                            const q = buscaColabMassa.toLowerCase().trim()
+                            return (f.nome || '').toLowerCase().includes(q) || 
+                                   (f.cargo || '').toLowerCase().includes(q) || 
+                                   (f.email || '').toLowerCase().includes(q) ||
+                                   (f.perfil || '').toLowerCase().includes(q)
+                          })
+                          .sort((a: any, b: any) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'))
+
+                        if (listaFiltrada.length === 0) {
+                          return (
+                            <div style={{ padding: '36px 16px', textAlign: 'center', color: '#64748b' }}>
+                              <Users size={32} style={{ opacity: 0.3, margin: '0 auto 8px' }} />
+                              <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>Nenhum colaborador encontrado</p>
+                              <p style={{ margin: '4px 0 0', fontSize: 11, color: '#94a3b8' }}>Verifique os termos da busca.</p>
+                            </div>
+                          )
+                        }
+
+                        return listaFiltrada.map((f: any) => {
+                          const turmasDoColabCount = (grupos || []).filter(g => (g.colaboradoresIds || []).includes(f.id)).length
+                          return (
+                            <div
+                              key={f.id}
+                              onClick={() => handleSelectColabParaMassa(f.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '12px 16px',
+                                borderRadius: 14,
+                                border: '1px solid #f1f5f9',
+                                background: '#ffffff',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={e => {
+                                e.currentTarget.style.background = '#f8fafc'
+                                e.currentTarget.style.borderColor = '#c7d2fe'
+                              }}
+                              onMouseLeave={e => {
+                                e.currentTarget.style.background = '#ffffff'
+                                e.currentTarget.style.borderColor = '#f1f5f9'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <UserAvatar userId={f.id} name={f.nome} size={38} fotoUrl={f.foto || f.fotoUrl || f.avatarUrl} />
+                                <div>
+                                  <div style={{ fontWeight: 800, fontSize: 14, color: '#1e293b' }}>{f.nome}</div>
+                                  <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span>{f.cargo || f.perfil || 'Colaborador'}</span>
+                                    {f.email && <span style={{ opacity: 0.6 }}>· {f.email}</span>}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: '4px 10px',
+                                  borderRadius: 20,
+                                  background: turmasDoColabCount > 0 ? 'rgba(79, 70, 229, 0.08)' : 'rgba(148, 163, 184, 0.1)',
+                                  color: turmasDoColabCount > 0 ? '#4f46e5' : '#64748b'
+                                }}>
+                                  {turmasDoColabCount} {turmasDoColabCount === 1 ? 'turma' : 'turmas'}
+                                </span>
+                                <ChevronRight size={16} color="#94a3b8" />
+                              </div>
+                            </div>
+                          )
+                        })
+                      })()}
+                    </div>
+                  </div>
+                ) : (
+                  /* ─── PASSO 2: SELECIONAR TURMAS PARA O COLABORADOR ─── */
+                  <div>
+                    {/* Card do Colaborador Ativo */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 16px',
+                      borderRadius: 16,
+                      background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.06) 0%, rgba(124, 58, 237, 0.06) 100%)',
+                      border: '1.5px solid rgba(99, 102, 241, 0.2)',
+                      marginBottom: 16
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <UserAvatar userId={colabSelecionadoInfo.id} name={colabSelecionadoInfo.nome} size={40} fotoUrl={colabSelecionadoInfo.foto || colabSelecionadoInfo.fotoUrl || colabSelecionadoInfo.avatarUrl} />
+                        <div>
+                          <div style={{ fontWeight: 900, fontSize: 14, color: '#1e293b' }}>
+                            {colabSelecionadoInfo.nome}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#4f46e5', fontWeight: 600 }}>
+                            {colabSelecionadoInfo.cargo || colabSelecionadoInfo.perfil || 'Colaborador'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setColabSelecionadoId(null)}
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: '#4f46e5',
+                          background: 'white',
+                          border: '1px solid #c7d2fe',
+                          padding: '6px 12px',
+                          borderRadius: 10,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Trocar Colaborador
+                      </button>
+                    </div>
+
+                    {/* Barra de Filtros e Busca de Turmas */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                          <Search size={15} style={{ position: 'absolute', left: 12, top: 11, color: '#94a3b8' }} />
+                          <input
+                            className="form-input"
+                            placeholder="Filtrar turmas pelo nome ou turno (ex: Nível 4, Matutino, 8º)..."
+                            value={buscaTurmaMassa}
+                            onChange={e => setBuscaTurmaMassa(e.target.value)}
+                            style={{ paddingLeft: 38, width: '100%', borderRadius: 12, fontSize: 12.5, height: 38 }}
+                          />
+                          {buscaTurmaMassa && (
+                            <button 
+                              onClick={() => setBuscaTurmaMassa('')}
+                              style={{ position: 'absolute', right: 10, top: 10, border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleSelecionarTodasVisiveis}
+                          className="btn btn-secondary"
+                          style={{ fontSize: 12, fontWeight: 700, padding: '0 14px', borderRadius: 12, whiteSpace: 'nowrap' }}
+                        >
+                          Marcar Todas ({turmasFiltradasMassa.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDesmarcarTodasVisiveis}
+                          className="btn btn-secondary"
+                          style={{ fontSize: 12, fontWeight: 700, padding: '0 14px', borderRadius: 12, whiteSpace: 'nowrap' }}
+                        >
+                          Desmarcar
+                        </button>
+                      </div>
+
+                      {/* Pills por Segmento Escolar */}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {[
+                          { id: 'todos', label: 'Todas' },
+                          { id: 'infantil', label: 'Educação Infantil' },
+                          { id: 'fund1', label: 'Ens. Fundamental I' },
+                          { id: 'fund2', label: 'Ens. Fundamental II' },
+                          { id: 'medio', label: 'Ensino Médio' },
+                          { id: 'equipe', label: 'Equipe Escolar' }
+                        ].map(seg => {
+                          const isCurrent = segmentoFiltroMassa === seg.id
+                          return (
+                            <button
+                              key={seg.id}
+                              type="button"
+                              onClick={() => setSegmentoFiltroMassa(seg.id as any)}
+                              style={{
+                                padding: '4px 10px',
+                                borderRadius: 14,
+                                fontSize: 11,
+                                fontWeight: isCurrent ? 800 : 600,
+                                border: isCurrent ? '1.5px solid #4f46e5' : '1px solid #e2e8f0',
+                                background: isCurrent ? '#4f46e5' : '#f8fafc',
+                                color: isCurrent ? '#ffffff' : '#64748b',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {seg.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Lista Ordenada de Turmas com Checkboxes */}
+                    <div style={{ 
+                      maxHeight: 380, 
+                      overflowY: 'auto', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: 6,
+                      border: '1px solid #f1f5f9',
+                      borderRadius: 16,
+                      padding: 8,
+                      background: '#fbfcfd'
+                    }}>
+                      {turmasFiltradasMassa.length === 0 ? (
+                        <div style={{ padding: '32px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                          Nenhuma turma encontrada para o filtro atual.
+                        </div>
+                      ) : (
+                        turmasFiltradasMassa.map(g => {
+                          const isSelected = turmasSelecionadasIds.includes(g.id)
+                          const wasOriginallyLinked = turmasOriginaisDoColab.includes(g.id)
+                          
+                          return (
+                            <div
+                              key={g.id}
+                              onClick={() => handleToggleTurmaMassa(g.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '10px 14px',
+                                borderRadius: 12,
+                                border: isSelected ? '1.5px solid #a5b4fc' : '1px solid #e2e8f0',
+                                background: isSelected ? '#eef2ff' : '#ffffff',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                                <div style={{
+                                  width: 22, height: 22, borderRadius: 6,
+                                  border: isSelected ? '2px solid #4f46e5' : '2px solid #cbd5e1',
+                                  background: isSelected ? '#4f46e5' : '#ffffff',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: 'white', flexShrink: 0
+                                }}>
+                                  {isSelected && <Check size={14} strokeWidth={3} />}
+                                </div>
+
+                                <div style={{
+                                  width: 32, height: 32, borderRadius: 10,
+                                  background: g.cor || '#6366f1',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  color: 'white', flexShrink: 0
+                                }}>
+                                  <BookOpen size={16} />
+                                </div>
+
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{
+                                    fontWeight: 800, fontSize: 13,
+                                    color: isSelected ? '#1e1b4b' : '#1e293b',
+                                    display: 'flex', alignItems: 'center', gap: 8
+                                  }}>
+                                    <span>{g.nome}</span>
+                                    {g.ano && (
+                                      <span style={{ fontSize: 10, color: '#64748b', background: '#f1f5f9', padding: '1px 6px', borderRadius: 6, fontWeight: 700 }}>
+                                        {g.ano}
+                                      </span>
+                                    )}
+                                    {g.isEquipeEscolar && (
+                                      <span style={{ fontSize: 10, color: '#4f46e5', background: 'rgba(79, 70, 229, 0.1)', padding: '1px 6px', borderRadius: 6, fontWeight: 700 }}>
+                                        Equipe Escolar
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize: 11, color: '#64748b' }}>
+                                    {(g.alunosIds || []).length} alunos vinculados
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div>
+                                {wasOriginallyLinked && isSelected && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 8, background: 'rgba(16, 185, 129, 0.1)', color: '#059669' }}>
+                                    Já vinculado
+                                  </span>
+                                )}
+                                {!wasOriginallyLinked && isSelected && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 8, background: 'rgba(79, 70, 229, 0.15)', color: '#4338ca' }}>
+                                    + Adicionar
+                                  </span>
+                                )}
+                                {wasOriginallyLinked && !isSelected && (
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 8, background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626' }}>
+                                    Remover
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              {colabSelecionadoInfo && (
+                <div style={{
+                  padding: '16px 24px',
+                  borderTop: '1px solid #f1f5f9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: '#f8fafc'
+                }}>
+                  <div style={{ fontSize: 13, color: '#475569' }}>
+                    Total selecionado: <strong style={{ color: '#1e293b' }}>{turmasSelecionadasIds.length} turmas</strong>
+                    {qtdAdicionadas > 0 && (
+                      <span style={{ color: '#059669', fontWeight: 700, marginLeft: 6 }}>
+                        (+{qtdAdicionadas} {qtdAdicionadas === 1 ? 'nova' : 'novas'})
+                      </span>
+                    )}
+                    {qtdRemovidas > 0 && (
+                      <span style={{ color: '#dc2626', fontWeight: 700, marginLeft: 6 }}>
+                        (-{qtdRemovidas} {qtdRemovidas === 1 ? 'removida' : 'removidas'})
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      type="button"
+                      onClick={() => { setShowVincularMassa(false); setColabSelecionadoId(null); }}
+                      className="btn btn-secondary"
+                      style={{ borderRadius: 12, fontWeight: 700 }}
+                      disabled={salvandoMassa}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSalvarVinculosMassa}
+                      className="btn btn-primary"
+                      style={{
+                        borderRadius: 12,
+                        fontWeight: 800,
+                        background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        boxShadow: '0 4px 14px rgba(79, 70, 229, 0.3)'
+                      }}
+                      disabled={salvandoMassa}
+                    >
+                      {salvandoMassa ? (
+                        <span>Salvando...</span>
+                      ) : (
+                        <>
+                          <Check size={16} strokeWidth={3} />
+                          <span>Salvar Vínculos</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>,
+      document.body
+    )}
     </div>
   )
 }

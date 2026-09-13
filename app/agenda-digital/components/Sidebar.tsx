@@ -216,7 +216,7 @@ export function ADSidebar() {
         { id: 'modulos', label: 'Trocar Módulo', icon: Grid, href: '/login?step=choose_system' }
       ].filter(item => {
         if (alunoId === 'colaborador') {
-          return ['comunicados', 'Mídia', 'Agenda', 'Perfil', 'Trocar Módulo'].includes(item.label)
+          return ['comunicados', 'Mídia', 'Agenda', 'Frequência', 'Notas', 'Ocorrências', 'Perfil', 'Trocar Módulo'].includes(item.label)
         }
         
         // Ocultar sempre "Trocar Módulo" na visão de aluno/família (conforme solicitado pelo usuário)
@@ -553,7 +553,7 @@ export function ADSidebar() {
                     { label: 'Meu Perfil', href: `/agenda-digital/${alunoId}/perfil`, icon: UserCog },
                   ].filter(item => {
                     if (alunoId === 'colaborador') {
-                      return ['Comunicados', 'Mídia', 'Calendário', 'Meu Perfil'].includes(item.label)
+                      return ['Comunicados', 'Mídia', 'Calendário', 'Frequência', 'Notas', 'Ocorrências', 'Meu Perfil'].includes(item.label)
                     }
                     
                     let isFin = false;

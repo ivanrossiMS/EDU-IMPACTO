@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import styles from './ImpactoLoader.module.css'
+import { IMPACTO_LOGO_DATA_URI } from './impactoLogoBase64'
 
 export interface ImpactoLoaderProps {
   isLoading?: boolean
@@ -18,25 +19,19 @@ export function ImpactoLoader({
   const [visible, setVisible] = useState(isLoading)
 
   useEffect(() => {
-    let animFrame: number | null = null
     let timeoutId: NodeJS.Timeout | null = null
 
     if (isLoading) {
       setShouldRender(true)
-      animFrame = requestAnimationFrame(() => {
-        setVisible(true)
-      })
+      setVisible(true)
     } else {
       setVisible(false)
       timeoutId = setTimeout(() => {
         setShouldRender(false)
-      }, 200)
+      }, 150)
     }
 
     return () => {
-      if (animFrame !== null) {
-        cancelAnimationFrame(animFrame)
-      }
       if (timeoutId !== null) {
         clearTimeout(timeoutId)
       }
@@ -71,12 +66,17 @@ export function ImpactoLoader({
           <span className={`${styles.particle} ${styles.dot6}`} />
         </div>
 
-        {/* 5. Logo oficial 70 x 70 px (cantos 20px) com pulso 0.97 a 1.035 e inclinação ±1° */}
+        {/* 5. Logo oficial 70 x 70 px (cantos 20px) com pulso 0.97 a 1.035 e inclinação ±1° — renderização 0ms imediata */}
         <div className={styles.logoCard}>
           <img
-            src="/logo-impacto.png"
-            alt=""
+            src={IMPACTO_LOGO_DATA_URI}
+            alt="Colégio Impacto"
             className={styles.logoImage}
+            width={62}
+            height={62}
+            decoding="sync"
+            loading="eager"
+            fetchPriority="high"
             draggable={false}
           />
           <div className={styles.shineOverlay} aria-hidden="true" />

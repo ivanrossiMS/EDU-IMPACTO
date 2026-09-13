@@ -6,7 +6,7 @@ import {
   Bell, Send, Users, Smartphone, ShieldCheck, CheckCircle2,
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
   Info, Check, Calendar, Camera, Clock, DollarSign, Award,
-  Car, FileText, ChevronRight, Search, X, Copy, Terminal,
+  Car, FileText, ChevronRight, ChevronDown, ChevronUp, Search, X, Copy, Terminal,
   Radio, CheckCheck, Eye, Zap, Shield, Laptop
 } from 'lucide-react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
@@ -402,6 +402,11 @@ export default function ADAdminPushTestPage() {
   const [isLoadingGuardians, setIsLoadingGuardians] = useState(false)
   const [selectedRespIds, setSelectedRespIds] = useState<string[]>([])
   const [includeAlunoDirect, setIncludeAlunoDirect] = useState(false)
+  const [expandedRespDevices, setExpandedRespDevices] = useState<Record<string, boolean>>({})
+
+  const toggleDevices = (respId: string) => {
+    setExpandedRespDevices(prev => ({ ...prev, [respId]: !prev[respId] }))
+  }
 
   // ── Estados de Conteúdo da Notificação ──
   const [activeCategory, setActiveCategory] = useState<PushCategory>('frequencia')
@@ -926,64 +931,192 @@ export default function ADAdminPushTestPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {guardians.map((g: any) => {
                         const isChecked = selectedRespIds.includes(String(g.responsavel_id))
+                        const isExpanded = Boolean(expandedRespDevices[String(g.responsavel_id)])
+                        const devices = g.dispositivos || []
+                        const totalDevs = g.totalDispositivos !== undefined ? g.totalDispositivos : devices.length
+                        const activeDevs = g.dispositivosAtivos !== undefined ? g.dispositivosAtivos : devices.filter((d: any) => d.isSubscribed).length
+
                         return (
-                          <label
+                          <div
                             key={g.responsavel_id}
                             style={{
-                              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                              borderRadius: 10, border: `1px solid ${isChecked ? 'rgba(99, 102, 241, 0.4)' : 'hsl(var(--border-subtle))'}`,
-                              background: isChecked ? 'rgba(99, 102, 241, 0.04)' : 'hsl(var(--bg-main))',
-                              cursor: 'pointer', transition: 'all 0.15s'
+                              borderRadius: 12,
+                              border: `1px solid ${isChecked ? 'rgba(99, 102, 241, 0.4)' : 'hsl(var(--border-subtle))'}`,
+                              background: isChecked ? 'rgba(99, 102, 241, 0.03)' : 'hsl(var(--bg-main))',
+                              transition: 'all 0.15s',
+                              overflow: 'hidden',
                             }}
                           >
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={e => {
-                                if (e.target.checked) {
-                                  setSelectedRespIds(prev => [...prev, String(g.responsavel_id)])
-                                } else {
+                            <div
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                                cursor: 'pointer',
+                              }}
+                              onClick={() => {
+                                if (isChecked) {
                                   setSelectedRespIds(prev => prev.filter(id => id !== String(g.responsavel_id)))
+                                } else {
+                                  setSelectedRespIds(prev => [...prev, String(g.responsavel_id)])
                                 }
                               }}
-                              style={{ width: 16, height: 16, accentColor: '#4f46e5' }}
-                            />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                <span style={{ fontWeight: 700, fontSize: 13 }}>{g.nome}</span>
-                                <span style={{
-                                  fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700,
-                                  background: 'rgba(99, 102, 241, 0.12)', color: '#4f46e5'
-                                }}>
-                                  {g.parentesco || 'Responsável'}
-                                </span>
-                                {g.isFinanceiro && (
-                                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700, background: 'rgba(244, 63, 94, 0.12)', color: '#f43f5e' }}>
-                                    Financeiro
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {}} // tratado no onClick do container pai
+                                style={{ width: 16, height: 16, accentColor: '#4f46e5', cursor: 'pointer' }}
+                              />
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  <span style={{ fontWeight: 700, fontSize: 13 }}>{g.nome}</span>
+                                  <span style={{
+                                    fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700,
+                                    background: 'rgba(99, 102, 241, 0.12)', color: '#4f46e5'
+                                  }}>
+                                    {g.parentesco || 'Responsável'}
                                   </span>
+                                  {g.isFinanceiro && (
+                                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700, background: 'rgba(244, 63, 94, 0.12)', color: '#f43f5e' }}>
+                                      Financeiro
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 8 }}>
+                                  <span>{g.email || 'Sem email'}</span>
+                                  {g.telefone && <span>• {g.telefone}</span>}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{
+                                    fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
+                                    background: g.temContaAtiva ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.12)',
+                                    color: g.temContaAtiva ? '#10b981' : '#64748b',
+                                    border: `1px solid ${g.temContaAtiva ? 'rgba(16, 185, 129, 0.3)' : 'rgba(100, 116, 139, 0.2)'}`
+                                  }}>
+                                    {g.temContaAtiva ? '✓ Conta no App' : 'Sem Login'}
+                                  </span>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                  {g.ultimoAcesso && (
+                                    <span style={{ fontSize: 9, color: '#10b981', fontWeight: 600 }}>
+                                      Visto: {new Date(g.ultimoAcesso).toLocaleDateString('pt-BR')}
+                                    </span>
+                                  )}
+
+                                  {/* Botão para Ver Aparelhos Conectados */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      toggleDevices(String(g.responsavel_id))
+                                    }}
+                                    style={{
+                                      background: isExpanded ? 'rgba(99, 102, 241, 0.18)' : 'rgba(99, 102, 241, 0.08)',
+                                      border: '1px solid rgba(99, 102, 241, 0.28)',
+                                      borderRadius: 8, padding: '2px 8px',
+                                      color: '#4f46e5', fontSize: 10, fontWeight: 700,
+                                      display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer',
+                                      transition: 'all 0.15s'
+                                    }}
+                                    title="Ver modelos de celular e status de push no OneSignal"
+                                  >
+                                    <Smartphone size={11} />
+                                    {totalDevs === 0
+                                      ? '0 aparelhos'
+                                      : `${totalDevs} aparelho${totalDevs > 1 ? 's' : ''} (${activeDevs} ativo${activeDevs !== 1 ? 's' : ''})`}
+                                    {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Acordeão de Aparelhos Conectados */}
+                            {isExpanded && (
+                              <div style={{
+                                padding: '10px 14px 14px',
+                                background: 'rgba(15, 23, 42, 0.03)',
+                                borderTop: '1px solid rgba(99, 102, 241, 0.12)',
+                                display: 'flex', flexDirection: 'column', gap: 8
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontWeight: 700 }}>
+                                  <span style={{ color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                    <Smartphone size={13} color="#6366f1" /> Aparelhos registrados no OneSignal ({totalDevs}):
+                                  </span>
+                                  <span style={{
+                                    fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6,
+                                    background: activeDevs > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                    color: activeDevs > 0 ? '#059669' : '#dc2626'
+                                  }}>
+                                    {activeDevs > 0 ? `✓ ${activeDevs} recebendo notificações` : '✕ Nenhum aparelho ativo'}
+                                  </span>
+                                </div>
+
+                                {devices.length === 0 ? (
+                                  <div style={{
+                                    fontSize: 11, color: 'hsl(var(--text-muted))',
+                                    padding: '8px 10px', borderRadius: 8, background: 'rgba(245, 158, 11, 0.06)',
+                                    border: '1px solid rgba(245, 158, 11, 0.18)'
+                                  }}>
+                                    Nenhum smartphone registrado no gateway push ainda. O responsável precisa fazer login no aplicativo para registrar o token.
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {devices.map((dev: any, dIdx: number) => (
+                                      <div
+                                        key={dev.id || dIdx}
+                                        style={{
+                                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                          padding: '8px 12px', borderRadius: 8,
+                                          background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.06)' : 'rgba(239, 68, 68, 0.05)',
+                                          border: `1px solid ${dev.isSubscribed ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.2)'}`,
+                                          gap: 10, flexWrap: 'wrap'
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                                          <div style={{
+                                            width: 28, height: 28, borderRadius: 8,
+                                            background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: 14, flexShrink: 0
+                                          }}>
+                                            {dev.tipo === 'iOS' ? '🍏' : dev.tipo === 'Android' ? '🤖' : '💻'}
+                                          </div>
+                                          <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontSize: 12, fontWeight: 800, color: 'hsl(var(--text-main))' }}>
+                                              {dev.modelo}
+                                            </div>
+                                            <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 1 }}>
+                                              {dev.sistema && <span>{dev.sistema}</span>}
+                                              <span>• {dev.sessoes} sessão{dev.sessoes > 1 ? 'ões' : ''}</span>
+                                              {dev.lastActive && (
+                                                <span>• Visto: {new Date(dev.lastActive).toLocaleDateString('pt-BR')}</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                          <span style={{
+                                            fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+                                            background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)',
+                                            color: dev.isSubscribed ? '#059669' : '#dc2626',
+                                          }}>
+                                            {dev.isSubscribed ? '✓ Push Ativo' : '✕ Desativado'}
+                                          </span>
+                                          <span style={{ fontSize: 9, color: dev.isSubscribed ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                                            {dev.isSubscribed ? 'Recebe Notificações' : (dev.notificationCode === -10 ? 'Token substituído / inativo' : 'Sem permissão push')}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 )}
                               </div>
-                              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 8 }}>
-                                <span>{g.email || 'Sem email'}</span>
-                                {g.telefone && <span>• {g.telefone}</span>}
-                              </div>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                              <span style={{
-                                fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 12,
-                                background: g.temContaAtiva ? 'rgba(16, 185, 129, 0.15)' : 'rgba(100, 116, 139, 0.12)',
-                                color: g.temContaAtiva ? '#10b981' : '#64748b',
-                                border: `1px solid ${g.temContaAtiva ? 'rgba(16, 185, 129, 0.3)' : 'rgba(100, 116, 139, 0.2)'}`
-                              }}>
-                                {g.temContaAtiva ? '✓ Conta no App' : 'Sem Login'}
-                              </span>
-                              {g.ultimoAcesso && (
-                                <span style={{ fontSize: 9, color: '#10b981', fontWeight: 600 }}>
-                                  Visto: {new Date(g.ultimoAcesso).toLocaleDateString('pt-BR')}
-                                </span>
-                              )}
-                            </div>
-                          </label>
+                            )}
+                          </div>
                         )
                       })}
                     </div>

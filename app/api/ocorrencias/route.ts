@@ -15,6 +15,10 @@ export async function GET(request: Request) {
   const supabase = await createProtectedClient();
   const { searchParams } = new URL(request.url)
   const alunoId = searchParams.get('aluno_id')
+  const alunoIds = searchParams.get('aluno_ids')
+  const turmaId = searchParams.get('turma_id') || searchParams.get('turma')
+  const limitParam = searchParams.get('limit')
+  const limit = limitParam ? parseInt(limitParam, 10) : (alunoId ? 500 : 1000)
 
   let query = supabase.from('ocorrencias').select('*')
   
@@ -26,10 +30,33 @@ export async function GET(request: Request) {
   query = query.order('created_at', { ascending: false })
   if (alunoId) {
     query = query.or(`aluno_id.eq.${alunoId},dados->>aluno_id.eq.${alunoId},dados->>alunoId.eq.${alunoId}`)
-  } else {
-    // Prevent full table scans on global queries
-    query = query.limit(100)
+  } else if (alunoIds) {
+    const ids = alunoIds.split(',').map(id => id.trim()).filter(Boolean)
+    const inList = `(${ids.join(',')})`
+    query = query.or(`aluno_id.in.${inList},dados->>aluno_id.in.${inList},dados->>alunoId.in.${inList}`)
+  } else if (turmaId) {
+    const rawTokens = turmaId.split(',').map(id => id.trim()).filter(Boolean)
+    if (rawTokens.length > 0) {
+      const { supabaseServer } = await import('@/lib/supabaseServer')
+      const { data: matchedTurmas } = await supabaseServer
+        .from('turmas')
+        .select('id, nome')
+        .or(`id.in.(${rawTokens.join(',')}),nome.in.(${rawTokens.map(n => `"${n.replace(/"/g, '')}"`).join(',')})`)
+
+      const allTokens = new Set<string>(rawTokens)
+      if (matchedTurmas) {
+        matchedTurmas.forEach(t => {
+          if (t.id) allTokens.add(String(t.id))
+          if (t.nome) allTokens.add(String(t.nome))
+        })
+      }
+      const tokenList = Array.from(allTokens)
+      const inList = `(${tokenList.map(t => `"${t.replace(/"/g, '')}"`).join(',')})`
+      query = query.or(`dados->>turma.in.${inList},turma.in.${inList}`)
+    }
   }
+
+  query = query.limit(limit)
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

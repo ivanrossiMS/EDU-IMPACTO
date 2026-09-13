@@ -40,6 +40,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
+        {/* Pré-carregamento imediato do asset estático da logo para o spinner e loaders */}
+        <link rel="preload" href="/logo-impacto-spinner.png" as="image" type="image/png" fetchPriority="high" />
       </head>
       <body style={{ backgroundColor: '#0A0F24', color: '#ffffff', minHeight: '100vh', margin: 0 }}>
         <Suspense fallback={null}>

@@ -9,7 +9,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { useData } from '@/lib/dataContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
-import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { isAlunoCursandoTurma, compareTurmasBySerie, getTurmaSerieWeight } from '@/lib/studentTurmaUtils'
 
 interface DestinatariosModalProps {
   isOpen: boolean
@@ -677,65 +677,7 @@ export function DestinatariosModal({
   // SEPARAÇÃO PRINCIPAL: TURMAS DE ALUNOS & EQUIPE ESCOLAR
   // ══════════════════════════════════════════════════════════════════════════
 
-  // Função utilitária para ordenar turmas rigorosamente por ordem de série e nível
-  const getTurmaSerieWeight = (t: any): number => {
-    const str = `${t?.nome || t?.title || ''} ${t?.serie || ''}`.toUpperCase().trim()
-
-    // 1. Educação Infantil: Berçário, Maternal, Jardim, Pré
-    if (str.includes('BERÇÁRIO') || str.includes('BERCARIO')) {
-      const m = str.match(/BER[ÇC][ÁA]RIO\s*([I|V|X|\d]+)?/)
-      const num = m && m[1] ? (parseInt(m[1], 10) || (m[1] === 'II' ? 2 : 1)) : 1
-      return 10 + num
-    }
-    if (str.includes('MATERNAL')) {
-      const m = str.match(/MATERNAL\s*([I|V|X|\d]+)?/)
-      const num = m && m[1] ? (parseInt(m[1], 10) || (m[1] === 'II' ? 2 : 1)) : 1
-      return 20 + num
-    }
-    if (str.includes('JARDIM')) {
-      const m = str.match(/JARDIM\s*([I|V|X|\d]+)?/)
-      const num = m && m[1] ? (parseInt(m[1], 10) || (m[1] === 'II' ? 2 : 1)) : 1
-      return 30 + num
-    }
-    if (str.includes('PRÉ') || str.includes('PRE')) {
-      const m = str.match(/PR[ÉE][-\s]*ESCOLA\s*([I|V|X|\d]+)?/)
-      const num = m && m[1] ? (parseInt(m[1], 10) || (m[1] === 'II' ? 2 : 1)) : 1
-      return 40 + num
-    }
-
-    // 2. Níveis da Educação Infantil (ex: NÍVEL 1, NÍVEL 2, NÍVEL 4, NÍVEL 5)
-    const nivelMatch = str.match(/N[ÍI]VEL\s*(\d+)/)
-    if (nivelMatch) {
-      return 50 + parseInt(nivelMatch[1], 10)
-    }
-
-    // 3. Anos do Ensino Fundamental (ex: 1º ANO, 2º ANO, ..., 9º ANO)
-    const anoMatch = str.match(/(\d+)º?\s*ANO/)
-    if (anoMatch) {
-      return 100 + parseInt(anoMatch[1], 10)
-    }
-
-    // 4. Séries do Ensino Médio (ex: 1ª SÉRIE, 2ª SÉRIE, 3ª SÉRIE, ou 1º MÉDIO, 2º MÉDIO...)
-    const serieMatch = str.match(/(\d+)[ªº]?\s*(?:S[ÉE]RIE|M[ÉE]DIO)/)
-    if (serieMatch) {
-      return 200 + parseInt(serieMatch[1], 10)
-    }
-
-    // 5. Fallback por número no início do nome
-    const anyNumMatch = str.match(/^(\d+)/)
-    if (anyNumMatch) {
-      return 300 + parseInt(anyNumMatch[1], 10)
-    }
-
-    return 999
-  }
-
-  const compareTurmasBySerie = (a: any, b: any): number => {
-    const wA = getTurmaSerieWeight(a)
-    const wB = getTurmaSerieWeight(b)
-    if (wA !== wB) return wA - wB
-    return (a.nome || a.title || '').localeCompare(b.nome || b.title || '', 'pt-BR', { numeric: true, sensitivity: 'base' })
-  }
+  // (Ordenação rigorosa por série fornecida por compareTurmasBySerie de @/lib/studentTurmaUtils)
 
   // 1. Segmentos Pedagógicos e Turmas de Alunos
   const { turmasListItems, turmasLeafIds } = useMemo(() => {

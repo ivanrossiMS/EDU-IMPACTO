@@ -13,41 +13,125 @@ export async function GET(request: Request) {
   const { user, errorResponse } = await requireAuth()
   if (errorResponse) return errorResponse
 
-  const supabase = await createProtectedClient();
+  const supabase = await createProtectedClient()
   const { searchParams } = new URL(request.url)
   const turmaId = searchParams.get('turma_id')
+  const turmaIdsParam = searchParams.get('turma_ids')
   const alunoId = searchParams.get('aluno_id')
   const data = searchParams.get('data')
+  
+  let dataInicioVal = searchParams.get('data_inicio')
+  let dataFimVal = searchParams.get('data_fim')
+  const mesVal = searchParams.get('mes')
+  const anoVal = searchParams.get('ano')
+
+  if (mesVal && !dataInicioVal) {
+    dataInicioVal = `${mesVal}-01`
+    dataFimVal = `${mesVal}-31`
+  } else if (anoVal && !dataInicioVal) {
+    dataInicioVal = `${anoVal}-01-01`
+    dataFimVal = `${anoVal}-12-31`
+  }
 
   const limitParam = searchParams.get('limit')
   const limit = limitParam ? parseInt(limitParam, 10) : 10000
 
-  let query = supabase.from('frequencias').select('*').order('data', { ascending: false }).limit(limit)
+  // Pre-resolve turmas and students if turma filtering is requested
+  let studentIds: string[] = []
+  let turmaIds: string[] = []
 
-  if (turmaId) {
+  if (turmaId || turmaIdsParam) {
+    const rawTurmaIds = turmaIdsParam 
+      ? turmaIdsParam.split(',').map(s => s.trim()).filter(Boolean)
+      : (turmaId ? [turmaId.trim()] : [])
+
+    turmaIds = rawTurmaIds
+
     const { data: allTurmas } = await supabase.from('turmas').select('*')
     const { data: allAlunos } = await supabase.from('alunos').select('id, turma, status, dados').or('status.neq.inativo,status.is.null')
 
-    const targetTurma = (allTurmas || []).find(t => String(t.id) === String(turmaId) || String(t.codigo) === String(turmaId) || String(t.nome) === String(turmaId))
-    const studentIds = (allAlunos || [])
-      .filter(a => isAlunoCursandoTurma(a, targetTurma || turmaId, undefined, allTurmas || []))
+    const matchedTurmaObjs = (allTurmas || []).filter(t => 
+      rawTurmaIds.some(tid => String(t.id) === tid || String(t.codigo) === tid || String(t.nome) === tid)
+    )
+
+    const resolvedIds = (allAlunos || [])
+      .filter(a => matchedTurmaObjs.some(t => isAlunoCursandoTurma(a, t, undefined, allTurmas || [])))
       .map(a => String(a.id))
 
-    if (studentIds.length > 0) {
-      query = query.or(`turma_id.eq.${turmaId},aluno_id.in.(${studentIds.join(',')})`)
-    } else {
-      query = query.eq('turma_id', turmaId)
-    }
+    studentIds = resolvedIds
   }
 
-  if (alunoId) query = query.eq('aluno_id', alunoId)
-  if (data) query = query.eq('data', data)
+  const applyFilters = (qb: any) => {
+    let q = qb
+    if (data) q = q.eq('data', data)
+    if (dataInicioVal) q = q.gte('data', dataInicioVal)
+    if (dataFimVal) q = q.lte('data', dataFimVal)
+    if (alunoId) q = q.eq('aluno_id', alunoId)
 
-  const { data: rows, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (turmaId) {
+      if (studentIds.length > 0 && studentIds.length <= 100) {
+        q = q.or(`turma_id.eq.${turmaId},aluno_id.in.(${studentIds.join(',')})`)
+      } else {
+        q = q.eq('turma_id', turmaId)
+      }
+    } else if (turmaIds && turmaIds.length > 0) {
+      if (studentIds.length > 0 && studentIds.length <= 100) {
+        q = q.or(`turma_id.in.(${turmaIds.join(',')}),aluno_id.in.(${studentIds.join(',')})`)
+      } else {
+        q = q.in('turma_id', turmaIds)
+      }
+    }
+    return q
+  }
 
+  // Determine total matching rows to bypass PostgREST max-rows cap (1000)
+  let count = 0
+  if (limit > 1000) {
+    const countQuery = applyFilters(supabase.from('frequencias').select('*', { count: 'exact', head: true }))
+    const { count: c, error: cErr } = await countQuery
+    if (cErr) return NextResponse.json({ error: cErr.message }, { status: 500 })
+    count = c || 0
+  }
+
+  let rows: any[] = []
+  if (count <= 1000 || limit <= 1000) {
+    const singleQuery = applyFilters(
+      supabase.from('frequencias').select('*').order('data', { ascending: false }).limit(limit)
+    )
+    const { data: pageData, error } = await singleQuery
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    rows = pageData || []
+  } else {
+    // Parallel pagination across chunks of 1,000 to fetch up to limit
+    const effectiveTotal = Math.min(count, limit)
+    const pageSize = 1000
+    const numPages = Math.ceil(effectiveTotal / pageSize)
+    const pagePromises: Promise<any[]>[] = []
+
+    for (let i = 0; i < numPages; i++) {
+      const from = i * pageSize
+      const to = Math.min(from + pageSize - 1, effectiveTotal - 1)
+      pagePromises.push(
+        applyFilters(
+          supabase
+            .from('frequencias')
+            .select('*')
+            .order('data', { ascending: false })
+            .range(from, to)
+        ).then((res: any) => {
+          if (res.error) throw res.error
+          return res.data || []
+        })
+      )
+    }
+
+    const pageResults = await Promise.all(pagePromises)
+    rows = pageResults.flat()
+  }
+
+  // Deduplicate records keeping the most recent update per student per date
   const map = new Map<string, any>()
-  ;(rows || []).forEach(row => {
+  rows.forEach(row => {
     const key = `${row.aluno_id}_${String(row.data).split('T')[0]}`
     if (!map.has(key)) {
       map.set(key, row)

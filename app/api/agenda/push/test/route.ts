@@ -47,6 +47,131 @@ async function verifyAdminAuth(): Promise<
   return { authorized: true, user: dbUser || user }
 }
 
+function formatDeviceModel(model: string, type: string): string {
+  if (!model) return type?.toLowerCase().includes('ios') ? 'Apple iPhone / iPad' : type?.toLowerCase().includes('android') ? 'Dispositivo Android' : 'Navegador Web'
+  const m = model.trim()
+
+  const appleModels: Record<string, string> = {
+    'iPhone18,1': 'iPhone 16 Pro',
+    'iPhone18,2': 'iPhone 16 Pro Max',
+    'iPhone17,1': 'iPhone 16',
+    'iPhone17,2': 'iPhone 16 Plus',
+    'iPhone16,1': 'iPhone 15 Pro',
+    'iPhone16,2': 'iPhone 15 Pro Max',
+    'iPhone15,4': 'iPhone 15',
+    'iPhone15,5': 'iPhone 15 Plus',
+    'iPhone15,2': 'iPhone 14 Pro',
+    'iPhone15,3': 'iPhone 14 Pro Max',
+    'iPhone14,7': 'iPhone 14',
+    'iPhone14,8': 'iPhone 14 Plus',
+    'iPhone14,2': 'iPhone 13 Pro',
+    'iPhone14,3': 'iPhone 13 Pro Max',
+    'iPhone14,5': 'iPhone 13',
+    'iPhone14,4': 'iPhone 13 mini',
+    'iPhone13,2': 'iPhone 12',
+    'iPhone13,3': 'iPhone 12 Pro',
+    'iPhone13,4': 'iPhone 12 Pro Max',
+    'iPhone12,1': 'iPhone 11',
+    'iPhone12,3': 'iPhone 11 Pro',
+    'iPhone12,5': 'iPhone 11 Pro Max',
+    'iPhone11,8': 'iPhone XR',
+    'iPhone11,2': 'iPhone XS',
+    'iPhone10,3': 'iPhone X',
+    'iPhone10,6': 'iPhone X',
+    'iPhone14,6': 'iPhone SE (3ª ger.)',
+    'iPhone12,8': 'iPhone SE (2ª ger.)',
+    'MacIntel': 'Apple Mac (Navegador)',
+    'Win32': 'PC Windows (Navegador)',
+    'Linux x86_64': 'Linux (Navegador)'
+  }
+
+  if (appleModels[m]) return appleModels[m]
+  if (m.startsWith('iPhone')) return `Apple ${m}`
+  if (m.startsWith('iPad')) return `Apple ${m}`
+  if (m.startsWith('SM-')) return `Samsung Galaxy (${m})`
+  return m
+}
+
+async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
+  const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY
+  if (!appId || !apiKey || !identifier) return []
+
+  try {
+    const cleanId = identifier.trim()
+    const url = isEmail
+      ? `https://onesignal.com/api/v1/apps/${appId}/users/by/email/${encodeURIComponent(cleanId.toLowerCase())}`
+      : `https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(cleanId)}`
+
+    const res = await fetch(url, {
+      headers: {
+        'Authorization': `Basic ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store'
+    })
+
+    if (!res.ok) {
+      if (!isEmail && cleanId.includes('@')) {
+        return fetchOneSignalUserDevices(cleanId, true)
+      }
+      return []
+    }
+
+    const data = await res.json()
+    const subscriptions = data.subscriptions || []
+
+    return subscriptions.map((sub: any) => {
+      const typeStr = sub.type || ''
+      const isIos = typeStr.toLowerCase().includes('ios')
+      const isAndroid = typeStr.toLowerCase().includes('android')
+      const isWeb = !isIos && !isAndroid
+
+      const notifType = sub.notification_types
+      const isSubscribed = Boolean(sub.enabled && notifType > 0 && sub.token)
+
+      let statusDescription = '🟢 Push Ativo e Conectado'
+      let statusTone: 'success' | 'warning' | 'danger' = 'success'
+
+      if (!sub.enabled || notifType <= 0 || !sub.token) {
+        statusTone = 'danger'
+        if (notifType === -10) {
+          statusDescription = '🔴 Desativado / Token Substituído por outro aparelho'
+        } else if (notifType === -99) {
+          statusDescription = '⚪ Navegador Web Desconectado'
+          statusTone = 'warning'
+        } else if (!sub.token) {
+          statusDescription = '🔴 Sem Token Push no aparelho'
+        } else {
+          statusDescription = '🔴 Notificações Bloqueadas nos Ajustes'
+        }
+      }
+
+      return {
+        id: sub.id,
+        tipo: isIos ? 'iOS' : isAndroid ? 'Android' : 'Web',
+        tipoRaw: typeStr,
+        modelo: formatDeviceModel(sub.device_model, typeStr),
+        modeloRaw: sub.device_model || '',
+        sistema: sub.device_os ? (isIos ? `iOS ${sub.device_os}` : isAndroid ? `Android ${sub.device_os}` : sub.device_os) : '',
+        appVersion: sub.app_version || '',
+        sessoes: sub.session_count || 0,
+        tempoSessaoSegundos: sub.session_time || 0,
+        isSubscribed,
+        statusDescription,
+        statusTone,
+        notificationCode: notifType,
+        hasToken: Boolean(sub.token),
+        tokenPreview: sub.token ? `${sub.token.slice(0, 8)}...${sub.token.slice(-4)}` : null,
+        lastActive: data.properties?.last_active ? new Date(data.properties.last_active * 1000).toISOString() : null,
+      }
+    })
+  } catch (err: any) {
+    console.warn('[OneSignal Device Fetch] Erro ao buscar dispositivos:', err?.message)
+    return []
+  }
+}
+
 /**
  * GET /api/agenda/push/test
  *
@@ -94,6 +219,19 @@ export async function GET(request: Request) {
       }
 
       return NextResponse.json({ logs: logs || [] })
+    }
+
+    // 2.1 Consulta de aparelhos conectados para um usuário específico
+    const userForDevices = searchParams.get('devicesForUser')
+    if (userForDevices) {
+      const isEmail = userForDevices.includes('@')
+      const devices = await fetchOneSignalUserDevices(userForDevices, isEmail)
+      return NextResponse.json({
+        user: userForDevices,
+        dispositivos: devices,
+        totalDispositivos: devices.length,
+        dispositivosAtivos: devices.filter((d: any) => d.isSubscribed).length,
+      })
     }
 
     // 3. Inspeção do Aluno e Responsáveis
@@ -282,6 +420,34 @@ export async function GET(request: Request) {
         }
       }
 
+      // 4. Enriquecer cada responsável com seus aparelhos conectados no OneSignal
+      const enrichedResponsaveis = await Promise.all(
+        responsaveisList.map(async (r: any) => {
+          let devices: any[] = []
+          try {
+            if (r.authId) {
+              devices = await fetchOneSignalUserDevices(r.authId, false)
+            }
+            if (devices.length === 0 && r.email) {
+              devices = await fetchOneSignalUserDevices(r.email, true)
+            }
+            if (devices.length === 0 && r.responsavel_id) {
+              devices = await fetchOneSignalUserDevices(r.responsavel_id, false)
+            }
+          } catch (devErr: any) {
+            console.warn(`[Push Test GET] Erro ao buscar dispositivos para ${r.nome}:`, devErr?.message)
+          }
+
+          const ativos = devices.filter((d: any) => d.isSubscribed).length
+          return {
+            ...r,
+            dispositivos: devices,
+            totalDispositivos: devices.length,
+            dispositivosAtivos: ativos,
+          }
+        })
+      )
+
       // Buscar logs recentes específicos deste aluno
       const { data: recentLogs } = await supabase
         .from('agenda_push_logs')
@@ -300,7 +466,7 @@ export async function GET(request: Request) {
           status: aluno.status,
           foto: aluno.foto || aluno.dados?.foto || null,
         },
-        responsaveis: responsaveisList,
+        responsaveis: enrichedResponsaveis,
         recentLogs: recentLogs || [],
       })
     }

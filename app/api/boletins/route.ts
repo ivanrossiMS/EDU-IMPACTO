@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const turma_id = searchParams.get('turma_id')
+    const turma_id = searchParams.get('turma_id') || searchParams.get('turma_ids')
     const aluno_id = searchParams.get('aluno_id')
     
     let query = supabase.from('boletins').select('*')
@@ -24,7 +24,12 @@ export async function GET(request: Request) {
     }
     
     if (turma_id) {
-      query = query.eq('turma_id', turma_id)
+      if (turma_id.includes(',')) {
+        const ids = turma_id.split(',').map(id => id.trim()).filter(Boolean)
+        query = query.in('turma_id', ids)
+      } else {
+        query = query.eq('turma_id', turma_id)
+      }
     }
     
     if (aluno_id) {

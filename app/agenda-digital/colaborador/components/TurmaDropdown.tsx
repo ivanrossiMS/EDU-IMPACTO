@@ -7,6 +7,7 @@ import {
   Sparkles, Users, GraduationCap, Building2, 
   SlidersHorizontal, CheckCircle2
 } from 'lucide-react'
+import { compareTurmasBySerie } from '@/lib/studentTurmaUtils'
 
 export interface TurmaOption {
   id: string
@@ -82,7 +83,7 @@ export function TurmaDropdown({
     )
   }, [turmaOptions, searchTerm])
 
-  // Agrupamento por categoria
+  // Agrupamento por categoria ordenado por série
   const groupsByCategory = useMemo(() => {
     const map: Record<string, TurmaOption[]> = {}
     filteredOptions.forEach(t => {
@@ -90,8 +91,22 @@ export function TurmaDropdown({
       if (!map[cat]) map[cat] = []
       map[cat].push(t)
     })
+    // Ordenar turmas de cada categoria por série
+    Object.keys(map).forEach(cat => {
+      map[cat].sort(compareTurmasBySerie)
+    })
     return map
   }, [filteredOptions])
+
+  const getCategoryOrderWeight = (catName: string): number => {
+    const lower = catName.toLowerCase()
+    if (lower.includes('infantil') || lower.includes('bercario') || lower.includes('maternal')) return 1
+    if (lower.includes('fundamental i') || lower.includes('fundamental 1') || lower.includes('fund 1')) return 2
+    if (lower.includes('fundamental ii') || lower.includes('fundamental 2') || lower.includes('fund 2')) return 3
+    if (lower.includes('medio') || lower.includes('médio')) return 4
+    if (lower.includes('equipe')) return 5
+    return 6
+  }
 
   // Determinar ícone da categoria
   const getCategoryMeta = (catName: string) => {
@@ -478,7 +493,9 @@ export function TurmaDropdown({
 
               {/* Categorias e Itens */}
               {Object.keys(groupsByCategory).length > 0 ? (
-                Object.entries(groupsByCategory).map(([catName, items]) => {
+                Object.entries(groupsByCategory)
+                  .sort(([catA], [catB]) => getCategoryOrderWeight(catA) - getCategoryOrderWeight(catB))
+                  .map(([catName, items]) => {
                   const meta = getCategoryMeta(catName)
                   const CatIcon = meta.icon
 
