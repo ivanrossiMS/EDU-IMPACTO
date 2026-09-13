@@ -31,9 +31,9 @@ export async function GET(request: NextRequest) {
     // Ignore invalid refresh token errors during logout
   }
 
-  // Belt-and-suspenders: forcibly expire every sb-* cookie from this request
+  // Belt-and-suspenders: forcibly expire every sb-* cookie and keep-connected flag from this request
   request.cookies.getAll().forEach(cookie => {
-    if (cookie.name.startsWith('sb-')) {
+    if (cookie.name.startsWith('sb-') || cookie.name === 'edu_keep_connected') {
       response.cookies.set(cookie.name, '', {
         maxAge: 0,
         path: '/',
@@ -42,6 +42,7 @@ export async function GET(request: NextRequest) {
       })
     }
   })
+  response.cookies.set('edu_keep_connected', '', { maxAge: 0, path: '/' })
 
   return response
 }
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
   }
 
   request.cookies.getAll().forEach(cookie => {
-    if (cookie.name.startsWith('sb-')) {
+    if (cookie.name.startsWith('sb-') || cookie.name === 'edu_keep_connected') {
       response.cookies.set(cookie.name, '', {
         maxAge: 0,
         path: '/',
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
       })
     }
   })
+  response.cookies.set('edu_keep_connected', '', { maxAge: 0, path: '/' })
 
   return response
 }

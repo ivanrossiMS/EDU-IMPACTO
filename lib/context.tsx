@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
+import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin'
 import { restoreSessionSecurely } from '@/lib/auth/secureSession'
 import { supabase } from '@/lib/supabase'
 
@@ -22,22 +23,34 @@ export const DEFAULT_MODULES: Record<string, boolean> = {
   almoxarifado: true,
 }
 
-// Async setting loader to support Capacitor Preferences with 300ms timeout protection
+// Resilient async setting loader supporting Keychain, Capacitor Preferences, and localStorage
 export async function loadSettingAsync<T>(key: string, fallback: T): Promise<T> {
   if (typeof window === 'undefined') return fallback
   try {
     if (Capacitor.isNativePlatform()) {
-      const getPromise = Preferences.get({ key })
-      const timeoutPromise = new Promise<{ value: string | null }>(res => setTimeout(() => res({ value: null }), 300))
-      const { value } = await Promise.race([getPromise, timeoutPromise])
-      if (value !== null) return JSON.parse(value) as T
+      // 1. Tenta Keychain / Keystore nativo para dados de sessão e usuário
+      if (key === 'edu-current-user' || key === 'edu-current-perfil') {
+        try {
+          const sec = await SecureStoragePlugin.get({ key })
+          if (sec?.value) return JSON.parse(sec.value) as T
+        } catch {}
+      }
+
+      // 2. Capacitor Preferences com timeout robusto de 3500ms para cold boot e reboot
+      try {
+        const getPromise = Preferences.get({ key })
+        const timeoutPromise = new Promise<{ value: string | null }>(res => setTimeout(() => res({ value: null }), 3500))
+        const { value } = await Promise.race([getPromise, timeoutPromise])
+        if (value !== null && value !== undefined) return JSON.parse(value) as T
+      } catch {}
     }
+
     const v = window.localStorage.getItem(key)
     return v !== null ? (JSON.parse(v) as T) : fallback
   } catch { return fallback }
 }
 
-// saveSetting now saves to both localStorage and Capacitor Preferences
+// saveSetting saves across localStorage, Capacitor Preferences, and Keychain
 export function saveSetting(key: string, value: unknown) {
   if (typeof window === 'undefined') return
   try { 
@@ -45,6 +58,9 @@ export function saveSetting(key: string, value: unknown) {
     window.localStorage.setItem(key, str) 
     if (Capacitor.isNativePlatform()) {
       Preferences.set({ key, value: str }).catch(() => {})
+      if (key === 'edu-current-user' || key === 'edu-current-perfil') {
+        SecureStoragePlugin.set({ key, value: str }).catch(() => {})
+      }
     }
   } catch { /* ignore */ }
 }
@@ -55,6 +71,9 @@ export async function removeSettingAsync(key: string) {
     window.localStorage.removeItem(key)
     if (Capacitor.isNativePlatform()) {
       await Preferences.remove({ key }).catch(() => {})
+      if (key === 'edu-current-user' || key === 'edu-current-perfil') {
+        await SecureStoragePlugin.remove({ key }).catch(() => {})
+      }
     }
   } catch { /* ignore */ }
 }
@@ -173,25 +192,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch { /* localStorage pode estar bloqueado em alguns contextos */ }
 
-    // Fallback de segurança para garantir hidratação mesmo em falha de storage
+    // Fallback de segurança para garantir hidratação mesmo em falha grave de storage
     const fallbackTimer = setTimeout(() => {
       if (isMounted) setHydrated(true)
-    }, 2000)
+    }, 5000)
 
     async function hydrate() {
       try {
         await restoreSessionSecurely(supabase).catch(() => {})
 
-        const [savedTheme, savedSidebarTheme, savedModules, savedUnit, savedPerfil, savedUser] = await Promise.all([
+        let [savedTheme, savedSidebarTheme, savedModules, savedUnit, savedPerfil, savedUser] = await Promise.all([
           loadSettingAsync<Theme>('edu-theme', 'light'),
           loadSettingAsync<Theme>('edu-sidebar-theme', 'dark'),
           loadSettingAsync<Record<string, boolean>>('edu-active-modules', DEFAULT_MODULES),
           loadSettingAsync<string>('edu-active-unit', 'Unidade Centro'),
-          loadSettingAsync<string>('edu-current-perfil', 'Diretor Geral'),
+          loadSettingAsync<string>('edu-current-perfil', ''),
           loadSettingAsync<CurrentUser | null>('edu-current-user', null),
         ])
 
         if (!isMounted) return
+
+        // Se savedUser ainda não foi encontrado mas temos uma sessão ativa no Supabase,
+        // reconstrói o usuário a partir dos metadados da sessão para garantir continuidade total
+        if (!savedUser) {
+          try {
+            const { data: sessionData } = await supabase.auth.getSession()
+            const u = sessionData?.session?.user
+            if (u) {
+              const meta = u.user_metadata || {}
+              savedUser = {
+                id: u.id,
+                nome: meta.nome || u.email?.split('@')[0] || 'Usuário',
+                email: u.email || '',
+                cargo: meta.cargo || 'Colaborador',
+                perfil: meta.perfil || 'Usuário',
+                foto: meta.foto,
+                aluno_id: meta.aluno_id || '',
+                responsavel_id: meta.responsavel_id || '',
+                colaborador_id: meta.colaborador_id || meta.system_user_id || '',
+                system_user_id: meta.system_user_id || meta.colaborador_id || '',
+                hasDualRole: Boolean(meta.hasDualRole || meta.responsavel_id),
+                user_metadata: meta
+              }
+              saveSetting('edu-current-user', savedUser)
+              saveSetting('edu-current-perfil', savedUser.perfil)
+            }
+          } catch {}
+        }
 
         setThemeState(savedTheme)
         setSidebarThemeState(savedSidebarTheme)

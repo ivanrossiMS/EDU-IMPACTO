@@ -110,6 +110,7 @@ export async function middleware(request: NextRequest) {
 
   // PERFORMANCE & RESILIÊNCIA: Timeout de 8s para evitar falsos negativos em conexões móveis (3G/4G).
   let user = null
+  let isTransientError = false
   try {
     const userPromise = supabase.auth.getUser()
     const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
@@ -118,21 +119,52 @@ export async function middleware(request: NextRequest) {
     const { data, error } = await Promise.race([userPromise, timeoutPromise])
     if (!error && data?.user) {
       user = data.user
+    } else if (error) {
+      const errMsg = (error.message || '').toLowerCase()
+      if (
+        errMsg.includes('timeout') ||
+        errMsg.includes('fetch') ||
+        errMsg.includes('network') ||
+        (error as any).name === 'AuthRetryableFetchError'
+      ) {
+        isTransientError = true
+      }
     }
   } catch (err: any) {
+    isTransientError = true
     if (!err?.message?.includes('Refresh Token') && err?.code !== 'refresh_token_not_found') {
       console.warn('[Middleware Auth Warning]', err)
     }
   }
 
-  // ── Sem sessão → redireciona para login ──────────────────────────────────
+  // ── Sem sessão no Edge ──────────────────────────────────────────────────
   if (!user) {
     if (pathname.startsWith('/api/')) {
+      if (isTransientError) {
+        return NextResponse.json(
+          { error: 'Serviço de autenticação temporariamente indisponível.', isNetworkError: true },
+          { status: 503 }
+        )
+      }
       return NextResponse.json(
         { error: 'Não autorizado. Faça login para continuar.' },
         { status: 401 }
       )
     }
+
+    // Para requisições de página (HTML):
+    const allCookies = request.cookies.getAll()
+    const hasAuthCookie = allCookies.some(c => c.name.startsWith('sb-') && c.value.length > 0)
+    const hasKeepConnected = request.cookies.has('edu_keep_connected')
+    const userAgent = request.headers.get('user-agent') || ''
+    const isCapacitorClient = userAgent.includes('Capacitor') || request.headers.has('x-capacitor-platform')
+
+    // Se houve erro de rede/timeout OU se o cliente possui cookie de sessão / app móvel,
+    // permite o carregamento da página para que o client-side restaure do Keychain/Preferences
+    if (isTransientError || hasAuthCookie || hasKeepConnected || isCapacitorClient) {
+      return response
+    }
+
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', pathname)
     const redirectResponse = NextResponse.redirect(loginUrl)

@@ -14,7 +14,7 @@ import { WebVitalsReporter } from '@/lib/webVitals'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
 import { Menu } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
-import { restoreSessionSecurely } from '@/lib/auth/secureSession'
+import { restoreSessionSecurely, refreshSessionCentralized, isNetworkOrTransientError, isPermanentTokenRevocation } from '@/lib/auth/secureSession'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -32,21 +32,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       try {
         const supabase = createClient();
         const restored = await restoreSessionSecurely(supabase);
-        // Se `restored` for true, o Supabase já injetou a sessão e as requisições API
-        // usarão esse token ou os cookies recriados.
 
         const res = await fetch('/api/auth/me', {
           cache: 'no-store', credentials: 'include',
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         })
 
-        // ✅ CORREÇÃO DE SEGURANÇA: Qualquer falha → redirecionar para login, exceto se houver cache local offline
         if (!res.ok) {
           if (res.status === 401 || res.status === 403) {
-            // Sessão pode estar apenas com access_token vencido — tenta renovar silenciosamente
+            // Sessão pode estar apenas com access_token vencido — renova com mutex centralizado
             try {
-              const { data: refreshData, error: refreshErr } = await supabase.auth.refreshSession()
-              if (!refreshErr && refreshData?.session) {
+              const { session: refreshedSession, error: refreshErr } = await refreshSessionCentralized(supabase)
+              if (!refreshErr && refreshedSession) {
                 const retryRes = await fetch('/api/auth/me', {
                   cache: 'no-store', credentials: 'include',
                   headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
@@ -61,16 +58,52 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   }
                 }
               }
-            } catch (refreshCatch) {}
 
-            await performLogout()
+              // Se o refresh falhou por erro de rede/offline, NÃO faz logout!
+              if (isNetworkOrTransientError(refreshErr)) {
+                console.warn('[Auth] Falha de rede ao renovar sessão. Mantendo usuário local offline.')
+                if (restored || currentUser) {
+                  setAuthState('authorized')
+                  hideSplashScreen(300)
+                  return
+                }
+              }
+
+              // Apenas executa logout se o token estiver comprovadamente revogado de forma definitiva
+              if (isPermanentTokenRevocation(refreshErr)) {
+                console.warn('[Auth] Token revogado definitivamente pelo servidor. Redirecionando para login.')
+                await performLogout()
+                return
+              }
+            } catch (refreshCatch: any) {
+              if (isNetworkOrTransientError(refreshCatch)) {
+                console.warn('[Auth] Exceção de rede na renovação. Mantendo acesso offline.')
+                if (restored || currentUser) {
+                  setAuthState('authorized')
+                  hideSplashScreen(300)
+                  return
+                }
+              }
+            }
+
+            // Se temos a sessão local restaurada, mantém logado e não expulsa
+            if (restored || currentUser) {
+              console.warn('[Auth] 401 temporário, mas credenciais locais presentes. Mantendo acesso.')
+              setAuthState('authorized')
+              hideSplashScreen(300)
+              return
+            }
+
+            setAuthState('unauthorized')
+            router.replace('/login')
             return
           }
-          // Erro de servidor (5xx) — pode ser temporário. 
-          // Se tivermos a sessão local recuperada, mantemos logado!
-          if (restored) {
-            console.warn('[Auth] Server error 5xx, mas sessão local restaurada. Mantendo acesso.');
+
+          // Erro de servidor (5xx) — temporário. Se tivermos a sessão local recuperada, mantemos logado!
+          if (restored || currentUser) {
+            console.warn('[Auth] Server error 5xx, mas sessão local restaurada. Mantendo acesso.')
             setAuthState('authorized')
+            hideSplashScreen(300)
             return
           }
           setAuthState('unauthorized')
@@ -82,7 +115,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         const serverUser: any = data.user
 
         if (!serverUser) {
-          // Resposta 200 mas sem usuário — sessão incoerente
+          // Resposta 200 mas sem usuário — tenta usar usuário local se presente
+          if (restored || currentUser) {
+            setAuthState('authorized')
+            hideSplashScreen(300)
+            return
+          }
           router.replace('/login')
           return
         }
@@ -97,15 +135,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         setAuthState('authorized')
         hideSplashScreen(300)
       } catch (err) {
-        // ✅ CORREÇÃO DE SEGURANÇA & OFFLINE: Erro de rede (falta de internet)
+        // Erro de rede (falta de internet ou timeout)
         console.warn('[Auth] Network error checking session.');
         
-        // Verificamos se há sessão válida local (seja do SecureStorage ou Cache do Supabase)
+        // Verificamos se há sessão válida local (seja do SecureStorage, Cache do Supabase ou currentUser)
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          console.log('[Auth] Modo offline ativo: Sessão local válida.');
+        if (session || currentUser) {
+          console.log('[Auth] Modo offline ativo: Sessão local válida mantida.');
           setAuthState('authorized');
+          hideSplashScreen(300);
           return;
         }
 

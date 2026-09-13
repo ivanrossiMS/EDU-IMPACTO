@@ -46,14 +46,6 @@ export async function requireAuth() {
       { error: 'Não autorizado. Autenticação é obrigatória para este endpoint.' },
       { status: 401 }
     )
-    try {
-      const cookieStore = await cookies()
-      cookieStore.getAll().forEach(c => {
-        if (c.name.startsWith('sb-')) {
-          errorResponse.cookies.set(c.name, '', { maxAge: 0, path: '/' })
-        }
-      })
-    } catch {}
 
     return {
       user: null,

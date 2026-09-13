@@ -76,24 +76,45 @@ function removeDocumentCookie(key: string) {
   } catch {}
 }
 
+import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin'
+import { SESSION_KEY } from '@/lib/auth/secureSession'
+
 // Custom async storage adapter that evaluates native platform at runtime
 // and maintains document.cookie in sync so SSR/middleware can always see the session
 const customStorage = {
   getItem: async (key: string) => {
     if (typeof window === 'undefined') return null
 
-    // 1. Native platform preferences (iOS/Android Capacitor)
+    // 1. Native Secure Storage (iOS Keychain / Android Keystore)
     if (Capacitor.isNativePlatform()) {
+      try {
+        const secRes = await SecureStoragePlugin.get({ key })
+        const valid = decodeAndValidate(secRes?.value)
+        if (valid) return valid
+      } catch (e) {}
+
+      // Backup: check general session key in SecureStorage
+      try {
+        const secBackup = await SecureStoragePlugin.get({ key: SESSION_KEY })
+        const validBackup = decodeAndValidate(secBackup?.value)
+        if (validBackup) return validBackup
+      } catch (e) {}
+
+      // 2. Capacitor Preferences (Native disk)
       try {
         const { value } = await Preferences.get({ key })
         const valid = decodeAndValidate(value)
         if (valid) return valid
       } catch (e) {}
+
+      try {
+        const { value: backupVal } = await Preferences.get({ key: SESSION_KEY })
+        const valid = decodeAndValidate(backupVal)
+        if (valid) return valid
+      } catch (e) {}
     }
 
-    // 2. Web Browser: document.cookie chunks MUST take precedence!
-    // Next.js Middleware and SSR endpoints refresh tokens and update cookies on responses.
-    // If we read stale localStorage before cookies, the client sends outdated tokens and gets "Invalid Refresh Token".
+    // 3. Web Browser: document.cookie chunks MUST take precedence!
     if (typeof document !== 'undefined') {
       try {
         const parsedCookies = document.cookie.split('; ').reduce((acc, c) => {
@@ -117,9 +138,9 @@ const customStorage = {
       } catch (e) {}
     }
 
-    // 3. Fallback to localStorage
+    // 4. Fallback to localStorage
     try {
-      const localVal = window.localStorage.getItem(key)
+      const localVal = window.localStorage.getItem(key) || window.localStorage.getItem(SESSION_KEY)
       const valid = decodeAndValidate(localVal)
       if (valid) return valid
     } catch (e) {}
@@ -134,8 +155,12 @@ const customStorage = {
       window.localStorage.setItem(key, value)
     } catch (e) {}
 
-    // Persiste no Capacitor Preferences
+    // Persiste no Capacitor SecureStorage e Preferences
     if (Capacitor.isNativePlatform()) {
+      try {
+        await SecureStoragePlugin.set({ key, value })
+      } catch (e) {}
+
       try {
         await Preferences.set({ key, value })
       } catch (e) {}
@@ -143,6 +168,14 @@ const customStorage = {
 
     // Sincroniza com os cookies do navegador para que o Next.js Middleware/SSR reconheça
     syncDocumentCookie(key, value)
+
+    // Também garante sincronização com a chave segura padrão
+    try {
+      const parsed = JSON.parse(value)
+      if (parsed?.access_token && parsed?.refresh_token) {
+        saveSessionSecurely(parsed).catch(() => {})
+      }
+    } catch {}
   },
   removeItem: async (key: string) => {
     if (typeof window === 'undefined') return
@@ -152,12 +185,14 @@ const customStorage = {
 
     if (Capacitor.isNativePlatform()) {
       try {
+        await SecureStoragePlugin.remove({ key })
+      } catch (e) {}
+      try {
         await Preferences.remove({ key })
       } catch (e) {}
     }
 
     removeDocumentCookie(key)
-    clearSessionSecurely().catch(() => {})
   },
 }
 
