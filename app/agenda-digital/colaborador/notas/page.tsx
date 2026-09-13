@@ -354,8 +354,9 @@ export default function ColaboradorNotasPage() {
 
   const modalMediaGlobal = useMemo(() => {
     if (!modalDisciplinas.length) return 0
-    const sum = modalDisciplinas.reduce((acc: number, curr: any) => acc + curr.mediaFNum, 0)
-    return parseFloat((sum / modalDisciplinas.length).toFixed(1))
+    const sum = modalDisciplinas.reduce((acc: number, curr: any) => acc + (Number(curr.mediaFNum) || 0), 0)
+    const avg = sum / modalDisciplinas.length
+    return isNaN(avg) ? 0 : parseFloat(avg.toFixed(1))
   }, [modalDisciplinas])
 
   const isModalMediaAcima = modalMediaGlobal >= 7.0
@@ -1097,10 +1098,11 @@ export default function ColaboradorNotasPage() {
               </div>
 
               {/* Modal Body - Scrollable */}
-              <div style={{
+              <div className="notas-modal-body" style={{
                 padding: '24px',
                 overflowY: 'auto',
                 flex: 1,
+                minHeight: 0,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 20
@@ -1150,9 +1152,10 @@ export default function ColaboradorNotasPage() {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       flexWrap: 'wrap',
-                      gap: 16
+                      gap: 16,
+                      flexShrink: 0
                     }}>
-                      <div>
+                      <div style={{ flex: '1 1 200px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                           <div style={{
                             width: 28,
@@ -1162,7 +1165,8 @@ export default function ColaboradorNotasPage() {
                             color: isModalMediaAcima ? '#2563eb' : '#ef4444',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            flexShrink: 0
                           }}>
                             <GraduationCap size={16} />
                           </div>
@@ -1173,14 +1177,14 @@ export default function ColaboradorNotasPage() {
 
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
                           <span style={{
-                            fontSize: 48,
+                            fontSize: 44,
                             fontWeight: 900,
                             fontFamily: 'Outfit, sans-serif',
                             lineHeight: 1,
                             color: isModalMediaAcima ? '#1e3a8a' : '#991b1b',
                             letterSpacing: '-1px'
                           }}>
-                            {modalMediaGlobal.toFixed(1)}
+                            {(modalMediaGlobal || 0).toFixed(1)}
                           </span>
                           <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
                             / 10.0
@@ -1193,7 +1197,7 @@ export default function ColaboradorNotasPage() {
                       </div>
 
                       {/* Status pill right */}
-                      <div style={{
+                      <div className="notas-modal-status-pill" style={{
                         padding: '12px 18px',
                         background: '#ffffff',
                         borderRadius: 16,
@@ -1202,14 +1206,16 @@ export default function ColaboradorNotasPage() {
                         alignItems: 'center',
                         gap: 6,
                         border: '1px solid rgba(0,0,0,0.06)',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
+                        flexShrink: 0
                       }}>
                         {isModalMediaAcima ? <TrendingUp size={24} color="#10b981" /> : <TrendingDown size={24} color="#ef4444" />}
                         <span style={{
                           fontSize: 12,
                           fontWeight: 800,
                           color: isModalMediaAcima ? '#059669' : '#b91c1c',
-                          textAlign: 'center'
+                          textAlign: 'center',
+                          whiteSpace: 'nowrap'
                         }}>
                           {isModalMediaAcima ? 'Desempenho Adequado' : 'Requer Atenção'}
                         </span>
@@ -1217,7 +1223,7 @@ export default function ColaboradorNotasPage() {
                     </div>
 
                     {/* Rendimento por Disciplina Grid */}
-                    <div>
+                    <div style={{ flexShrink: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                         <div style={{ width: 28, height: 28, borderRadius: 8, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <BarChart2 size={16} />
@@ -1440,10 +1446,28 @@ export default function ColaboradorNotasPage() {
             border-bottom-left-radius: 0 !important;
             border-bottom-right-radius: 0 !important;
           }
+          .notas-modal-body {
+            padding: 16px !important;
+            gap: 16px !important;
+            min-height: 0 !important;
+          }
           .notas-modal-resumo {
-            padding: 14px 16px !important;
-            border-radius: 16px !important;
-            gap: 10px !important;
+            padding: 16px !important;
+            border-radius: 18px !important;
+            gap: 12px !important;
+            flex-shrink: 0 !important;
+            min-height: fit-content !important;
+          }
+          .notas-modal-status-pill {
+            flex-direction: row !important;
+            padding: 8px 14px !important;
+            border-radius: 12px !important;
+            gap: 8px !important;
+            align-self: flex-start !important;
+          }
+          .notas-modal-status-pill svg {
+            width: 18px !important;
+            height: 18px !important;
           }
           .notas-modal-disciplinas-grid {
             grid-template-columns: 1fr !important;

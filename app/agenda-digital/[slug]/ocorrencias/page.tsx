@@ -2,7 +2,7 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useApiQuery } from '@/hooks/useApi'
 import React, { useMemo, useState, useEffect } from 'react'
-import { AlertTriangle, AlertCircle, CheckCircle, Eye, Check, Loader2, Filter, FileText, ShieldCheck, Sparkles } from 'lucide-react'
+import { AlertTriangle, AlertCircle, CheckCircle, Eye, Check, Loader2, Filter, FileText, ShieldCheck, Sparkles, GraduationCap, User, Clock, Layers, Calendar } from 'lucide-react'
 import { useApp } from '@/lib/context'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
@@ -327,20 +327,11 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
       ) : (
         <div style={{ position: 'relative' }}>
           {/* Vertical continuous timeline line */}
-          <div style={{ position: 'absolute', top: 32, bottom: 0, left: 14, width: 1, background: '#e2e8f0', zIndex: 0 }} />
+          <div style={{ position: 'absolute', top: 26, bottom: 0, left: 14, width: 1, background: '#e2e8f0', zIndex: 0 }} />
 
           <AnimatePresence>
             {groupedOcorrencias.map((group, gIdx) => (
               <div key={group.date}>
-                {/* Date separator */}
-                <div style={{ display: 'flex', alignItems: 'center', margin: '24px 0 24px 0', position: 'relative', zIndex: 1 }}>
-                   <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                   <div style={{ padding: '0 16px', fontSize: 13, fontWeight: 700, color: '#64748b' }}>
-                      {formatDateSeparator(group.date)}
-                   </div>
-                   <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
-                </div>
-
                 {group.items.map((o, idx) => {
                   const lowerTipo = (o.tipo || '').toLowerCase()
                   const isElogio = lowerTipo === 'elogio' || lowerTipo === 'parabéns' || lowerTipo === 'parabens'
@@ -375,6 +366,9 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                   const displayText = shouldTruncate ? textStr.slice(0, maxLength).trim() + '...' : textStr
 
                   const timeStr = new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                  const dataStr = formatDateSeparator(group.date || o.data || o.created_at)
+                  const turmaStr = o.turmaNome || o.dados?.turma || aluno?.turma || '4º Ano A • Matutino'
+                  const autorStr = lancado ? lancado.split(' em ')[0] : (o.responsavel || 'Coordenação')
                   
                   return (
                     <motion.div 
@@ -385,71 +379,117 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                       transition={{ duration: 0.3, delay: (gIdx * 0.1) + (idx * 0.05) }}
                       style={{ 
                         position: 'relative',
-                        paddingLeft: 40,
+                        paddingLeft: 38,
                         marginBottom: 20
                       }}
                     >
-                      {/* Timeline Dot centered on the vertical line (which is at left: 14px) => dot center at 14px */}
+                      {/* Timeline Dot centered on the vertical line (which is at left: 14px) */}
                       <div style={{ 
                         position: 'absolute', 
                         left: 14, 
-                        top: 28, 
+                        top: 26, 
                         transform: 'translate(-50%, -50%)', 
                         zIndex: 2,
-                        width: 24, 
-                        height: 24, 
+                        width: 22, 
+                        height: 22, 
                         borderRadius: '50%', 
                         background: '#fff', 
-                        border: `2px solid ${borderColor}`,
+                        border: '2.5px solid #8b5cf6',
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        boxShadow: '0 0 0 6px #fdfdfd'
+                        boxShadow: '0 0 0 5px #fdfdfd'
                       }}>
-                        <div style={{ width: 12, height: 12, borderRadius: '50%', background: iconColor }} />
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#8b5cf6' }} />
                       </div>
 
-                      {/* Card Body */}
+                      {/* ============================================================ */}
+                      {/* TIMELINE AURORA GLOW (Versão 4 Definitiva)                  */}
+                      {/* ============================================================ */}
                       <div style={{
+                        position: 'relative',
                         background: '#ffffff',
-                        border: '1px solid #f8fafc',
+                        border: '1px solid rgba(216, 180, 254, 0.45)',
                         borderRadius: 24,
-                        padding: '24px',
-                        boxShadow: '0 8px 30px rgba(0,0,0,0.04)'
+                        padding: '18px 20px',
+                        boxShadow: '0 16px 36px -6px rgba(168, 85, 247, 0.08), 0 4px 12px rgba(0, 0, 0, 0.02)',
+                        overflow: 'hidden'
                       }}>
-                        {/* Title Row */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            {isLeve ? (
-                              <div style={{ background: '#ffedd5', borderRadius: 14, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
-                              </div>
-                            ) : (
-                              <div style={{ background: '#fee2e2', borderRadius: 14, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <AlertTriangle size={20} color={iconColor} strokeWidth={2.5} />
-                              </div>
-                            )}
-                            <h3 style={{ fontSize: 18, fontWeight: 900, margin: 0, color: '#0f172a', letterSpacing: '-0.02em' }}>{o.tipo}</h3>
+                        {/* Aurora Glowing Accent Top Bar */}
+                        <div style={{
+                          position: 'absolute', top: 0, left: 16, right: 16, height: 4,
+                          borderRadius: '0 0 4px 4px',
+                          background: 'linear-gradient(90deg, #f59e0b, #ec4899, #8b5cf6)'
+                        }} />
+
+                        {/* Card Header: Severity Badge + Title + Time + Collapse */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: 4, marginBottom: 12 }}>
+                          <div>
                             <span style={{ 
-                              fontSize: 11, 
-                              background: gravBg, 
-                              color: gravColor, 
-                              padding: '4px 10px', 
-                              borderRadius: 8, 
+                              fontSize: 10, 
                               fontWeight: 800, 
                               textTransform: 'uppercase', 
-                              letterSpacing: 0.5 
+                              padding: '2.5px 8.5px', 
+                              borderRadius: 999, 
+                              background: isLeve ? '#fdf4ff' : '#fef2f2', 
+                              color: isLeve ? '#86198f' : '#dc2626', 
+                              border: isLeve ? '1px solid #f0abfc' : '1px solid #fecaca',
+                              letterSpacing: '0.04em'
                             }}>
                               {gravText}
                             </span>
+                            <h3 style={{ fontSize: 18, fontWeight: 800, margin: '4px 0 0 0', color: '#0f172a', letterSpacing: '-0.01em' }}>
+                              {o.tipo}
+                            </h3>
                           </div>
-                          
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                            <span style={{ 
+                              fontSize: 11.5, 
+                              fontWeight: 700, 
+                              color: '#7c3aed', 
+                              background: '#f3e8ff', 
+                              padding: '4px 10px', 
+                              borderRadius: 999,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}>
+                              <Calendar size={11} color="#7c3aed" />
+                              {dataStr}
+                            </span>
+
+                            <span style={{ 
+                              fontSize: 11.5, 
+                              fontWeight: 700, 
+                              color: '#7c3aed', 
+                              background: '#f3e8ff', 
+                              padding: '4px 10px', 
+                              borderRadius: 999,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}>
+                              <Clock size={11} color="#7c3aed" />
+                              {timeStr}
+                            </span>
+
                             <div 
                               onClick={() => setCollapsedIds(p => ({ ...p, [o.id]: !p[o.id] }))}
-                              style={{ width: 30, height: 30, borderRadius: '50%', background: '#f8fafc', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                              style={{ 
+                                width: 28, 
+                                height: 28, 
+                                borderRadius: '50%', 
+                                background: '#f8fafc', 
+                                border: '1px solid #e2e8f0', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                cursor: 'pointer', 
+                                color: '#64748b' 
+                              }}
                             >
-                              <svg style={{ transform: collapsedIds[o.id] ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                              <svg style={{ transform: collapsedIds[o.id] ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                             </div>
                           </div>
                         </div>
@@ -460,39 +500,64 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: 'auto', opacity: 1 }}
                               exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.3 }}
+                              transition={{ duration: 0.25 }}
                               style={{ overflow: 'hidden' }}
                             >
-                              {/* Meta Info Rows */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#f8fafc', padding: '12px 16px', borderRadius: 16 }}>
-                                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
-                                  </div>
-                                  <span style={{ fontSize: 14, color: '#475569', fontWeight: 600 }}>
-                                    {o.turmaNome || o.dados?.turma || aluno?.turma || '4º Ano A'}
-                                  </span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#f8fafc', padding: '12px 16px', borderRadius: 16 }}>
-                                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #f1f5f9', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                                  </div>
-                                  <span style={{ fontSize: 14, color: '#475569', fontWeight: 600 }}>
-                                    {lancado || `${o.responsavel || 'Coordenação'} em ${new Date(o.created_at).toLocaleDateString('pt-BR')} às ${timeStr}`}
-                                  </span>
-                                </div>
+                              {/* Floating Aurora Badges: Turma & Autor */}
+                              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+                                <span style={{ 
+                                  background: '#fdf4ff', 
+                                  border: '1px solid #f0abfc', 
+                                  color: '#86198f', 
+                                  fontSize: 11.5, 
+                                  fontWeight: 700, 
+                                  padding: '4px 10px', 
+                                  borderRadius: 10, 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  gap: 5 
+                                }}>
+                                  <GraduationCap size={13} color="#a21caf" />
+                                  {turmaStr}
+                                </span>
+
+                                <span style={{ 
+                                  background: '#f8fafc', 
+                                  border: '1px solid #e2e8f0', 
+                                  color: '#334155', 
+                                  fontSize: 11.5, 
+                                  fontWeight: 600, 
+                                  padding: '4px 10px', 
+                                  borderRadius: 10, 
+                                  display: 'inline-flex', 
+                                  alignItems: 'center', 
+                                  gap: 5 
+                                }}>
+                                  <User size={13} color="#64748b" />
+                                  {autorStr}
+                                </span>
                               </div>
 
-                              {/* Description */}
-                              <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: 16, position: 'relative', marginBottom: 24, minHeight: 80 }}>
-                                <span style={{ position: 'absolute', top: 10, left: 16, fontSize: 40, color: '#e2e8f0', lineHeight: 1, fontFamily: 'Georgia, serif' }}>"</span>
-                                <span style={{ position: 'absolute', bottom: -10, right: 16, fontSize: 40, color: '#e2e8f0', lineHeight: 1, fontFamily: 'Georgia, serif' }}>"</span>
-                                <p style={{ fontSize: 14, color: '#334155', margin: '14px 0 0 0', lineHeight: 1.6, position: 'relative', zIndex: 1, fontWeight: 500 }}>
+                              {/* Motivo / Descrição Pedagógica com Aurora Glow sutil */}
+                              <div style={{ 
+                                background: 'linear-gradient(135deg, #faf5ff 0%, #ffffff 100%)', 
+                                border: '1px solid #f3e8ff', 
+                                borderRadius: 14, 
+                                padding: '12px 14px', 
+                                marginBottom: 16, 
+                                fontSize: 13, 
+                                color: '#475569', 
+                                lineHeight: 1.6 
+                              }}>
+                                <strong style={{ color: '#581c87', display: 'block', fontSize: 11, marginBottom: 3 }}>
+                                  Relato Pedagógico:
+                                </strong>
+                                <p style={{ margin: 0 }}>
                                   {displayText}
                                   {shouldTruncate && (
                                     <span 
                                       onClick={() => setExpandedIds(p => ({...p, [o.id]: true}))} 
-                                      style={{ color: '#2563eb', fontWeight: 700, cursor: 'pointer', marginLeft: 4 }}
+                                      style={{ color: '#7c3aed', fontWeight: 700, cursor: 'pointer', marginLeft: 4 }}
                                     >
                                       Ver mais
                                     </span>
@@ -500,39 +565,36 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                                 </p>
                               </div>
 
-                              {/* Action Buttons */}
-                              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                                {!isMirroring && (
-                                  <button 
-                                    onClick={() => !o.ciencia_responsavel && handleAssinar(o.id)}
-                                    disabled={!!signingIds[o.id] || o.ciencia_responsavel}
-                                    style={{ 
-                                      flex: 1, 
-                                      minWidth: 140, 
-                                      background: o.ciencia_responsavel ? '#ecfdf5' : 'linear-gradient(135deg, #f59e0b 0%, #f97316 100%)', 
-                                      border: o.ciencia_responsavel ? '1px solid #a7f3d0' : 'none', 
-                                      color: o.ciencia_responsavel ? '#059669' : '#ffffff', 
-                                      fontWeight: 800, 
-                                      fontSize: 14, 
-                                      padding: '14px 0', 
-                                      borderRadius: 20,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                      gap: 8,
-                                      cursor: (signingIds[o.id] || o.ciencia_responsavel) ? 'default' : 'pointer',
-                                      boxShadow: o.ciencia_responsavel ? 'none' : '0 8px 16px rgba(249, 115, 22, 0.25)'
-                                    }}
-                                  >
-                                    {signingIds[o.id] ? (
-                                      <Loader2 size={18} className="spin-animation" />
-                                    ) : (
-                                      <Check size={18} strokeWidth={3} />
-                                    )}
-                                    {o.ciencia_responsavel ? 'Ciência Assinada' : 'Assinar ciência'}
-                                  </button>
-                                )}
-                              </div>
+                              {/* Botão de Assinar Ciência com Gradiente Aurora */}
+                              {!isMirroring && (
+                                <button 
+                                  onClick={() => !o.ciencia_responsavel && handleAssinar(o.id)}
+                                  disabled={!!signingIds[o.id] || o.ciencia_responsavel}
+                                  style={{ 
+                                    width: '100%', 
+                                    height: 44,
+                                    borderRadius: 14, 
+                                    border: o.ciencia_responsavel ? '1px solid #a7f3d0' : 'none', 
+                                    background: o.ciencia_responsavel ? '#ecfdf5' : 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 50%, #f59e0b 100%)', 
+                                    color: o.ciencia_responsavel ? '#059669' : '#ffffff', 
+                                    fontWeight: 800, 
+                                    fontSize: 13.5, 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    gap: 8,
+                                    cursor: (signingIds[o.id] || o.ciencia_responsavel) ? 'default' : 'pointer',
+                                    boxShadow: o.ciencia_responsavel ? 'none' : '0 8px 20px rgba(124, 58, 237, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.35)'
+                                  }}
+                                >
+                                  {signingIds[o.id] ? (
+                                    <Loader2 size={16} className="spin-animation" />
+                                  ) : (
+                                    <Check size={16} strokeWidth={3} />
+                                  )}
+                                  {o.ciencia_responsavel ? 'Ciência Registrada' : 'Assinar Ciência'}
+                                </button>
+                              )}
                             </motion.div>
                           )}
                         </AnimatePresence>

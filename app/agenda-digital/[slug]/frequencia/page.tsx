@@ -340,21 +340,9 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
           .ad-freq-cal-cell {
             min-height: 50px !important;
           }
-          .ad-banner-global {
-            flex-direction: column !important;
-            padding: 32px 24px !important;
-          }
-          .ad-banner-global > div:first-child {
-            max-width: 100% !important;
-            margin-bottom: 24px !important;
-          }
-          .ad-banner-catraca {
-            position: relative !important;
-            right: auto !important;
-            bottom: -32px !important;
-            margin: 0 auto !important;
-            display: flex !important;
-            justify-content: center !important;
+          .ad-freq-info-card {
+            padding: 14px 16px !important;
+            gap: 12px !important;
           }
         }
       `}} />
@@ -495,37 +483,59 @@ export default function ADFrequenciaPage({ params }: { params: any }) {
         </div>
       </motion.div>
 
-      {/* Header / Banner Premium Moved to Bottom */}
+      {/* Card Informativo Discreto de Registro de Frequência */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="ad-banner-global"
+        className="ad-freq-info-card"
         style={{
-          background: 'linear-gradient(90deg, #4f46e5 0%, #6d28d9 100%)',
-          borderRadius: 24,
-          padding: '32px 40px',
-          marginBottom: 32,
+          background: 'linear-gradient(135deg, #4f46e5 0%, #6d28d9 100%)',
+          borderRadius: 16,
+          padding: '14px 18px',
+          marginBottom: 24,
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          boxShadow: '0 15px 35px rgba(79, 70, 229, 0.25)',
-          position: 'relative',
-          overflow: 'hidden'
+          alignItems: 'flex-start',
+          gap: 12,
+          boxShadow: '0 4px 14px rgba(79, 70, 229, 0.12)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          boxSizing: 'border-box',
+          width: '100%'
         }}
       >
-        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', zIndex: 1 }}>
-          <div style={{ border: '1.5px solid rgba(255,255,255,0.4)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}>
-            <Info size={16} color="#fff" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h4 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#fff', marginBottom: 12, letterSpacing: '-0.02em' }}>
-              Como a frequência é registrada?
-            </h4>
-            <p style={{ margin: 0, fontSize: 15, color: 'rgba(255,255,255,0.9)', lineHeight: 1.6, fontWeight: 500 }}>
-              A entrada do aluno é computada automaticamente através da catraca de acesso. A saída é registrada no momento em que você chama o aluno pelo painel.
-            </p>
-          </div>
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.15)',
+          borderRadius: '50%',
+          width: 28,
+          height: 28,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          marginTop: 1
+        }}>
+          <Info size={15} color="#fff" strokeWidth={2.2} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <h4 style={{
+            margin: '0 0 3px 0',
+            fontSize: 13.5,
+            fontWeight: 700,
+            color: '#fff',
+            letterSpacing: '-0.01em',
+            lineHeight: 1.3
+          }}>
+            Como a frequência é registrada?
+          </h4>
+          <p style={{
+            margin: 0,
+            fontSize: 12,
+            color: 'rgba(255, 255, 255, 0.9)',
+            lineHeight: 1.45,
+            fontWeight: 400
+          }}>
+            A entrada do aluno é computada automaticamente através da catraca de acesso. A saída é registrada no momento em que você chama o aluno pelo painel.
+          </p>
         </div>
       </motion.div>
 
