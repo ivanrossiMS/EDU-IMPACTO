@@ -1128,7 +1128,7 @@ export interface NotaFiscal {
 
 interface DataState {
   alunos: Aluno[]; setAlunos: Setter<Aluno[]>
-  turmas: Turma[]; setTurmas: Setter<Turma[]>
+  turmas: Turma[]; setTurmas: Setter<Turma[]>; turmasLoading?: boolean
   funcionarios: Funcionario[]; setFuncionarios: Setter<Funcionario[]>
   leads: Lead[]; setLeads: Setter<Lead[]>
   titulos: Titulo[]; setTitulos: Setter<Titulo[]>
@@ -1201,7 +1201,7 @@ export interface GlobalDataState {
 }
 
 export interface PedagogicoDataState {
-  turmas: Turma[]; setTurmas: Setter<Turma[]>
+  turmas: Turma[]; setTurmas: Setter<Turma[]>; turmasLoading?: boolean
   cfgTurnos: ConfigTurno[]; setCfgTurnos: Setter<ConfigTurno[]>
   cfgSituacaoAluno: ConfigSituacaoAluno[]; setCfgSituacaoAluno: Setter<ConfigSituacaoAluno[]>
   cfgGruposAlunos: ConfigGrupoAluno[]; setCfgGruposAlunos: Setter<ConfigGrupoAluno[]>
@@ -1251,7 +1251,7 @@ export const OperacionalContext = createContext<OperacionalDataState>({} as Oper
 const DataContext = createContext<DataState>({
   // Arrays  — safe empty defaults to prevent .filter()/.map() crashes during initial render
   alunos: [], setAlunos: NOOP,
-  turmas: [], setTurmas: NOOP,
+  turmas: [], setTurmas: NOOP, turmasLoading: false,
   funcionarios: [], setFuncionarios: NOOP,
   leads: [], setLeads: NOOP,
   titulos: [], setTitulos: NOOP,
@@ -1330,7 +1330,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // ── DADOS PRIMÁRIOS — persistidos no Supabase ──────────────────────
   // (alunos, titulos, contas-pagar, caixas, funcionários foram desacoplados para SWR Regional nas próprias telas para não travar Context global)
-  const [turmas, setTurmas] = useSupabaseArray<Turma>('turmas')
+  const [turmas, setTurmas, { loading: turmasLoading }] = useSupabaseArray<Turma>('turmas')
   const [leads, setLeads] = useState<Lead[]>([])
   
   const [comunicados, setComunicados] = useState<Comunicado[]>([])
@@ -1629,7 +1629,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [perfis, perfisLoading, wipeAll, logSystemAction]);
 
   const pedagogicoValue = useMemo(() => ({
-    turmas, setTurmas: trackedSetters.setTurmas,
+    turmas, setTurmas: trackedSetters.setTurmas, turmasLoading,
     cfgTurnos, setCfgTurnos: trackedSetters.setCfgTurnos,
     cfgSituacaoAluno, setCfgSituacaoAluno: trackedSetters.setCfgSituacaoAluno,
     cfgGruposAlunos, setCfgGruposAlunos: trackedSetters.setCfgGruposAlunos,

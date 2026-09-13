@@ -13,10 +13,10 @@ import { TurmaOption } from '../components/TurmaDropdown'
 export function useCollaboratorTurmas() {
   const { currentUser } = useApp()
   const searchParams = useSearchParams()
-  const { turmas = [], cfgCalendarioLetivo = [] } = useData()
+  const { turmas = [], turmasLoading = false, cfgCalendarioLetivo = [] } = useData()
   const { chatGroups = [] } = useAgendaDigital()
-  const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
-  const [equipes = []] = useSupabaseArray<any>('agenda/equipes')
+  const [colaboradores, , { loading: loadingColabs }] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [equipes = [], , { loading: loadingEquipes }] = useSupabaseArray<any>('agenda/equipes')
 
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const espelharColabNome = searchParams?.get('espelhar_nome')
@@ -383,6 +383,7 @@ export function useCollaboratorTurmas() {
     selectedAno: effectiveAno,
     setSelectedAno,
     anosLetivos,
-    anoVigente
+    anoVigente,
+    isLoading: Boolean(turmasLoading || loadingColabs || loadingEquipes)
   }
 }

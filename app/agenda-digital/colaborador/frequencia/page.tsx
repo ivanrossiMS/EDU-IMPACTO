@@ -18,6 +18,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { useCollaboratorTurmas } from '../hooks/useCollaboratorTurmas'
 import { TurmaDropdown } from '../components/TurmaDropdown'
+import { LoadingGlass } from '@/components/LoadingGlass'
 
 export default function ColaboradorFrequenciaPage() {
   const {
@@ -34,7 +35,8 @@ export default function ColaboradorFrequenciaPage() {
     selectedAno,
     setSelectedAno,
     anosLetivos,
-    anoVigente
+    anoVigente,
+    isLoading: isLoadingTurmas
   } = useCollaboratorTurmas()
 
   const queryClient = useQueryClient()
@@ -163,7 +165,7 @@ export default function ColaboradorFrequenciaPage() {
     return params
   }, [gridStartStr, gridEndStr, selectedTurmaId])
 
-  const { data: rawFrequencias = [], isLoading: isLoadingFreqs } = useApiQuery<any[]>(
+  const { data: rawFrequencias = [], isLoading: isLoadingFreqs, isFetching: isFetchingFreqs } = useApiQuery<any[]>(
     ['frequencias-colaborador', monthKey, gridStartStr, gridEndStr, selectedTurmaId, selectedAno],
     '/api/academico/frequencias',
     freqQueryParams
@@ -176,7 +178,7 @@ export default function ColaboradorFrequenciaPage() {
     limit: 5000
   }), [gridStartStr, gridEndStr])
 
-  const { data: rawPortaria } = useApiQuery<any>(
+  const { data: rawPortaria, isLoading: isLoadingPortaria } = useApiQuery<any>(
     ['portaria-eventos-colaborador', monthKey, gridStartStr, gridEndStr],
     '/api/portaria/eventos',
     portariaQueryParams
@@ -196,7 +198,7 @@ export default function ColaboradorFrequenciaPage() {
     limit: 5000
   }), [gridStartStr, gridEndStr])
 
-  const { data: saidaCalls = [] } = useApiQuery<any[]>(
+  const { data: saidaCalls = [], isLoading: isLoadingSaidas } = useApiQuery<any[]>(
     ['saida-calls-colaborador', monthKey, gridStartStr, gridEndStr],
     '/api/saida/calls',
     saidaQueryParams
@@ -471,6 +473,37 @@ export default function ColaboradorFrequenciaPage() {
     return counts
   }, [activeTurmas, alunosVinculados, selectedAno, turmas])
 
+  // Controle de carregamento inicial completo dos dados do banco
+  const isDataLoading = (
+    isLoadingAlunos ||
+    rawAlunos === undefined ||
+    isLoadingFreqs ||
+    isLoadingPortaria ||
+    isLoadingSaidas ||
+    Boolean(isLoadingTurmas)
+  )
+
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false)
+
+  useEffect(() => {
+    if (!isDataLoading && mounted) {
+      setHasLoadedInitialData(true)
+    }
+  }, [isDataLoading, mounted])
+
+  // Fallback de segurança: evita tela travada caso alguma query falhe ou demore excessivamente
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setHasLoadedInitialData(true)
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Só exibe a página quando todos os dados do banco estiverem 100% carregados
+  if (!mounted || (!hasLoadedInitialData && isDataLoading)) {
+    return <LoadingGlass />
+  }
+
   return (
     <div className="frequencia-page-container" style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 110, fontFamily: 'Outfit, Inter, sans-serif' }}>
       
@@ -570,9 +603,48 @@ export default function ColaboradorFrequenciaPage() {
           border: '1px solid #f1f5f9',
           overflow: 'hidden', 
           padding: '32px', 
-          marginBottom: 32 
+          marginBottom: 32,
+          position: 'relative'
         }}
       >
+        {/* Loading overlay suave ao navegar entre meses ou filtrar turmas */}
+        <AnimatePresence>
+          {isFetchingFreqs && hasLoadedInitialData && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'rgba(255, 255, 255, 0.72)',
+                backdropFilter: 'blur(3px)',
+                WebkitBackdropFilter: 'blur(3px)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                zIndex: 20,
+                borderRadius: 24
+              }}
+            >
+              <div style={{
+                width: 36,
+                height: 36,
+                border: '3px solid rgba(2, 132, 199, 0.15)',
+                borderTopColor: '#0284c7',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite'
+              }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#0369a1' }}>
+                Carregando registros do mês...
+              </span>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Cabeçalho do Calendário */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
           <div>
