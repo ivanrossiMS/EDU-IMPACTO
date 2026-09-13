@@ -21,6 +21,7 @@ export default function ColaboradorNotasPage() {
     effectiveUser,
     isMirrorMode,
     isMasterAdmin,
+    isEquipeEscolar,
     turmas,
     activeTurmas,
     turmaOptions,
@@ -60,21 +61,10 @@ export default function ColaboradorNotasPage() {
   // Realtime updates on boletins table
   useAgendaRealtime({
     table: 'boletins',
-    toastConfig: {
-      enabled: true,
-      insertMessage: () => 'Novo boletim lançado!',
-      updateMessage: () => 'Boletim escolar atualizado!',
-      icon: <GraduationCap size={18} color="#2563eb" />
-    },
-    onInsert: () => {
-      queryClient.invalidateQueries({ queryKey: ['boletins-colaborador'] })
-    },
-    onUpdate: () => {
-      queryClient.invalidateQueries({ queryKey: ['boletins-colaborador'] })
-    },
-    onDelete: () => {
-      queryClient.invalidateQueries({ queryKey: ['boletins-colaborador'] })
-    }
+    toastConfig: { enabled: false },
+    onInsert: () => queryClient.invalidateQueries({ queryKey: ['boletins-colaborador'] }),
+    onUpdate: () => queryClient.invalidateQueries({ queryKey: ['boletins-colaborador'] }),
+    onDelete: () => queryClient.invalidateQueries({ queryKey: ['boletins-colaborador'] })
   })
 
   // 1. Fetch Students
@@ -96,12 +86,15 @@ export default function ColaboradorNotasPage() {
     if (selectedTurmaId !== 'all') {
       return `/api/boletins?turma_id=${selectedTurmaId}`
     }
+    if (isEquipeEscolar) {
+      return '/api/boletins'
+    }
     if (activeTurmas.length > 0) {
       const ids = activeTurmas.map(t => t.id).join(',')
       return `/api/boletins?turma_ids=${ids}`
     }
     return '/api/boletins'
-  }, [selectedTurmaId, activeTurmas])
+  }, [selectedTurmaId, activeTurmas, isEquipeEscolar])
 
   const { data: rawBoletins, isLoading: isLoadingBoletins } = useApiQuery<any>(
     boletinsQueryKey,
@@ -406,7 +399,7 @@ export default function ColaboradorNotasPage() {
             selectedAno={selectedAno}
             setSelectedAno={setSelectedAno}
             anoVigente={anoVigente}
-            allLabel="Todas as Minhas Turmas"
+            allLabel={isEquipeEscolar ? "Todas as Turmas" : "Todas as Minhas Turmas"}
           />
         </div>
       </div>

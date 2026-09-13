@@ -7,6 +7,7 @@ import { useData } from '@/lib/dataContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { compareTurmasBySerie } from '@/lib/studentTurmaUtils'
+import { getTurmaSchedule } from '@/lib/frequenciaEngine'
 import { TurmaOption } from '../components/TurmaDropdown'
 
 export function useCollaboratorTurmas() {
@@ -15,6 +16,7 @@ export function useCollaboratorTurmas() {
   const { turmas = [], cfgCalendarioLetivo = [] } = useData()
   const { chatGroups = [] } = useAgendaDigital()
   const [colaboradores] = useSupabaseArray<any>('configuracoes/usuarios')
+  const [equipes = []] = useSupabaseArray<any>('agenda/equipes')
 
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const espelharColabNome = searchParams?.get('espelhar_nome')
@@ -109,11 +111,96 @@ export function useCollaboratorTurmas() {
     })
   }, [chatGroups, candidateColabIds])
 
-  // FILTRAGEM ESTRITA: Retorna SOMENTE as turmas às quais o colaborador está efetivamente vinculado
+  // Determina se o usuário atual pertence à Equipe Escolar ou possui privilégios administrativos
+  const isEquipeEscolar = useMemo(() => {
+    if (!effectiveUser?.id && !currentUser?.id) return false
+
+    // 1. Cargos ou Perfis de Gestão / Equipe Escolar
+    const staffRoles = [
+      'administrador master', 'administrador', 'admin', 'master',
+      'diretor geral', 'diretora geral', 'diretor', 'diretora',
+      'coordenador geral', 'coordenadora geral', 'coordenador', 'coordenadora',
+      'coordenador pedagógico', 'coordenadora pedagógica', 'coordenacao', 'coordenação',
+      'orientador', 'orientadora', 'orientador pedagógico', 'orientadora pedagógica',
+      'secretaria', 'secretário', 'secretária',
+      'inspetor', 'inspetora', 'inspetores',
+      'apoio pedagógico', 'apoio', 'equipe escolar', 'institucional', 'gestor', 'gestora'
+    ]
+    const userPerfil = String(effectiveUser?.perfil || currentUser?.perfil || '').toLowerCase().trim()
+    const userCargo = String(effectiveUser?.cargo || currentUser?.cargo || '').toLowerCase().trim()
+    const userAcesso = String((effectiveUser as any)?.acesso || (currentUser as any)?.acesso || '').toLowerCase().trim()
+
+    const hasStaffRole = (
+      staffRoles.some(r => userPerfil.includes(r) || userCargo.includes(r)) ||
+      userAcesso === 'institucional' ||
+      Boolean((effectiveUser as any)?.isMasterAdmin || (currentUser as any)?.isMasterAdmin) ||
+      effectiveUser?.perfil === 'administrador' ||
+      effectiveUser?.perfil === 'admin'
+    )
+
+    if (hasStaffRole) return true
+
+    // 2. Vínculo do colaborador com algum grupo de Equipe Escolar em chatGroups
+    const isInEquipeGroup = (chatGroups || []).some((g: any) => {
+      const isEq = (
+        g.isEquipeEscolar === true || g.isEquipeEscolar === 'true' || g.isEquipeEscolar === 1 || g.dados?.isEquipeEscolar === true ||
+        g.isGlobalAccess === true || g.isGlobalAccess === 'true' || g.isGlobalAccess === 1 || g.dados?.isGlobalAccess === true ||
+        String(g.ano || '').toLowerCase() === 'equipe escolar' ||
+        String(g.categoria || '').toLowerCase().includes('equipe') ||
+        String(g.nome || '').toLowerCase().includes('equipe escolar') ||
+        String(g.nome || '').toLowerCase().includes('coordenação') ||
+        String(g.nome || '').toLowerCase().includes('coordenacao') ||
+        String(g.nome || '').toLowerCase().includes('direção') ||
+        String(g.nome || '').toLowerCase().includes('direcao') ||
+        String(g.nome || '').toLowerCase().includes('inspetor') ||
+        String(g.nome || '').toLowerCase().includes('secretaria') ||
+        String(g.nome || '').toLowerCase().includes('financeiro') ||
+        String(g.nome || '').toLowerCase().includes('recepção') ||
+        String(g.nome || '').toLowerCase().includes('recepcao')
+      )
+
+      if (!isEq) return false
+
+      let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds || g.funcionariosIds || g.dados?.funcionariosIds
+      if (typeof colabs === 'string') {
+        try { colabs = JSON.parse(colabs) } catch { colabs = [] }
+      }
+      if (!Array.isArray(colabs)) colabs = []
+
+      return colabs.some((id: any) => {
+        const clean = String(id).replace(/^f_?/, '').trim().toLowerCase()
+        return candidateColabIds.includes(clean) || candidateColabIds.includes(String(id).trim().toLowerCase())
+      })
+    })
+
+    if (isInEquipeGroup) return true
+
+    // 3. Vínculo do colaborador na tabela agenda/equipes
+    const isInAgendaEquipes = (equipes || []).some((eq: any) => {
+      let membros = eq.membrosIds || eq.colaboradoresIds || eq.dados?.membrosIds
+      if (typeof membros === 'string') {
+        try { membros = JSON.parse(membros) } catch { membros = [] }
+      }
+      if (!Array.isArray(membros)) membros = []
+      return membros.some((id: any) => {
+        const clean = String(id).replace(/^f_?/, '').trim().toLowerCase()
+        return candidateColabIds.includes(clean) || candidateColabIds.includes(String(id).trim().toLowerCase())
+      })
+    })
+
+    return isInAgendaEquipes
+  }, [effectiveUser, currentUser, candidateColabIds, chatGroups, equipes])
+
+  // Retorna as turmas base: se for equipe escolar, todas as turmas; se for professor, apenas as vinculadas
   const baseTurmas = useMemo(() => {
     if (!effectiveUser?.id) return []
 
-    const effNome = String(effectiveUser.nome || '').trim().toLowerCase()
+    // Se o colaborador faz parte da Equipe Escolar, tem visão de todas as turmas escolares
+    if (isEquipeEscolar) {
+      return [...turmas].sort(compareTurmasBySerie)
+    }
+
+    const effNome = String(effectiveUser?.nome || '').trim().toLowerCase()
     const effTurmasIds = new Set<string>()
 
     // Vínculos explícitos no cadastro do colaborador/usuário
@@ -262,15 +349,16 @@ export function useCollaboratorTurmas() {
 
   const selectedTurmaName = useMemo(() => {
     if (baseTurmas.length === 0) return 'Nenhuma turma vinculada'
-    if (selectedTurmaId === 'all') return 'Todas as turmas vinculadas'
+    if (selectedTurmaId === 'all') return isEquipeEscolar ? 'Todas as Turmas' : 'Todas as turmas vinculadas'
     const found = turmasDoAno.find(t => String(t.id) === String(selectedTurmaId) || String(t.codigo) === String(selectedTurmaId))
     return found ? found.nome : 'Selecione uma turma'
-  }, [selectedTurmaId, turmasDoAno, baseTurmas.length])
+  }, [selectedTurmaId, turmasDoAno, baseTurmas.length, isEquipeEscolar])
 
   const turmaOptions: TurmaOption[] = useMemo(() => {
     return turmasDoAno.map(t => {
       const anyT = t as any
-      const seg = anyT.dados?.segmento || anyT.segmento || anyT.serie || ''
+      const schedule = getTurmaSchedule(t)
+      const seg = anyT.dados?.segmento || anyT.segmento || schedule?.segmento || anyT.serie || ''
       return {
         id: String(t.id),
         nome: t.nome,
@@ -283,7 +371,8 @@ export function useCollaboratorTurmas() {
   return {
     effectiveUser,
     isMirrorMode,
-    isMasterAdmin: false, // Força a visão estritamente restrita ao colaborador
+    isMasterAdmin: isEquipeEscolar,
+    isEquipeEscolar,
     turmas: baseTurmas,
     turmasDoAno,
     activeTurmas,

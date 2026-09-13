@@ -21,6 +21,7 @@ export default function ColaboradorOcorrenciasPage() {
     effectiveUser,
     isMirrorMode,
     isMasterAdmin,
+    isEquipeEscolar,
     turmas,
     activeTurmas,
     turmaOptions,
@@ -416,7 +417,7 @@ export default function ColaboradorOcorrenciasPage() {
             selectedAno={selectedAno}
             setSelectedAno={setSelectedAno}
             anoVigente={anoVigente}
-            allLabel="Todas as Minhas Turmas"
+            allLabel={isEquipeEscolar ? "Todas as Turmas" : "Todas as Minhas Turmas"}
           />
         </div>
       </div>

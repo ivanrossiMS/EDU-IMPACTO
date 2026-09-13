@@ -24,6 +24,7 @@ export default function ColaboradorFrequenciaPage() {
     effectiveUser,
     isMirrorMode,
     isMasterAdmin,
+    isEquipeEscolar,
     turmas,
     activeTurmas,
     turmaOptions,
@@ -490,7 +491,12 @@ export default function ColaboradorFrequenciaPage() {
               Portal do Colaborador
             </span>
             <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
-              {activeTurmas.length} {activeTurmas.length === 1 ? 'turma vinculada' : 'turmas vinculadas'}
+              {isEquipeEscolar 
+                ? (selectedTurmaId === 'all' 
+                    ? `${activeTurmas.length} ${activeTurmas.length === 1 ? 'turma' : 'turmas'} (Equipe Escolar)` 
+                    : '1 turma filtrada')
+                : `${activeTurmas.length} ${activeTurmas.length === 1 ? 'turma vinculada' : 'turmas vinculadas'}`
+              }
             </span>
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
@@ -512,7 +518,7 @@ export default function ColaboradorFrequenciaPage() {
             selectedAno={selectedAno}
             setSelectedAno={setSelectedAno}
             anoVigente={anoVigente}
-            allLabel="Todas as Minhas Turmas"
+            allLabel={isEquipeEscolar ? "Todas as Turmas" : "Todas as Minhas Turmas"}
           />
         </div>
       </div>
@@ -895,7 +901,7 @@ export default function ColaboradorFrequenciaPage() {
                       }}
                     >
                       <option value="all">
-                        Todas as Turmas Vinculadas ({turmaCounts['all'] ?? alunosVinculados.length} alunos)
+                        {isEquipeEscolar ? 'Todas as Turmas' : 'Todas as Turmas Vinculadas'} ({turmaCounts['all'] ?? alunosVinculados.length} alunos)
                       </option>
                       {activeTurmas.map(t => (
                         <option key={t.id} value={String(t.id)}>
