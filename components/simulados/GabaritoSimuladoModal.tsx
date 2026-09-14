@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
+import { isTextoApoio } from '@/lib/utils'
 
 interface GabaritoSimuladoModalProps {
   simuladoUploadId: string
@@ -35,6 +36,11 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
   const [simulado, setSimulado] = useState<any>(null)
   const [questoes, setQuestoes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Filtra rigorosamente questões reais (exclui textos de apoio)
+  const questoesValidas = React.useMemo(() => {
+    return (questoes || []).filter((q: any) => !isTextoApoio(q))
+  }, [questoes])
 
   // Upload modal state
   const [showUploadModal, setShowUploadModal] = useState(false)
@@ -242,16 +248,17 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
   const handleProcessar = async () => {
     if (!nomeAluno.trim()) { setUploadError('Informe o nome do aluno.'); return }
     if (!imagemBase64) { setUploadError('Envie ou tire uma foto do gabarito.'); return }
-    if (questoes.length === 0) { setUploadError('Este simulado não possui questões no gabarito.'); return }
+    if (questoesValidas.length === 0) { setUploadError('Este simulado não possui questões no gabarito.'); return }
 
     setProcessando(true)
     setUploadError(null)
 
     try {
-      // Build official answer key
-      const gabaritoOficial = questoes.map((q: any, idx: number) => {
-        const correta = q.alternativas?.find((a: any) => a.correct)
-        return { numero: idx + 1, resposta: correta?.letter || '?' }
+      // Build official answer key (exclui textos de apoio e numera 1..N)
+      const gabaritoOficial = questoesValidas.map((q: any, idx: number) => {
+        const correta = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
+        const letra = correta ? (correta.letter || correta.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
+        return { numero: idx + 1, resposta: String(letra).toUpperCase() }
       })
 
       // Call AI API
@@ -540,20 +547,20 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                         <Users size={14} /> <span>Turmas: {Array.isArray(simulado?.series) ? simulado.series.join(', ') : (simulado?.series || 'Geral')}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                        <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.length} Questões</span>
+                        <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoesValidas.length} Questões</span>
                       </div>
                     </div>
                   </div>
                   <div className="print-grid-container" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 }}>
                     <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
-                      {[questoes.slice(0, Math.ceil(questoes.length / 2)), questoes.slice(Math.ceil(questoes.length / 2))].map((colQuestoes, colIndex) => (
+                      {[questoesValidas.slice(0, Math.ceil(questoesValidas.length / 2)), questoesValidas.slice(Math.ceil(questoesValidas.length / 2))].map((colQuestoes, colIndex) => (
                         <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
                           {colQuestoes.map((q: any, idx: number) => {
-                            const num = colIndex === 0 ? idx + 1 : Math.ceil(questoes.length / 2) + idx + 1
-                            const alt = q.alternativas?.find((a: any) => a.correct)
-                            const letra = alt ? alt.letter : '?'
+                            const num = colIndex === 0 ? idx + 1 : Math.ceil(questoesValidas.length / 2) + idx + 1
+                            const alt = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
+                            const letra = alt ? (alt.letter || alt.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
                             return (
-                              <div key={q.id || num} className="gabarito-list-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.12)', marginBottom: 8 }}>
+                              <div key={q.id || `q-${num}`} className="gabarito-list-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.12)', marginBottom: 8 }}>
                                 <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Questão {num.toString().padStart(2, '0')}</span>
                                 <div className="gabarito-bubble" style={{ width: 32, height: 32, borderRadius: '50%', background: letra !== '?' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.1)', color: letra !== '?' ? '#10b981' : '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, border: letra !== '?' ? '2px solid rgba(16,185,129,0.35)' : '2px dashed rgba(239,68,68,0.4)' }}>
                                   {letra}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Check, ArrowRight, ArrowLeft, User, ClipboardList, Users, UserCheck, Loader2 } from 'lucide-react'
+import { X, Check, ArrowRight, ArrowLeft, User, ClipboardList, Users, UserCheck, Loader2, Copy } from 'lucide-react'
 import { useRelatorios, ReportTemplate, ReportField } from '@/lib/relatoriosContext'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 
@@ -35,6 +35,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
   const [answers, setAnswers] = useState<Record<string, Record<string, any>>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [reportTitle, setReportTitle] = useState('')
+  const [copiedStudentId, setCopiedStudentId] = useState<string | null>(null)
 
   // Parse payload
   const payload = useMemo(() => {
@@ -114,6 +115,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
       setIsSubmitting(false)
       setIsSelectingStudents(false)
       setReportTitle('')
+      setCopiedStudentId(null)
       document.body.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
@@ -122,6 +124,10 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
       document.body.style.overflow = ''
     }
   }, [isOpen, payload?.templateId])
+
+  useEffect(() => {
+    setCopiedStudentId(null)
+  }, [currentFieldIndex])
 
   if (!isOpen || !payload || !template || targetedStudents.length === 0) return null;
 
@@ -185,6 +191,74 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
         [studentId]: studentAns
       }
     })
+  }
+
+  const isTextField = currentField?.type === 'texto-curto' || currentField?.type === 'texto-longo' || currentField?.type === 'numero';
+
+  const handleCopyToAll = (sourceStudentId: string) => {
+    if (!currentField) return;
+    const sourceValue = (answers[sourceStudentId] || {})[currentField.id];
+    if (sourceValue === undefined || sourceValue === null || String(sourceValue).trim() === '') return;
+
+    // Verificar se algum outro aluno ativo já possui anotação divergente
+    const hasConflictingAnswers = activeStudents.some(s => {
+      if (s.id === sourceStudentId) return false;
+      const existingVal = (answers[s.id] || {})[currentField.id];
+      return existingVal !== undefined && existingVal !== null && String(existingVal).trim() !== '' && String(existingVal).trim() !== String(sourceValue).trim();
+    });
+
+    if (hasConflictingAnswers) {
+      const confirmOverwrite = window.confirm(
+        'Outros alunos já possuem anotações neste campo. Deseja substituir a resposta de todos pelo conteúdo deste aluno?'
+      );
+      if (!confirmOverwrite) return;
+    }
+
+    setAnswers(prev => {
+      const updated = { ...prev };
+      activeStudents.forEach(s => {
+        updated[s.id] = {
+          ...(updated[s.id] || {}),
+          [currentField.id]: sourceValue
+        };
+      });
+      return updated;
+    });
+
+    setCopiedStudentId(sourceStudentId);
+    setTimeout(() => {
+      setCopiedStudentId(prev => (prev === sourceStudentId ? null : prev));
+    }, 2500);
+  }
+
+  const hasAnyAnswer = useMemo(() => {
+    if (!currentField) return false;
+    return activeStudents.some(aluno => {
+      const val = (answers[aluno.id] || {})[currentField.id];
+      return val !== undefined && val !== null && val !== '' && (!Array.isArray(val) || val.length > 0);
+    });
+  }, [answers, activeStudents, currentField]);
+
+  const handleUnmarkAll = () => {
+    if (!currentField) return;
+    if (!hasAnyAnswer) return;
+
+    const ok = window.confirm('Deseja realmente desmarcar a resposta de todos os alunos para esta pergunta?');
+    if (!ok) return;
+
+    setAnswers(prev => {
+      const updated = { ...prev };
+      activeStudents.forEach(aluno => {
+        if (updated[aluno.id]) {
+          const studentAns = { ...updated[aluno.id] };
+          delete studentAns[currentField.id];
+          updated[aluno.id] = studentAns;
+        }
+      });
+      return updated;
+    });
+
+    setCopiedStudentId(null);
   }
 
   const handleFinish = async () => {
@@ -760,15 +834,38 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
               
               {/* Question Header */}
               <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 20, boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                   <div style={{ fontSize: 12, color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, background: '#f1f5f9', padding: '4px 10px', borderRadius: 8 }}>
                     Pergunta {currentFieldIndex + 1} de {allFields.length}
                   </div>
-                  {fillMode === 'igual' && (
+                  {fillMode === 'igual' ? (
                     <div style={{ fontSize: 11, color: '#3b82f6', fontWeight: 800, background: '#eff6ff', padding: '4px 8px', borderRadius: 8 }}>
                       Para Todos
                     </div>
-                  )}
+                  ) : hasAnyAnswer ? (
+                    <button
+                      type="button"
+                      onClick={handleUnmarkAll}
+                      style={{
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        color: '#ef4444',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: '4px 10px',
+                        borderRadius: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="Desmarcar resposta de todos os alunos nesta pergunta"
+                    >
+                      <X size={13} />
+                      <span>Desmarcar todos</span>
+                    </button>
+                  ) : null}
                 </div>
                 <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3 }}>{currentField?.label}</h2>
                 {currentField?.required && <span style={{ color: '#ef4444', fontSize: 12, fontWeight: 700, display: 'block', marginTop: 8 }}>* Obrigatório</span>}
@@ -816,43 +913,85 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                   activeStudents.map(aluno => {
                     const studentAns = (answers[aluno.id] || {})[currentField?.id || ''];
                     const hasAnswer = studentAns !== undefined && studentAns !== null && studentAns !== '' && (!Array.isArray(studentAns) || studentAns.length > 0);
+                    const hasText = typeof studentAns === 'string' ? studentAns.trim().length > 0 : hasAnswer;
 
                     return (
                       <div key={aluno.id} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px', background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 auto' }}>
                             <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
                               {aluno.foto_url || aluno.foto ? <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <User size={16} />}
                             </div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {abbreviateName(aluno.nome)}
                             </div>
                           </div>
 
-                          {hasAnswer && (
-                            <button
-                              type="button"
-                              onClick={() => handleAnswerChange(aluno.id, '')}
-                              style={{
-                                background: '#fef2f2',
-                                border: '1px solid #fecaca',
-                                color: '#ef4444',
-                                fontSize: 12,
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                padding: '4px 10px',
-                                borderRadius: 8,
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                transition: 'all 0.15s ease'
-                              }}
-                              title="Desmarcar resposta para este aluno"
-                            >
-                              <X size={13} />
-                              <span>Desmarcar</span>
-                            </button>
-                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                            {isTextField && hasText && activeStudents.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyToAll(aluno.id)}
+                                style={{
+                                  background: copiedStudentId === aluno.id ? '#ecfdf5' : '#eff6ff',
+                                  border: copiedStudentId === aluno.id ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
+                                  color: copiedStudentId === aluno.id ? '#059669' : '#2563eb',
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  padding: '4px 10px',
+                                  borderRadius: 8,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  transition: 'all 0.15s ease',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                title="Copiar este texto para todos os outros alunos"
+                              >
+                                {copiedStudentId === aluno.id ? (
+                                  <>
+                                    <Check size={13} />
+                                    <span>Copiado para todos!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy size={13} />
+                                    <span>Copiar para todos</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+
+                            {hasAnswer && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleAnswerChange(aluno.id, '');
+                                  if (copiedStudentId === aluno.id) setCopiedStudentId(null);
+                                }}
+                                style={{
+                                  background: '#fef2f2',
+                                  border: '1px solid #fecaca',
+                                  color: '#ef4444',
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  padding: '4px 10px',
+                                  borderRadius: 8,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  transition: 'all 0.15s ease',
+                                  whiteSpace: 'nowrap'
+                                }}
+                                title="Desmarcar resposta para este aluno"
+                              >
+                                <X size={13} />
+                                <span>Desmarcar</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                         
                         <div style={{ width: '100%' }}>

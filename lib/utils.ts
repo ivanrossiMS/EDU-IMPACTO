@@ -238,6 +238,23 @@ export function getDerivedStatus(item: any, type: 'prova' | 'simulado' | 'redaca
 }
 
 /**
+ * Determina com precisão e robustez se um item é um texto de apoio.
+ * Textos de apoio não são questões reais: não possuem alternativas nem gabarito,
+ * não recebem numeração de questão e NÃO devem ser exibidos nem somados como questão nos gabaritos.
+ */
+export function isTextoApoio(q: any): boolean {
+  if (!q) return false
+  return Boolean(
+    q.tipo_questao === 'texto_apoio' ||
+    q.is_texto_apoio ||
+    q.isTextoApoio ||
+    q.tipo === 'texto_apoio' ||
+    q.tipo === 'texto' ||
+    q.numero === 0
+  )
+}
+
+/**
  * Determina com precisão e robustez se uma questão pertence a uma requisição específica.
  * Suporta simulados adaptados/duplicados onde os IDs das requisições mudaram,
  * itens com requisição única, correspondência por professor único, e disciplina.
@@ -251,10 +268,8 @@ export function isQuestionForRequisicao(
   if (!q || !req) return false
 
   // Se solicitado excluir textos de apoio (ex: contagem de questões)
-  if (excludeTextoApoio) {
-    if (q.tipo_questao === 'texto_apoio' || q.is_texto_apoio || q.isTextoApoio) {
-      return false
-    }
+  if (excludeTextoApoio && isTextoApoio(q)) {
+    return false
   }
 
   // 1. Match direto e exato pelo ID da requisição

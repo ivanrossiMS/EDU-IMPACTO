@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { X, Printer, CheckSquare, Layers, Calendar, Users, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { isTextoApoio } from '@/lib/utils'
 
 interface GabaritoRedacaoModalProps {
   provaUploadId: string
@@ -234,28 +235,31 @@ export function GabaritoRedacaoModal({ provaUploadId, onClose }: GabaritoRedacao
                     <Users size={14} /> <span>Turmas: {Array.isArray(prova?.series) ? prova.series.join(', ') : (prova?.series || 'Geral')}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.length} Questões</span>
+                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.filter(q => !isTextoApoio(q)).length} Questões</span>
                   </div>
                 </div>
               </div>
 
               {/* Grid de Respostas */}
               <div className="print-grid-container" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, breakInside: 'avoid' }}>
-                <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-                  {[
-                    questoes.slice(0, Math.ceil(questoes.length / 2)),
-                    questoes.slice(Math.ceil(questoes.length / 2))
-                  ].map((colQuestoes, colIndex) => (
-                    <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
-                      {colQuestoes.map((q, idx) => {
-                        const num = colIndex === 0 ? idx + 1 : Math.ceil(questoes.length / 2) + idx + 1
-                        const alternativaCorreta = q.alternativas?.find((a: any) => a.correct)
-                        const letraCorreta = alternativaCorreta ? alternativaCorreta.letter : '?'
+                {(() => {
+                  const meQuestoes = questoes.filter(q => !isTextoApoio(q))
+                  return (
+                    <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+                      {[
+                        meQuestoes.slice(0, Math.ceil(meQuestoes.length / 2)),
+                        meQuestoes.slice(Math.ceil(meQuestoes.length / 2))
+                      ].map((colQuestoes, colIndex) => (
+                        <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
+                          {colQuestoes.map((q, idx) => {
+                            const num = colIndex === 0 ? idx + 1 : Math.ceil(meQuestoes.length / 2) + idx + 1
+                            const alternativaCorreta = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
+                            const letraCorreta = alternativaCorreta ? (alternativaCorreta.letter || alternativaCorreta.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
 
-                        return (
-                          <div 
-                            key={q.id || num} 
-                            className="gabarito-list-item"
+                            return (
+                              <div 
+                                key={q.id || `q-${num}`} 
+                                className="gabarito-list-item"
                             style={{ 
                               display: 'flex', 
                               alignItems: 'center', 
@@ -297,6 +301,7 @@ export function GabaritoRedacaoModal({ provaUploadId, onClose }: GabaritoRedacao
                     </div>
                   ))}
                 </div>
+              )})()}
               </div>
             </>
           )}

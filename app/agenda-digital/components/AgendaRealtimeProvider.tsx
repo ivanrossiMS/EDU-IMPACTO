@@ -670,7 +670,9 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     }
   }, [router, alunoId, meusAlunos])
 
-  const showInAppToast = useCallback((params: {
+  // Banners flutuantes (toasts in-app) desativados a pedido do usuário:
+  // Mantendo apenas o histórico na central de notificações/sininho e as Push Notifications nativas.
+  const showInAppToast = useCallback((_params: {
     type: 'comunicado' | 'momento' | 'calendario' | 'frequencia' | 'ocorrencia' | 'nota'
     id: string
     title: string
@@ -678,36 +680,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     autor?: string
     match: EventMatchResult
   }) => {
-    const { type, id, title, conteudo, autor, match } = params
-
-    let profileBadge = ''
-    if (match.profileTarget === 'colaborador') {
-      profileBadge = '🏛️ Institucional'
-    } else if (match.targetAlunoNome) {
-      profileBadge = `🎒 Aluno: ${match.targetAlunoNome.split(' ')[0]}`
-    }
-
-    let iconNode = <Megaphone size={18} className="text-indigo-600" />
-    if (type === 'momento') iconNode = <ImageIcon size={18} className="text-emerald-600" />
-    if (type === 'calendario') iconNode = <Calendar size={18} className="text-amber-600" />
-    if (type === 'frequencia') iconNode = <BarChart2 size={18} className="text-indigo-600" />
-
-    const preview = conteudo 
-      ? (conteudo.replace(/<[^>]*>?/gm, '').slice(0, 75) + (conteudo.length > 75 ? '...' : ''))
-      : autor ? `Por ${autor}` : 'Clique para visualizar'
-
-    const toastMessage = profileBadge ? `${profileBadge} • ${title}` : title
-
-    toast(toastMessage, {
-      description: preview,
-      icon: iconNode,
-      duration: 8000,
-      action: {
-        label: 'Abrir',
-        onClick: () => handleOpenItem(type, id, match),
-      },
-    })
-  }, [hasDualAccess, handleOpenItem])
+    // Desativado: nenhum banner flutuante deve ser exibido cobrindo a tela
+  }, [])
 
   // ── Supabase Realtime (In-App Toasts & Live Sync) ─────────────────────────
   useEffect(() => {

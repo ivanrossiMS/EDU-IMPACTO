@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { X, Printer, CheckSquare, Layers, Calendar, Users, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { isTextoApoio } from '@/lib/utils'
 
 interface GabaritoModalProps {
   simuladoId: string
@@ -260,7 +261,7 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
                     <Users size={14} /> <span>Turmas: {simulado?.turmas?.join(', ') || 'Geral'}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.filter(q => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio).length} Questões</span>
+                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.filter(q => !isTextoApoio(q)).length} Questões</span>
                   </div>
                 </div>
               </div>
@@ -268,7 +269,7 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
               {/* Grid Moderno de Respostas Agrupadas por Disciplina */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {(() => {
-                  const meQuestoes = questoes.filter(q => q.tipo_questao !== 'texto_apoio' && !q.is_texto_apoio && !q.isTextoApoio)
+                  const meQuestoes = questoes.filter(q => !isTextoApoio(q))
                   const grouped: Record<string, typeof meQuestoes> = {}
                   meQuestoes.forEach(q => {
                     const disc = q.simulados_disciplinas?.nome || 'Geral'
@@ -283,9 +284,9 @@ export function GabaritoModal({ simuladoId, onClose }: GabaritoModalProps) {
                       </h3>
                       <div style={{ columnCount: 2, columnGap: 16 }}>
                         {questoesDisciplina.map((q) => {
-                          const num = questoes.findIndex(item => item.id === q.id) + 1
-                          const alternativaCorreta = q.simulados_alternativas?.find((a: any) => a.eh_correta)
-                          const letraCorreta = alternativaCorreta ? alternativaCorreta.letra : '?'
+                          const num = meQuestoes.findIndex(item => item.id === q.id) + 1
+                          const alternativaCorreta = q.simulados_alternativas?.find((a: any) => a.eh_correta || a.correct)
+                          const letraCorreta = alternativaCorreta ? (alternativaCorreta.letra || alternativaCorreta.letter) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
 
                           return (
                             <div 

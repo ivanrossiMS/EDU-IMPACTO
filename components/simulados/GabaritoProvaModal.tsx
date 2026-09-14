@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { X, Printer, CheckSquare, Layers, Calendar, Users, FileText } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { isTextoApoio } from '@/lib/utils'
 
 interface GabaritoProvaModalProps {
   provaUploadId: string
@@ -234,7 +235,7 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
                     <Users size={14} /> <span>Turmas: {Array.isArray(prova?.series) ? prova.series.join(', ') : (prova?.series || 'Geral')}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.filter(q => q.tipo_questao !== 'texto_apoio').length} Questões</span>
+                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.filter(q => !isTextoApoio(q)).length} Questões</span>
                   </div>
                 </div>
               </div>
@@ -242,7 +243,7 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
               {/* Grid de Respostas */}
               <div className="print-grid-container" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, breakInside: 'avoid' }}>
                 {(() => {
-                  const meQuestoes = questoes.filter(q => q.tipo_questao !== 'texto_apoio')
+                  const meQuestoes = questoes.filter(q => !isTextoApoio(q))
                   return (
                     <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
                       {[
@@ -252,8 +253,8 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
                         <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
                           {colQuestoes.map((q, idx) => {
                             const num = colIndex === 0 ? idx + 1 : Math.ceil(meQuestoes.length / 2) + idx + 1
-                        const alternativaCorreta = q.alternativas?.find((a: any) => a.correct)
-                        const letraCorreta = alternativaCorreta ? alternativaCorreta.letter : '?'
+                        const alternativaCorreta = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
+                        const letraCorreta = alternativaCorreta ? (alternativaCorreta.letter || alternativaCorreta.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
 
                         return (
                           <div 
