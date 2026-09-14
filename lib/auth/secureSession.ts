@@ -137,9 +137,24 @@ export function isSessionExpiredOrExpiringSoon(session: any, thresholdSeconds = 
   return expiresAt <= (now + thresholdSeconds);
 }
 
-// Controle de Estado de Logout e Época de Operações
+// Controle de Estado de Logout e Geração de Autenticação
+let authGenerationId = 1;
 let lastLogoutTimestamp = 0;
 let isExplicitlyLoggedOut = false;
+
+export function getAuthGenerationId(): number {
+  return authGenerationId;
+}
+
+export function bumpAuthGeneration(): number {
+  authGenerationId++;
+  if (typeof window !== 'undefined') {
+    try {
+      window.sessionStorage?.setItem('edu_auth_generation_id', String(authGenerationId));
+    } catch {}
+  }
+  return authGenerationId;
+}
 
 export function getLastLogoutTimestamp(): number {
   return lastLogoutTimestamp;
@@ -152,12 +167,57 @@ export function isUserLoggedOut(): boolean {
 export function markExplicitLogin() {
   lastLogoutTimestamp = 0;
   isExplicitlyLoggedOut = false;
+  bumpAuthGeneration();
   if (typeof window !== 'undefined') {
     try {
       window.localStorage.removeItem('edu-logout-pending');
       window.localStorage.removeItem('edu_last_logout_at');
     } catch {}
   }
+}
+
+/**
+ * Migrates a session from fallback storage (Preferences / localStorage)
+ * into SecureStorage (Keychain/Keystore).
+ * CRITICAL SAFETY RULE: Verifies the session was successfully written and can be read back
+ * from SecureStorage BEFORE removing the fallback copy.
+ */
+export async function migrateSessionToSecureStorageSafely(session: any): Promise<boolean> {
+  if (!Capacitor.isNativePlatform() || !isValidSessionObject(session)) return false;
+
+  const sessionStr = JSON.stringify(session);
+  const saved = await setSecureStorageWithRetry(SESSION_KEY, sessionStr);
+  if (!saved) {
+    console.warn('[Auth Migration] Falha ao gravar no Keychain. Preservando cópias de contingência.');
+    return false;
+  }
+
+  const readBack = await getSecureStorageWithRetry(SESSION_KEY);
+  if (!readBack) {
+    console.warn('[Auth Migration] Keychain retornou vazio na verificação. Preservando cópias de contingência.');
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(readBack);
+    if (!isValidSessionObject(parsed) || parsed.access_token !== session.access_token) {
+      console.warn('[Auth Migration] Dados no Keychain divergem do esperado. Preservando fallback.');
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  // Verificado com sucesso no Keychain: agora limpa a cópia desprotegida
+  try {
+    await Preferences.remove({ key: SESSION_KEY });
+  } catch {}
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem(SESSION_KEY);
+    } catch {}
+  }
+  return true;
 }
 
 /**
@@ -170,6 +230,22 @@ export async function getSessionFromStorageTiers(): Promise<any | null> {
   // 1. Native Secure Storage (Keychain on iOS / Android Keystore) com retentativa
   if (Capacitor.isNativePlatform()) {
     sessionStr = await getSecureStorageWithRetry(SESSION_KEY);
+
+    // Se o Keychain estiver vazio, busca em Preferences como contingência e tenta migrar de forma segura
+    if (!sessionStr) {
+      try {
+        const { value } = await Preferences.get({ key: SESSION_KEY });
+        if (value) {
+          sessionStr = value;
+          try {
+            const parsed = JSON.parse(value);
+            if (isValidSessionObject(parsed)) {
+              migrateSessionToSecureStorageSafely(parsed).catch(() => {});
+            }
+          } catch {}
+        }
+      } catch {}
+    }
   } else {
     // 2. Web Browser tradicional: recupera de window.localStorage
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -201,17 +277,18 @@ export async function getSessionFromStorageTiers(): Promise<any | null> {
 export interface SaveSessionOptions {
   startedAt?: number;
   originToken?: string;
+  generationId?: number;
   isExplicitLogin?: boolean;
 }
 
 /**
- * Saves the Supabase session with strict monotonic versioning,
- * anti-race coordination and post-logout protection.
+ * Saves the Supabase session with generation coordination,
+ * anti-race protection and verified migration before cleanup.
  */
 export async function saveSessionSecurely(session: any, options?: SaveSessionOptions): Promise<boolean> {
   if (!isValidSessionObject(session)) return false;
 
-  // 1. Proteção contra gravação após logout
+  // 1. Proteção contra gravação por geração defasada ou após logout
   if (options?.isExplicitLogin) {
     markExplicitLogin();
   } else {
@@ -219,14 +296,15 @@ export async function saveSessionSecurely(session: any, options?: SaveSessionOpt
       console.warn('[Auth] Bloqueando gravação de sessão: usuário encontra-se deslogado.');
       return false;
     }
+    // Se foi fornecida uma geração e a geração atual mudou, rejeita a gravação SEM limpar nada
+    if (options?.generationId !== undefined && options.generationId !== authGenerationId) {
+      console.warn(`[Auth] Bloqueando gravação de sessão defasada (geração da op: ${options.generationId} != atual: ${authGenerationId}).`);
+      return false;
+    }
     if (lastLogoutTimestamp > 0) {
       const opStartedAt = options?.startedAt || 0;
       if (opStartedAt > 0 && opStartedAt <= lastLogoutTimestamp) {
         console.warn('[Auth] Bloqueando gravação de sessão: operação iniciada antes do logout.');
-        return false;
-      }
-      if (Date.now() - lastLogoutTimestamp < 10000) {
-        console.warn('[Auth] Bloqueando gravação de sessão: logout recente detectado.');
         return false;
       }
     }
@@ -236,20 +314,13 @@ export async function saveSessionSecurely(session: any, options?: SaveSessionOpt
     }
   }
 
-  // 2. Proteção contra sobrescrita por operação antiga atrasada:
-  // Supabase JWTs possuem expires_at estritamente crescente a cada rotação
+  // 2. Proteção contra sobrescrita de conta por operação concorrente
   const currentStored = await getSessionFromStorageTiers();
   if (currentStored && isValidSessionObject(currentStored)) {
-    const currentExpiresAt = currentStored.expires_at || 0;
-    const newExpiresAt = session.expires_at || 0;
-
-    if (currentExpiresAt > 0 && newExpiresAt > 0 && currentExpiresAt > newExpiresAt) {
-      console.warn(`[Auth] Ignorando gravação de sessão defasada (expires_at ${newExpiresAt} < atual gravado ${currentExpiresAt}).`);
-      return false;
-    }
-
-    if (currentExpiresAt === newExpiresAt && currentStored._saved_at && (session._saved_at || 0) < currentStored._saved_at) {
-      console.warn('[Auth] Ignorando gravação de sessão idêntica/anterior com timestamp mais antigo.');
+    const currentUserId = currentStored.user?.id;
+    const newUserId = session.user?.id;
+    if (currentUserId && newUserId && currentUserId !== newUserId && !options?.isExplicitLogin) {
+      console.warn(`[Auth] Bloqueando sobrescrita de conta: sessão atual (${currentUserId}) != nova (${newUserId}).`);
       return false;
     }
   }
@@ -262,37 +333,53 @@ export async function saveSessionSecurely(session: any, options?: SaveSessionOpt
 
   const sessionStr = JSON.stringify(sessionToSave);
 
-  // 3. Persistência no Mobile Nativo:
+  // 3. Persistência no Mobile Nativo com verificação antes de limpar fallback
   if (Capacitor.isNativePlatform()) {
-    // FONTE PRINCIPAL EXCLUSIVA DE TOKENS: Keychain / Keystore com retry
     const saved = await setSecureStorageWithRetry(SESSION_KEY, sessionStr);
-    if (!saved) {
-      console.error('[Auth] Erro: Falha ao persistir credenciais no Keychain/Keystore após retentativas.');
+
+    // VERIFICAÇÃO ATIVA: Confirma se o Keychain realmente gravou
+    let verifiedInSecureStorage = false;
+    if (saved) {
+      const readBack = await getSecureStorageWithRetry(SESSION_KEY);
+      if (readBack) {
+        try {
+          const parsed = JSON.parse(readBack);
+          if (isValidSessionObject(parsed) && parsed.access_token === sessionToSave.access_token) {
+            verifiedInSecureStorage = true;
+          }
+        } catch {}
+      }
     }
 
-    // PREFERENCES: NUNCA armazena refresh_token desprotegido em disco!
-    // Salva apenas metadados não-sensíveis para consulta rápida
-    try {
-      const safeMeta = {
-        user: sessionToSave.user,
-        expires_at: sessionToSave.expires_at,
-        _saved_at: sessionToSave._saved_at,
-      };
-      await Preferences.set({
-        key: `${SESSION_KEY}_meta`,
-        value: JSON.stringify(safeMeta),
-      });
-      // Remove a chave principal com token bruto de Preferences se existir de versões anteriores
-      await Preferences.remove({ key: SESSION_KEY }).catch(() => {});
-    } catch (e) {}
-
-    // localStorage do WebView: apenas perfil de usuário, SEM refresh_token
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (verifiedInSecureStorage) {
+      // SUCESSO VERIFICADO NO KEYCHAIN: Limpa fallback desprotegido e mantém apenas metadados
       try {
-        if (sessionToSave.user) {
-          window.localStorage.setItem('edu_auth_user', JSON.stringify(sessionToSave.user));
-        }
-        window.localStorage.removeItem(SESSION_KEY);
+        const safeMeta = {
+          user: sessionToSave.user,
+          expires_at: sessionToSave.expires_at,
+          _saved_at: sessionToSave._saved_at,
+        };
+        await Preferences.set({
+          key: `${SESSION_KEY}_meta`,
+          value: JSON.stringify(safeMeta),
+        });
+        await Preferences.remove({ key: SESSION_KEY }).catch(() => {});
+      } catch (e) {}
+
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          if (sessionToSave.user) {
+            window.localStorage.setItem('edu_auth_user', JSON.stringify(sessionToSave.user));
+          }
+          window.localStorage.removeItem(SESSION_KEY);
+        } catch (e) {}
+      }
+    } else {
+      // SE A GRAVAÇÃO OU VERIFICAÇÃO NO KEYCHAIN FALHOU:
+      // Não destrua a única sessão recuperável! Preserva cópia em Preferences para evitar perda de login
+      console.warn('[Auth] Gravação no SecureStorage não pôde ser confirmada. Preservando cópia em Preferences.');
+      try {
+        await Preferences.set({ key: SESSION_KEY, value: sessionStr });
       } catch (e) {}
     }
   } else {
@@ -318,8 +405,7 @@ export async function saveSessionSecurely(session: any, options?: SaveSessionOpt
 
 /**
  * Centralized Promise Deduplication Lock for Token Refresh.
- * Prevents multiple concurrent refresh calls from racing and invalidating
- * Supabase's single-use rotating refresh tokens.
+ * Captures generation and origin identity to discard stale completions safely.
  */
 let inFlightRefreshPromise: Promise<any> | null = null;
 
@@ -331,50 +417,60 @@ export async function refreshSessionCentralized(supabase: SupabaseClient): Promi
     return inFlightRefreshPromise;
   }
 
+  const capturedGenerationId = authGenerationId;
   const refreshStartedAt = Date.now();
 
   inFlightRefreshPromise = (async () => {
     let sessionBeforeRefresh: any = null;
     try {
-      // Se usuário está deslogado, nem inicia
-      if (isExplicitlyLoggedOut || (lastLogoutTimestamp > 0 && refreshStartedAt <= lastLogoutTimestamp)) {
+      if (isExplicitlyLoggedOut) {
         return { session: null, error: new Error('User logged out') };
       }
 
-      // Captura sessão antes do refresh para verificar concorrência e origem
       sessionBeforeRefresh = await getSessionFromStorageTiers();
+      const originUserId = sessionBeforeRefresh?.user?.id;
       const originRefreshToken = sessionBeforeRefresh?.refresh_token;
 
-      // Se o cliente estiver sabidamente offline, evita bater na rede
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         console.log('[Auth] Dispositivo offline detectado — mantendo sessão local sem refresh.');
         return { session: sessionBeforeRefresh, error: null };
       }
 
-      console.log('[Auth] Renovando sessão Supabase centralizada...');
+      console.log(`[Auth] Renovando sessão (Geração ${capturedGenerationId})...`);
       const { data, error } = await supabase.auth.refreshSession();
 
-      // VERIFICAÇÃO CRÍTICA 1: Logout ocorreu enquanto o refresh estava em andamento?
-      if (isExplicitlyLoggedOut || (lastLogoutTimestamp > 0 && lastLogoutTimestamp >= refreshStartedAt)) {
-        console.warn('[Auth] Descartando resultado do refresh: logout foi acionado durante a requisição de rede.');
-        await clearSessionSecurely();
-        return { session: null, error: new Error('User logged out during refresh') };
+      // VERIFICAÇÃO 1: GERAÇÃO MUDOU ENQUANTO O REFRESH ESTAVA EM ANDAMENTO?
+      // (Ex: O usuário deslogou ou outra conta efetuou login enquanto a requisição viajava)
+      if (authGenerationId !== capturedGenerationId) {
+        console.warn(`[Auth] Refresh da geração ${capturedGenerationId} descartado: geração atual é ${authGenerationId}. Sem limpeza global.`);
+        // DESCARTE SEGURO: Não chama clearSessionSecurely(), mantendo a nova sessão intacta!
+        return { session: null, error: new Error('Stale generation discarded') };
+      }
+
+      // VERIFICAÇÃO 2: A IDENTIDADE DA SESSÃO EM ARMAZENAMENTO MUDOU?
+      const currentStored = await getSessionFromStorageTiers();
+      if (currentStored && isValidSessionObject(currentStored)) {
+        const currentUserId = currentStored.user?.id;
+        if (originUserId && currentUserId && originUserId !== currentUserId) {
+          console.warn('[Auth] Identidade do usuário mudou durante refresh. Descartando resposta defasada.');
+          return { session: currentStored, error: null };
+        }
+        if (originRefreshToken && currentStored.refresh_token && currentStored.refresh_token !== originRefreshToken) {
+          console.log('[Auth] Sessão já renovada por outro processo. Preservando a mais recente.');
+          return { session: currentStored, error: null };
+        }
       }
 
       if (!error && data?.session) {
-        // VERIFICAÇÃO CRÍTICA 2: Outra operação salvou uma sessão mais recente enquanto esta rodava?
-        const latestStored = await getSessionFromStorageTiers();
-        if (latestStored && isValidSessionObject(latestStored)) {
-          const latestExpiresAt = latestStored.expires_at || 0;
-          const refreshedExpiresAt = data.session.expires_at || 0;
-          if (latestExpiresAt > refreshedExpiresAt) {
-            console.log('[Auth] Sessão em armazenamento é mais recente que a resposta do refresh. Adotando a mais recente.');
-            return { session: latestStored, error: null };
-          }
+        // Checagem final de geração antes de persistir
+        if (authGenerationId !== capturedGenerationId) {
+          console.warn('[Auth] Geração mudou antes de gravar. Descartando.');
+          return { session: null, error: new Error('Stale generation discarded') };
         }
 
         console.log('[Auth] Sessão renovada com sucesso.');
         await saveSessionSecurely(data.session, {
+          generationId: capturedGenerationId,
           startedAt: refreshStartedAt,
           originToken: originRefreshToken,
         });
@@ -382,30 +478,31 @@ export async function refreshSessionCentralized(supabase: SupabaseClient): Promi
       }
 
       if (error) {
-        // 1. Antes de tratar como erro definitivo, verifique se outra operação já salvou uma sessão mais recente
-        const latestStored = await getSessionFromStorageTiers();
-        if (latestStored && isValidSessionObject(latestStored)) {
-          const isNewer = !sessionBeforeRefresh ||
-            (latestStored.expires_at || 0) > (sessionBeforeRefresh.expires_at || 0) ||
-            latestStored.access_token !== sessionBeforeRefresh.access_token;
-          if (isNewer) {
-            console.log('[Auth] Refresh reportou erro, mas sessão mais recente já foi persistida concorrentemente. Preservando credenciais.');
-            return { session: latestStored, error: null };
+        // Se a geração mudou durante o erro, descarta sem tomar ações
+        if (authGenerationId !== capturedGenerationId) {
+          return { session: null, error: new Error('Stale generation discarded') };
+        }
+
+        // Se falhou com invalid_grant mas uma sessão mais recente já está salva
+        if (currentStored && isValidSessionObject(currentStored)) {
+          if (currentStored.refresh_token !== originRefreshToken) {
+            console.log('[Auth] Refresh reportou erro, mas sessão já foi atualizada concorrentemente. Preservando credenciais.');
+            return { session: currentStored, error: null };
           }
         }
 
-        // 2. Erros de rede ou modo offline: preserva a sessão local sem apagar
         if (isNetworkOrTransientError(error)) {
           console.warn('[Auth] Falha temporária de rede ao renovar sessão. Preservando sessão local.');
-          const cached = await getSessionFromStorageTiers();
-          return { session: cached, error };
+          return { session: sessionBeforeRefresh, error };
         }
 
-        // 3. Revogação definitiva comprovada (usuário deletado, senha alterada ou invalid_grant sem sessão mais recente)
+        // Revogação definitiva comprovada: SÓ limpa se a geração ainda for EXATAMENTE a mesma!
         if (isPermanentTokenRevocation(error)) {
-          console.warn('[Auth] Token de atualização definitivamente revogado no servidor. Limpando credenciais locais:', error.message);
-          await clearSessionSecurely();
-          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          if (authGenerationId === capturedGenerationId) {
+            console.warn('[Auth] Token definitivamente revogado no servidor para a geração atual. Limpando credenciais locais:', error.message);
+            await clearSessionSecurely();
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          }
           return { session: null, error };
         }
 
@@ -542,6 +639,7 @@ export async function restoreSessionSecurely(supabase: SupabaseClient): Promise<
 export async function clearSessionSecurely() {
   lastLogoutTimestamp = Date.now();
   isExplicitlyLoggedOut = true;
+  bumpAuthGeneration();
   inFlightRefreshPromise = null;
   inFlightRestorePromise = null;
 
