@@ -99,6 +99,14 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     return targetedStudents;
   }, [fillMode, targetedStudents, selectedStudentIds]);
 
+  const hasAnyAnswer = useMemo(() => {
+    if (!currentField) return false;
+    return activeStudents.some(aluno => {
+      const val = (answers[aluno.id] || {})[currentField.id];
+      return val !== undefined && val !== null && val !== '' && (!Array.isArray(val) || val.length > 0);
+    });
+  }, [answers, activeStudents, currentField]);
+
   // Initialize selected students or reset when payload changes
   useEffect(() => {
     if (isOpen && targetedStudents && targetedStudents.length > 0) {
@@ -128,8 +136,6 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
   useEffect(() => {
     setCopiedStudentId(null)
   }, [currentFieldIndex])
-
-  if (!isOpen || !payload || !template || targetedStudents.length === 0) return null;
 
   // Helper to abbreviate surnames (e.g. "Arthur Souza Hindo" -> "Arthur Souza H.")
   const abbreviateName = (fullName: string) => {
@@ -231,14 +237,6 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     }, 2500);
   }
 
-  const hasAnyAnswer = useMemo(() => {
-    if (!currentField) return false;
-    return activeStudents.some(aluno => {
-      const val = (answers[aluno.id] || {})[currentField.id];
-      return val !== undefined && val !== null && val !== '' && (!Array.isArray(val) || val.length > 0);
-    });
-  }, [answers, activeStudents, currentField]);
-
   const handleUnmarkAll = () => {
     if (!currentField) return;
     if (!hasAnyAnswer) return;
@@ -262,6 +260,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
   }
 
   const handleFinish = async () => {
+    if (!template || !payload) return;
     setIsSubmitting(true)
 
     const newSubmissions: any[] = []
@@ -613,11 +612,11 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     }
   }
 
-  const progressPercentage = fillMode ? ((currentFieldIndex + 1) / allFields.length) * 100 : 0;
+  const progressPercentage = fillMode && allFields.length > 0 ? ((currentFieldIndex + 1) / allFields.length) * 100 : 0;
 
   const modalContent = (
     <AnimatePresence>
-      {isOpen && template && (
+      {isOpen && payload && template && targetedStudents.length > 0 && (
         <div className="ad-report-filler-overlay" style={{ position: 'fixed', inset: 0, zIndex: 999999999, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <style>{`
             @media (min-width: 769px) {
@@ -1061,5 +1060,5 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     </AnimatePresence>
   );
 
-  return mounted ? createPortal(modalContent, document.body) : modalContent;
+  return mounted ? createPortal(modalContent, document.body) : null;
 }

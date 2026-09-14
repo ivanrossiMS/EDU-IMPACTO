@@ -52,11 +52,55 @@ export function GabaritoRedacaoModal({ provaUploadId, onClose }: GabaritoRedacao
     style.innerHTML = `
       @media print {
         @page { margin: 1cm; size: A4 portrait; }
+        html, body {
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          color: #000000 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          height: auto !important;
+          min-height: 100% !important;
+        }
+        .gabarito-modal-overlay {
+          position: static !important;
+          inset: auto !important;
+          background: transparent !important;
+          background-color: transparent !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          width: 100% !important;
+          height: auto !important;
+          min-height: 100% !important;
+          display: block !important;
+          box-shadow: none !important;
+          border: none !important;
+        }
+        .gabarito-modal-box {
+          position: static !important;
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          box-shadow: none !important;
+          border: none !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          min-height: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          overflow: visible !important;
+          border-radius: 0 !important;
+        }
         body * { visibility: hidden; }
         #gabarito-print-area, #gabarito-print-area * { visibility: visible; }
         #gabarito-print-area {
           position: absolute; left: 0; top: 0; width: 100%;
-          padding: 0; background: white !important; color: black !important;
+          min-height: 100%;
+          padding: 0 !important; margin: 0 !important;
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          color: #000000 !important;
         }
         .no-print { display: none !important; }
         
@@ -65,7 +109,12 @@ export function GabaritoRedacaoModal({ provaUploadId, onClose }: GabaritoRedacao
         #gabarito-print-area .print-header-info svg { width: 12px !important; height: 12px !important; }
         #gabarito-print-area > div:first-child { margin-bottom: 12px !important; }
         
-        #gabarito-print-area .print-grid-container { padding: 8px !important; }
+        #gabarito-print-area .print-grid-container {
+          padding: 8px !important;
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          border: 1px solid #e2e8f0 !important;
+        }
         #gabarito-print-area .print-grid-columns { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; column-count: auto !important; }
         
         .gabarito-list-item {
@@ -74,6 +123,7 @@ export function GabaritoRedacaoModal({ provaUploadId, onClose }: GabaritoRedacao
           border: 1px solid #e2e8f0 !important;
           border-radius: 4px !important;
           box-shadow: none !important;
+          background: #ffffff !important;
         }
         .gabarito-list-item span { font-size: 10px !important; }
         .gabarito-bubble {

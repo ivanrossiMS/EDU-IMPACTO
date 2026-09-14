@@ -78,6 +78,47 @@ export function ProvaGabaritoModal({ provaId, onClose }: ProvaGabaritoModalProps
     const style = document.createElement('style')
     style.innerHTML = `
       @media print {
+        @page { margin: 1cm; size: A4 portrait; }
+        html, body {
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          color: #000000 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          height: auto !important;
+          min-height: 100% !important;
+        }
+        .gabarito-modal-overlay {
+          position: static !important;
+          inset: auto !important;
+          background: transparent !important;
+          background-color: transparent !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          width: 100% !important;
+          height: auto !important;
+          min-height: 100% !important;
+          display: block !important;
+          box-shadow: none !important;
+          border: none !important;
+        }
+        .gabarito-modal-box {
+          position: static !important;
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          box-shadow: none !important;
+          border: none !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          min-height: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          overflow: visible !important;
+          border-radius: 0 !important;
+        }
         body * {
           visibility: hidden;
         }
@@ -89,9 +130,12 @@ export function ProvaGabaritoModal({ provaId, onClose }: ProvaGabaritoModalProps
           left: 0;
           top: 0;
           width: 100%;
-          padding: 20px;
-          background: white !important;
-          color: black !important;
+          min-height: 100%;
+          padding: 0 !important;
+          margin: 0 !important;
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          color: #000000 !important;
         }
         .no-print {
           display: none !important;
