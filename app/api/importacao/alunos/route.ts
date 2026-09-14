@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { getSerieKey } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 
@@ -316,28 +315,6 @@ export async function POST(request: Request) {
         // Processar Histórico de Turmas
         if (alunoData.turma && resolvedTurmaId) {
           const isIntegralBool = finalAlunoData.dados?.isIntegralIntermediario === true
-
-          if (isIntegralBool && Array.isArray(allTurmas)) {
-            const sKey = getSerieKey(finalSerie)
-            if (sKey) {
-              const matchedIntTurma = allTurmas.find((t: any) => {
-                const tIsInt = String(t.nome || '').toLowerCase().includes('integral') ||
-                               String(t.nome || '').toLowerCase().includes('intermediario') ||
-                               String(t.turno || '').toLowerCase().includes('integral') ||
-                               String(t.turno || '').toLowerCase().includes('intermediario')
-                if (!tIsInt) return false
-                return (getSerieKey(t.serie) || getSerieKey(t.nome)) === sKey
-              })
-              if (matchedIntTurma) {
-                resolvedTurmaId = String(matchedIntTurma.id)
-                const intSeg = (matchedIntTurma as any).segmento || matchedIntTurma.dados?.segmento
-                if (intSeg) {
-                  resolvedSegmento = intSeg
-                }
-              }
-            }
-          }
-
           const novoVinculo: any = {
             id: `HIST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             anoLetivo: alunoData.ano_letivo || new Date().getFullYear().toString(),

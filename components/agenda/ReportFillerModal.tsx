@@ -173,13 +173,18 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
   }
 
   const handleAnswerChange = (studentId: string, value: any) => {
-    setAnswers(prev => ({
-      ...prev,
-      [studentId]: {
-        ...(prev[studentId] || {}),
-        [currentField.id]: value
+    setAnswers(prev => {
+      const studentAns = { ...(prev[studentId] || {}) }
+      if (value === '' || value === undefined || value === null) {
+        delete studentAns[currentField.id]
+      } else {
+        studentAns[currentField.id] = value
       }
-    }))
+      return {
+        ...prev,
+        [studentId]: studentAns
+      }
+    })
   }
 
   const handleFinish = async () => {
@@ -417,22 +422,93 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
       case 'sim-nao':
         return (
           <div style={{ display: 'flex', gap: 12 }}>
-            <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', border: value === 'Sim' ? '2px solid #10b981' : '1px solid #cbd5e1', background: value === 'Sim' ? '#ecfdf5' : '#fff', borderRadius: 12, cursor: 'pointer', color: value === 'Sim' ? '#047857' : '#475569', fontWeight: 700 }}>
-              <input type="radio" checked={value === 'Sim'} onChange={() => handleAnswerChange(studentId, 'Sim')} style={{ display: 'none' }} /> Sim
-            </label>
-            <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', border: value === 'Não' ? '2px solid #ef4444' : '1px solid #cbd5e1', background: value === 'Não' ? '#fef2f2' : '#fff', borderRadius: 12, cursor: 'pointer', color: value === 'Não' ? '#b91c1c' : '#475569', fontWeight: 700 }}>
-              <input type="radio" checked={value === 'Não'} onChange={() => handleAnswerChange(studentId, 'Não')} style={{ display: 'none' }} /> Não
-            </label>
+            <div 
+              role="button"
+              tabIndex={0}
+              onClick={() => handleAnswerChange(studentId, value === 'Sim' ? '' : 'Sim')}
+              onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleAnswerChange(studentId, value === 'Sim' ? '' : 'Sim'); } }}
+              style={{ 
+                flex: 1, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: 8, 
+                padding: '12px', 
+                border: value === 'Sim' ? '2px solid #10b981' : '1px solid #cbd5e1', 
+                background: value === 'Sim' ? '#ecfdf5' : '#fff', 
+                borderRadius: 12, 
+                cursor: 'pointer', 
+                color: value === 'Sim' ? '#047857' : '#475569', 
+                fontWeight: 700,
+                userSelect: 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <input type="radio" checked={value === 'Sim'} readOnly style={{ display: 'none' }} /> Sim
+            </div>
+            <div 
+              role="button"
+              tabIndex={0}
+              onClick={() => handleAnswerChange(studentId, value === 'Não' ? '' : 'Não')}
+              onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleAnswerChange(studentId, value === 'Não' ? '' : 'Não'); } }}
+              style={{ 
+                flex: 1, 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: 8, 
+                padding: '12px', 
+                border: value === 'Não' ? '2px solid #ef4444' : '1px solid #cbd5e1', 
+                background: value === 'Não' ? '#fef2f2' : '#fff', 
+                borderRadius: 12, 
+                cursor: 'pointer', 
+                color: value === 'Não' ? '#b91c1c' : '#475569', 
+                fontWeight: 700,
+                userSelect: 'none',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <input type="radio" checked={value === 'Não'} readOnly style={{ display: 'none' }} /> Não
+            </div>
           </div>
         )
       case 'unica-escolha':
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {currentField.options?.map(opt => (
-              <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: value === opt ? '2px solid #3b82f6' : '1px solid #cbd5e1', background: value === opt ? '#eff6ff' : '#fff', borderRadius: 12, cursor: 'pointer', color: value === opt ? '#1d4ed8' : '#475569', fontWeight: value === opt ? 700 : 500 }}>
-                <input type="radio" checked={value === opt} onChange={() => handleAnswerChange(studentId, opt)} style={{ width: 18, height: 18 }} /> {opt}
-              </label>
-            ))}
+            {currentField.options?.map(opt => {
+              const isSelected = value === opt;
+              return (
+                <div 
+                  key={opt}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleAnswerChange(studentId, isSelected ? '' : opt)}
+                  onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleAnswerChange(studentId, isSelected ? '' : opt); } }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 12, 
+                    padding: '12px 16px', 
+                    border: isSelected ? '2px solid #3b82f6' : '1px solid #cbd5e1', 
+                    background: isSelected ? '#eff6ff' : '#fff', 
+                    borderRadius: 12, 
+                    cursor: 'pointer', 
+                    color: isSelected ? '#1d4ed8' : '#475569', 
+                    fontWeight: isSelected ? 700 : 500,
+                    userSelect: 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <input 
+                    type="radio" 
+                    checked={isSelected} 
+                    readOnly 
+                    style={{ width: 18, height: 18, pointerEvents: 'none', accentColor: '#3b82f6' }} 
+                  /> 
+                  <span style={{ flex: 1 }}>{opt}</span>
+                </div>
+              );
+            })}
           </div>
         )
       case 'multipla-escolha':
@@ -702,26 +778,89 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 20 }}>
                 {fillMode === 'igual' ? (
                   <div style={{ background: '#fff', borderRadius: 16, padding: 20, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: '#475569', marginBottom: 12 }}>Resposta única para os {targetedStudents.length} alunos:</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#475569' }}>Resposta única para os {targetedStudents.length} alunos:</div>
+                      {(() => {
+                        const globalAns = (answers['GLOBAL'] || {})[currentField?.id || ''];
+                        const hasGlobalAnswer = globalAns !== undefined && globalAns !== null && globalAns !== '' && (!Array.isArray(globalAns) || globalAns.length > 0);
+                        if (!hasGlobalAnswer) return null;
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => handleAnswerChange('GLOBAL', '')}
+                            style={{
+                              background: '#fef2f2',
+                              border: '1px solid #fecaca',
+                              color: '#ef4444',
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              padding: '4px 10px',
+                              borderRadius: 8,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              transition: 'all 0.15s ease'
+                            }}
+                            title="Desmarcar resposta para todos"
+                          >
+                            <X size={13} />
+                            <span>Desmarcar</span>
+                          </button>
+                        );
+                      })()}
+                    </div>
                     {renderFieldInput('GLOBAL')}
                   </div>
                 ) : (
-                  activeStudents.map(aluno => (
-                    <div key={aluno.id} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px', background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
-                          {aluno.foto_url || aluno.foto ? <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <User size={16} />}
+                  activeStudents.map(aluno => {
+                    const studentAns = (answers[aluno.id] || {})[currentField?.id || ''];
+                    const hasAnswer = studentAns !== undefined && studentAns !== null && studentAns !== '' && (!Array.isArray(studentAns) || studentAns.length > 0);
+
+                    return (
+                      <div key={aluno.id} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px', background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
+                              {aluno.foto_url || aluno.foto ? <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <User size={16} />}
+                            </div>
+                            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
+                              {abbreviateName(aluno.nome)}
+                            </div>
+                          </div>
+
+                          {hasAnswer && (
+                            <button
+                              type="button"
+                              onClick={() => handleAnswerChange(aluno.id, '')}
+                              style={{
+                                background: '#fef2f2',
+                                border: '1px solid #fecaca',
+                                color: '#ef4444',
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                padding: '4px 10px',
+                                borderRadius: 8,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                transition: 'all 0.15s ease'
+                              }}
+                              title="Desmarcar resposta para este aluno"
+                            >
+                              <X size={13} />
+                              <span>Desmarcar</span>
+                            </button>
+                          )}
                         </div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>
-                          {abbreviateName(aluno.nome)}
+                        
+                        <div style={{ width: '100%' }}>
+                          {renderFieldInput(aluno.id)}
                         </div>
                       </div>
-                      
-                      <div style={{ width: '100%' }}>
-                        {renderFieldInput(aluno.id)}
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

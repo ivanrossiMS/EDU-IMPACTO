@@ -24,7 +24,15 @@ export function FormFiller({ formId, onNavigate }: Props) {
   if (!form) return null
 
   const handleFieldChange = (fieldId: string, value: any) => {
-    setData(prev => ({ ...prev, [fieldId]: value }))
+    setData(prev => {
+      const next = { ...prev }
+      if (value === '' || value === undefined || value === null) {
+        delete next[fieldId]
+      } else {
+        next[fieldId] = value
+      }
+      return next
+    })
   }
 
   const checkValidation = () => {
@@ -126,19 +134,29 @@ export function FormFiller({ formId, onNavigate }: Props) {
                              />
                            )}
                            
-                           {f.type === 'unica-escolha' && f.options?.map(op => (
-                             <label key={op} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, marginBottom: 8, cursor: 'pointer', background: data[f.id] === op ? 'rgba(79,70,229,0.05)' : 'white' }}>
-                                <input type="radio" checked={data[f.id] === op} onChange={() => handleFieldChange(f.id, op)} style={{ width: 18, height: 18 }} />
-                                <span>{op}</span>
-                             </label>
-                           ))}
+                           {f.type === 'unica-escolha' && f.options?.map(op => {
+                              const isSelected = data[f.id] === op;
+                              return (
+                                <div 
+                                  key={op} 
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => handleFieldChange(f.id, isSelected ? '' : op)}
+                                  onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleFieldChange(f.id, isSelected ? '' : op); } }}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, marginBottom: 8, cursor: 'pointer', background: isSelected ? 'rgba(79,70,229,0.05)' : 'white', userSelect: 'none' }}
+                                >
+                                   <input type="radio" checked={isSelected} readOnly style={{ width: 18, height: 18, pointerEvents: 'none' }} />
+                                   <span>{op}</span>
+                                </div>
+                              );
+                            })}
 
-                           {f.type === 'sim-nao' && (
-                             <div style={{ display: 'flex', gap: 12 }}>
-                                <button className={`btn ${data[f.id] === 'Sim' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1 }} onClick={() => handleFieldChange(f.id, 'Sim')}>Sim</button>
-                                <button className={`btn ${data[f.id] === 'Não' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, background: data[f.id] === 'Não' ? '#ef4444' : '', borderColor: data[f.id] === 'Não' ? '#ef4444' : '' }} onClick={() => handleFieldChange(f.id, 'Não')}>Não</button>
-                             </div>
-                           )}
+                            {f.type === 'sim-nao' && (
+                              <div style={{ display: 'flex', gap: 12 }}>
+                                 <button type="button" className={`btn ${data[f.id] === 'Sim' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1 }} onClick={() => handleFieldChange(f.id, data[f.id] === 'Sim' ? '' : 'Sim')}>Sim</button>
+                                 <button type="button" className={`btn ${data[f.id] === 'Não' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, background: data[f.id] === 'Não' ? '#ef4444' : '', borderColor: data[f.id] === 'Não' ? '#ef4444' : '' }} onClick={() => handleFieldChange(f.id, data[f.id] === 'Não' ? '' : 'Não')}>Não</button>
+                              </div>
+                            )}
 
                            {f.type === 'multipla-escolha' && f.options?.map(op => {
                              const curr = data[f.id] || []

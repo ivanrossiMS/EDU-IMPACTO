@@ -12,61 +12,23 @@
 /**
  * Returns the student's CURSANDO (currently enrolled/active) class name or ID.
  */
-export function getAlunoTurmaCursando(aluno: any, anoLetivo?: string | number, turmasList?: any[]): string {
+export function getAlunoTurmaCursando(aluno: any, anoLetivo?: string | number): string {
   if (!aluno) return ''
-  const isIntegral = isStudentMarkedIntegral(aluno)
   const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
-  let candidate = ''
-  let candidateSerie = ''
-
   if (Array.isArray(hist) && hist.length > 0) {
     if (anoLetivo !== undefined && anoLetivo !== null && String(anoLetivo).trim() !== '') {
       const matchingYear = hist.filter((h: any) => String(h.anoLetivo || '').trim() === String(anoLetivo).trim())
       if (matchingYear.length > 0) {
         const lastHist = matchingYear[matchingYear.length - 1]
-        candidate = String(lastHist.serieTurma || lastHist.turma || '').trim()
-        candidateSerie = lastHist.serie || ''
+        return String(lastHist.serieTurma || lastHist.turma || '').trim()
       }
     }
-    if (!candidate) {
-      const lastHist = hist[hist.length - 1]
-      if (lastHist?.serieTurma || lastHist?.turma) {
-        candidate = String(lastHist.serieTurma || lastHist.turma).trim()
-        candidateSerie = lastHist.serie || ''
-      }
+    const lastHist = hist[hist.length - 1]
+    if (lastHist?.serieTurma || lastHist?.turma) {
+      return String(lastHist.serieTurma || lastHist.turma).trim()
     }
   }
-  if (!candidate) candidate = String(aluno.turma || '').trim()
-  if (!candidateSerie) candidateSerie = aluno.serie || aluno.dados?.serie || ''
-
-  if (isIntegral && Array.isArray(turmasList) && turmasList.length > 0) {
-    const curObj = turmasList.find(t => String(t.id) === candidate || String(t.nome) === candidate)
-    const curIsIntegral = curObj && (
-      String(curObj.nome || '').toLowerCase().includes('integral') ||
-      String(curObj.nome || '').toLowerCase().includes('intermediario') ||
-      String(curObj.turno || '').toLowerCase().includes('integral') ||
-      String(curObj.turno || '').toLowerCase().includes('intermediario')
-    )
-    if (!curIsIntegral) {
-      const sKey = getSerieKey(candidateSerie) || getSerieKey(curObj?.serie) || getSerieKey(curObj?.nome)
-      if (sKey) {
-        const intTurma = turmasList.find(t => {
-          const tIsInt = String(t.nome || '').toLowerCase().includes('integral') ||
-                         String(t.nome || '').toLowerCase().includes('intermediario') ||
-                         String(t.turno || '').toLowerCase().includes('integral') ||
-                         String(t.turno || '').toLowerCase().includes('intermediario')
-          if (!tIsInt) return false
-          const tKey = getSerieKey(t.serie) || getSerieKey(t.nome)
-          return tKey === sKey
-        })
-        if (intTurma) {
-          return String(intTurma.id || intTurma.nome).trim()
-        }
-      }
-    }
-  }
-
-  return candidate
+  return String(aluno.turma || '').trim()
 }
 
 /**
@@ -123,47 +85,8 @@ export function getSerieKey(str: any): string {
 }
 
 /**
- * Checks whether a student is marked as Integral or Intermediário.
- */
-export function isStudentMarkedIntegral(aluno: any, vinculos?: any[]): boolean {
-  if (!aluno) return false
-
-  if (aluno.isIntegralIntermediario === true || aluno.dados?.isIntegralIntermediario === true) return true
-  
-  const directTurno = String(aluno.turno || aluno.turno_nome || aluno.dados?.turno || '').toLowerCase()
-  if (directTurno.includes('integral') || directTurno.includes('intermediario') || directTurno.includes('intermediário')) return true
-
-  const directModalidade = String(aluno.modalidade || aluno.dados?.modalidade || '').toLowerCase()
-  if (directModalidade.includes('integral') || directModalidade.includes('intermediario') || directModalidade.includes('intermediário')) return true
-
-  const vList = vinculos || (Array.isArray(aluno.historicoTurmas) ? aluno.historicoTurmas : (Array.isArray(aluno.dados?.historicoTurmas) ? aluno.dados.historicoTurmas : []))
-  if (Array.isArray(vList) && vList.length > 0) {
-    for (const v of vList) {
-      if (v.status === 'Inativo') continue
-      if (v.isIntegralIntermediario === true) return true
-      const vMod = String(v.modalidade || '').toLowerCase()
-      if (vMod.includes('integral') || vMod.includes('intermediario') || vMod.includes('intermediário')) return true
-      const vTurno = String(v.turno || '').toLowerCase()
-      if (vTurno.includes('integral') || vTurno.includes('intermediario') || vTurno.includes('intermediário')) return true
-      if (Array.isArray(v.turmasAdicionais)) {
-        for (const sub of v.turmasAdicionais) {
-          if (sub.isIntegralIntermediario === true) return true
-          const subMod = String(sub.modalidade || '').toLowerCase()
-          if (subMod.includes('integral') || subMod.includes('intermediario') || subMod.includes('intermediário')) return true
-        }
-      }
-    }
-  }
-
-  return false
-}
-
-/**
- * Checks if the given class (`turmaRef`) is an active/cursando class for the student.
- * STRICT EXCLUSIVITY RULE:
- * - Students marked as Integral/Intermediário must appear ONLY in the Integral/Intermediário class of their serie.
- *   They NEVER appear in regular (Matutino/Vespertino/Noturno) classes.
- * - Regular students must appear ONLY in regular classes. They NEVER appear in Integral/Intermediário classes.
+ * Checks if the given class (`turmaRef`) is a active/cursando class for the student.
+ * Supports dual-enrollment for Integral/Intermediário students.
  */
 export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: string | number, turmasList?: any[]): boolean {
   if (!aluno || !turmaRef) return false
@@ -185,101 +108,7 @@ export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: stri
   const tSegmento = typeof resolvedTurma === 'object' && resolvedTurma && (resolvedTurma.segmento || resolvedTurma.dados?.segmento) ? String(resolvedTurma.segmento || resolvedTurma.dados?.segmento).trim() : ''
   const tAno = typeof resolvedTurma === 'object' && resolvedTurma ? (resolvedTurma.ano || resolvedTurma.anoLetivo || '') : (anoLetivo || '')
 
-  const vinculos = getAlunoVinculosAtivos(aluno, anoLetivo || tAno)
-
-  // 1. Identify if target turma is an Integral/Intermediário class
-  const tNormNome = norm(tNome)
-  const tNormTurno = norm(tTurno)
-  const isIntegralTurma = tNormNome.includes('integral') || tNormNome.includes('intermediario') ||
-                          tNormTurno.includes('integral') || tNormTurno.includes('intermediario') ||
-                          (typeof resolvedTurma === 'object' && Boolean(resolvedTurma.isIntegralIntermediario || resolvedTurma.dados?.isIntegralIntermediario))
-
-  // 2. Identify if student is marked as Integral/Intermediário
-  const hasExplicitIntegral = isStudentMarkedIntegral(aluno, vinculos)
-
-  // 3. ENFORCE STRICT EXCLUSIVITY
-  if (hasExplicitIntegral) {
-    // Aluno Integral NUNCA pode pertencer a uma turma regular
-    if (!isIntegralTurma) {
-      return false
-    }
-
-    // Se a turma é Integral, verificar se pertence a este aluno
-    // A) Vínculo direto por ID, código ou nome
-    const directTurma = String(aluno.turma || '').trim()
-    if (directTurma !== '') {
-      const directNorm = norm(directTurma)
-      if (directNorm === norm(tNome) || directNorm === norm(tId) || (tCod && directNorm === norm(tCod))) {
-        return true
-      }
-    }
-
-    const directTurmaNome = String(aluno.turma_nome || '').trim()
-    if (directTurmaNome !== '') {
-      const directNorm = norm(directTurmaNome)
-      if (directNorm === norm(tNome) || directNorm === norm(tId) || (tCod && directNorm === norm(tCod))) {
-        return true
-      }
-    }
-
-    for (const v of vinculos) {
-      const vTurma = String(v.serieTurma || v.turma || '').trim()
-      if (vTurma !== '') {
-        const vNorm = norm(vTurma)
-        if (vNorm === norm(tNome) || vNorm === norm(tId) || (tCod && vNorm === norm(tCod))) {
-          return true
-        }
-      }
-    }
-
-    // B) Vínculo por Série / Segmento na turma de Integral
-    const targetSerieKey = getSerieKey(tSerie) || getSerieKey(tNome)
-    if (targetSerieKey) {
-      const targetSegKey = getSegmentoKey(tSegmento)
-
-      const mainTurmaObj = Array.isArray(turmasList) && turmasList.length > 0
-        ? turmasList.find(t => 
-            String(t.id) === directTurma || 
-            String(t.codigo) === directTurma || 
-            String(t.nome) === directTurma ||
-            (aluno.turma_nome && String(t.nome).toLowerCase() === String(aluno.turma_nome).toLowerCase())
-          )
-        : null
-
-      for (const v of vinculos) {
-        const vSegmento = v.segmento || aluno.segmento || aluno.dados?.segmento || mainTurmaObj?.dados?.segmento || mainTurmaObj?.segmento || ''
-        const vSegKey = getSegmentoKey(vSegmento)
-
-        if (targetSegKey && vSegKey && targetSegKey !== vSegKey) {
-          continue
-        }
-
-        const vinculoSerieKey = getSerieKey(v.serie) ||
-                                getSerieKey(v.serieTurma) ||
-                                getSerieKey(v.turma) ||
-                                getSerieKey(aluno.serie) ||
-                                getSerieKey(aluno.turma_nome) ||
-                                getSerieKey(aluno.turma) ||
-                                getSerieKey(mainTurmaObj?.serie) ||
-                                getSerieKey(mainTurmaObj?.nome) ||
-                                getSerieKey(aluno.dados?.serie)
-
-        if (vinculoSerieKey && vinculoSerieKey === targetSerieKey) {
-          return true
-        }
-      }
-    }
-
-    return false
-  }
-
-  // Se o aluno NÃO é Integral, NUNCA pode pertencer a uma turma Integral
-  if (isIntegralTurma) {
-    return false
-  }
-
-  // 4. Fluxo normal para aluno regular em turma regular
-  // 4.1. Check direct property aluno.turma
+  // 1. Check direct property aluno.turma
   const directTurma = String(aluno.turma || '').trim()
   if (directTurma !== '') {
     const directNorm = norm(directTurma)
@@ -288,7 +117,7 @@ export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: stri
     }
   }
 
-  // 4.2. Check direct property aluno.turma_nome
+  // 2. Check direct property aluno.turma_nome
   const directTurmaNome = String(aluno.turma_nome || '').trim()
   if (directTurmaNome !== '') {
     const directNorm = norm(directTurmaNome)
@@ -297,7 +126,9 @@ export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: stri
     }
   }
 
-  // 4.3. Check active vinculos in historicoTurmas & turmasAdicionais
+  // 3. Check active vinculos in historicoTurmas & turmasAdicionais
+  const vinculos = getAlunoVinculosAtivos(aluno, anoLetivo || tAno)
+
   for (const v of vinculos) {
     const vTurma = String(v.serieTurma || v.turma || '').trim()
     if (vTurma !== '') {
@@ -320,6 +151,75 @@ export function isAlunoCursandoTurma(aluno: any, turmaRef: any, anoLetivo?: stri
     }
   }
 
+  // 4. Dual-Enrollment check for Integral/Intermediário classes!
+  const tNormNome = norm(tNome)
+  const tNormTurno = norm(tTurno)
+  const isIntegralTurma = tNormNome.includes('integral') || tNormNome.includes('intermediario') ||
+                          tNormTurno.includes('integral') || tNormTurno.includes('intermediario') ||
+                          (typeof resolvedTurma === 'object' && Boolean(resolvedTurma.isIntegralIntermediario || resolvedTurma.dados?.isIntegralIntermediario))
+
+  if (isIntegralTurma) {
+    const hasExplicitIntegral = Boolean(
+      aluno.isIntegralIntermediario === true ||
+      aluno.dados?.isIntegralIntermediario === true ||
+      aluno.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+      aluno.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+      aluno.integral_tipo || aluno.dados?.integral_tipo ||
+      String(aluno.turno || aluno.turno_nome || aluno.dados?.turno || '').toLowerCase().includes('integral') ||
+      String(aluno.turno || aluno.turno_nome || aluno.dados?.turno || '').toLowerCase().includes('intermediario')
+    ) || vinculos.some(v => 
+      v.isIntegralIntermediario === true || 
+      v.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
+      v.modalidade === 'Integral/Intermediário' ||
+      v.integral_tipo ||
+      String(v.turno || '').toLowerCase().includes('integral') ||
+      String(v.turno || '').toLowerCase().includes('intermediario')
+    )
+
+    if (hasExplicitIntegral) {
+      const targetSerieKey = getSerieKey(tSerie) || getSerieKey(tNome)
+
+      if (targetSerieKey) {
+        // Resolve student's main class from turmasList if available
+        const mainTurmaObj = Array.isArray(turmasList) && turmasList.length > 0
+          ? turmasList.find(t => 
+              String(t.id) === directTurma || 
+              String(t.codigo) === directTurma || 
+              String(t.nome) === directTurma ||
+              (aluno.turma_nome && String(t.nome).toLowerCase() === String(aluno.turma_nome).toLowerCase())
+            )
+          : null
+
+        const targetSegKey = getSegmentoKey(tSegmento)
+
+        for (const v of vinculos) {
+          const vSegmento = v.segmento || aluno.segmento || aluno.dados?.segmento || mainTurmaObj?.dados?.segmento || mainTurmaObj?.segmento || ''
+          const vSegKey = getSegmentoKey(vSegmento)
+
+          if (targetSegKey && vSegKey && targetSegKey !== vSegKey) {
+            continue
+          }
+
+          const vinculoSerieKey = getSerieKey(v.serie) ||
+                                  getSerieKey(v.serieTurma) ||
+                                  getSerieKey(v.turma) ||
+                                  getSerieKey(aluno.serie) ||
+                                  getSerieKey(aluno.turma_nome) ||
+                                  getSerieKey(aluno.turma) ||
+                                  getSerieKey(mainTurmaObj?.serie) ||
+                                  getSerieKey(mainTurmaObj?.nome) ||
+                                  getSerieKey(aluno.dados?.serie)
+
+          if (vinculoSerieKey && vinculoSerieKey === targetSerieKey) {
+            return true
+          }
+        }
+      } else {
+        return true
+      }
+    }
+  }
+
   return false
 }
 
@@ -330,17 +230,17 @@ export function getAlunoTurmasCursando(aluno: any, turmas: any[] = [], anoLetivo
   if (!aluno) return []
   const result = new Set<string>()
 
+  const cursando = getAlunoTurmaCursando(aluno, anoLetivo)
+  if (cursando) result.add(cursando)
+  if (aluno.turma) result.add(String(aluno.turma))
+
   if (Array.isArray(turmas) && turmas.length > 0) {
     for (const t of turmas) {
-      if (isAlunoCursandoTurma(aluno, t, anoLetivo || t.ano, turmas)) {
+      if (isAlunoCursandoTurma(aluno, t, anoLetivo || t.ano)) {
         if (t.id) result.add(String(t.id))
         if (t.nome) result.add(String(t.nome))
       }
     }
-  } else {
-    const cursando = getAlunoTurmaCursando(aluno, anoLetivo)
-    if (cursando) result.add(cursando)
-    if (aluno.turma) result.add(String(aluno.turma))
   }
 
   return Array.from(result)
@@ -353,27 +253,12 @@ export function getAlunoTodasTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
   if (!aluno) return []
   const result = new Set<string>()
 
-  const isIntegral = isStudentMarkedIntegral(aluno)
-
   // 1. Direct properties
-  if (!isIntegral) {
-    if (aluno.turma) result.add(String(aluno.turma).trim())
-    if (aluno.turma_nome) result.add(String(aluno.turma_nome).trim())
-    if (aluno.turmaNome) result.add(String(aluno.turmaNome).trim())
-    if (aluno.dados?.turma) result.add(String(aluno.dados.turma).trim())
-    if (aluno.dados?.turma_nome) result.add(String(aluno.dados.turma_nome).trim())
-  } else {
-    const checkIntegralProp = (val: any) => {
-      if (!val) return
-      const s = String(val).toLowerCase()
-      if (s.includes('integral') || s.includes('intermediario')) {
-        result.add(String(val).trim())
-      }
-    }
-    checkIntegralProp(aluno.turma_nome)
-    checkIntegralProp(aluno.turmaNome)
-    checkIntegralProp(aluno.dados?.turma_nome)
-  }
+  if (aluno.turma) result.add(String(aluno.turma).trim())
+  if (aluno.turma_nome) result.add(String(aluno.turma_nome).trim())
+  if (aluno.turmaNome) result.add(String(aluno.turmaNome).trim())
+  if (aluno.dados?.turma) result.add(String(aluno.dados.turma).trim())
+  if (aluno.dados?.turma_nome) result.add(String(aluno.dados.turma_nome).trim())
 
   // 2. Matching turmas in ERP (isAlunoCursandoTurma)
   if (Array.isArray(turmas) && turmas.length > 0) {
@@ -421,31 +306,14 @@ export function getAlunoTodasTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
   if (Array.isArray(hist)) {
     hist.forEach((ht: any) => {
       if (!ht || ht.status === 'Inativo') return
-      if (isIntegral) {
-        const isHtIntegral = ht.isIntegralIntermediario === true || String(ht.modalidade || '').toLowerCase().includes('integral')
-        if (isHtIntegral) {
-          if (ht.serieTurma) result.add(String(ht.serieTurma).trim())
-          if (ht.turma) result.add(String(ht.turma).trim())
-        }
-      } else {
-        if (ht.serieTurma) result.add(String(ht.serieTurma).trim())
-        if (ht.turma) result.add(String(ht.turma).trim())
-      }
+      if (ht.serieTurma) result.add(String(ht.serieTurma).trim())
+      if (ht.turma) result.add(String(ht.turma).trim())
       if (Array.isArray(ht.turmasAdicionais)) {
         ht.turmasAdicionais.forEach((sub: any) => {
           if (!sub || sub.status === 'Inativo') return
-          if (isIntegral) {
-            const isSubIntegral = sub.isIntegralIntermediario === true || String(sub.modalidade || '').toLowerCase().includes('integral')
-            if (isSubIntegral) {
-              if (sub.serieTurma) result.add(String(sub.serieTurma).trim())
-              if (sub.turma) result.add(String(sub.turma).trim())
-              if (sub.nome) result.add(String(sub.nome).trim())
-            }
-          } else {
-            if (sub.serieTurma) result.add(String(sub.serieTurma).trim())
-            if (sub.turma) result.add(String(sub.turma).trim())
-            if (sub.nome) result.add(String(sub.nome).trim())
-          }
+          if (sub.serieTurma) result.add(String(sub.serieTurma).trim())
+          if (sub.turma) result.add(String(sub.turma).trim())
+          if (sub.nome) result.add(String(sub.nome).trim())
         })
       }
     })
@@ -491,13 +359,6 @@ export function getAlunoTurnosAtivos(aluno: any, turmas: any[] = [], grupos: any
   const turnos = new Set<string>()
   if (!aluno) return turnos
 
-  const isIntegral = isStudentMarkedIntegral(aluno) || isAlunoIntegralIntermediario(aluno, turmas, grupos, anoLetivo)
-  if (isIntegral) {
-    turnos.add('integral')
-    turnos.add('intermediario')
-    return turnos
-  }
-
   const checkAndAdd = (val: any) => {
     if (!val) return
     const s = String(val).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -517,6 +378,12 @@ export function getAlunoTurnosAtivos(aluno: any, turmas: any[] = [], grupos: any
   checkAndAdd(aluno.dados?.modalidade)
   checkAndAdd(aluno.turma_nome)
   checkAndAdd(aluno.dados?.turma_nome)
+
+  // 2. If student is integral/intermediario
+  if (isAlunoIntegralIntermediario(aluno, turmas, grupos, anoLetivo)) {
+    turnos.add('integral')
+    turnos.add('intermediario')
+  }
 
   // 3. From cursando turmas in ERP
   if (Array.isArray(turmas) && turmas.length > 0) {

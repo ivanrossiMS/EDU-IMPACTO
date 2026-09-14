@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import { requireAuth, requireProfile } from '@/lib/server/authGuard'
 import { isValidStudentPhoto } from '@/lib/utils'
-import { isAlunoCursandoTurma, isAlunoIntegralIntermediario, isStudentMarkedIntegral, getSerieKey } from '@/lib/studentTurmaUtils'
+import { isAlunoCursandoTurma, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
 
 export const dynamic = 'force-dynamic'
 
@@ -368,36 +368,11 @@ export async function GET(request: Request) {
         const d = student.dados || {}
         
         const studentTurma = student.turma
-        let tObj = turmasData?.find((t: any) =>
+        const tObj = turmasData?.find((t: any) =>
           String(t.id) === String(studentTurma) ||
           String(t.codigo) === String(studentTurma) ||
           String(t.nome).toLowerCase() === String(studentTurma).toLowerCase()
         )
-
-        if (isStudentMarkedIntegral(student) && turmasData && turmasData.length > 0) {
-          const isTObjInt = tObj && (
-            String(tObj.nome || '').toLowerCase().includes('integral') ||
-            String(tObj.nome || '').toLowerCase().includes('intermediario') ||
-            String(tObj.turno || '').toLowerCase().includes('integral') ||
-            String(tObj.turno || '').toLowerCase().includes('intermediario')
-          )
-          if (!isTObjInt) {
-            const sKey = getSerieKey(student.serie || d.serie || tObj?.serie || tObj?.nome)
-            if (sKey) {
-              const intTurma = turmasData.find((t: any) => {
-                const tIsInt = String(t.nome || '').toLowerCase().includes('integral') ||
-                               String(t.nome || '').toLowerCase().includes('intermediario') ||
-                               String(t.turno || '').toLowerCase().includes('integral') ||
-                               String(t.turno || '').toLowerCase().includes('intermediario')
-                if (!tIsInt) return false
-                return (getSerieKey(t.serie) || getSerieKey(t.nome)) === sKey
-              })
-              if (intTurma) {
-                tObj = intTurma
-              }
-            }
-          }
-        }
 
         const rawFoto = student.foto || student.imagem1 || student.foto_url || d.foto || d.avatarUrl || d.fotoUrl || null
         let resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
@@ -780,36 +755,11 @@ export async function GET(request: Request) {
       checkDirectField(d.nome_responsavel || d.responsavel || d.nomeResponsavel || d.resp_nome || student.responsavel || student.nomeResponsavel, 'Responsável')
 
       const studentTurma = student.turma
-      let tObj = turmasData?.find((t: any) =>
+      const tObj = turmasData?.find((t: any) =>
         String(t.id) === String(studentTurma) ||
         String(t.codigo) === String(studentTurma) ||
         String(t.nome).toLowerCase() === String(studentTurma).toLowerCase()
       )
-
-      if (isStudentMarkedIntegral(student) && turmasData && turmasData.length > 0) {
-        const isTObjInt = tObj && (
-          String(tObj.nome || '').toLowerCase().includes('integral') ||
-          String(tObj.nome || '').toLowerCase().includes('intermediario') ||
-          String(tObj.turno || '').toLowerCase().includes('integral') ||
-          String(tObj.turno || '').toLowerCase().includes('intermediario')
-        )
-        if (!isTObjInt) {
-          const sKey = getSerieKey(student.serie || d.serie || tObj?.serie || tObj?.nome)
-          if (sKey) {
-            const intTurma = turmasData.find((t: any) => {
-              const tIsInt = String(t.nome || '').toLowerCase().includes('integral') ||
-                             String(t.nome || '').toLowerCase().includes('intermediario') ||
-                             String(t.turno || '').toLowerCase().includes('integral') ||
-                             String(t.turno || '').toLowerCase().includes('intermediario')
-              if (!tIsInt) return false
-              return (getSerieKey(t.serie) || getSerieKey(t.nome)) === sKey
-            })
-            if (intTurma) {
-              tObj = intTurma
-            }
-          }
-        }
-      }
 
       const rawFoto = student.foto || student.imagem1 || student.foto_url || student.dados?.foto || student.dados?.avatarUrl || student.dados?.fotoUrl || null
       let resolvedFoto = isValidStudentPhoto(rawFoto) ? rawFoto : null
@@ -875,9 +825,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Este endpoint aceita apenas um objeto, não um array.' }, { status: 400 })
     }
 
-    const { data: allTurmasDb } = await supabase.from('turmas').select('id, nome, serie, segmento, turno, ano')
     const item = body
-    const row = buildRow(item, allTurmasDb || [])
+    const row = buildRow(item)
     
     console.info(`[${new Date().toISOString()}] POST Aluno Individual: ${row.nome}\n`)
 
@@ -1144,8 +1093,7 @@ export async function PUT(request: Request) {
 
     if (!id) return NextResponse.json({ error: 'ID é obrigatório para atualização' }, { status: 400 })
 
-    const { data: allTurmasDb } = await supabase.from('turmas').select('id, nome, serie, segmento, turno, ano')
-    const row = buildRow(body, allTurmasDb || [])
+    const row = buildRow(body)
     delete row.id // Não atualiza o ID!
 
     console.info(`[${new Date().toISOString()}] PUT Aluno: ${row.nome} (ID: ${id})\n`)
@@ -1746,7 +1694,7 @@ export async function DELETE(request: Request) {
   }
 }
 
-function buildRow(a: any, turmasList: any[] = []) {
+function buildRow(a: any) {
   const { 
     id, nome, matricula, turma, serie, turno, status, email, 
     data_nascimento, responsavel, responsavel_financeiro, responsavel_pedagogico, 
@@ -1835,40 +1783,6 @@ function buildRow(a: any, turmasList: any[] = []) {
     if (mainTurma.isIntegralIntermediario === true || mainTurma.modalidade === 'INTEGRAL/INTERMEDIÁRIO') {
       rest.isIntegralIntermediario = true;
       rest.modalidade = 'INTEGRAL/INTERMEDIÁRIO';
-    }
-  }
-
-  const isStudentIntegral = rest.isIntegralIntermediario === true || 
-                            rest.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || 
-                            a.isIntegralIntermediario === true || 
-                            a.modalidade === 'INTEGRAL/INTERMEDIÁRIO'
-
-  if (isStudentIntegral && Array.isArray(turmasList) && turmasList.length > 0) {
-    const curTurmaObj = turmasList.find((t: any) => String(t.id) === String(activeTurma) || String(t.nome) === String(activeTurma))
-    const isCurInt = curTurmaObj && (
-      String(curTurmaObj.nome || '').toLowerCase().includes('integral') ||
-      String(curTurmaObj.nome || '').toLowerCase().includes('intermediario') ||
-      String(curTurmaObj.turno || '').toLowerCase().includes('integral') ||
-      String(curTurmaObj.turno || '').toLowerCase().includes('intermediario')
-    )
-    if (!isCurInt) {
-      const sKey = getSerieKey(activeSerie) || getSerieKey(curTurmaObj?.serie) || getSerieKey(curTurmaObj?.nome)
-      if (sKey) {
-        const matchingInt = turmasList.find((t: any) => {
-          const tIsInt = String(t.nome || '').toLowerCase().includes('integral') ||
-                         String(t.nome || '').toLowerCase().includes('intermediario') ||
-                         String(t.turno || '').toLowerCase().includes('integral') ||
-                         String(t.turno || '').toLowerCase().includes('intermediario')
-          if (!tIsInt) return false
-          return (getSerieKey(t.serie) || getSerieKey(t.nome)) === sKey
-        })
-        if (matchingInt) {
-          activeTurma = String(matchingInt.id)
-          if (historicoTurmas && Array.isArray(historicoTurmas) && historicoTurmas.length > 0) {
-            historicoTurmas[historicoTurmas.length - 1].serieTurma = String(matchingInt.id)
-          }
-        }
-      }
     }
   }
 

@@ -63,13 +63,18 @@ export function ReportsSelectionModal({
   };
 
   const handleValueChange = (studentId: string, fieldId: string, value: any) => {
-    setReportValues((prev) => ({
-      ...prev,
-      [studentId]: {
-        ...prev[studentId],
-        [fieldId]: value,
-      },
-    }));
+    setReportValues((prev) => {
+      const studentVals = { ...(prev[studentId] || {}) };
+      if (value === '' || value === undefined || value === null) {
+        delete studentVals[fieldId];
+      } else {
+        studentVals[fieldId] = value;
+      }
+      return {
+        ...prev,
+        [studentId]: studentVals,
+      };
+    });
   };
 
   const handleFinish = () => {
@@ -395,7 +400,8 @@ function FieldRenderer({
           return (
             <button
               key={opt}
-              onClick={() => onChange(opt)}
+              type="button"
+              onClick={() => onChange(isSelected ? '' : opt)}
               className={`flex items-center px-4 py-2 rounded-full border text-sm font-medium transition-all ${
                 isSelected
                   ? 'bg-blue-600 text-white border-blue-600 shadow-md'

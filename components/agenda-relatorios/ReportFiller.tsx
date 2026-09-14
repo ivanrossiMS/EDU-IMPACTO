@@ -21,7 +21,15 @@ export function ReportFiller({ templateId, onNavigate }: Props) {
   if (!tpl) return <div style={{ padding: 40, textAlign: 'center' }}>Modelo não encontrado.</div>
 
   const handleFieldChange = (fieldId: string, value: any) => {
-    setFormData(prev => ({ ...prev, [fieldId]: value }))
+    setFormData(prev => {
+      const next = { ...prev }
+      if (value === '' || value === undefined || value === null) {
+        delete next[fieldId]
+      } else {
+        next[fieldId] = value
+      }
+      return next
+    })
   }
 
   const handleCheckboxChange = (fieldId: string, option: string, checked: boolean) => {
@@ -108,12 +116,22 @@ export function ReportFiller({ templateId, onNavigate }: Props) {
                         
                         {f.type === 'unica-escolha' && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
-                            {f.options?.map(opt => (
-                              <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 15, cursor: 'pointer', padding: '12px 16px', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, background: formData[f.id] === opt ? 'rgba(99,102,241,0.05)' : 'transparent', outline: formData[f.id] === opt ? '1px solid #4f46e5' : 'none' }}>
-                                <input type="radio" style={{ width: 18, height: 18 }} checked={formData[f.id] === opt} onChange={() => handleFieldChange(f.id, opt)} /> 
-                                {opt}
-                              </label>
-                            ))}
+                            {f.options?.map(opt => {
+                              const isSelected = formData[f.id] === opt;
+                              return (
+                                <div 
+                                  key={opt} 
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => handleFieldChange(f.id, isSelected ? '' : opt)}
+                                  onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleFieldChange(f.id, isSelected ? '' : opt); } }}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 15, cursor: 'pointer', padding: '12px 16px', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, background: isSelected ? 'rgba(99,102,241,0.05)' : 'transparent', outline: isSelected ? '1px solid #4f46e5' : 'none', userSelect: 'none' }}
+                                >
+                                  <input type="radio" style={{ width: 18, height: 18, pointerEvents: 'none' }} checked={isSelected} readOnly /> 
+                                  <span>{opt}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 

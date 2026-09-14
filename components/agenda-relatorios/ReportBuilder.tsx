@@ -7,7 +7,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { 
   ArrowLeft, Save, Eye, Smartphone, Monitor, Plus, GripVertical, 
   Trash2, Edit3, Type, CheckSquare, Hash, AlignLeft, CheckCircle2, 
-  ChevronDown, List, Calendar, Clock, DollarSign, Percent, FileText, 
+  ChevronDown, ChevronUp, List, Calendar, Clock, DollarSign, Percent, FileText, 
   Image as ImageIcon, PenTool, LayoutTemplate, Copy
 } from 'lucide-react'
 
@@ -70,6 +70,30 @@ export function ReportBuilder({ templateId, onNavigate }: Props) {
   // Editor Modal State
   const [editingField, setEditingField] = useState<{sectionId: string, field: ReportField} | null>(null)
 
+  // Section drag & active state
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null)
+  const [draggedSecIdx, setDraggedSecIdx] = useState<number | null>(null)
+  const [dragOverSecIdx, setDragOverSecIdx] = useState<number | null>(null)
+  const [dropSecPosition, setDropSecPosition] = useState<'before' | 'after' | null>(null)
+
+  // Field drag state
+  const [draggedField, setDraggedField] = useState<{ secId: string; fIdx: number } | null>(null)
+  const [dragOverField, setDragOverField] = useState<{ secId: string; fIdx: number; position: 'before' | 'after' } | null>(null)
+  const [dragOverEmptySecId, setDragOverEmptySecId] = useState<string | null>(null)
+
+  // Collapsed sections
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    if (!activeSectionId && tpl.sections.length > 0) {
+      setActiveSectionId(tpl.sections[0].id)
+    }
+  }, [tpl.sections, activeSectionId])
+
+  const toggleCollapse = (secId: string) => {
+    setCollapsedSections(prev => ({ ...prev, [secId]: !prev[secId] }))
+  }
+
   const handleSave = (asDraft: boolean) => {
     if (!tpl.name) return adAlert('O relatório requer um nome!', 'Erro ao Salvar')
     
@@ -93,21 +117,120 @@ export function ReportBuilder({ templateId, onNavigate }: Props) {
     onNavigate('list')
   }
 
-  // Build Functions
+  // Section Build & Reorder Functions
   const addSection = () => {
+    const newSec: ReportSection = { id: `SEC-${Date.now()}`, title: 'Nova Seção', fields: [] }
     setTpl(prev => ({
       ...prev,
-      sections: [...prev.sections, { id: `SEC-${Date.now()}`, title: 'Nova Seção', fields: [] }]
+      sections: [...prev.sections, newSec]
     }))
+    setActiveSectionId(newSec.id)
   }
 
   const removeSection = (secId: string) => {
     adConfirm('Deseja excluir esta seção e todos os seus campos?', 'Atenção', () => {
-      setTpl(prev => ({ ...prev, sections: prev.sections.filter(s => s.id !== secId) }))
+      setTpl(prev => {
+        const next = prev.sections.filter(s => s.id !== secId)
+        if (activeSectionId === secId) {
+          setActiveSectionId(next[0]?.id || null)
+        }
+        return { ...prev, sections: next }
+      })
     })
   }
 
+  const duplicateSection = (secId: string) => {
+    const sec = tpl.sections.find(s => s.id === secId)
+    if (!sec) return
+    const cloned: ReportSection = {
+      id: `SEC-${Date.now()}`,
+      title: `${sec.title} (Cópia)`,
+      fields: sec.fields.map(f => ({
+        ...f,
+        id: `F-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+      }))
+    }
+    const secIndex = tpl.sections.findIndex(s => s.id === secId)
+    setTpl(prev => {
+      const next = [...prev.sections]
+      next.splice(secIndex + 1, 0, cloned)
+      return { ...prev, sections: next }
+    })
+    setActiveSectionId(cloned.id)
+  }
+
+  const moveSection = (index: number, up: boolean) => {
+    const targetIdx = up ? index - 1 : index + 1
+    if (targetIdx < 0 || targetIdx >= tpl.sections.length) return
+    setTpl(prev => {
+      const next = [...prev.sections]
+      const [moved] = next.splice(index, 1)
+      next.splice(targetIdx, 0, moved)
+      return { ...prev, sections: next }
+    })
+  }
+
+  const reorderSections = (fromIndex: number, toIndex: number, position: 'before' | 'after') => {
+    if (fromIndex === toIndex) return
+    setTpl(prev => {
+      const next = [...prev.sections]
+      const [moved] = next.splice(fromIndex, 1)
+      let target = toIndex
+      if (fromIndex < toIndex) {
+        target = target - 1
+      }
+      if (position === 'after') {
+        target += 1
+      }
+      next.splice(target, 0, moved)
+      return { ...prev, sections: next }
+    })
+  }
+
+  // Section Drag Event Handlers
+  const handleSecDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', `section:${index}`)
+    setDraggedSecIdx(index)
+  }
+
+  const handleSecDragOver = (e: React.DragEvent, index: number) => {
+    if (draggedSecIdx === null) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const offset = e.clientY - rect.top
+    const isAfter = offset > rect.height / 2
+    setDragOverSecIdx(index)
+    setDropSecPosition(isAfter ? 'after' : 'before')
+  }
+
+  const handleSecDrop = (e: React.DragEvent, index: number) => {
+    if (draggedSecIdx === null) return
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (draggedSecIdx !== null && dropSecPosition !== null) {
+      reorderSections(draggedSecIdx, index, dropSecPosition)
+    }
+    setDraggedSecIdx(null)
+    setDragOverSecIdx(null)
+    setDropSecPosition(null)
+  }
+
+  const handleSecDragEnd = () => {
+    setDraggedSecIdx(null)
+    setDragOverSecIdx(null)
+    setDropSecPosition(null)
+  }
+
+  // Field Functions
   const addField = (secId: string, type: FieldType) => {
+    const targetId = secId || activeSectionId || tpl.sections[tpl.sections.length - 1]?.id
+    if (!targetId) return adAlert('Adicione uma seção primeiro.', 'Aviso')
+
     const newField: ReportField = {
       id: `F-${Date.now()}`,
       type,
@@ -120,10 +243,11 @@ export function ReportBuilder({ templateId, onNavigate }: Props) {
     
     setTpl(prev => ({
       ...prev,
-      sections: prev.sections.map(s => s.id === secId ? { ...s, fields: [...s.fields, newField] } : s)
+      sections: prev.sections.map(s => s.id === targetId ? { ...s, fields: [...s.fields, newField] } : s)
     }))
     
-    setEditingField({ sectionId: secId, field: newField })
+    setActiveSectionId(targetId)
+    setEditingField({ sectionId: targetId, field: newField })
   }
 
   const updateEditingField = (updates: Partial<ReportField>) => {
@@ -157,7 +281,6 @@ export function ReportBuilder({ templateId, onNavigate }: Props) {
     }))
   }
 
-  // Simulating Drag and Drop Ordering using simple move up/down
   const moveField = (secId: string, fieldIndex: number, up: boolean) => {
     setTpl(prev => ({
       ...prev,
@@ -172,6 +295,106 @@ export function ReportBuilder({ templateId, onNavigate }: Props) {
         return { ...s, fields: f }
       })
     }))
+  }
+
+  const moveFieldBetween = (fromSecId: string, fromIdx: number, toSecId: string, toIdx: number, position: 'before' | 'after') => {
+    setTpl(prev => {
+      const sourceSec = prev.sections.find(s => s.id === fromSecId)
+      if (!sourceSec) return prev
+      const fieldToMove = sourceSec.fields[fromIdx]
+      if (!fieldToMove) return prev
+
+      const nextSections = prev.sections.map(s => {
+        if (s.id === fromSecId && s.id === toSecId) {
+          const f = [...s.fields]
+          const [moved] = f.splice(fromIdx, 1)
+          let target = toIdx
+          if (fromIdx < toIdx) target -= 1
+          if (position === 'after') target += 1
+          f.splice(target, 0, moved)
+          return { ...s, fields: f }
+        }
+        if (s.id === fromSecId) {
+          return { ...s, fields: s.fields.filter((_, idx) => idx !== fromIdx) }
+        }
+        if (s.id === toSecId) {
+          const f = [...s.fields]
+          let target = toIdx
+          if (position === 'after') target += 1
+          f.splice(target, 0, fieldToMove)
+          return { ...s, fields: f }
+        }
+        return s
+      })
+
+      return { ...prev, sections: nextSections }
+    })
+  }
+
+  const moveFieldToSectionEnd = (fromSecId: string, fromIdx: number, toSecId: string) => {
+    setTpl(prev => {
+      const sourceSec = prev.sections.find(s => s.id === fromSecId)
+      if (!sourceSec) return prev
+      const fieldToMove = sourceSec.fields[fromIdx]
+      if (!fieldToMove) return prev
+
+      const nextSections = prev.sections.map(s => {
+        if (s.id === fromSecId && s.id === toSecId) return s
+        if (s.id === fromSecId) {
+          return { ...s, fields: s.fields.filter((_, idx) => idx !== fromIdx) }
+        }
+        if (s.id === toSecId) {
+          return { ...s, fields: [...s.fields, fieldToMove] }
+        }
+        return s
+      })
+      return { ...prev, sections: nextSections }
+    })
+  }
+
+  // Field Drag Event Handlers
+  const handleFieldDragStart = (e: React.DragEvent, secId: string, fIdx: number) => {
+    e.stopPropagation()
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', `field:${secId}:${fIdx}`)
+    setDraggedField({ secId, fIdx })
+  }
+
+  const handleFieldDragOver = (e: React.DragEvent, secId: string, fIdx: number) => {
+    if (!draggedField) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const offset = e.clientY - rect.top
+    const isAfter = offset > rect.height / 2
+    setDragOverField({ secId, fIdx, position: isAfter ? 'after' : 'before' })
+  }
+
+  const handleFieldDrop = (e: React.DragEvent, targetSecId: string, targetFIdx: number) => {
+    if (!draggedField) return
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (dragOverField) {
+      moveFieldBetween(
+        draggedField.secId,
+        draggedField.fIdx,
+        targetSecId,
+        targetFIdx,
+        dragOverField.position
+      )
+    }
+    setDraggedField(null)
+    setDragOverField(null)
+    setDragOverEmptySecId(null)
+  }
+
+  const handleFieldDragEnd = () => {
+    setDraggedField(null)
+    setDragOverField(null)
+    setDragOverEmptySecId(null)
   }
 
   return (
@@ -220,14 +443,43 @@ export function ReportBuilder({ templateId, onNavigate }: Props) {
             
             {leftTab === 'secoes' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))' }}>Clique em um campo abaixo para adicioná-lo à última seção aberta.</p>
+                {/* Target Section Selector */}
+                <div style={{ 
+                  background: 'hsl(var(--bg-main))', 
+                  padding: '12px 14px', 
+                  borderRadius: 10, 
+                  border: '1px solid hsl(var(--border-subtle))',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6
+                }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Destino do Novo Campo:
+                  </label>
+                  <select 
+                    className="form-input" 
+                    style={{ fontSize: 13, fontWeight: 600, height: 36, padding: '4px 8px' }}
+                    value={activeSectionId || (tpl.sections[0]?.id || '')}
+                    onChange={e => setActiveSectionId(e.target.value)}
+                  >
+                    {tpl.sections.map((s, idx) => (
+                      <option key={s.id} value={s.id}>
+                        Seção {idx + 1}: {s.title || '(Sem título)'}
+                      </option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                    Clique em um campo abaixo para inseri-lo na seção selecionada.
+                  </span>
+                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {FIELD_TYPES.map(ft => (
                     <button 
                       key={ft.type} 
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: 'hsl(var(--bg-main))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, cursor: 'pointer', textAlign: 'left' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: 'hsl(var(--bg-main))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s ease' }}
                       onClick={() => {
-                        const secId = tpl.sections[tpl.sections.length - 1]?.id
+                        const secId = activeSectionId || tpl.sections[tpl.sections.length - 1]?.id
                         if (!secId) return adAlert('Adicione uma seção primeiro.', 'Aviso')
                         addField(secId, ft.type)
                       }}
@@ -244,74 +496,317 @@ export function ReportBuilder({ templateId, onNavigate }: Props) {
 
         {/* CENTER COLUMN: Canvas (Drag & Drop / Reorder) */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.03)', position: 'relative' }}>
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)'}}>
-             <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--text-secondary)' }}>Estrutura do Formulário (Fluxo Central)</h3>
+          <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-surface)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--text-secondary)' }}>Estrutura do Formulário (Fluxo Central)</h3>
+              <p style={{ fontSize: 11, color: 'hsl(var(--text-muted))', margin: '2px 0 0 0' }}>Arraste seções e campos pelo ícone de alça para organizar o formulário</p>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={addSection} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Plus size={14} /> Nova Seção
+            </button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 32 }}>
             <div style={{ maxWidth: 640, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
                
-               {tpl.sections.map((sec, sIdx) => (
-                 <div key={sec.id} className="card" style={{ overflow: 'visible', outline: '2px solid transparent' }}>
-                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'hsl(var(--bg-main))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                     <input 
-                       className="form-input" 
-                       style={{ fontSize: 18, fontWeight: 800, background: 'transparent', border: 'none', padding: 0 }} 
-                       value={sec.title} 
-                       onChange={e => setTpl(p => ({...p, sections: p.sections.map(s => s.id === sec.id ? {...s, title: e.target.value} : s)}))}
-                     />
-                     <button className="btn btn-ghost btn-sm" style={{ color: '#ef4444' }} onClick={() => removeSection(sec.id)}><Trash2 size={16}/></button>
-                   </div>
-                   
-                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                     {sec.fields.length === 0 && <div style={{ padding: 32, textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>Nenhum campo nesta seção. Adicione pelo menu à esquerda.</div>}
-                     {sec.fields.map((f, fIdx) => (
-                       <div key={f.id} style={{ display: 'flex', padding: '16px 20px', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-surface))', gap: 12 }}>
-                         <div style={{ cursor: 'move', color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                           <button style={{ border: 0, background: 'none', cursor: 'pointer' }} onClick={() => moveField(sec.id, fIdx, true)}>↑</button>
-                           <GripVertical size={16} />
-                           <button style={{ border: 0, background: 'none', cursor: 'pointer' }} onClick={() => moveField(sec.id, fIdx, false)}>↓</button>
+               {tpl.sections.map((sec, sIdx) => {
+                 const isCollapsed = collapsedSections[sec.id]
+                 const isActive = activeSectionId === sec.id
+
+                 return (
+                   <div key={sec.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                     {/* Drag target indicator ABOVE this section */}
+                     {dragOverSecIdx === sIdx && draggedSecIdx !== null && draggedSecIdx !== sIdx && dropSecPosition === 'before' && (
+                       <div style={{ height: 4, background: '#4f46e5', borderRadius: 2, margin: '6px 0', boxShadow: '0 0 10px rgba(79,70,229,0.7)', position: 'relative', zIndex: 10 }}>
+                         <div style={{ position: 'absolute', left: -4, top: -4, width: 12, height: 12, borderRadius: '50%', background: '#4f46e5', boxShadow: '0 0 6px rgba(79,70,229,0.8)' }} />
+                       </div>
+                     )}
+
+                     <div
+                       className="card"
+                       onDragOver={e => handleSecDragOver(e, sIdx)}
+                       onDrop={e => handleSecDrop(e, sIdx)}
+                       style={{
+                         overflow: 'visible',
+                         outline: isActive ? '2px solid rgba(79,70,229,0.4)' : '2px solid transparent',
+                         opacity: draggedSecIdx === sIdx ? 0.35 : 1,
+                         transform: draggedSecIdx === sIdx ? 'scale(0.99)' : 'none',
+                         boxShadow: isActive ? '0 8px 24px -6px rgba(79,70,229,0.12)' : undefined,
+                         transition: 'all 0.15s ease'
+                       }}
+                     >
+                       {/* Header */}
+                       <div style={{ 
+                         display: 'flex', 
+                         alignItems: 'center', 
+                         justifyContent: 'space-between', 
+                         padding: '14px 18px', 
+                         background: 'hsl(var(--bg-main))', 
+                         borderBottom: '1px solid hsl(var(--border-subtle))',
+                         gap: 12
+                       }}>
+                         {/* Drag Handle + Order badge + Arrows */}
+                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                           <div
+                             draggable
+                             onDragStart={e => handleSecDragStart(e, sIdx)}
+                             onDragEnd={handleSecDragEnd}
+                             title="Segure e arraste para reposicionar esta seção no formulário"
+                             style={{
+                               display: 'flex',
+                               alignItems: 'center',
+                               gap: 6,
+                               cursor: draggedSecIdx === sIdx ? 'grabbing' : 'grab',
+                               padding: '6px 10px',
+                               borderRadius: 8,
+                               background: 'hsl(var(--bg-surface))',
+                               border: '1px solid hsl(var(--border-subtle))',
+                               userSelect: 'none',
+                               boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                             }}
+                           >
+                             <GripVertical size={16} style={{ color: 'hsl(var(--text-muted))' }} />
+                             <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'hsl(var(--text-secondary))' }}>
+                               Seção {sIdx + 1}
+                             </span>
+                           </div>
+
+                           <div style={{ display: 'flex', gap: 2 }}>
+                             <button
+                               type="button"
+                               className="btn btn-ghost btn-sm"
+                               style={{ padding: '4px 6px', height: 28, width: 28, opacity: sIdx === 0 ? 0.25 : 1 }}
+                               disabled={sIdx === 0}
+                               onClick={() => moveSection(sIdx, true)}
+                               title="Mover seção para cima"
+                             >
+                               <ChevronUp size={15} />
+                             </button>
+                             <button
+                               type="button"
+                               className="btn btn-ghost btn-sm"
+                               style={{ padding: '4px 6px', height: 28, width: 28, opacity: sIdx === tpl.sections.length - 1 ? 0.25 : 1 }}
+                               disabled={sIdx === tpl.sections.length - 1}
+                               onClick={() => moveSection(sIdx, false)}
+                               title="Mover seção para baixo"
+                             >
+                               <ChevronDown size={15} />
+                             </button>
+                           </div>
                          </div>
+
+                         {/* Title */}
                          <div style={{ flex: 1 }}>
-                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                             <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>{f.label} {f.required && <span style={{ color: '#ef4444' }}>*</span>}</h4>
-                             <span className="badge badge-ghost" style={{ fontSize: 11 }}>{FIELD_TYPES.find(t => t.type === f.type)?.label}</span>
-                           </div>
-                           {f.description && <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', margin: '4px 0 0 0' }}>{f.description}</p>}
-                           
-                           {/* Quick preview placeholder */}
-                           <div style={{ marginTop: 12, opacity: 0.6, pointerEvents: 'none' }}>
-                             {f.type === 'texto-curto' && <input className="form-input" style={{ width: '100%', height: 32 }} placeholder={f.placeholder || 'Resposta curta'} />}
-                             {f.type === 'texto-longo' && <textarea className="form-input" style={{ width: '100%' }} rows={2} placeholder={f.placeholder || 'Resposta detalhada'} />}
-                             {['unica-escolha', 'multipla-escolha'].includes(f.type) && (
-                               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                 {f.options?.map(opt => <div key={opt} className="badge badge-ghost"><div style={{ width:10,height:10,borderRadius:(f.type==='unica-escolha'?'50%':4),border:'1px solid #ccc' }}/> {opt}</div>)}
-                               </div>
-                             )}
-                           </div>
-                           
-                           {f.conditionalRule && (
-                             <div style={{ marginTop: 12, fontSize: 12, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', padding: '4px 8px', borderRadius: 4, display: 'inline-block' }}>
-                               ⚠️ Rule: Mostrar se campo "{f.conditionalRule.fieldId}" {f.conditionalRule.operator} "{f.conditionalRule.value}"
-                             </div>
-                           )}
+                           <input 
+                             className="form-input" 
+                             style={{ fontSize: 16, fontWeight: 700, background: 'transparent', border: 'none', padding: '4px 8px' }} 
+                             placeholder="Nome da Seção..."
+                             value={sec.title} 
+                             onFocus={() => setActiveSectionId(sec.id)}
+                             onChange={e => setTpl(p => ({...p, sections: p.sections.map(s => s.id === sec.id ? {...s, title: e.target.value} : s)}))}
+                           />
                          </div>
-                         
-                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                           <button className="btn btn-ghost btn-sm" onClick={() => setEditingField({sectionId: sec.id, field: f})}><Edit3 size={14}/></button>
-                           <button className="btn btn-ghost btn-sm" onClick={() => duplicateField(sec.id, f)}><Copy size={14}/></button>
-                           <button className="btn btn-ghost btn-sm" style={{ color: '#ef4444' }} onClick={() => removeField(sec.id, f.id)}><Trash2 size={14}/></button>
+
+                         {/* Actions */}
+                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                           <button 
+                             type="button"
+                             className="btn btn-ghost btn-sm" 
+                             style={{ padding: '4px 8px', height: 30 }}
+                             onClick={() => duplicateSection(sec.id)} 
+                             title="Duplicar seção"
+                           >
+                             <Copy size={14}/>
+                           </button>
+                           <button 
+                             type="button"
+                             className="btn btn-ghost btn-sm" 
+                             style={{ padding: '4px 8px', height: 30 }}
+                             onClick={() => toggleCollapse(sec.id)} 
+                             title={isCollapsed ? "Expandir seção" : "Recolher seção"}
+                           >
+                             {isCollapsed ? <ChevronDown size={16}/> : <ChevronUp size={16}/>}
+                           </button>
+                           <button 
+                             type="button"
+                             className="btn btn-ghost btn-sm" 
+                             style={{ color: '#ef4444', padding: '4px 8px', height: 30 }} 
+                             onClick={() => removeSection(sec.id)}
+                             title="Excluir seção"
+                           >
+                             <Trash2 size={15}/>
+                           </button>
                          </div>
                        </div>
-                     ))}
+                       
+                       {/* Section Body */}
+                       {!isCollapsed && (
+                         <>
+                           <div 
+                             style={{ display: 'flex', flexDirection: 'column' }}
+                             onDragOver={e => {
+                               if (draggedField && sec.fields.length === 0) {
+                                 e.preventDefault()
+                                 e.dataTransfer.dropEffect = 'move'
+                                 setDragOverEmptySecId(sec.id)
+                               }
+                             }}
+                             onDrop={e => {
+                               if (draggedField && sec.fields.length === 0) {
+                                 e.preventDefault()
+                                 e.stopPropagation()
+                                 moveFieldToSectionEnd(draggedField.secId, draggedField.fIdx, sec.id)
+                                 setDraggedField(null)
+                                 setDragOverEmptySecId(null)
+                               }
+                             }}
+                           >
+                             {sec.fields.length === 0 && (
+                               <div style={{ 
+                                 padding: 32, 
+                                 textAlign: 'center', 
+                                 color: 'hsl(var(--text-muted))', 
+                                 fontSize: 13,
+                                 border: dragOverEmptySecId === sec.id ? '2px dashed #4f46e5' : 'none',
+                                 background: dragOverEmptySecId === sec.id ? 'rgba(79,70,229,0.05)' : 'transparent',
+                                 borderRadius: 8,
+                                 margin: 8,
+                                 transition: 'all 0.2s ease'
+                               }}>
+                                 {dragOverEmptySecId === sec.id ? 'Solte o campo aqui' : 'Nenhum campo nesta seção. Clique no botão abaixo para adicionar ou arraste campos para cá.'}
+                               </div>
+                             )}
+
+                             {sec.fields.map((f, fIdx) => (
+                               <React.Fragment key={f.id}>
+                                 {/* Field drop indicator BEFORE */}
+                                 {draggedField && dragOverField?.secId === sec.id && dragOverField?.fIdx === fIdx && dragOverField?.position === 'before' && (
+                                   <div style={{ height: 3, background: '#4f46e5', margin: '2px 0', boxShadow: '0 0 6px rgba(79,70,229,0.7)', position: 'relative', zIndex: 10 }}>
+                                     <div style={{ position: 'absolute', left: 8, top: -4, width: 10, height: 10, borderRadius: '50%', background: '#4f46e5' }} />
+                                   </div>
+                                 )}
+
+                                 <div 
+                                   onDragOver={e => handleFieldDragOver(e, sec.id, fIdx)}
+                                   onDrop={e => handleFieldDrop(e, sec.id, fIdx)}
+                                   style={{ 
+                                     display: 'flex', 
+                                     padding: '16px 20px', 
+                                     borderBottom: '1px solid hsl(var(--border-subtle))', 
+                                     background: 'hsl(var(--bg-surface))', 
+                                     gap: 12,
+                                     opacity: draggedField?.secId === sec.id && draggedField?.fIdx === fIdx ? 0.35 : 1,
+                                     transition: 'all 0.15s ease'
+                                   }}
+                                 >
+                                   {/* Field drag handle + reorder buttons */}
+                                   <div style={{ color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                     <button 
+                                       type="button"
+                                       style={{ border: 0, background: 'none', cursor: fIdx === 0 ? 'default' : 'pointer', opacity: fIdx === 0 ? 0.25 : 0.7, padding: '2px 4px' }} 
+                                       disabled={fIdx === 0}
+                                       onClick={() => moveField(sec.id, fIdx, true)}
+                                       title="Mover campo para cima"
+                                     >
+                                       <ChevronUp size={14} />
+                                     </button>
+                                     <div
+                                       draggable
+                                       onDragStart={e => handleFieldDragStart(e, sec.id, fIdx)}
+                                       onDragEnd={handleFieldDragEnd}
+                                       title="Arraste para reposicionar este campo"
+                                       style={{ cursor: 'grab', padding: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                     >
+                                       <GripVertical size={16} />
+                                     </div>
+                                     <button 
+                                       type="button"
+                                       style={{ border: 0, background: 'none', cursor: fIdx === sec.fields.length - 1 ? 'default' : 'pointer', opacity: fIdx === sec.fields.length - 1 ? 0.25 : 0.7, padding: '2px 4px' }} 
+                                       disabled={fIdx === sec.fields.length - 1}
+                                       onClick={() => moveField(sec.id, fIdx, false)}
+                                       title="Mover campo para baixo"
+                                     >
+                                       <ChevronDown size={14} />
+                                     </button>
+                                   </div>
+
+                                   <div style={{ flex: 1 }}>
+                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                       <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>{f.label} {f.required && <span style={{ color: '#ef4444' }}>*</span>}</h4>
+                                       <span className="badge badge-ghost" style={{ fontSize: 11 }}>{FIELD_TYPES.find(t => t.type === f.type)?.label}</span>
+                                     </div>
+                                     {f.description && <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', margin: '4px 0 0 0' }}>{f.description}</p>}
+                                     
+                                     {/* Quick preview placeholder */}
+                                     <div style={{ marginTop: 12, opacity: 0.6, pointerEvents: 'none' }}>
+                                       {f.type === 'texto-curto' && <input className="form-input" style={{ width: '100%', height: 32 }} placeholder={f.placeholder || 'Resposta curta'} />}
+                                       {f.type === 'texto-longo' && <textarea className="form-input" style={{ width: '100%' }} rows={2} placeholder={f.placeholder || 'Resposta detalhada'} />}
+                                       {['unica-escolha', 'multipla-escolha'].includes(f.type) && (
+                                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                           {f.options?.map(opt => <div key={opt} className="badge badge-ghost"><div style={{ width:10,height:10,borderRadius:(f.type==='unica-escolha'?'50%':4),border:'1px solid #ccc' }}/> {opt}</div>)}
+                                         </div>
+                                       )}
+                                     </div>
+                                     
+                                     {f.conditionalRule && (
+                                       <div style={{ marginTop: 12, fontSize: 12, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', padding: '4px 8px', borderRadius: 4, display: 'inline-block' }}>
+                                         ⚠️ Rule: Mostrar se campo "{f.conditionalRule.fieldId}" {f.conditionalRule.operator} "{f.conditionalRule.value}"
+                                       </div>
+                                     )}
+                                   </div>
+                                   
+                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                     <button className="btn btn-ghost btn-sm" title="Editar configurações do campo" onClick={() => setEditingField({sectionId: sec.id, field: f})}><Edit3 size={14}/></button>
+                                     <button className="btn btn-ghost btn-sm" title="Duplicar campo" onClick={() => duplicateField(sec.id, f)}><Copy size={14}/></button>
+                                     <button className="btn btn-ghost btn-sm" title="Excluir campo" style={{ color: '#ef4444' }} onClick={() => removeField(sec.id, f.id)}><Trash2 size={14}/></button>
+                                   </div>
+                                 </div>
+
+                                 {/* Field drop indicator AFTER */}
+                                 {draggedField && dragOverField?.secId === sec.id && dragOverField?.fIdx === fIdx && dragOverField?.position === 'after' && (
+                                   <div style={{ height: 3, background: '#4f46e5', margin: '2px 0', boxShadow: '0 0 6px rgba(79,70,229,0.7)', position: 'relative', zIndex: 10 }}>
+                                     <div style={{ position: 'absolute', left: 8, top: -4, width: 10, height: 10, borderRadius: '50%', background: '#4f46e5' }} />
+                                   </div>
+                                 )}
+                               </React.Fragment>
+                             ))}
+                           </div>
+                           
+                           {/* Add Field In This Section */}
+                           <div style={{ padding: '12px 20px', background: 'rgba(0,0,0,0.02)', textAlign: 'center', borderTop: '1px solid hsl(var(--border-subtle))' }}>
+                             <button 
+                               type="button"
+                               className="btn btn-ghost btn-sm" 
+                               style={{ color: tpl.color || 'hsl(var(--color-primary))', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                               onClick={() => { 
+                                 setActiveSectionId(sec.id)
+                                 setLeftTab('secoes') 
+                               }}
+                             >
+                               <Plus size={15} /> Adicionar Campo Nesta Seção
+                             </button>
+                           </div>
+                         </>
+                       )}
+                     </div>
+
+                     {/* Drag target indicator BELOW this section */}
+                     {dragOverSecIdx === sIdx && draggedSecIdx !== null && draggedSecIdx !== sIdx && dropSecPosition === 'after' && (
+                       <div style={{ height: 4, background: '#4f46e5', borderRadius: 2, margin: '6px 0', boxShadow: '0 0 10px rgba(79,70,229,0.7)', position: 'relative', zIndex: 10 }}>
+                         <div style={{ position: 'absolute', left: -4, top: -4, width: 12, height: 12, borderRadius: '50%', background: '#4f46e5', boxShadow: '0 0 6px rgba(79,70,229,0.8)' }} />
+                       </div>
+                     )}
                    </div>
-                   
-                   <div style={{ padding: '12px 20px', background: 'rgba(0,0,0,0.02)', textAlign: 'center' }}>
-                     <button className="btn btn-ghost btn-sm text-muted" onClick={() => { setLeftTab('secoes') }}>Adicionar Campo Aqui</button>
-                   </div>
-                 </div>
-               ))}
+                 )
+               })}
                
-               <button className="btn btn-secondary" style={{ borderStyle: 'dashed', padding: 24 }} onClick={addSection}>+ Adicionar Nova Seção</button>
+               <button 
+                 type="button"
+                 className="btn btn-secondary" 
+                 style={{ borderStyle: 'dashed', padding: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} 
+                 onClick={addSection}
+               >
+                 <Plus size={16} /> Adicionar Nova Seção
+               </button>
             </div>
           </div>
         </div>
