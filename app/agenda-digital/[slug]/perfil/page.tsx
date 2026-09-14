@@ -14,6 +14,7 @@ import { getInitials, formatDate } from '@/lib/utils'
 import { useApiQuery } from '@/hooks/useApi'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
 import { useApp } from '@/lib/context'
+import { apiFetch } from '@/lib/api/apiClient'
 
 export default function ADPerfilPage() {
   const { currentUser, setCurrentUser } = useApp()
@@ -51,7 +52,7 @@ export default function ADPerfilPage() {
 
       const targetResp = responsaveisList.find((r: any) => r.id === selectedRespId)
       
-      const apiRes = await fetch('/api/responsaveis/avatar', {
+      const apiRes = await apiFetch('/api/responsaveis/avatar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -106,8 +107,25 @@ export default function ADPerfilPage() {
   }, [aluno?.email, aluno?.telefone])
 
   if (error) return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: 100, color: '#ef4444' }}>
-      Erro ao carregar perfil: {(error as Error).message}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 80, gap: 16, color: '#ef4444', textAlign: 'center' }}>
+      <p style={{ margin: 0, fontSize: 15, fontWeight: 500 }}>
+        Erro ao carregar perfil: {(error as Error).message}
+      </p>
+      <button
+        onClick={() => refetch()}
+        style={{
+          padding: '8px 20px',
+          borderRadius: 8,
+          background: 'rgba(239, 68, 68, 0.15)',
+          color: '#ef4444',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          cursor: 'pointer',
+          fontWeight: 600,
+          fontSize: 14
+        }}
+      >
+        Tentar novamente
+      </button>
     </div>
   )
 
@@ -120,7 +138,7 @@ export default function ADPerfilPage() {
   const handleSaveField = async (field: 'email' | 'telefone', value: string) => {
     try {
       setIsSaving(true)
-      const res = await fetch(`/api/alunos/${aluno.id}`, {
+      const res = await apiFetch(`/api/alunos/${aluno.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value })

@@ -68,6 +68,9 @@ export function CapacitorResumeGuard() {
       }
     }
 
+    // Executa verificação imediata na montagem (cold boot)
+    checkAndFreshenSession('cold boot / montagem inicial')
+
     // 2. Listener para reconexão de internet (online)
     const handleOnline = () => {
       console.log('[CapacitorResumeGuard] Conexão com a internet restabelecida.')

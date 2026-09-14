@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
     }
 
     const cookieStore = await cookies()
-    const INFINITE_SESSION_SECONDS = 3153600000 // 100 anos (permanência vitalícia com rolagem contínua)
+    const INFINITE_SESSION_SECONDS = 31536000 // 1 ano (365 dias) — seguro contra overflow de 32 bits (RFC 6265bis)
     const expiresDate = new Date(Date.now() + INFINITE_SESSION_SECONDS * 1000)
     const capturedCookiesToSet: { name: string; value: string; options: any }[] = []
 

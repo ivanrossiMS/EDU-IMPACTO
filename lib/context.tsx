@@ -185,8 +185,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const syncPhoto = parsedUser.id ? window.localStorage.getItem(`edu-user-photo-${parsedUser.id}`) : null
           if (syncPhoto) parsedUser.foto = JSON.parse(syncPhoto)
           setCurrentUserState(parsedUser)
-          // Marca como hidratado imediatamente se temos o usuário — evita waterfall
-          if (isMounted) setHydrated(true)
+          // NÃO marca hydrated aqui — aguarda a sessão ser verificada/restaurada em hydrate()
         }
         if (syncTheme) document.documentElement.setAttribute('data-theme', JSON.parse(syncTheme))
       }

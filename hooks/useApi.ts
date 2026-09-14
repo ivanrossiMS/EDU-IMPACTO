@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { apiFetch } from '@/lib/api/apiClient'
 
 export interface ApiQueryOptions {
   /** Tiempo en ms que los datos se consideran "frescos" (sin re-fetch). Default: 30s */
@@ -50,7 +51,7 @@ export function useApiQuery<T>(
         ? { cache: 'no-store' }
         : { cache: 'default' }
 
-      const res = await fetch(`${url}${queryStr}${cacheBuster}`, fetchOptions)
+      const res = await apiFetch(`${url}${queryStr}${cacheBuster}`, fetchOptions)
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || `Falha (${res.status}) ao processar os dados.`)
@@ -73,10 +74,11 @@ export function useApiMutation<TVariables = any, TData = any>(
 
   return useMutation<TData, Error, TVariables>({
     mutationFn: async (vars) => {
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(vars)
+        body: JSON.stringify(vars),
+        skipRetry: true // Não repetir mutações automaticamente para evitar duplicidade de registros
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))

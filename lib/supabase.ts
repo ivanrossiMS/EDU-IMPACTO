@@ -2,13 +2,13 @@ import { createClient } from '@supabase/supabase-js'
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
 import { createChunks, combineChunks, stringToBase64URL, stringFromBase64URL, isChunkLike } from '@supabase/ssr'
-import { saveSessionSecurely, clearSessionSecurely } from '@/lib/auth/secureSession'
+import { saveSessionSecurely, clearSessionSecurely, setSecureStorageWithRetry, getSecureStorageWithRetry } from '@/lib/auth/secureSession'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lrpwerkkqrjkcauofhph.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxycHdlcmtrcXJqa2NhdW9maHBoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0MDAzMjYsImV4cCI6MjA5MDk3NjMyNn0.1-_0vMiLn0Y9piS90150Ur7qx8ic1Kz64RuhiaVGLhg'
 
 const BASE64_PREFIX = 'base64-'
-const INFINITE_SESSION_SECONDS = 3153600000 // 100 anos (rolagem contínua no browser)
+export const INFINITE_SESSION_SECONDS = 31536000 // 1 ano (365 dias) — seguro contra overflow de 32 bits (RFC 6265bis)
 
 /**
  * Decodifica o valor caso esteja no formato base64url do @supabase/ssr
@@ -37,7 +37,7 @@ function decodeAndValidate(raw: string | null): string | null {
   }
 }
 
-function syncDocumentCookie(key: string, value: string) {
+export function syncDocumentCookie(key: string, value: string) {
   if (typeof document === 'undefined') return
   const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:'
   const securePart = isHttps ? '; Secure' : ''
@@ -85,36 +85,22 @@ const customStorage = {
   getItem: async (key: string) => {
     if (typeof window === 'undefined') return null
 
-    // 1. Native Secure Storage (iOS Keychain / Android Keystore)
+    // 1. Native Secure Storage (iOS Keychain / Android Keystore) com retry
     if (Capacitor.isNativePlatform()) {
-      try {
-        const secRes = await SecureStoragePlugin.get({ key })
-        const valid = decodeAndValidate(secRes?.value)
-        if (valid) return valid
-      } catch (e) {}
+      const secVal = await getSecureStorageWithRetry(key)
+      const valid = decodeAndValidate(secVal)
+      if (valid) return valid
 
       // Backup: check general session key in SecureStorage
-      try {
-        const secBackup = await SecureStoragePlugin.get({ key: SESSION_KEY })
-        const validBackup = decodeAndValidate(secBackup?.value)
-        if (validBackup) return validBackup
-      } catch (e) {}
+      const secBackup = await getSecureStorageWithRetry(SESSION_KEY)
+      const validBackup = decodeAndValidate(secBackup)
+      if (validBackup) return validBackup
 
-      // 2. Capacitor Preferences (Native disk)
-      try {
-        const { value } = await Preferences.get({ key })
-        const valid = decodeAndValidate(value)
-        if (valid) return valid
-      } catch (e) {}
-
-      try {
-        const { value: backupVal } = await Preferences.get({ key: SESSION_KEY })
-        const valid = decodeAndValidate(backupVal)
-        if (valid) return valid
-      } catch (e) {}
+      // No mobile nativo, NÃO lê tokens brutos de Preferences nem de localStorage
+      return null
     }
 
-    // 3. Web Browser: document.cookie chunks MUST take precedence!
+    // 2. Web Browser: document.cookie chunks MUST take precedence!
     if (typeof document !== 'undefined') {
       try {
         const parsedCookies = document.cookie.split('; ').reduce((acc, c) => {
@@ -138,7 +124,7 @@ const customStorage = {
       } catch (e) {}
     }
 
-    // 4. Fallback to localStorage
+    // 3. Fallback to localStorage (apenas no Web)
     try {
       const localVal = window.localStorage.getItem(key) || window.localStorage.getItem(SESSION_KEY)
       const valid = decodeAndValidate(localVal)
@@ -150,19 +136,16 @@ const customStorage = {
   setItem: async (key: string, value: string) => {
     if (typeof window === 'undefined') return
 
-    // Persiste no localStorage
-    try {
-      window.localStorage.setItem(key, value)
-    } catch (e) {}
-
-    // Persiste no Capacitor SecureStorage e Preferences
+    // Persiste no Capacitor SecureStorage com retry (Keychain / Keystore)
     if (Capacitor.isNativePlatform()) {
+      setSecureStorageWithRetry(key, value).catch(() => {})
+      // Limpa qualquer chave desprotegida antiga em Preferences
+      Preferences.remove({ key }).catch(() => {})
+      // No mobile nativo, NÃO salva refresh_token bruto no localStorage nem em Preferences!
+    } else {
+      // Web browser padrão:
       try {
-        await SecureStoragePlugin.set({ key, value })
-      } catch (e) {}
-
-      try {
-        await Preferences.set({ key, value })
+        window.localStorage.setItem(key, value)
       } catch (e) {}
     }
 

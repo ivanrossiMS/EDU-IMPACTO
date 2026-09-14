@@ -542,7 +542,7 @@ export default function LoginPage() {
             access_token: authData.session.access_token,
             refresh_token: authData.session.refresh_token,
           })
-          await saveSessionSecurely(authData.session)
+          await saveSessionSecurely(authData.session, { isExplicitLogin: true })
         } catch (e) {
           console.warn('[Login] Erro ao sincronizar sessão no cliente Supabase:', e)
         }

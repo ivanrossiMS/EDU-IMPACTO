@@ -9,9 +9,13 @@ export const revalidate = 0
 export async function GET(request: Request) {
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
 
+  const authHeader = request.headers.get('authorization');
+  const hasBearer = authHeader ? authHeader.toLowerCase().startsWith('bearer ') : false;
+  const bearerToken = hasBearer ? authHeader!.substring(7).trim() : null;
+
   const cookieStore = await cookies();
-  const INFINITE_SESSION_SECONDS = 3153600000;
-  const expiresDate = new Date(Date.now() + INFINITE_SESSION_SECONDS * 1000);
+  const SAFE_SESSION_SECONDS = 31536000; // 1 ano (365 dias)
+  const expiresDate = new Date(Date.now() + SAFE_SESSION_SECONDS * 1000);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +34,7 @@ export async function GET(request: Request) {
                 ...options,
                 path: options?.path || '/',
                 sameSite: options?.sameSite || 'lax',
-                maxAge: INFINITE_SESSION_SECONDS,
+                maxAge: SAFE_SESSION_SECONDS,
                 expires: expiresDate,
               })
             }) 
@@ -43,7 +47,10 @@ export async function GET(request: Request) {
   let user = null;
   let isNetworkError = false;
   try {
-    const res = await supabase.auth.getUser();
+    const res = bearerToken 
+      ? await supabase.auth.getUser(bearerToken)
+      : await supabase.auth.getUser();
+
     if (res.error) {
       const msg = res.error.message?.toLowerCase() || '';
       const name = res.error.name || '';

@@ -14,6 +14,7 @@ import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { AppLoadingScreen } from '@/components/AppLoadingScreen'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
+import { apiFetch } from '@/lib/api/apiClient'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -1077,9 +1078,10 @@ function SelecionarAlunoContent() {
   useEffect(() => {
     if (!hydrated || !currentUser) return;
 
+    const userCacheKey = `edu-meus-alunos-${currentUser.id}`;
     const keysToCheck = [
+      userCacheKey,
       `edu-meus-alunos-${respId || emailBusca}`,
-      `edu-meus-alunos-${currentUser.id}`,
       `edu-meus-alunos-${emailBusca}`
     ];
 
@@ -1099,25 +1101,34 @@ function SelecionarAlunoContent() {
       } catch (_) {}
     }
 
-    // Step 2: Always fire a fresh network request in background
+    // Step 2: Always fire a fresh network request with apiFetch (Bearer + proactive refresh + 401 retry)
     const url = `/api/agenda/meus-alunos?respId=${encodeURIComponent(respId)}&email=${encodeURIComponent(emailBusca)}&nome=${encodeURIComponent(nomeBusca)}`;
 
-    fetch(url, { credentials: 'include' })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => {
-        if (!Array.isArray(data)) return;
-        setMeusAlunos(data);
-        setHasFetched(true);
-        // Update localStorage cache with fresh data across all unified keys
-        keysToCheck.forEach(k => {
-          try {
-            localStorage.setItem(k, JSON.stringify(data));
-            localStorage.setItem(`${k}-meta`, JSON.stringify({ data, ts: Date.now() }));
-          } catch (_) {}
-        });
+    apiFetch(url)
+      .then(async (r) => {
+        // Respostas de erro (401, 403, 500) NUNCA podem sobrescrever o cache com lista vazia!
+        if (!r.ok) {
+          console.warn('[selecionar-aluno] Falha na requisição de alunos:', r.status);
+          return null;
+        }
+        return r.json();
       })
-      .catch(() => {
-        setHasFetched(true); // Even on error, stop the spinner
+      .then((data) => {
+        // Se a requisição falhou, data é null: NÃO altera o estado nem apaga o cache
+        if (data === null || !Array.isArray(data)) return;
+
+        // Resposta 200 OK válida: atualiza estado e cache da conta específica (mesmo se data for [] vazio de fato)
+        setMeusAlunos(data);
+        try {
+          localStorage.setItem(userCacheKey, JSON.stringify(data));
+          localStorage.setItem(`${userCacheKey}-meta`, JSON.stringify({ data, ts: Date.now() }));
+        } catch (_) {}
+      })
+      .catch((err) => {
+        console.warn('[selecionar-aluno] Erro de conexão ao buscar alunos:', err);
+      })
+      .finally(() => {
+        setHasFetched(true);
       });
   }, [hydrated, currentUser?.id, respId, emailBusca]);
 

@@ -13,8 +13,30 @@ import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-/** Client autenticado — respeita Row Level Security. Use na maioria das API routes. */
-export async function createProtectedClient() {
+/** Client autenticado — respeita Row Level Security. Suporta Bearer Token (mobile) ou cookies (web). */
+export async function createProtectedClient(bearerToken?: string) {
+  if (bearerToken) {
+    return createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${bearerToken}`
+          },
+          fetch: (url, options) => {
+            return fetch(url, { ...options, cache: 'no-store' })
+          }
+        },
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false
+        }
+      }
+    )
+  }
+
   const cookieStore = await cookies()
   
   return createServerClient(
@@ -34,10 +56,10 @@ export async function createProtectedClient() {
               }
               const sessionOptions = { ...options };
               
-              // Unconditionally keep the user connected for 1 year
-              const expires = new Date();
-              expires.setFullYear(expires.getFullYear() + 1);
-              sessionOptions.maxAge = 315360000;
+              // 1 ano (365 dias) — seguro contra overflow de 32 bits (RFC 6265bis)
+              const SAFE_SESSION_SECONDS = 31536000;
+              const expires = new Date(Date.now() + SAFE_SESSION_SECONDS * 1000);
+              sessionOptions.maxAge = SAFE_SESSION_SECONDS;
               sessionOptions.expires = expires;
               
               cookieStore.set(name, value, sessionOptions)

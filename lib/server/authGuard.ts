@@ -1,20 +1,53 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { createProtectedClient } from './supabaseServerFactory'
 
 /**
  * Utilitário para proteger rotas de API.
- * Verifica o cookie de sessão httpOnly. Se não houver sessão válida, retorna uma resposta de erro.
- * Se houver sessão, retorna o usuário.
+ * Suporta tanto Header Authorization: Bearer <token> (Mobile) quanto cookies de sessão (Web).
  * 
  * Uso em rotas de API:
  * ```ts
- * const { user, errorResponse } = await requireAuth()
+ * const { user, errorResponse } = await requireAuth(request)
  * if (errorResponse) return errorResponse
  * // Acesso seguro: user está autenticado
  * ```
  */
-export async function requireAuth() {
+export async function requireAuth(req?: Request) {
+  let authHeader: string | null = null;
+  if (req && 'headers' in req) {
+    authHeader = req.headers.get('authorization');
+  } else {
+    try {
+      const h = await headers();
+      authHeader = h.get('authorization');
+    } catch {}
+  }
+
+  const hasBearer = authHeader ? authHeader.toLowerCase().startsWith('bearer ') : false;
+  const bearerToken = hasBearer ? authHeader!.substring(7).trim() : null;
+
+  // 1. Se o Bearer token foi fornecido explicitamente:
+  if (bearerToken) {
+    const supabase = await createProtectedClient(bearerToken);
+    try {
+      const res = await supabase.auth.getUser(bearerToken);
+      if (!res.error && res.data?.user) {
+        return { user: res.data.user, errorResponse: null };
+      }
+    } catch {}
+
+    // REGRA DE SEGURANÇA: Se o Bearer falhar, NUNCA assume silenciosamente uma identidade presente no cookie!
+    return {
+      user: null,
+      errorResponse: NextResponse.json(
+        { error: 'Não autorizado. Token expirado ou inválido.', code: 'token_expired' },
+        { status: 401, headers: { 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
+      )
+    };
+  }
+
+  // 2. Fluxo tradicional por cookies de sessão para requisições web/SSR:
   const supabase = await createProtectedClient()
   
   let user = null;

@@ -73,6 +73,9 @@ export async function middleware(request: NextRequest) {
     request: { headers: request.headers },
   })
 
+  // 365 dias (1 ano) em segundos — dentro do padrão RFC 6265bis e sem overflow de 32 bits
+  const SAFE_SESSION_SECONDS = 31536000;
+
   // Cria cliente Supabase SSR no edge — lê/escreve cookies da requisição
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -83,7 +86,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          // Escreve cookies novos na response (token refresh)
+          // Escreve cookies novos na response (token refresh para navegação web)
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
@@ -94,10 +97,8 @@ export async function middleware(request: NextRequest) {
               return
             }
             const sessionOptions = { ...options };
-            // Preserva sessão permanente/vitalícia com rolagem contínua
-            const INFINITE_SESSION_SECONDS = 3153600000;
-            const expires = new Date(Date.now() + INFINITE_SESSION_SECONDS * 1000);
-            sessionOptions.maxAge = INFINITE_SESSION_SECONDS;
+            const expires = new Date(Date.now() + SAFE_SESSION_SECONDS * 1000);
+            sessionOptions.maxAge = SAFE_SESSION_SECONDS;
             sessionOptions.expires = expires;
             sessionOptions.path = options?.path || '/';
             sessionOptions.sameSite = options?.sameSite || 'lax';
@@ -108,36 +109,83 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // PERFORMANCE & RESILIÊNCIA: Timeout de 8s para evitar falsos negativos em conexões móveis (3G/4G).
+  // ── 1. Verificação de Autenticação com Bearer Token (Mobile / API Clients) ──
+  const authHeader = request.headers.get('authorization')
+  const hasBearer = authHeader ? authHeader.toLowerCase().startsWith('bearer ') : false
+  const bearerToken = hasBearer ? authHeader!.substring(7).trim() : null
+
   let user = null
   let isTransientError = false
-  try {
-    const userPromise = supabase.auth.getUser()
-    const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
-      setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 8000)
-    )
-    const { data, error } = await Promise.race([userPromise, timeoutPromise])
-    if (!error && data?.user) {
-      user = data.user
-    } else if (error) {
-      const errMsg = (error.message || '').toLowerCase()
-      if (
-        errMsg.includes('timeout') ||
-        errMsg.includes('fetch') ||
-        errMsg.includes('network') ||
-        (error as any).name === 'AuthRetryableFetchError'
-      ) {
-        isTransientError = true
+
+  if (bearerToken) {
+    // REGRA DE SEGURANÇA: Se o Bearer foi fornecido explicitamente, ele é a credencial autoritativa.
+    // NUNCA assume silenciosamente identidade do cookie se o Bearer falhar.
+    try {
+      const userPromise = supabase.auth.getUser(bearerToken)
+      const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
+        setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 8000)
+      )
+      const { data, error } = await Promise.race([userPromise, timeoutPromise])
+      if (!error && data?.user) {
+        user = data.user
+      } else if (error) {
+        const errMsg = (error.message || '').toLowerCase()
+        if (
+          errMsg.includes('timeout') ||
+          errMsg.includes('fetch') ||
+          errMsg.includes('network') ||
+          (error as any).name === 'AuthRetryableFetchError'
+        ) {
+          isTransientError = true
+        }
       }
+    } catch (err: any) {
+      isTransientError = true
     }
-  } catch (err: any) {
-    isTransientError = true
-    if (!err?.message?.includes('Refresh Token') && err?.code !== 'refresh_token_not_found') {
-      console.warn('[Middleware Auth Warning]', err)
+
+    // Se o Bearer token for inválido ou expirado, rejeita com 401 imediato sem rotacionar no servidor
+    if (!user) {
+      if (isTransientError) {
+        return NextResponse.json(
+          { error: 'Serviço de autenticação temporariamente indisponível.', isNetworkError: true },
+          { status: 503 }
+        )
+      }
+      return NextResponse.json(
+        { error: 'Não autorizado. Token expirado ou inválido.', code: 'token_expired' },
+        { status: 401, headers: { 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
+      )
+    }
+  } else {
+    // ── 2. Fluxo Tradicional por Cookies (Navegação Web / SSR) ──
+    try {
+      const userPromise = supabase.auth.getUser()
+      const timeoutPromise = new Promise<{ data: { user: any }, error?: any }>(res =>
+        setTimeout(() => res({ data: { user: null }, error: new Error('TIMEOUT') }), 8000)
+      )
+      const { data, error } = await Promise.race([userPromise, timeoutPromise])
+      if (!error && data?.user) {
+        user = data.user
+      } else if (error) {
+        const errMsg = (error.message || '').toLowerCase()
+        if (
+          errMsg.includes('timeout') ||
+          errMsg.includes('fetch') ||
+          errMsg.includes('network') ||
+          (error as any).name === 'AuthRetryableFetchError'
+        ) {
+          isTransientError = true
+        }
+      }
+    } catch (err: any) {
+      isTransientError = true
+      if (!err?.message?.includes('Refresh Token') && err?.code !== 'refresh_token_not_found') {
+        console.warn('[Middleware Auth Warning]', err)
+      }
     }
   }
 
-  // ── Sem sessão no Edge ──────────────────────────────────────────────────
+  // ── Sem sessão no Edge (após verificação de cookies) ─────────────────────
   if (!user) {
     if (pathname.startsWith('/api/')) {
       if (isTransientError) {
