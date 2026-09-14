@@ -2336,7 +2336,24 @@ export default function AlunosPage() {
                           const hList = aluno.historicoTurmas || aluno.dados?.historicoTurmas || [];
                           const activeHist = hList.length > 0 ? hList[hList.length - 1] : null;
                           const isIntegralInt = activeHist?.isIntegralIntermediario || activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' || aluno.dados?.isIntegralIntermediario || aluno.turma_nome?.includes('INTEGRAL/INTERMEDIÁRIO');
-                          const turmaNome = aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma;
+                          let turmaNome = aluno.turma_nome || todasTurmas.find((t: any) => String(t.id) === String(aluno.turma))?.nome || aluno.turma;
+
+                          if (isIntegralInt && !String(turmaNome || '').toUpperCase().includes('INTEGRAL') && !String(turmaNome || '').toUpperCase().includes('INTERMEDIÁRIO')) {
+                            const sName = aluno.serie || activeHist?.serie || aluno.dados?.serie || '';
+                            const cleanS = cleanName(sName);
+                            const intTurma = todasTurmas.find((t: any) => {
+                              const isTInt = String(t.nome || '').toLowerCase().includes('integral') ||
+                                             String(t.nome || '').toLowerCase().includes('intermediario') ||
+                                             String(t.turno || '').toLowerCase().includes('integral') ||
+                                             String(t.turno || '').toLowerCase().includes('intermediario');
+                              if (!isTInt) return false;
+                              const tSerie = cleanName(t.dados?.serie || t.serie || '');
+                              return cleanS && tSerie === cleanS;
+                            });
+                            if (intTurma) {
+                              turmaNome = intTurma.nome;
+                            }
+                          }
 
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -3416,8 +3433,46 @@ export default function AlunosPage() {
                               e.preventDefault();
                               const newHist = [...formData.historicoTurmas];
                               const isSel = newHist[index].isIntegralIntermediario || newHist[index].modalidade === 'INTEGRAL/INTERMEDIÁRIO';
-                              newHist[index].isIntegralIntermediario = !isSel;
-                              newHist[index].modalidade = !isSel ? 'INTEGRAL/INTERMEDIÁRIO' : '';
+                              const turningOn = !isSel;
+                              newHist[index].isIntegralIntermediario = turningOn;
+                              newHist[index].modalidade = turningOn ? 'INTEGRAL/INTERMEDIÁRIO' : '';
+
+                              // Se ativou Integral, trocar automaticamente a turma para a turma de Integral/Intermediário da série
+                              const curSerie = newHist[index].serie;
+                              const cleanCurSerie = cleanName(curSerie || '');
+
+                              if (turningOn) {
+                                const intTurma = todasTurmas.find((t: any) => {
+                                  const isTInt = String(t.nome || '').toLowerCase().includes('integral') ||
+                                                 String(t.nome || '').toLowerCase().includes('intermediario') ||
+                                                 String(t.turno || '').toLowerCase().includes('integral') ||
+                                                 String(t.turno || '').toLowerCase().includes('intermediario');
+                                  if (!isTInt) return false;
+                                  const tSerie = cleanName(t.dados?.serie || t.serie || '');
+                                  return cleanCurSerie && tSerie === cleanCurSerie;
+                                });
+                                if (intTurma) {
+                                  newHist[index].serieTurma = String(intTurma.id);
+                                  if (intTurma.segmento || intTurma.dados?.segmento) {
+                                    newHist[index].segmento = intTurma.segmento || intTurma.dados?.segmento;
+                                  }
+                                }
+                              } else {
+                                // Se desativou Integral, trocar de volta para a turma regular da série
+                                const regTurma = todasTurmas.find((t: any) => {
+                                  const isTInt = String(t.nome || '').toLowerCase().includes('integral') ||
+                                                 String(t.nome || '').toLowerCase().includes('intermediario') ||
+                                                 String(t.turno || '').toLowerCase().includes('integral') ||
+                                                 String(t.turno || '').toLowerCase().includes('intermediario');
+                                  if (isTInt) return false;
+                                  const tSerie = cleanName(t.dados?.serie || t.serie || '');
+                                  return cleanCurSerie && tSerie === cleanCurSerie;
+                                });
+                                if (regTurma) {
+                                  newHist[index].serieTurma = String(regTurma.id);
+                                }
+                              }
+
                               setFormData(prev => ({ ...prev, historicoTurmas: newHist }));
                             }}
                             style={{
