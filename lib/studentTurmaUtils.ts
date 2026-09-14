@@ -301,10 +301,10 @@ export function getAlunoTodasTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
     }
   }
 
-  // 4. historicoTurmas & turmasAdicionais
-  const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
-  if (Array.isArray(hist)) {
-    hist.forEach((ht: any) => {
+  // 4. historicoTurmas (apenas vínculos ativos do ano) & turmasAdicionais
+  const vinculosAtivos = getAlunoVinculosAtivos(aluno, anoLetivo)
+  if (Array.isArray(vinculosAtivos)) {
+    vinculosAtivos.forEach((ht: any) => {
       if (!ht || ht.status === 'Inativo') return
       if (ht.serieTurma) result.add(String(ht.serieTurma).trim())
       if (ht.turma) result.add(String(ht.turma).trim())
@@ -490,9 +490,25 @@ export function isTurmaOrGroupMatch(
   // 3. Shift conflict check!
   const studentTurnos = getAlunoTurnosAtivos(aluno, turmas, grupos, anoLetivo)
 
-  const isTargetVespertino = targetNorm.includes('vespertino') || targetNorm.includes('tarde')
-  const isTargetMatutino = targetNorm.includes('matutino') || targetNorm.includes('manha')
-  const isTargetNoturno = targetNorm.includes('noturno') || targetNorm.includes('noite')
+  // Resolve matchedTurma / matchedGroup to check shift even if target is numeric code or ID
+  const matchedTurmaObj = Array.isArray(turmas)
+    ? turmas.find(t => t && (String(t.id) === rawTarget || String(t.codigo) === rawTarget || normalizeTurmaText(t.nome) === targetNorm))
+    : null
+  const matchedGroupObj = Array.isArray(grupos)
+    ? grupos.find(g => g && (String(g.id) === rawTarget || String(g.syncId) === rawTarget || normalizeTurmaText(g.nome || g.dados?.nome) === targetNorm))
+    : null
+
+  const isTargetVespertino = targetNorm.includes('vespertino') || targetNorm.includes('tarde') ||
+    Boolean(matchedTurmaObj && normalizeTurmaText(matchedTurmaObj.turno || matchedTurmaObj.dados?.turno || matchedTurmaObj.nome).includes('vespertino')) ||
+    Boolean(matchedGroupObj && normalizeTurmaText(matchedGroupObj.nome || matchedGroupObj.dados?.nome).includes('vespertino'))
+
+  const isTargetMatutino = targetNorm.includes('matutino') || targetNorm.includes('manha') ||
+    Boolean(matchedTurmaObj && normalizeTurmaText(matchedTurmaObj.turno || matchedTurmaObj.dados?.turno || matchedTurmaObj.nome).includes('matutino')) ||
+    Boolean(matchedGroupObj && normalizeTurmaText(matchedGroupObj.nome || matchedGroupObj.dados?.nome).includes('matutino'))
+
+  const isTargetNoturno = targetNorm.includes('noturno') || targetNorm.includes('noite') ||
+    Boolean(matchedTurmaObj && normalizeTurmaText(matchedTurmaObj.turno || matchedTurmaObj.dados?.turno || matchedTurmaObj.nome).includes('noturno')) ||
+    Boolean(matchedGroupObj && normalizeTurmaText(matchedGroupObj.nome || matchedGroupObj.dados?.nome).includes('noturno'))
 
   // If candidate specifies vespertino and student is NOT vespertino -> STRICT REJECTION
   if (isTargetVespertino && !studentTurnos.has('vespertino')) {
@@ -621,10 +637,10 @@ export function getAlunoNomesTurmasEGrupos(aluno: any, turmas: any[] = [], grupo
     namesSet.add(String(aluno.dados.turma_nome).trim())
   }
 
-  // 4. historicoTurmas & turmas adicionais (ex: Integral)
-  const hist = aluno.historicoTurmas || aluno.dados?.historicoTurmas
-  if (Array.isArray(hist)) {
-    hist.forEach((ht: any) => {
+  // 4. historicoTurmas (apenas vínculos ativos do ano) & turmas adicionais (ex: Integral)
+  const vinculosAtivos = getAlunoVinculosAtivos(aluno, anoLetivo)
+  if (Array.isArray(vinculosAtivos)) {
+    vinculosAtivos.forEach((ht: any) => {
       if (!ht || ht.status === 'Inativo') return
       const htName = ht.serieTurma || ht.turma || ht.nome
       if (htName && isNaN(Number(htName)) && !/^[0-9a-fA-F-]{10,}$/.test(htName)) {

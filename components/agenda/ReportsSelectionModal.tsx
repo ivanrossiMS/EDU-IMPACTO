@@ -411,14 +411,6 @@ export function ReportsSelectionModal({
       ? String(selectedTurma.ano)
       : (selectedTurma.anoLetivo || selectedTurma.ano_letivo || selectedTurma.dados?.anoLetivo || year || String(new Date().getFullYear()))
 
-    // Alunos diretos do objeto da turma (ex: grupo da Agenda Digital que tem alunosIds)
-    let directAlunosIds: string[] = []
-    let tAlunos = selectedTurma.alunosIds || selectedTurma.dados?.alunosIds || []
-    if (typeof tAlunos === 'string') {
-      try { tAlunos = JSON.parse(tAlunos) } catch { tAlunos = [] }
-    }
-    if (Array.isArray(tAlunos)) directAlunosIds = tAlunos.map(String)
-
     // 1. Procura grupo espelhado em agenda/grupos (sync-{id}, id ou mesmo nome)
     const syncGroup = (gruposManuais || []).find((g: any) => {
       const gSync = g.syncId || (String(g.id).startsWith('sync-') ? g.id : '')
@@ -430,48 +422,42 @@ export function ReportsSelectionModal({
       )
     })
 
-    let extraAlunosIds: string[] = []
-    if (syncGroup) {
+    const tNomeLower = String(selectedTurma.nome || '').trim().toLowerCase()
+    const rawTurmaId = selectedTurma.rawId ? String(selectedTurma.rawId) : (tIdStr.startsWith('sync-') ? tIdStr.replace(/^sync-/, '') : tIdStr)
+
+    // Localiza a turma correspondente no ERP
+    const turmaERP = (turmas || []).find((t: any) => 
+      String(t.id) === tIdStr || 
+      String(t.id) === rawTurmaId || 
+      (syncGroup?.syncId && (syncGroup.syncId === `sync-${t.id}` || syncGroup.id === `sync-${t.id}`)) || 
+      (selectedTurma?.syncId && (selectedTurma.syncId === `sync-${t.id}` || selectedTurma.id === `sync-${t.id}`)) ||
+      String(t.nome).trim().toLowerCase() === tNomeLower || 
+      (syncGroup && String(t.nome).trim().toLowerCase() === String(syncGroup.nome || '').trim().toLowerCase())
+    )
+
+    // Se for grupo puramente manual sem turma no ERP
+    let manualGroupAlunosIds: string[] = []
+    if (syncGroup && !turmaERP) {
       let aIds = syncGroup.alunosIds || syncGroup.dados?.alunosIds || []
       if (typeof aIds === 'string') {
         try { aIds = JSON.parse(aIds) } catch { aIds = [] }
       }
-      if (Array.isArray(aIds)) extraAlunosIds = aIds.map(String)
+      if (Array.isArray(aIds)) manualGroupAlunosIds = aIds.map(String)
     }
-
-    const tIdLower = tIdStr.toLowerCase()
-    const tNomeLower = String(selectedTurma.nome || '').trim().toLowerCase()
-    const tCodLower = String(selectedTurma.codigo || '').trim().toLowerCase()
 
     return (alunos || []).filter((a: any) => {
       const aIdStr = String(a.id)
 
-      // Se constar nos alunos vinculados diretos do grupo ou do grupo espelhado
-      if (directAlunosIds.includes(aIdStr) || extraAlunosIds.includes(aIdStr)) return true
-
-      // Regra oficial de matricula cursando (inclui Dual-Enrollment de Integral/Intermediário!)
-      if (isAlunoCursandoTurma(a, selectedTurma, tAno, turmas)) return true
-
-      // Vínculos diretos nas propriedades do aluno
-      const directTurma = String(a.turma || '').trim().toLowerCase()
-      const directTurmaId = String((a as any).turmaId || '').trim().toLowerCase()
-      if (directTurma && (directTurma === tIdLower || directTurma === tNomeLower || (tCodLower && directTurma === tCodLower))) return true
-      if (directTurmaId && (directTurmaId === tIdLower || directTurmaId === tNomeLower || (tCodLower && directTurmaId === tCodLower))) return true
-
-      // Histórico de turmas
-      const hist = a.historicoTurmas || a.dados?.historicoTurmas
-      if (Array.isArray(hist)) {
-        const matchesHist = hist.some((h: any) => {
-          if (!h || h.status === 'Inativo') return false
-          const hYear = String(h.anoLetivo || h.ano || '').trim()
-          if (tAno && hYear && hYear !== tAno) return false
-          const hTurma = String(h.serieTurma || h.turma || h.nome || '').trim().toLowerCase()
-          return hTurma === tIdLower || hTurma === tNomeLower || (tCodLower && hTurma === tCodLower)
-        })
-        if (matchesHist) return true
+      // Regra oficial de matricula cursando no ERP (inclui Dual-Enrollment de Integral/Intermediário)
+      if (turmaERP) {
+        return isAlunoCursandoTurma(a, turmaERP, tAno || turmaERP?.ano, turmas)
       }
 
-      return false
+      // Grupo manual: membros explícitos adicionados ao grupo
+      if (manualGroupAlunosIds.includes(aIdStr)) return true
+
+      // Fallback para turma/grupo digital não mapeado no ERP
+      return isAlunoCursandoTurma(a, selectedTurma, tAno, turmas)
     })
   }, [alunos, gruposManuais, turmas])
 
@@ -523,13 +509,20 @@ export function ReportsSelectionModal({
 
         resolved = (alunos || []).filter(a => {
            if (directStudentIds.has(String(a.id))) return true;
+           let matchedAnyTurma = false;
            for (const tc of Array.from(targetedClasses)) {
-             const tObj = turmas.find((t: any) => String(t.id).toLowerCase() === tc || String(t.codigo).toLowerCase() === tc || String(t.nome).trim().toLowerCase() === tc)
-             if (tObj && isAlunoCursandoTurma(a, tObj, tObj.ano || filterYear, turmas)) return true
+              const tObj = turmas.find((t: any) => String(t.id).toLowerCase() === tc || String(t.codigo).toLowerCase() === tc || String(t.nome).trim().toLowerCase() === tc)
+              if (tObj) {
+                matchedAnyTurma = true;
+                if (isAlunoCursandoTurma(a, tObj, tObj.ano || filterYear, turmas)) return true;
+              }
            }
-           const tRefLower = String(a.turma || '').trim().toLowerCase();
-           const tIdLower = String((a as any).turmaId || '').trim().toLowerCase();
-           return validTurmaRefs.has(tRefLower) || validTurmaRefs.has(tIdLower);
+           if (!matchedAnyTurma && targetedClasses.size > 0) {
+             const tRefLower = String(a.turma || '').trim().toLowerCase();
+             const tIdLower = String((a as any).turmaId || '').trim().toLowerCase();
+             return validTurmaRefs.has(tRefLower) || validTurmaRefs.has(tIdLower);
+           }
+           return false;
         })
       }
 

@@ -66,29 +66,47 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
 
   const targetedStudents = useMemo(() => {
     if (!payload || !alunos) return [];
+
+    // Resolve target turma if available
+    const tTarget = payload.turmaId ? String(payload.turmaId).trim().toLowerCase() : '';
+    const cleanTargetId = tTarget.replace(/^sync-/, '');
+    const targetTurmaObj = tTarget
+      ? (turmas || []).find((t: any) => 
+          String(t.id).toLowerCase() === tTarget || 
+          String(t.id).toLowerCase() === cleanTargetId ||
+          String(t.codigo || '').toLowerCase() === tTarget || 
+          String(t.codigo || '').toLowerCase() === cleanTargetId ||
+          String(t.nome || '').trim().toLowerCase() === tTarget ||
+          (payload.turmaName && String(t.nome || '').trim().toLowerCase() === String(payload.turmaName).trim().toLowerCase())
+        )
+      : null;
+
     if (payload.studentIds && payload.studentIds.length > 0) {
       const idSet = new Set(payload.studentIds.map((id: any) => String(id)));
-      return alunos.filter(a => idSet.has(String(a.id)));
-    }
-    if (payload.turmaId) {
-      const tTarget = String(payload.turmaId).trim().toLowerCase();
-      const targetTurmaObj = turmas?.find((t: any) => 
-        String(t.id).toLowerCase() === tTarget || 
-        String(t.codigo || '').toLowerCase() === tTarget || 
-        String(t.nome || '').trim().toLowerCase() === tTarget
-      );
-
       return alunos.filter(a => {
-        if (targetTurmaObj && isAlunoCursandoTurma(a, targetTurmaObj, targetTurmaObj.ano, turmas)) {
-          return true;
+        if (!idSet.has(String(a.id))) return false;
+        // Se a turma alvo é conhecida, valida se o aluno de fato a cursa (evita divergências de histórico/turno de payloads legados)
+        if (targetTurmaObj) {
+          return isAlunoCursandoTurma(a, targetTurmaObj, targetTurmaObj.ano, turmas);
         }
+        return true;
+      });
+    }
+
+    if (targetTurmaObj) {
+      return alunos.filter(a => isAlunoCursandoTurma(a, targetTurmaObj, targetTurmaObj.ano, turmas));
+    }
+
+    if (tTarget) {
+      return alunos.filter(a => {
         const refs = [String(a.turma || '').trim(), String((a as any).turmaId || '').trim()].filter(Boolean);
         return refs.some(tRef => {
           const tRefLower = tRef.toLowerCase();
-          return tRefLower === tTarget || (targetTurmaObj && (String(targetTurmaObj.id).toLowerCase() === tRefLower || String(targetTurmaObj.codigo || '').toLowerCase() === tRefLower || String(targetTurmaObj.nome || '').trim().toLowerCase() === tRefLower));
+          return tRefLower === tTarget || tRefLower === cleanTargetId;
         });
       });
     }
+
     return [];
   }, [payload, alunos, turmas]);
 
