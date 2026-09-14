@@ -416,7 +416,7 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     segmento: 'Educação Infantil',
     mensalidadeBase: 1230.00,
     anuidadeBase: 14760.00,
-    taxaMaterial: 1285.00,
+    taxaMaterial: 1365.00,
     taxaMaterialDesc: 'Livros didáticos + LIV (Nível 3 ao Nível 5)'
   },
   {
@@ -426,7 +426,7 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
     segmento: 'Fundamental I',
     mensalidadeBase: 1230.00,
     anuidadeBase: 14760.00,
-    taxaMaterial: 1585.00,
+    taxaMaterial: 1665.00,
     taxaMaterialDesc: 'Livros didáticos + LIV (1º ao 5º ano)'
   },
   {
@@ -547,8 +547,8 @@ const MAX_PARCELAS_MATERIAL = 10
 const OPCOES_MATERIAIS: MaterialOption[] = [
   { id: 'mat-n1', nome: 'Taxa de Material (Nível 1)', segmento: 'Nível 1/Nivel 2 • Berçário (N1)', valor: 480.00, tipo: 'anual' },
   { id: 'mat-n2', nome: 'Livros didáticos (Nível 2)', segmento: 'Nível 1/Nivel 2 • Maternal (N2)', valor: 600.00, tipo: 'anual' },
-  { id: 'mat-n3-n5', nome: 'Livros didáticos + LIV (Nível 3 ao Nível 5)', segmento: 'Nível 3 ao Nível 5 (Educação Infantil)', valor: 1285.00, tipo: 'anual' },
-  { id: 'mat-fund1', nome: 'Livros didáticos + LIV (1º ao 5º ano)', segmento: '1º ao 5º ano (Ensino Fundamental I)', valor: 1585.00, tipo: 'anual' },
+  { id: 'mat-n3-n5', nome: 'Livros didáticos + LIV (Nível 3 ao Nível 5)', segmento: 'Nível 3 ao Nível 5 (Educação Infantil)', valor: 1365.00, tipo: 'anual' },
+  { id: 'mat-fund1', nome: 'Livros didáticos + LIV (1º ao 5º ano)', segmento: '1º ao 5º ano (Ensino Fundamental I)', valor: 1665.00, tipo: 'anual' },
   { id: 'mat-fund2', nome: 'Apostilas (6º ao 9º ano)', segmento: '6º ao 9º ano (Ensino Fundamental II)', valor: 1985.00, tipo: 'anual' },
   { id: 'mat-medio', nome: 'Apostilas (1ª a 3ª série - Ensino Médio)', segmento: 'Ensino Médio (1ª a 3ª série)', valor: 2150.00, tipo: 'anual' },
 ]
@@ -580,8 +580,8 @@ const SERVICOS_ADICIONAIS = {
   // Serviços de Material e Livros Didáticos Oficiais
   taxaMaterialNivel1: 480.00,
   livrosDidaticosNivel2: 600.00,
-  livrosDidaticosLIVNivel3a5: 1285.00,
-  livrosDidaticosLIVFund1: 1585.00,
+  livrosDidaticosLIVNivel3a5: 1365.00,
+  livrosDidaticosLIVFund1: 1665.00,
   apostilasFund2: 1985.00,
   apostilasEnsinoMedio: 2150.00,
   tabelaServicosMateriais: OPCOES_MATERIAIS

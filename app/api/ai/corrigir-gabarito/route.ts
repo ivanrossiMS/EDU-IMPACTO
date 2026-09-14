@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { GoogleGenAI, Type, Schema } from '@google/genai'
+import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: Request) {
   try {
-    const { imageBase64, mimeType, gabaritoOficial } = await request.json()
+    const { imageBase64, mimeType, gabaritoOficial, simuladoUploadId, nomeAluno } = await request.json()
 
     if (!imageBase64 || !gabaritoOficial) {
       return NextResponse.json({ error: 'Imagem e gabarito oficial são obrigatórios.' }, { status: 400 })
@@ -154,13 +155,47 @@ Retorne um JSON com o array de respostas para exatamente as ${totalQuestoes} que
 
     const percentual = totalQuestoes > 0 ? Math.round((acertos / totalQuestoes) * 10000) / 100 : 0
 
+    // Upload image to Supabase Storage so it is permanently attached to the student's correction
+    let imagemUrl: string | null = null
+    try {
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
+        const supabaseAdmin = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL,
+          process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        )
+        const buffer = Buffer.from(imageBase64, 'base64')
+        const ext = (mimeType || 'image/jpeg').includes('png') ? 'png' : 'jpg'
+        const safeName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${ext}`
+        const storagePath = `gabaritos-respostas/${simuladoUploadId || 'geral'}/${safeName}`
+
+        const { error: uploadErr } = await supabaseAdmin.storage
+          .from('simulados-arquivos')
+          .upload(storagePath, buffer, {
+            contentType: mimeType || 'image/jpeg',
+            upsert: true
+          })
+
+        if (!uploadErr) {
+          const { data: pubData } = supabaseAdmin.storage
+            .from('simulados-arquivos')
+            .getPublicUrl(storagePath)
+          imagemUrl = pubData.publicUrl
+        } else {
+          console.warn('[corrigir-gabarito] Aviso ao salvar imagem no storage:', uploadErr.message)
+        }
+      }
+    } catch (storageErr: any) {
+      console.warn('[corrigir-gabarito] Erro no upload para storage:', storageErr.message)
+    }
+
     return NextResponse.json({
       respostasAluno,
       resultadoDetalhado,
       totalQuestoes,
       totalAcertos: acertos,
       totalAnuladas: anuladas,
-      percentual
+      percentual,
+      imagemUrl
     })
   } catch (err: any) {
     console.error('[corrigir-gabarito] Erro:', err)

@@ -6,7 +6,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Printer, CheckSquare, Layers, Calendar, Users, FileText,
   Upload, Camera, ScanLine, User, Trophy, AlertCircle, ChevronDown,
-  ChevronUp, Loader2, CheckCircle, XCircle, BarChart3, BookOpen, Trash2, Edit3
+  ChevronUp, Loader2, CheckCircle, XCircle, BarChart3, BookOpen, Trash2, Edit3,
+  Eye, ExternalLink, Download, Paperclip
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
@@ -24,6 +25,7 @@ interface Correcao {
   percentual_acerto: number
   respostas_aluno: { numero: number; resposta: string | null; detalhe?: string }[]
   gabarito_oficial: { numero: number; resposta: string }[]
+  imagem_url?: string | null
   created_at: string
 }
 
@@ -49,6 +51,7 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
   const [correcoes, setCorrecoes] = useState<Correcao[]>([])
   const [loadingCorrecoes, setLoadingCorrecoes] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [visualizandoArquivo, setVisualizandoArquivo] = useState<{ url: string; alunoNome: string } | null>(null)
   const [editingQuestion, setEditingQuestion] = useState<{
     correcaoId: string
     numero: number
@@ -255,13 +258,19 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
       const res = await fetch('/api/ai/corrigir-gabarito', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: imagemBase64, mimeType: imagemMime, gabaritoOficial })
+        body: JSON.stringify({
+          imageBase64: imagemBase64,
+          mimeType: imagemMime,
+          gabaritoOficial,
+          simuladoUploadId,
+          nomeAluno: nomeAluno.trim()
+        })
       })
 
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || 'Erro ao processar a imagem.')
 
-      // Save to DB
+      // Save to DB (including permanent image attachment)
       await (supabase as any).from('gabarito_correcoes').insert({
         id_simulado_upload: simuladoUploadId,
         nome_aluno: nomeAluno.trim(),
@@ -270,6 +279,7 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
         total_questoes: result.totalQuestoes,
         total_acertos: result.totalAcertos,
         percentual_acerto: result.percentual,
+        imagem_url: result.imagemUrl || null,
       })
 
       // Close upload modal, switch to results tab
@@ -669,7 +679,34 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                           </div>
 
                           {/* Actions */}
-                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
+                            {c.imagem_url && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setVisualizandoArquivo({ url: c.imagem_url!, alunoNome: c.nome_aluno })
+                                }}
+                                title="Ver folha/gabarito respondido pelo aluno"
+                                style={{
+                                  height: 34,
+                                  padding: '0 10px',
+                                  borderRadius: 8,
+                                  background: 'rgba(99,102,241,0.1)',
+                                  border: '1.5px solid rgba(99,102,241,0.25)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  cursor: 'pointer',
+                                  color: '#6366f1',
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <Paperclip size={14} />
+                                <span style={{ display: isMobile ? 'none' : 'inline' }}>Anexo</span>
+                              </button>
+                            )}
                             <button onClick={() => setExpandedId(isExpanded ? null : c.id)} style={{ width: 34, height: 34, borderRadius: 8, background: '#ffffff', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}>
                               {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                             </button>
@@ -690,6 +727,51 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                               style={{ overflow: 'hidden' }}
                             >
                               <div style={{ borderTop: '1px solid #e2e8f0', padding: '16px 20px', background: '#ffffff' }}>
+                                {c.imagem_url && (
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.06))',
+                                    border: '1px solid rgba(99,102,241,0.2)',
+                                    borderRadius: 12,
+                                    padding: '10px 14px',
+                                    marginBottom: 16,
+                                    gap: 12,
+                                    flexWrap: 'wrap'
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                      <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                        <Paperclip size={16} color="#6366f1" />
+                                      </div>
+                                      <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Gabarito Original Anexado</div>
+                                        <div style={{ fontSize: 11, color: '#64748b' }}>Foto enviada salva permanentemente nesta correção</div>
+                                      </div>
+                                    </div>
+                                    <button
+                                      onClick={() => setVisualizandoArquivo({ url: c.imagem_url!, alunoNome: c.nome_aluno })}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                        padding: '7px 14px',
+                                        borderRadius: 8,
+                                        background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                                        color: '#ffffff',
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+                                        flexShrink: 0
+                                      }}
+                                    >
+                                      <Eye size={14} /> Abrir Arquivo
+                                    </button>
+                                  </div>
+                                )}
+
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                                   <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                                     Detalhe por questão
@@ -1004,6 +1086,153 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                 </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ===== FILE VIEWER MODAL (Lightbox do Gabarito Respondido) ===== */}
+      <AnimatePresence>
+        {visualizandoArquivo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15,23,42,0.92)',
+              backdropFilter: 'blur(10px)',
+              zIndex: 10002,
+              display: 'flex',
+              flexDirection: 'column',
+              padding: 20
+            }}
+            onClick={(e) => { if (e.target === e.currentTarget) setVisualizandoArquivo(null) }}
+          >
+            {/* Top Toolbar */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              width: '100%',
+              maxWidth: 1000,
+              margin: '0 auto 16px',
+              padding: '12px 18px',
+              background: 'rgba(30,41,59,0.85)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 16,
+              color: '#ffffff',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+              flexWrap: 'wrap',
+              gap: 10
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(99,102,241,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Paperclip size={18} color="#818cf8" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#ffffff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    Folha de Respostas — {visualizandoArquivo.alunoNome}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>Arquivo permanente salvo na correção</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <a
+                  href={visualizandoArquivo.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(255,255,255,0.1)',
+                    color: '#ffffff',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    border: '1px solid rgba(255,255,255,0.15)'
+                  }}
+                >
+                  <ExternalLink size={14} />
+                  <span style={{ display: isMobile ? 'none' : 'inline' }}>Nova Aba</span>
+                </a>
+                <a
+                  href={visualizandoArquivo.url}
+                  download={`gabarito_${visualizandoArquivo.alunoNome.replace(/\s+/g, '_')}.jpg`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(99,102,241,0.25)',
+                    color: '#a5b4fc',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textDecoration: 'none',
+                    border: '1px solid rgba(99,102,241,0.4)'
+                  }}
+                >
+                  <Download size={14} />
+                  <span style={{ display: isMobile ? 'none' : 'inline' }}>Baixar</span>
+                </a>
+                <button
+                  onClick={() => setVisualizandoArquivo(null)}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: 'rgba(239,68,68,0.2)',
+                    border: '1px solid rgba(239,68,68,0.4)',
+                    color: '#f87171',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Image Preview Container */}
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'auto',
+                maxWidth: 1000,
+                width: '100%',
+                margin: '0 auto',
+                borderRadius: 16,
+                background: 'rgba(0,0,0,0.6)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                padding: 16
+              }}
+              onClick={() => setVisualizandoArquivo(null)}
+            >
+              <img
+                src={visualizandoArquivo.url}
+                alt={`Gabarito de ${visualizandoArquivo.alunoNome}`}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '100%',
+                  objectFit: 'contain',
+                  borderRadius: 12,
+                  boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
