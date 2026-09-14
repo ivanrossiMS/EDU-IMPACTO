@@ -51,7 +51,7 @@ export function ReportsSelectionModal({
   const [dataReferencia, setDataReferencia] = useState<string>(new Date().toISOString().split('T')[0])
 
   const [filterYear, setFilterYear] = useState<string>('')
-  const [filterTurmaId, setFilterTurmaId] = useState<string>('')
+  const [filterTurmaIds, setFilterTurmaIds] = useState<string[]>([])
   
   // Custom selector states
   const [showYearDropdown, setShowYearDropdown] = useState(false)
@@ -340,10 +340,21 @@ export function ReportsSelectionModal({
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
   }, [accessibleTurmas, filterYear])
 
-  // Derived selected turma name
-  const selectedTurmaName = React.useMemo(() => {
-    return availableTurmas.find((t: any) => t.id === filterTurmaId)?.name || ''
-  }, [availableTurmas, filterTurmaId])
+  // Derived selected turma names and summary
+  const selectedTurmaNames = React.useMemo(() => {
+    return filterTurmaIds
+      .map(id => availableTurmas.find((t: any) => t.id === id)?.name)
+      .filter(Boolean) as string[]
+  }, [availableTurmas, filterTurmaIds])
+
+  const selectedTurmaSummary = React.useMemo(() => {
+    if (selectedTurmaNames.length === 0) return ''
+    if (selectedTurmaNames.length === 1) return selectedTurmaNames[0]
+    return `${selectedTurmaNames.length} turmas selecionadas`
+  }, [selectedTurmaNames])
+
+  const selectedTurmaName = selectedTurmaSummary
+  const filterTurmaId = filterTurmaIds[0] || ''
 
   // Formata o item da turma de forma leve, compacta e sem redundâncias
   const formatTurmaDisplay = React.useCallback((rawName: string) => {
@@ -352,28 +363,50 @@ export function ReportsSelectionModal({
     let badgeText = ''
     let badgeStyle = { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' }
 
-    if (name.includes(' - ')) {
-      const parts = name.split(' - ')
-      main = parts[0].trim()
-      badgeText = parts.slice(1).join(' - ').trim()
-    } else if (name.includes(' – ')) {
-      const parts = name.split(' – ')
-      main = parts[0].trim()
-      badgeText = parts.slice(1).join(' – ').trim()
+    const isShiftWord = (text: string) => {
+      const lower = text.toLowerCase()
+      return (
+        lower.includes('matutino') ||
+        lower.includes('manhã') ||
+        lower.includes('manha') ||
+        lower.includes('vespertino') ||
+        lower.includes('tarde') ||
+        lower.includes('noturno') ||
+        lower.includes('noite') ||
+        lower.includes('integral') ||
+        lower.includes('intermediário') ||
+        lower.includes('intermediario') ||
+        lower.includes('semi-integral') ||
+        lower.includes('parcial')
+      )
     }
 
-    const bLower = (badgeText || name).toLowerCase()
+    const separator = name.includes(' - ') ? ' - ' : (name.includes(' – ') ? ' – ' : null)
+    if (separator) {
+      const parts = name.split(separator).map(p => p.trim()).filter(Boolean)
+      if (parts.length === 2) {
+        main = parts[0]
+        badgeText = parts[1]
+      } else if (parts.length > 2) {
+        if (isShiftWord(parts[parts.length - 1])) {
+          badgeText = parts[parts.length - 1]
+          main = parts.slice(0, parts.length - 1).join(separator)
+        } else {
+          main = parts[0]
+          badgeText = parts.slice(1).join(separator)
+        }
+      }
+    }
+
+    const bLower = (badgeText || '').toLowerCase()
     if (bLower.includes('matutino') || bLower.includes('manhã') || bLower.includes('manha')) {
       badgeStyle = { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' }
-      if (!badgeText) badgeText = 'Matutino'
     } else if (bLower.includes('vespertino') || bLower.includes('tarde')) {
       badgeStyle = { bg: '#fdf4ff', color: '#9333ea', border: '#f0abfc' }
-      if (!badgeText) badgeText = 'Vespertino'
     } else if (bLower.includes('integral') || bLower.includes('intermediário') || bLower.includes('intermediario')) {
       badgeStyle = { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' }
-      if (!badgeText) badgeText = 'Integral'
-    } else if (bLower.includes('médio') || bLower.includes('medio')) {
-      badgeStyle = { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' }
+    } else if (bLower.includes('noturno') || bLower.includes('noite')) {
+      badgeStyle = { bg: '#f8fafc', color: '#334155', border: '#cbd5e1' }
     }
 
     return { main, badgeText, badgeStyle }
@@ -390,7 +423,7 @@ export function ReportsSelectionModal({
         ? currentYearStr
         : (availableYears[0] || '')
       setFilterYear(initialYear)
-      setFilterTurmaId('')
+      setFilterTurmaIds([])
       setShowTurmaModal(false)
       setShowYearDropdown(false)
       document.body.style.overflow = 'hidden'
@@ -461,6 +494,23 @@ export function ReportsSelectionModal({
     })
   }, [alunos, gruposManuais, turmas])
 
+  // Contagem dinâmica de alunos para cada turma disponível
+  const turmaStudentCounts = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    if (!availableTurmas.length) return counts
+
+    availableTurmas.forEach(t => {
+      const fullTurma = accessibleTurmas.find((at: any) => String(at.id) === t.id) || 
+                        (turmas || []).find((erpT: any) => String(erpT.id) === t.id) ||
+                        (gruposManuais || []).find((gm: any) => String(gm.id) === t.id)
+      if (fullTurma) {
+        const studs = resolveTurmaAlunos(fullTurma, filterYear)
+        counts.set(t.id, studs.length)
+      }
+    })
+    return counts
+  }, [availableTurmas, accessibleTurmas, turmas, gruposManuais, filterYear, resolveTurmaAlunos])
+
   // Resolve targeted students when dependencies or filters change
   useEffect(() => {
     if (isOpen) {
@@ -526,37 +576,52 @@ export function ReportsSelectionModal({
         })
       }
 
-      if (filterTurmaId && filterTurmaId !== 'all') {
-        const filterLower = filterTurmaId.trim().toLowerCase();
-        const selectedTurma = accessibleTurmas.find((t: any) => 
-          String(t.id).toLowerCase() === filterLower || 
-          String(t.rawId || '').toLowerCase() === filterLower ||
-          String(t.codigo || '').toLowerCase() === filterLower || 
-          String(t.nome).trim().toLowerCase() === filterLower
-        ) || (turmas || []).find((t: any) => 
-          String(t.id).toLowerCase() === filterLower || 
-          String(t.codigo).toLowerCase() === filterLower || 
-          String(t.nome).trim().toLowerCase() === filterLower
-        ) || (gruposManuais || []).find((g: any) => 
-          String(g.id).toLowerCase() === filterLower || 
-          String(g.syncId || '').toLowerCase() === filterLower ||
-          String(g.nome).trim().toLowerCase() === filterLower
-        );
-        
-        resolved = resolveTurmaAlunos(selectedTurma, filterYear)
+      if (filterTurmaIds.length > 0) {
+        const studentMap = new Map<string, any>()
+        for (const tId of filterTurmaIds) {
+          const filterLower = tId.trim().toLowerCase();
+          const selectedTurma = accessibleTurmas.find((t: any) => 
+            String(t.id).toLowerCase() === filterLower || 
+            String(t.rawId || '').toLowerCase() === filterLower ||
+            String(t.codigo || '').toLowerCase() === filterLower || 
+            String(t.nome).trim().toLowerCase() === filterLower
+          ) || (turmas || []).find((t: any) => 
+            String(t.id).toLowerCase() === filterLower || 
+            String(t.codigo).toLowerCase() === filterLower || 
+            String(t.nome).trim().toLowerCase() === filterLower
+          ) || (gruposManuais || []).find((g: any) => 
+            String(g.id).toLowerCase() === filterLower || 
+            String(g.syncId || '').toLowerCase() === filterLower ||
+            String(g.nome).trim().toLowerCase() === filterLower
+          );
+          
+          if (selectedTurma) {
+            const turmaAlunos = resolveTurmaAlunos(selectedTurma, filterYear)
+            turmaAlunos.forEach(aluno => {
+              if (!studentMap.has(String(aluno.id))) {
+                studentMap.set(String(aluno.id), {
+                  ...aluno,
+                  _turmaOrigemNome: selectedTurma.nome,
+                  _turmaOrigemId: selectedTurma.id
+                })
+              }
+            })
+          }
+        }
+        resolved = Array.from(studentMap.values())
       } else if (propTargetedStudents && propTargetedStudents.length > 0) {
         resolved = propTargetedStudents
       } else if (selectedDest && selectedDest.length > 0) {
         // Se nenhuma turma foi selecionada no modal, mas temos destinatários, 
         // a lista já está filtrada em `resolved`. Não fazemos nada.
       } else {
-        // Se ainda não selecionou a turma e não há destinatários prévios, exibimos 0 alunos
+        // Se ainda não selecionou as turmas e não há destinatários prévios, exibimos 0 alunos
         resolved = []
       }
 
       setTargetedStudents(resolved)
     }
-  }, [isOpen, selectedDest, propTargetedStudents, alunos, turmas, gruposManuais, filterYear, filterTurmaId, accessibleTurmas, availableTurmas, resolveTurmaAlunos])
+  }, [isOpen, selectedDest, propTargetedStudents, alunos, turmas, gruposManuais, filterYear, filterTurmaIds, accessibleTurmas, availableTurmas, resolveTurmaAlunos])
 
   // Set default date when going to step 2
   useEffect(() => {
@@ -574,12 +639,24 @@ export function ReportsSelectionModal({
   const handleFillDirectly = () => {
     if (!selectedTemplate) return
     
+    const validTurmaNames = filterTurmaIds
+      .map(id => availableTurmas.find((t: any) => t.id === id)?.name)
+      .filter(Boolean) as string[]
+
+    const turmaNameSummary = validTurmaNames.length === 1
+      ? validTurmaNames[0]
+      : validTurmaNames.length > 1
+        ? `${validTurmaNames.length} turmas: ${validTurmaNames.join(', ')}`
+        : 'Turma selecionada'
+
     const payload = {
       type: 'report-assignment',
       templateId: selectedTemplate.id,
       templateName: selectedTemplate.name,
-      turmaId: filterTurmaId,
-      turmaName: availableTurmas.find((t: any) => t.id === filterTurmaId)?.name || 'Turma selecionada',
+      turmaId: filterTurmaIds[0] || '',
+      turmaIds: filterTurmaIds,
+      turmaName: turmaNameSummary,
+      turmaNames: validTurmaNames,
       dataReferencia: new Date().toISOString().split('T')[0],
       studentCount: targetedStudents.length,
       studentIds: targetedStudents.map(st => st.id)
@@ -609,7 +686,7 @@ export function ReportsSelectionModal({
     return <IconComp size={size} />
   }
 
-  const isReadyToFill = Boolean(selectedTemplate && filterYear !== '' && filterTurmaId !== '' && targetedStudents.length > 0)
+  const isReadyToFill = Boolean(selectedTemplate && filterYear !== '' && filterTurmaIds.length > 0 && targetedStudents.length > 0)
 
   return (
     <AnimatePresence>
@@ -845,9 +922,9 @@ export function ReportsSelectionModal({
                     <GraduationCap size={15} style={{ color: '#2563eb' }} />
                     Filtro de Turma
                   </span>
-                  {filterTurmaId && targetedStudents.length > 0 && (
+                  {filterTurmaIds.length > 0 && targetedStudents.length > 0 && (
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: 10 }}>
-                      {targetedStudents.length} {targetedStudents.length === 1 ? 'aluno' : 'alunos'}
+                      {targetedStudents.length} {targetedStudents.length === 1 ? 'aluno' : 'alunos'} ({filterTurmaIds.length} {filterTurmaIds.length === 1 ? 'turma' : 'turmas'})
                     </span>
                   )}
                 </div>
@@ -873,7 +950,7 @@ export function ReportsSelectionModal({
                           fontSize: 13.5, 
                           fontWeight: 700, 
                           background: filterYear ? '#eff6ff' : '#ffffff', 
-                          color: '#1e293b',
+                          color: '#1e293b', 
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -922,7 +999,7 @@ export function ReportsSelectionModal({
                                   key={y}
                                   onClick={() => {
                                     setFilterYear(y)
-                                    setFilterTurmaId('')
+                                    setFilterTurmaIds([])
                                     setShowYearDropdown(false)
                                   }}
                                   style={{
@@ -964,11 +1041,11 @@ export function ReportsSelectionModal({
                           width: '100%', 
                           height: 44, 
                           borderRadius: 14, 
-                          border: filterTurmaId ? '1.5px solid #93c5fd' : '1.5px solid #e2e8f0', 
+                          border: filterTurmaIds.length > 0 ? '1.5px solid #93c5fd' : '1.5px solid #e2e8f0', 
                           padding: '0 14px', 
                           fontSize: 13.5, 
                           fontWeight: 700, 
-                          background: filterTurmaId ? '#eff6ff' : '#ffffff', 
+                          background: filterTurmaIds.length > 0 ? '#eff6ff' : '#ffffff', 
                           color: '#1e293b',
                           cursor: 'pointer',
                           display: 'flex',
@@ -981,7 +1058,7 @@ export function ReportsSelectionModal({
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
-                          <Users size={16} style={{ color: filterTurmaId ? '#2563eb' : '#94a3b8', flexShrink: 0 }} />
+                          <Users size={16} style={{ color: filterTurmaIds.length > 0 ? '#2563eb' : '#94a3b8', flexShrink: 0 }} />
                           <span style={{ 
                             whiteSpace: 'nowrap', 
                             overflow: 'hidden', 
@@ -989,19 +1066,19 @@ export function ReportsSelectionModal({
                             color: selectedTurmaName ? '#1e293b' : '#94a3b8',
                             fontWeight: selectedTurmaName ? 700 : 500
                           }}>
-                            {selectedTurmaName || 'Selecione a Turma'}
+                            {selectedTurmaName || 'Selecione a(s) Turma(s)'}
                           </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                           <span style={{ 
                             fontSize: 10.5, 
                             fontWeight: 700, 
-                            color: filterTurmaId ? '#2563eb' : '#64748b', 
-                            background: filterTurmaId ? '#dbeafe' : '#f1f5f9', 
+                            color: filterTurmaIds.length > 0 ? '#2563eb' : '#64748b', 
+                            background: filterTurmaIds.length > 0 ? '#dbeafe' : '#f1f5f9', 
                             padding: '2px 7px', 
                             borderRadius: 6 
                           }}>
-                            {filterTurmaId ? 'Trocar' : 'Escolher'}
+                            {filterTurmaIds.length > 0 ? `Alterar (${filterTurmaIds.length})` : 'Escolher'}
                           </span>
                           <ChevronDown size={14} style={{ color: '#94a3b8' }} />
                         </div>
@@ -1010,27 +1087,66 @@ export function ReportsSelectionModal({
                   </div>
                 )}
 
-                {/* Status e Feedback de Alunos */}
-                {filterTurmaId && (
-                  <div style={{ marginTop: 2 }}>
+                {/* Status e Feedback de Alunos e Turmas Selecionadas */}
+                {filterTurmaIds.length > 0 && (
+                  <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {isLoadingData ? (
-                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Carregando alunos da turma...</div>
+                      <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Carregando alunos das turmas...</div>
                     ) : targetedStudents.length > 0 ? (
-                      <div style={{ 
-                        fontSize: 12, 
-                        fontWeight: 600, 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 6, 
-                        color: '#059669', 
-                        background: '#ecfdf5', 
-                        border: '1px solid #d1fae5', 
-                        padding: '7px 12px', 
-                        borderRadius: 11 
-                      }}>
-                        <Check size={14} style={{ color: '#10b981', flexShrink: 0 }} />
-                        <span>{targetedStudents.length} aluno{targetedStudents.length > 1 ? 's' : ''} participante{targetedStudents.length > 1 ? 's' : ''} vinculado{targetedStudents.length > 1 ? 's' : ''} a esta turma</span>
-                      </div>
+                      <>
+                        <div style={{ 
+                          fontSize: 12, 
+                          fontWeight: 600, 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 6, 
+                          color: '#059669', 
+                          background: '#ecfdf5', 
+                          border: '1px solid #d1fae5', 
+                          padding: '7px 12px', 
+                          borderRadius: 11 
+                        }}>
+                          <Check size={14} style={{ color: '#10b981', flexShrink: 0 }} />
+                          <span>
+                            <strong>{targetedStudents.length}</strong> {targetedStudents.length === 1 ? 'aluno participante' : 'alunos participantes'} {targetedStudents.length === 1 ? 'vinculado' : 'vinculados'} em <strong>{filterTurmaIds.length}</strong> {filterTurmaIds.length === 1 ? 'turma selecionada' : 'turmas selecionadas'}
+                          </span>
+                        </div>
+
+                        {/* Chips com contagem detalhada por turma */}
+                        {filterTurmaIds.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
+                            {filterTurmaIds.map(tId => {
+                              const tName = availableTurmas.find((t: any) => t.id === tId)?.name || tId
+                              const count = turmaStudentCounts.get(tId) ?? 0
+                              const { main, badgeText, badgeStyle } = formatTurmaDisplay(tName)
+                              return (
+                                <span key={tId} style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  background: '#ffffff',
+                                  color: '#1e40af',
+                                  border: '1px solid #bfdbfe',
+                                  padding: '2px 8px',
+                                  borderRadius: 8,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5
+                                }}>
+                                  <span>{main}</span>
+                                  {badgeText && (
+                                    <span style={{ fontSize: 9.5, padding: '0 4px', borderRadius: 4, background: badgeStyle.bg, color: badgeStyle.color, border: `1px solid ${badgeStyle.border}` }}>
+                                      {badgeText}
+                                    </span>
+                                  )}
+                                  <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '1px 5px', borderRadius: 6, fontSize: 10, fontWeight: 800 }}>
+                                    {count}
+                                  </span>
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <div style={{ 
                         fontSize: 12, 
@@ -1044,7 +1160,7 @@ export function ReportsSelectionModal({
                         padding: '7px 12px', 
                         borderRadius: 11 
                       }}>
-                        <span>⚠️ Nenhum aluno encontrado nesta turma para o ano {filterYear || 'selecionado'}.</span>
+                        <span>⚠️ Nenhum aluno encontrado para a(s) turma(s) selecionada(s) no ano {filterYear || 'selecionado'}.</span>
                       </div>
                     )}
                   </div>
@@ -1217,8 +1333,8 @@ export function ReportsSelectionModal({
                 title={
                   !selectedTemplate ? 'Selecione um relatório' :
                   !filterYear ? 'Selecione o ano' :
-                  !filterTurmaId ? 'Selecione a turma' :
-                  targetedStudents.length === 0 ? 'Nenhum aluno encontrado para esta turma' :
+                  filterTurmaIds.length === 0 ? 'Selecione pelo menos uma turma' :
+                  targetedStudents.length === 0 ? 'Nenhum aluno encontrado para as turmas selecionadas' :
                   'Clique para preencher o relatório'
                 }
                 style={{ 
@@ -1237,7 +1353,7 @@ export function ReportsSelectionModal({
                   transition: 'all 0.2s'
                 }}
               >
-                <span>Preencher Relatório</span>
+                <span>Preencher Relatório{targetedStudents.length > 0 ? ` (${targetedStudents.length})` : ''}</span>
                 <ArrowRight size={16} />
               </button>
             </div>
@@ -1291,24 +1407,27 @@ export function ReportsSelectionModal({
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{
-                      width: 34,
-                      height: 34,
+                      width: 36,
+                      height: 36,
                       borderRadius: 10,
                       background: '#eff6ff',
                       border: '1px solid #bfdbfe',
                       color: '#2563eb',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'center',
+                      flexShrink: 0
                     }}>
-                      <GraduationCap size={18} />
+                      <GraduationCap size={19} />
                     </div>
                     <div>
                       <h4 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.2 }}>
-                        Selecionar Turma
+                        Selecionar Turmas
                       </h4>
                       <p style={{ fontSize: 11.5, color: '#64748b', margin: '2px 0 0 0', fontWeight: 500 }}>
-                        {availableTurmas.length} turmas disponíveis em {filterYear || 'ano selecionado'}
+                        {filterTurmaIds.length === 0
+                          ? `Escolha uma ou mais turmas (${availableTurmas.length} em ${filterYear || 'ano selecionado'})`
+                          : `${filterTurmaIds.length} de ${availableTurmas.length} turmas selecionadas`}
                       </p>
                     </div>
                   </div>
@@ -1336,16 +1455,77 @@ export function ReportsSelectionModal({
                   </button>
                 </div>
 
-                {/* Lista de Turmas em Cards Compactos, Leves e Organizados */}
+                {/* Barra de Ações Rápidas (Selecionar Todas / Limpar) */}
+                {availableTurmas.length > 0 && (
+                  <div style={{
+                    padding: '8px 16px',
+                    background: '#f8fafc',
+                    borderBottom: '1px solid #f1f5f9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 8
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => setFilterTurmaIds(availableTurmas.map(t => t.id))}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#2563eb',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: '3px 6px',
+                          borderRadius: 6
+                        }}
+                      >
+                        Selecionar Todas
+                      </button>
+                      <span style={{ color: '#cbd5e1' }}>•</span>
+                      <button
+                        type="button"
+                        onClick={() => setFilterTurmaIds([])}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#64748b',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          padding: '3px 6px',
+                          borderRadius: 6
+                        }}
+                      >
+                        Limpar Seleção
+                      </button>
+                    </div>
+
+                    <div style={{
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      color: filterTurmaIds.length > 0 ? '#1e40af' : '#94a3b8',
+                      background: filterTurmaIds.length > 0 ? '#dbeafe' : '#f1f5f9',
+                      padding: '2px 8px',
+                      borderRadius: 12
+                    }}>
+                      {filterTurmaIds.length} selecionada{filterTurmaIds.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Lista de Turmas em Cards com Checkboxes */}
                 <div 
                   className="ad-turma-picker-list"
                   style={{ 
                     flex: 1, 
                     overflowY: 'auto', 
-                    padding: '10px 14px', 
+                    padding: '12px 14px', 
                     display: 'flex', 
                     flexDirection: 'column', 
-                    gap: 6 
+                    gap: 7 
                   }}
                 >
                   {availableTurmas.length === 0 ? (
@@ -1356,27 +1536,30 @@ export function ReportsSelectionModal({
                     </div>
                   ) : (
                     availableTurmas.map((t: { id: string, name: string }) => {
-                      const isSelected = filterTurmaId === t.id
+                      const isSelected = filterTurmaIds.includes(t.id)
                       const { main, badgeText, badgeStyle } = formatTurmaDisplay(t.name)
+                      const stCount = turmaStudentCounts.get(t.id) ?? 0
+
                       return (
                         <div
                           key={t.id}
                           onClick={() => {
-                            setFilterTurmaId(t.id)
-                            setShowTurmaModal(false)
+                            setFilterTurmaIds(prev => 
+                              prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
+                            )
                           }}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 10,
-                            padding: '8px 12px',
-                            borderRadius: 12,
+                            gap: 12,
+                            padding: '10px 14px',
+                            borderRadius: 14,
                             background: isSelected ? '#eff6ff' : '#ffffff',
                             border: isSelected ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
                             cursor: 'pointer',
                             transition: 'all 0.15s ease',
                             boxShadow: isSelected ? '0 2px 8px rgba(59, 130, 246, 0.12)' : '0 1px 2px rgba(0,0,0,0.02)',
-                            minHeight: 40
+                            minHeight: 52
                           }}
                           onMouseEnter={e => {
                             if (!isSelected) {
@@ -1391,57 +1574,12 @@ export function ReportsSelectionModal({
                             }
                           }}
                         >
-                          {/* Ícone Compacto */}
+                          {/* Checkbox Indicador Customizado */}
                           <div style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 8,
-                            background: isSelected ? '#dbeafe' : '#f1f5f9',
-                            color: isSelected ? '#2563eb' : '#64748b',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <Users size={14} />
-                          </div>
-
-                          {/* Nome e Badge Alinhados em Linha Única */}
-                          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden' }}>
-                            <span style={{
-                              fontSize: 13,
-                              fontWeight: isSelected ? 800 : 700,
-                              color: isSelected ? '#1d4ed8' : '#1e293b',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
-                            }}>
-                              {main}
-                            </span>
-                            {badgeText && (
-                              <span style={{
-                                fontSize: 10,
-                                fontWeight: 700,
-                                background: badgeStyle.bg,
-                                color: badgeStyle.color,
-                                border: `1px solid ${badgeStyle.border}`,
-                                padding: '1px 6px',
-                                borderRadius: 6,
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0,
-                                letterSpacing: '0.02em'
-                              }}>
-                                {badgeText}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Checkmark Indicador */}
-                          <div style={{
-                            width: 20,
-                            height: 20,
-                            borderRadius: '50%',
-                            background: isSelected ? '#3b82f6' : '#ffffff',
+                            width: 22,
+                            height: 22,
+                            borderRadius: 7,
+                            background: isSelected ? '#2563eb' : '#ffffff',
                             border: isSelected ? 'none' : '1.5px solid #cbd5e1',
                             display: 'flex',
                             alignItems: 'center',
@@ -1449,12 +1587,131 @@ export function ReportsSelectionModal({
                             flexShrink: 0,
                             transition: 'all 0.15s'
                           }}>
-                            {isSelected && <Check size={12} strokeWidth={3} style={{ color: '#ffffff' }} />}
+                            {isSelected && <Check size={14} strokeWidth={3} style={{ color: '#ffffff' }} />}
+                          </div>
+
+                          {/* Ícone de Turma */}
+                          <div style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 9,
+                            background: isSelected ? '#dbeafe' : '#f1f5f9',
+                            color: isSelected ? '#2563eb' : '#64748b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <Users size={15} />
+                          </div>
+
+                          {/* Informações da Turma: Nome Completo + Tag de Turno em linhas separadas */}
+                          <div style={{ 
+                            flex: 1, 
+                            minWidth: 0, 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: 3, 
+                            justifyContent: 'center' 
+                          }}>
+                            {/* Nome Completo da Turma (Sem corte ou reticências) */}
+                            <div style={{
+                              fontSize: 14,
+                              fontWeight: isSelected ? 800 : 700,
+                              color: isSelected ? '#1d4ed8' : '#0f172a',
+                              lineHeight: 1.35,
+                              wordBreak: 'break-word'
+                            }}>
+                              {main}
+                            </div>
+
+                            {/* Tag de Turno / Segmento */}
+                            {badgeText && (
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <span style={{
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  background: badgeStyle.bg,
+                                  color: badgeStyle.color,
+                                  border: `1px solid ${badgeStyle.border}`,
+                                  padding: '1.5px 7px',
+                                  borderRadius: 6,
+                                  letterSpacing: '0.02em',
+                                  textTransform: 'uppercase',
+                                  display: 'inline-block'
+                                }}>
+                                  {badgeText}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Contador de Alunos na Turma */}
+                          <div style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: isSelected ? '#1d4ed8' : '#475569',
+                            background: isSelected ? '#dbeafe' : '#f1f5f9',
+                            padding: '3px 8px',
+                            borderRadius: 8,
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap',
+                            alignSelf: 'center',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3
+                          }}>
+                            <span>{stCount}</span>
+                            <span style={{ fontWeight: 500, fontSize: 10.5, color: isSelected ? '#2563eb' : '#64748b' }}>
+                              {stCount === 1 ? 'aluno' : 'alunos'}
+                            </span>
                           </div>
                         </div>
                       )
                     })
                   )}
+                </div>
+
+                {/* Rodapé do Seletor com Botão de Confirmação */}
+                <div style={{
+                  padding: '12px 18px',
+                  borderTop: '1px solid #f1f5f9',
+                  background: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12
+                }}>
+                  <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                    {filterTurmaIds.length > 0 ? (
+                      <span><strong>{filterTurmaIds.length}</strong> turma(s) selecionada(s)</span>
+                    ) : (
+                      <span>Nenhuma turma selecionada</span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowTurmaModal(false)}
+                    style={{
+                      padding: '8px 18px',
+                      borderRadius: 11,
+                      border: 'none',
+                      background: filterTurmaIds.length > 0 ? 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)' : '#e2e8f0',
+                      color: filterTurmaIds.length > 0 ? '#ffffff' : '#94a3b8',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      boxShadow: filterTurmaIds.length > 0 ? '0 2px 8px rgba(37, 99, 235, 0.25)' : 'none',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    <Check size={14} strokeWidth={2.5} />
+                    <span>Confirmar Seleção</span>
+                  </button>
                 </div>
               </motion.div>
             </div>

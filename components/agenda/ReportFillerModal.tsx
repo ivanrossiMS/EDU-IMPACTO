@@ -64,58 +64,127 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
 
   const currentField = allFields[currentFieldIndex] || null;
 
+  // 1. Extrai todas as turmas alvo envolvidas neste relatório
+  const targetTurmaIds = useMemo(() => {
+    if (!payload) return [];
+    if (Array.isArray(payload.turmaIds) && payload.turmaIds.length > 0) {
+      return payload.turmaIds.map((id: any) => String(id));
+    }
+    if (payload.turmaId) {
+      return [String(payload.turmaId)];
+    }
+    return [];
+  }, [payload]);
+
+  // 2. Resolve os objetos das turmas no ERP
+  const targetTurmaObjs = useMemo(() => {
+    if (!targetTurmaIds.length || !turmas) return [];
+    const setIds = new Set(targetTurmaIds.map((id: string) => id.trim().toLowerCase()));
+    const setClean = new Set(targetTurmaIds.map((id: string) => id.trim().replace(/^sync-/, '').toLowerCase()));
+    return (turmas || []).filter((t: any) => {
+      const tid = String(t.id).toLowerCase();
+      const tcode = String(t.codigo || '').toLowerCase();
+      const tnome = String(t.nome || '').trim().toLowerCase();
+      return setIds.has(tid) || setClean.has(tid) || setIds.has(tcode) || setClean.has(tcode) || setIds.has(tnome);
+    });
+  }, [targetTurmaIds, turmas]);
+
+  // 3. Helper para obter o objeto de turma de cada aluno (dando prioridade às turmas deste relatório)
+  const getAlunoTurmaObj = React.useCallback((aluno: any) => {
+    if (!aluno) return null;
+    if (targetTurmaObjs.length > 0) {
+      for (const tObj of targetTurmaObjs) {
+        if (isAlunoCursandoTurma(aluno, tObj, tObj.ano, turmas)) {
+          return tObj;
+        }
+      }
+    }
+    if (turmas && turmas.length > 0) {
+      const aTurmaRef = String(aluno.turma || aluno.turma_nome || (aluno as any).turmaId || '').trim().toLowerCase();
+      return turmas.find(t => 
+        String(t.id).toLowerCase() === aTurmaRef ||
+        String(t.nome).trim().toLowerCase() === aTurmaRef ||
+        String(t.codigo || '').toLowerCase() === aTurmaRef
+      ) || null;
+    }
+    return null;
+  }, [targetTurmaObjs, turmas]);
+
+  // 4. Helper para obter o nome formatado da turma do aluno
+  const getTurmaName = React.useCallback((aluno: any) => {
+    const tObj = getAlunoTurmaObj(aluno);
+    if (tObj?.nome) return tObj.nome;
+    if (aluno.turma_nome && String(aluno.turma_nome).trim() !== '') return aluno.turma_nome;
+    return aluno.turma || '';
+  }, [getAlunoTurmaObj]);
+
+  // 5. Resolução da lista consolidada de alunos participantes
   const targetedStudents = useMemo(() => {
     if (!payload || !alunos) return [];
-
-    // Resolve target turma if available
-    const tTarget = payload.turmaId ? String(payload.turmaId).trim().toLowerCase() : '';
-    const cleanTargetId = tTarget.replace(/^sync-/, '');
-    const targetTurmaObj = tTarget
-      ? (turmas || []).find((t: any) => 
-          String(t.id).toLowerCase() === tTarget || 
-          String(t.id).toLowerCase() === cleanTargetId ||
-          String(t.codigo || '').toLowerCase() === tTarget || 
-          String(t.codigo || '').toLowerCase() === cleanTargetId ||
-          String(t.nome || '').trim().toLowerCase() === tTarget ||
-          (payload.turmaName && String(t.nome || '').trim().toLowerCase() === String(payload.turmaName).trim().toLowerCase())
-        )
-      : null;
 
     if (payload.studentIds && payload.studentIds.length > 0) {
       const idSet = new Set(payload.studentIds.map((id: any) => String(id)));
       return alunos.filter(a => {
         if (!idSet.has(String(a.id))) return false;
-        // Se a turma alvo é conhecida, valida se o aluno de fato a cursa (evita divergências de histórico/turno de payloads legados)
-        if (targetTurmaObj) {
-          return isAlunoCursandoTurma(a, targetTurmaObj, targetTurmaObj.ano, turmas);
+        // Se há turmas conhecidas, valida se o aluno realmente cursa alguma delas
+        if (targetTurmaObjs.length > 0) {
+          return targetTurmaObjs.some(tObj => isAlunoCursandoTurma(a, tObj, tObj.ano, turmas));
         }
         return true;
       });
     }
 
-    if (targetTurmaObj) {
-      return alunos.filter(a => isAlunoCursandoTurma(a, targetTurmaObj, targetTurmaObj.ano, turmas));
+    if (targetTurmaObjs.length > 0) {
+      return alunos.filter(a => targetTurmaObjs.some(tObj => isAlunoCursandoTurma(a, tObj, tObj.ano, turmas)));
     }
 
-    if (tTarget) {
+    if (targetTurmaIds.length > 0) {
+      const targetIdSet = new Set(targetTurmaIds.map((t: string) => t.toLowerCase()));
+      const cleanSet = new Set(targetTurmaIds.map((t: string) => t.replace(/^sync-/, '').toLowerCase()));
       return alunos.filter(a => {
         const refs = [String(a.turma || '').trim(), String((a as any).turmaId || '').trim()].filter(Boolean);
         return refs.some(tRef => {
           const tRefLower = tRef.toLowerCase();
-          return tRefLower === tTarget || tRefLower === cleanTargetId;
+          return targetIdSet.has(tRefLower) || cleanSet.has(tRefLower);
         });
       });
     }
 
     return [];
-  }, [payload, alunos, turmas]);
+  }, [payload, alunos, turmas, targetTurmaObjs, targetTurmaIds]);
+
+  // 6. Agrupamento dos alunos por turma para visualização organizada
+  const targetedStudentsByTurma = useMemo(() => {
+    const map = new Map<string, { turmaName: string; turmaId: string; students: any[] }>();
+
+    targetedStudents.forEach(aluno => {
+      const tName = getTurmaName(aluno) || 'Outros / Sem Turma';
+      if (!map.has(tName)) {
+        map.set(tName, {
+          turmaName: tName,
+          turmaId: aluno.turma || tName,
+          students: []
+        });
+      }
+      map.get(tName)!.students.push(aluno);
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.turmaName.localeCompare(b.turmaName, 'pt-BR'));
+  }, [targetedStudents, getTurmaName]);
 
   const activeStudents = useMemo(() => {
-    if (fillMode === 'especifico') {
-      return targetedStudents.filter(s => selectedStudentIds.includes(s.id));
-    }
-    return targetedStudents;
-  }, [fillMode, targetedStudents, selectedStudentIds]);
+    const list = fillMode === 'especifico'
+      ? targetedStudents.filter(s => selectedStudentIds.includes(s.id))
+      : targetedStudents;
+
+    return [...list].sort((a, b) => {
+      const tA = getTurmaName(a) || '';
+      const tB = getTurmaName(b) || '';
+      const cmp = tA.localeCompare(tB, 'pt-BR');
+      if (cmp !== 0) return cmp;
+      return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR');
+    });
+  }, [fillMode, targetedStudents, selectedStudentIds, getTurmaName]);
 
   const hasAnyAnswer = useMemo(() => {
     if (!currentField) return false;
@@ -286,16 +355,6 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
     const newComunicados: any[] = []
     const fullPayloadValues: Record<string, any> = {}
 
-    // Gerar o anexo do relatório para o aluno (Família)
-    const getTurmaName = (aluno: any) => {
-      if (aluno.turma_nome && String(aluno.turma_nome).trim() !== '') return aluno.turma_nome;
-      if (turmas && turmas.length > 0) {
-        const t = turmas.find(t => String(t.id) === String(aluno.turma) || String(t.nome) === String(aluno.turma) || String(t.codigo) === String(aluno.turma));
-        if (t) return t.nome;
-      }
-      return aluno.turma || '';
-    };
-
     activeStudents.forEach(aluno => {
       // If 'igual', use the 'GLOBAL' answers. Otherwise use the student's specific answers.
       const studentAnswers = fillMode === 'igual' ? (answers['GLOBAL'] || {}) : (answers[aluno.id] || {})
@@ -350,7 +409,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
         autorCargo: currentUser?.cargo || currentUser?.perfil || 'Colaborador',
         autorId: currentUser?.id || '',
         autorFoto: currentUser?.foto || null,
-        turmas: [],
+        turmas: [getTurmaName(aluno)].filter(Boolean),
         alunosIds: [aluno.id.replace(/^a_?/, '')],
         destino: 'selecionados',
         prioridade: 'normal',
@@ -683,7 +742,11 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
               <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: 0 }}>Preenchimento de Relatório</h3>
               <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span>{template.name}</span>
-                {payload?.turmaName && <span style={{ color: '#3b82f6' }}>{payload.turmaName} • {fillMode ? activeStudents.length : targetedStudents.length} alunos</span>}
+                {payload?.turmaName && (
+                  <span style={{ color: '#2563eb', fontWeight: 700 }}>
+                    {payload.turmaName} • {fillMode ? activeStudents.length : targetedStudents.length} alunos
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -704,7 +767,9 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
             <div style={{ flex: 1, overflowY: 'auto', padding: '32px 20px', display: 'flex', flexDirection: 'column', gap: 20, background: '#f8fafc' }}>
               <div style={{ textAlign: 'center', marginBottom: 12 }}>
                 <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 6px 0' }}>Como deseja preencher?</h2>
-                <p style={{ color: '#64748b', fontSize: 14, fontWeight: 500, margin: 0 }}>Escolha o modo de preenchimento para esta turma.</p>
+                <p style={{ color: '#64748b', fontSize: 14, fontWeight: 500, margin: 0 }}>
+                  Escolha o modo de preenchimento para {targetTurmaIds.length > 1 ? 'estas turmas' : 'esta turma'}.
+                </p>
               </div>
 
               <div style={{ background: '#fff', padding: 16, borderRadius: 16, border: '2px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
@@ -730,7 +795,9 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                 </div>
                 <div>
                   <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Igual para todos</h4>
-                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>Responda uma única vez e aplique a todos os {targetedStudents.length} alunos.</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>
+                    Responda uma única vez e aplique a todos os {targetedStudents.length} alunos{targetTurmaIds.length > 1 ? ` (${targetTurmaIds.length} turmas)` : ''}.
+                  </p>
                 </div>
               </div>
 
@@ -746,7 +813,9 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                 </div>
                 <div>
                   <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Específico por aluno</h4>
-                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>Responda individualmente a pergunta para cada aluno na lista.</p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.4 }}>
+                    Selecione e responda individualmente para cada aluno por turma.
+                  </p>
                 </div>
               </div>
             </div>
@@ -776,7 +845,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
           </>
         ) : !fillMode && isSelectingStudents ? (
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, background: '#f8fafc' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                  <button 
                    onClick={() => setIsSelectingStudents(false)}
@@ -784,7 +853,12 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                  >
                    <ArrowLeft size={16} />
                  </button>
-                 <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>Selecione os Alunos</h2>
+                 <div>
+                   <h2 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: 0 }}>Selecione os Alunos</h2>
+                   <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0 0', fontWeight: 500 }}>
+                     {selectedStudentIds.length} de {targetedStudents.length} selecionados
+                   </p>
+                 </div>
                </div>
                <button 
                  onClick={() => {
@@ -794,33 +868,146 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                      setSelectedStudentIds(targetedStudents.map(s => s.id))
                    }
                  }}
-                 style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}
+                 style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
                >
                  {selectedStudentIds.length === targetedStudents.length ? 'Desmarcar todos' : 'Marcar todos'}
                </button>
             </div>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-               {targetedStudents.map(aluno => (
-                  <label key={aluno.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: '#fff', borderRadius: 12, border: '1px solid #cbd5e1', cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
-                    <input 
-                      type="checkbox" 
-                      style={{ width: 18, height: 18 }} 
-                      checked={selectedStudentIds.includes(aluno.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedStudentIds(prev => [...prev, aluno.id])
-                        } else {
-                          setSelectedStudentIds(prev => prev.filter(id => id !== aluno.id))
-                        }
-                      }}
-                    />
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
-                      {aluno.foto_url || aluno.foto ? <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <User size={16} />}
+            {/* Lista de Alunos Agrupada por Turma */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {targetedStudentsByTurma.map(group => {
+                const groupSelectedCount = group.students.filter(s => selectedStudentIds.includes(s.id)).length;
+                const isAllGroupSelected = groupSelectedCount === group.students.length && group.students.length > 0;
+
+                const toggleAllInGroup = () => {
+                  if (isAllGroupSelected) {
+                    const groupIds = new Set(group.students.map(s => s.id));
+                    setSelectedStudentIds(prev => prev.filter(id => !groupIds.has(id)));
+                  } else {
+                    const groupIds = group.students.map(s => s.id);
+                    setSelectedStudentIds(prev => Array.from(new Set([...prev, ...groupIds])));
+                  }
+                };
+
+                return (
+                  <div 
+                    key={group.turmaName}
+                    style={{
+                      background: '#ffffff',
+                      borderRadius: 16,
+                      border: '1px solid #e2e8f0',
+                      overflow: 'hidden',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                    }}
+                  >
+                    {/* Cabeçalho da Turma */}
+                    <div style={{
+                      padding: '10px 14px',
+                      background: '#f8fafc',
+                      borderBottom: '1px solid #f1f5f9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 8
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 8,
+                          background: '#eff6ff',
+                          color: '#2563eb',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <Users size={14} />
+                        </div>
+                        <span style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b' }}>
+                          {group.turmaName}
+                        </span>
+                        <span style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#2563eb',
+                          background: '#dbeafe',
+                          padding: '1px 7px',
+                          borderRadius: 10
+                        }}>
+                          {groupSelectedCount}/{group.students.length}
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={toggleAllInGroup}
+                        style={{
+                          background: isAllGroupSelected ? '#fef2f2' : '#eff6ff',
+                          border: isAllGroupSelected ? '1px solid #fecaca' : '1px solid #bfdbfe',
+                          color: isAllGroupSelected ? '#ef4444' : '#2563eb',
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          padding: '3px 8px',
+                          borderRadius: 7,
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {isAllGroupSelected ? 'Desmarcar turma' : 'Marcar turma'}
+                      </button>
                     </div>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: '#334155' }}>{abbreviateName(aluno.nome)}</span>
-                  </label>
-               ))}
+
+                    {/* Alunos da Turma */}
+                    <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {group.students.map(aluno => {
+                        const isChecked = selectedStudentIds.includes(aluno.id);
+                        return (
+                          <label 
+                            key={aluno.id} 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: 10, 
+                              padding: '8px 12px', 
+                              background: isChecked ? '#f8fafc' : '#ffffff', 
+                              borderRadius: 10, 
+                              border: isChecked ? '1px solid #cbd5e1' : '1px solid #f1f5f9', 
+                              cursor: 'pointer', 
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <input 
+                              type="checkbox" 
+                              style={{ width: 17, height: 17, cursor: 'pointer' }} 
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedStudentIds(prev => [...prev, aluno.id]);
+                                } else {
+                                  setSelectedStudentIds(prev => prev.filter(id => id !== aluno.id));
+                                }
+                              }}
+                            />
+                            <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
+                              {aluno.foto_url || aluno.foto ? (
+                                <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                              ) : (
+                                <User size={15} />
+                              )}
+                            </div>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: '#334155' }}>
+                              {abbreviateName(aluno.nome)}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div style={{ marginTop: 'auto', paddingTop: 16 }}>
@@ -893,7 +1080,9 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                 {fillMode === 'igual' ? (
                   <div style={{ background: '#fff', borderRadius: 16, padding: 20, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#475569' }}>Resposta única para os {targetedStudents.length} alunos:</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#475569' }}>
+                        Resposta única para os {targetedStudents.length} alunos{targetTurmaIds.length > 1 ? ` (${targetTurmaIds.length} turmas)` : ''}:
+                      </div>
                       {(() => {
                         const globalAns = (answers['GLOBAL'] || {})[currentField?.id || ''];
                         const hasGlobalAnswer = globalAns !== undefined && globalAns !== null && globalAns !== '' && (!Array.isArray(globalAns) || globalAns.length > 0);
@@ -927,94 +1116,127 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                     {renderFieldInput('GLOBAL')}
                   </div>
                 ) : (
-                  activeStudents.map(aluno => {
+                  activeStudents.map((aluno, index) => {
                     const studentAns = (answers[aluno.id] || {})[currentField?.id || ''];
                     const hasAnswer = studentAns !== undefined && studentAns !== null && studentAns !== '' && (!Array.isArray(studentAns) || studentAns.length > 0);
                     const hasText = typeof studentAns === 'string' ? studentAns.trim().length > 0 : hasAnswer;
 
+                    const alunoTurma = getTurmaName(aluno);
+                    const prevTurma = index > 0 ? getTurmaName(activeStudents[index - 1]) : null;
+                    const isFirstInTurma = alunoTurma !== prevTurma;
+
                     return (
-                      <div key={aluno.id} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px', background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 auto' }}>
-                            <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
-                              {aluno.foto_url || aluno.foto ? <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <User size={16} />}
+                      <React.Fragment key={aluno.id}>
+                        {targetTurmaIds.length > 1 && isFirstInTurma && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: index > 0 ? 8 : 0, marginBottom: 2 }}>
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                              padding: '3px 10px',
+                              borderRadius: 9,
+                              fontSize: 12,
+                              fontWeight: 800
+                            }}>
+                              <Users size={13} />
+                              <span>{alunoTurma}</span>
                             </div>
-                            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {abbreviateName(aluno.nome)}
-                            </div>
+                            <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
                           </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                            {isTextField && hasText && activeStudents.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => handleCopyToAll(aluno.id)}
-                                style={{
-                                  background: copiedStudentId === aluno.id ? '#ecfdf5' : '#eff6ff',
-                                  border: copiedStudentId === aluno.id ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
-                                  color: copiedStudentId === aluno.id ? '#059669' : '#2563eb',
-                                  fontSize: 12,
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                  padding: '4px 10px',
-                                  borderRadius: 8,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 5,
-                                  transition: 'all 0.15s ease',
-                                  whiteSpace: 'nowrap'
-                                }}
-                                title="Copiar este texto para todos os outros alunos"
-                              >
-                                {copiedStudentId === aluno.id ? (
-                                  <>
-                                    <Check size={13} />
-                                    <span>Copiado para todos!</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy size={13} />
-                                    <span>Copiar para todos</span>
-                                  </>
+                        )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px', background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 auto' }}>
+                              <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
+                                {aluno.foto_url || aluno.foto ? <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <User size={16} />}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', minWidth: 0 }}>
+                                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {abbreviateName(aluno.nome)}
+                                </div>
+                                {targetTurmaIds.length > 1 && (
+                                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap' }}>
+                                    {alunoTurma}
+                                  </span>
                                 )}
-                              </button>
-                            )}
+                              </div>
+                            </div>
 
-                            {hasAnswer && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleAnswerChange(aluno.id, '');
-                                  if (copiedStudentId === aluno.id) setCopiedStudentId(null);
-                                }}
-                                style={{
-                                  background: '#fef2f2',
-                                  border: '1px solid #fecaca',
-                                  color: '#ef4444',
-                                  fontSize: 12,
-                                  fontWeight: 700,
-                                  cursor: 'pointer',
-                                  padding: '4px 10px',
-                                  borderRadius: 8,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  transition: 'all 0.15s ease',
-                                  whiteSpace: 'nowrap'
-                                }}
-                                title="Desmarcar resposta para este aluno"
-                              >
-                                <X size={13} />
-                                <span>Desmarcar</span>
-                              </button>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                              {isTextField && hasText && activeStudents.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyToAll(aluno.id)}
+                                  style={{
+                                    background: copiedStudentId === aluno.id ? '#ecfdf5' : '#eff6ff',
+                                    border: copiedStudentId === aluno.id ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
+                                    color: copiedStudentId === aluno.id ? '#059669' : '#2563eb',
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    padding: '4px 10px',
+                                    borderRadius: 8,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    transition: 'all 0.15s ease',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title="Copiar este texto para todos os outros alunos"
+                                >
+                                  {copiedStudentId === aluno.id ? (
+                                    <>
+                                      <Check size={13} />
+                                      <span>Copiado para todos!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy size={13} />
+                                      <span>Copiar para todos</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
+                              {hasAnswer && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleAnswerChange(aluno.id, '');
+                                    if (copiedStudentId === aluno.id) setCopiedStudentId(null);
+                                  }}
+                                  style={{
+                                    background: '#fef2f2',
+                                    border: '1px solid #fecaca',
+                                    color: '#ef4444',
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    padding: '4px 10px',
+                                    borderRadius: 8,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    transition: 'all 0.15s ease',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title="Desmarcar resposta para este aluno"
+                                >
+                                  <X size={13} />
+                                  <span>Desmarcar</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div style={{ width: '100%' }}>
+                            {renderFieldInput(aluno.id)}
                           </div>
                         </div>
-                        
-                        <div style={{ width: '100%' }}>
-                          {renderFieldInput(aluno.id)}
-                        </div>
-                      </div>
+                      </React.Fragment>
                     );
                   })
                 )}
