@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Printer, CheckSquare, Layers, Calendar, Users, FileText,
   Upload, Camera, ScanLine, User, Trophy, AlertCircle, ChevronDown,
-  ChevronUp, Loader2, CheckCircle, XCircle, BarChart3, BookOpen, Trash2
+  ChevronUp, Loader2, CheckCircle, XCircle, BarChart3, BookOpen, Trash2, Edit3
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
@@ -22,19 +22,19 @@ interface Correcao {
   total_questoes: number
   total_acertos: number
   percentual_acerto: number
-  respostas_aluno: { numero: number; resposta: string | null }[]
+  respostas_aluno: { numero: number; resposta: string | null; detalhe?: string }[]
   gabarito_oficial: { numero: number; resposta: string }[]
   created_at: string
 }
 
 export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSimuladoModalProps) {
   const isMobile = useIsMobile()
-  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'gabarito' | 'correcoes'>('gabarito')
   const [simulado, setSimulado] = useState<any>(null)
   const [questoes, setQuestoes] = useState<any[]>([])
-  const [activeTab, setActiveTab] = useState<'gabarito' | 'correcoes'>('gabarito')
+  const [loading, setLoading] = useState(true)
 
-  // Upload state
+  // Upload modal state
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [nomeAluno, setNomeAluno] = useState('')
   const [imagemPreview, setImagemPreview] = useState<string | null>(null)
@@ -49,6 +49,13 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
   const [correcoes, setCorrecoes] = useState<Correcao[]>([])
   const [loadingCorrecoes, setLoadingCorrecoes] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editingQuestion, setEditingQuestion] = useState<{
+    correcaoId: string
+    numero: number
+    alunoNome: string
+    currentAnswer: string | null
+    gabaritoOficial: string
+  } | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -119,13 +126,109 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
     setUploadError(null)
     const reader = new FileReader()
     reader.onload = (e) => {
-      const dataUrl = e.target?.result as string
-      setImagemPreview(dataUrl)
-      const base64 = dataUrl.split(',')[1]
-      setImagemBase64(base64)
-      setImagemMime(file.type || 'image/jpeg')
+      const rawDataUrl = e.target?.result as string
+      if (!rawDataUrl) return
+
+      // Load image into an Image element to normalize orientation and downscale to optimal OMR dimensions
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const maxDim = 1800
+          let width = img.naturalWidth || img.width
+          let height = img.naturalHeight || img.height
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width)
+              width = maxDim
+            } else {
+              width = Math.round((width * maxDim) / height)
+              height = maxDim
+            }
+          }
+
+          const canvas = document.createElement('canvas')
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+
+          if (ctx) {
+            ctx.fillStyle = '#ffffff'
+            ctx.fillRect(0, 0, width, height)
+            ctx.drawImage(img, 0, 0, width, height)
+            const compressed = canvas.toDataURL('image/jpeg', 0.90)
+            setImagemPreview(compressed)
+            setImagemBase64(compressed.split(',')[1])
+            setImagemMime('image/jpeg')
+            return
+          }
+        } catch (err) {
+          console.warn('Fallback para imagem original:', err)
+        }
+
+        // Fallback
+        setImagemPreview(rawDataUrl)
+        setImagemBase64(rawDataUrl.split(',')[1])
+        setImagemMime(file.type || 'image/jpeg')
+      }
+      img.onerror = () => {
+        setImagemPreview(rawDataUrl)
+        setImagemBase64(rawDataUrl.split(',')[1])
+        setImagemMime(file.type || 'image/jpeg')
+      }
+      img.src = rawDataUrl
     }
     reader.readAsDataURL(file)
+  }
+
+  const handleUpdateResposta = async (correcaoId: string, numero: number, novaResposta: string | null) => {
+    const correcao = correcoes.find(c => c.id === correcaoId)
+    if (!correcao) return
+
+    const novasRespostas = [...(correcao.respostas_aluno || [])]
+    const idx = novasRespostas.findIndex((r: any) => r.numero === numero)
+    if (idx >= 0) {
+      novasRespostas[idx] = { ...novasRespostas[idx], resposta: novaResposta }
+    } else {
+      novasRespostas.push({ numero, resposta: novaResposta })
+    }
+
+    // Recalcular pontuação
+    let acertos = 0
+    correcao.gabarito_oficial.forEach((g: any) => {
+      const rAluno = novasRespostas.find((r: any) => r.numero === g.numero)?.resposta?.toUpperCase()
+      if (rAluno && rAluno !== 'ANULADA' && rAluno === g.resposta?.toUpperCase()) {
+        acertos++
+      }
+    })
+
+    const total = correcao.total_questoes || correcao.gabarito_oficial.length || 1
+    const percentual = Math.round((acertos / total) * 10000) / 100
+
+    // Atualização otimista do estado local
+    setCorrecoes(prev => prev.map(c => {
+      if (c.id === correcaoId) {
+        return {
+          ...c,
+          respostas_aluno: novasRespostas,
+          total_acertos: acertos,
+          percentual_acerto: percentual
+        }
+      }
+      return c
+    }))
+    setEditingQuestion(null)
+
+    // Salvar no Supabase
+    try {
+      await (supabase as any).from('gabarito_correcoes').update({
+        respostas_aluno: novasRespostas,
+        total_acertos: acertos,
+        percentual_acerto: percentual
+      }).eq('id', correcaoId)
+    } catch (err) {
+      console.error('Erro ao salvar alteração da resposta:', err)
+    }
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -587,16 +690,52 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                               style={{ overflow: 'hidden' }}
                             >
                               <div style={{ borderTop: '1px solid #e2e8f0', padding: '16px 20px', background: '#ffffff' }}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Detalhe por questão</div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                    Detalhe por questão
+                                  </div>
+                                  <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <Edit3 size={12} /> Clique em uma questão para ajustar
+                                  </div>
+                                </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 8 }}>
                                   {(c.gabarito_oficial || []).map((g: any, idx: number) => {
                                     const respostaAluno = c.respostas_aluno?.find((r: any) => r.numero === g.numero)
                                     const ra = respostaAluno?.resposta?.toUpperCase() || '–'
                                     const rc = g.resposta?.toUpperCase()
                                     const correto = ra === rc
+                                    const detalhe = respostaAluno?.detalhe
                                     return (
-                                      <div key={idx} style={{ background: correto ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)', border: `1px solid ${correto ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`, borderRadius: 10, padding: '8px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                                        <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Q{g.numero}</span>
+                                      <div
+                                        key={idx}
+                                        onClick={() => setEditingQuestion({
+                                          correcaoId: c.id,
+                                          numero: g.numero,
+                                          alunoNome: c.nome_aluno,
+                                          currentAnswer: ra === '–' ? null : ra,
+                                          gabaritoOficial: rc
+                                        })}
+                                        title={detalhe ? `${detalhe} (Clique para alterar)` : 'Clique para alterar resposta'}
+                                        style={{
+                                          background: correto ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+                                          border: `1px solid ${correto ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                                          borderRadius: 10,
+                                          padding: '8px 10px',
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          alignItems: 'center',
+                                          gap: 4,
+                                          cursor: 'pointer',
+                                          transition: 'all 0.15s ease',
+                                          position: 'relative'
+                                        }}
+                                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)' }}
+                                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                          <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Q{g.numero}</span>
+                                          <Edit3 size={10} color="#94a3b8" />
+                                        </div>
                                         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                           <span style={{ fontSize: 14, fontWeight: 900, color: correto ? '#10b981' : '#ef4444' }}>{ra}</span>
                                           {!correto && <span style={{ fontSize: 11, color: '#64748b' }}>({rc})</span>}
@@ -760,6 +899,110 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                   <><ScanLine size={18} /> Corrigir com Inteligência Artificial</>
                 )}
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ===== QUICK EDIT MODAL (Override answer for a question) ===== */}
+      <AnimatePresence>
+        {editingQuestion && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+            onClick={(e) => { if (e.target === e.currentTarget) setEditingQuestion(null) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 16 }}
+              style={{ background: '#ffffff', borderRadius: 20, width: '100%', maxWidth: 420, padding: 24, border: '1px solid #e2e8f0', boxShadow: '0 24px 48px rgba(0,0,0,0.3)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>
+                    Ajustar Questão {editingQuestion.numero}
+                  </h4>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>
+                    Aluno: <strong>{editingQuestion.alunoNome}</strong> • Oficial: <span style={{ color: '#10b981', fontWeight: 700 }}>{editingQuestion.gabaritoOficial}</span>
+                  </p>
+                </div>
+                <button onClick={() => setEditingQuestion(null)} style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ fontSize: 13, color: '#475569', marginBottom: 14 }}>
+                Selecione a resposta que o aluno marcou:
+              </div>
+
+              {/* Options A, B, C, D, E */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 14 }}>
+                {['A', 'B', 'C', 'D', 'E'].map(letra => {
+                  const isSelected = editingQuestion.currentAnswer === letra
+                  const isCorrect = editingQuestion.gabaritoOficial === letra
+                  return (
+                    <button
+                      key={letra}
+                      onClick={() => handleUpdateResposta(editingQuestion.correcaoId, editingQuestion.numero, letra)}
+                      style={{
+                        padding: '12px 0',
+                        borderRadius: 12,
+                        border: isSelected ? '2px solid #6366f1' : '1.5px solid #e2e8f0',
+                        background: isSelected ? 'rgba(99,102,241,0.1)' : '#f8fafc',
+                        color: isSelected ? '#6366f1' : '#0f172a',
+                        fontWeight: 800,
+                        fontSize: 16,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 2,
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <span>{letra}</span>
+                      {isCorrect && <span style={{ fontSize: 9, color: '#10b981', fontWeight: 700 }}>Gabarito</span>}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Special options: ANULADA or Em Branco */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  onClick={() => handleUpdateResposta(editingQuestion.correcaoId, editingQuestion.numero, 'ANULADA')}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: editingQuestion.currentAnswer === 'ANULADA' ? '2px solid #ef4444' : '1.5px solid #e2e8f0',
+                    background: editingQuestion.currentAnswer === 'ANULADA' ? 'rgba(239,68,68,0.1)' : '#f8fafc',
+                    color: '#ef4444',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Marcação Dupla (Anulada)
+                </button>
+                <button
+                  onClick={() => handleUpdateResposta(editingQuestion.correcaoId, editingQuestion.numero, null)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: !editingQuestion.currentAnswer ? '2px solid #64748b' : '1.5px solid #e2e8f0',
+                    background: !editingQuestion.currentAnswer ? 'rgba(100,116,139,0.1)' : '#f8fafc',
+                    color: '#64748b',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Em Branco (Sem resposta)
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
