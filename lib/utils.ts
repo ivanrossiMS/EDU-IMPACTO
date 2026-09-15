@@ -619,3 +619,170 @@ export function normalizeQuestoesList(questoes: any[]): any[] {
   if (!Array.isArray(questoes)) return []
   return questoes.map(q => normalizeQuestionImages(q))
 }
+
+/**
+ * Extrai a letra da alternativa correta com máxima resiliência:
+ * checa alt.correct, alt.eh_correta, alt.correta, alt.is_correta, alt.isCorrect,
+ * checa simulados_alternativas e fallback em q.gabarito.
+ */
+export function getQuestionCorrectAnswer(q: any): string {
+  if (!q) return '?'
+
+  // 1. Alternativas em formato array de objetos (questoes_json)
+  if (Array.isArray(q.alternativas) && q.alternativas.length > 0) {
+    const correctAlt = q.alternativas.find((a: any) =>
+      a.correct === true || a.correct === 'true' ||
+      a.eh_correta === true || a.eh_correta === 'true' ||
+      a.correta === true || a.correta === 'true' ||
+      a.is_correta === true || a.is_correta === 'true' ||
+      a.isCorrect === true || a.isCorrect === 'true'
+    )
+    if (correctAlt) {
+      const l = correctAlt.letter || correctAlt.letra
+      if (l && typeof l === 'string' && l.trim()) {
+        return l.trim().toUpperCase()
+      }
+    }
+  }
+
+  // 2. simulados_alternativas (se vier de relacionamento SQL do Supabase)
+  if (Array.isArray(q.simulados_alternativas) && q.simulados_alternativas.length > 0) {
+    const correctAlt = q.simulados_alternativas.find((a: any) =>
+      a.correct === true || a.correct === 'true' ||
+      a.eh_correta === true || a.eh_correta === 'true' ||
+      a.correta === true || a.correta === 'true'
+    )
+    if (correctAlt) {
+      const l = correctAlt.letra || correctAlt.letter
+      if (l && typeof l === 'string' && l.trim()) {
+        return l.trim().toUpperCase()
+      }
+    }
+  }
+
+  // 3. Campo gabarito direto na questão
+  if (q.gabarito && typeof q.gabarito === 'string' && q.gabarito.trim()) {
+    const g = q.gabarito.trim().toUpperCase()
+    if (/^[A-Z]$/.test(g)) {
+      return g
+    }
+  }
+
+  // 4. Fallbacks adicionais
+  const fallback = q.resposta_correta || q.resposta || q.gabarito_oficial || q.correta
+  if (fallback && typeof fallback === 'string' && fallback.trim()) {
+    const f = fallback.trim().toUpperCase()
+    if (/^[A-Z]$/.test(f)) {
+      return f
+    }
+  }
+
+  return '?'
+}
+
+/**
+ * Retorna as questões do simulado ordenadas e numeradas com fidelidade absoluta
+ * à impressão oficial do simulado (Estúdio de Edição / PaginationEngine):
+ * - Ordena requisições conforme config_estudio.ordem_requisicoes ou ordem_disciplinas.
+ * - Mapeia as questões por requisição/disciplina via isQuestionForRequisicao.
+ * - Inclui eventuais questões órfãs ao final.
+ * - Filtra questões marcadas como excluídas (q.excluida ou config_estudio.questoes_excluidas).
+ * - Numera sequencialmente 1..N (textos de apoio recebem numero 0).
+ */
+export function getSimuladoPrintOrderedQuestoes(
+  simuladoData: any,
+  rawReqs?: any[]
+): any[] {
+  if (!simuladoData) return []
+
+  const allQuestions = Array.isArray(simuladoData.questoes_json)
+    ? normalizeQuestoesList(simuladoData.questoes_json)
+    : []
+
+  if (allQuestions.length === 0) return []
+
+  // 1. Coleta e ordena as requisições de acordo com a configuração salva do estúdio
+  let reqs = Array.isArray(rawReqs) && rawReqs.length > 0
+    ? [...rawReqs]
+    : (Array.isArray(simuladoData.simulados_upload_requisicoes) ? [...simuladoData.simulados_upload_requisicoes] : [])
+
+  const configEstudio = simuladoData.config_estudio || {}
+  const savedOrder = Array.isArray(configEstudio.ordem_requisicoes) ? configEstudio.ordem_requisicoes : []
+  const savedDiscOrder = Array.isArray(configEstudio.ordem_disciplinas) ? configEstudio.ordem_disciplinas : []
+
+  if (savedOrder.length > 0) {
+    reqs.sort((a: any, b: any) => {
+      const idxA = savedOrder.indexOf(a.id)
+      const idxB = savedOrder.indexOf(b.id)
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB
+      if (idxA !== -1) return -1
+      if (idxB !== -1) return 1
+      return 0
+    })
+  } else if (savedDiscOrder.length > 0) {
+    reqs.sort((a: any, b: any) => {
+      const idxA = savedDiscOrder.indexOf(a.id_disciplina)
+      const idxB = savedDiscOrder.indexOf(b.id_disciplina)
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB
+      if (idxA !== -1) return -1
+      if (idxB !== -1) return 1
+      return 0
+    })
+  }
+
+  // 2. Ordena as questões exatamente como o motor de impressão de simulados
+  let orderedQuestions: any[] = []
+  const matchedIds = new Set<string>()
+
+  if (reqs.length > 0) {
+    orderedQuestions = reqs.flatMap((req: any) => {
+      const matching = allQuestions.filter((q: any) => isQuestionForRequisicao(q, req, reqs, false))
+      const discName = req.disciplina_nome || req.simulados_disciplinas?.nome || ''
+      return matching.map((q: any) => {
+        const idKey = q._internalId || q.id || `${q.numero}-${(q.enunciado || '').slice(0, 20)}`
+        matchedIds.add(idKey)
+        return {
+          ...q,
+          id_requisicao: req.id,
+          id_disciplina: req.id_disciplina || q.id_disciplina,
+          disciplina_nome: q.disciplina_nome || discName,
+          disciplina: q.disciplina || q.disciplina_nome || discName,
+          id_professor: req.id_professor || q.id_professor,
+          professor_nome: req.professor_nome || q.professor_nome,
+        }
+      })
+    })
+
+    // Adiciona eventuais questões não associadas a nenhuma requisição
+    const unassigned = allQuestions.filter((q: any) => {
+      const idKey = q._internalId || q.id || `${q.numero}-${(q.enunciado || '').slice(0, 20)}`
+      return !matchedIds.has(idKey)
+    })
+    orderedQuestions = [...orderedQuestions, ...unassigned]
+  } else {
+    orderedQuestions = [...allQuestions]
+  }
+
+  // 3. Filtra questões excluídas pelo usuário
+  const excludedIds = new Set<string>(
+    Array.isArray(configEstudio.questoes_excluidas) ? configEstudio.questoes_excluidas : []
+  )
+
+  const activeQuestions = orderedQuestions.filter((q: any) => {
+    if (q.excluida === true) return false
+    const idKey = q._internalId || q.id
+    if (idKey && excludedIds.has(String(idKey))) return false
+    return true
+  })
+
+  // 4. Numera sequencialmente idêntico ao A4 da impressão
+  let numCounter = 1
+  return activeQuestions.map((q: any) => {
+    const isApoio = isTextoApoio(q)
+    return {
+      ...q,
+      numero: isApoio ? 0 : numCounter++
+    }
+  })
+}
+

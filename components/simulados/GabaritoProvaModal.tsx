@@ -1,24 +1,106 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { X, Printer, CheckSquare, Layers, Calendar, Users, FileText } from 'lucide-react'
+import { X, Printer, CheckSquare, Layers, Calendar, Users, FileText, BookOpen } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { isTextoApoio } from '@/lib/utils'
+import { isTextoApoio, isQuestionForRequisicao } from '@/lib/utils'
 
 interface GabaritoProvaModalProps {
   provaUploadId: string
   onClose: () => void
 }
 
+function getDisciplineName(q: any, idx: number, reqs: any[] = []): string {
+  const direct = q.disciplina_nome || q.disciplina
+  if (direct && typeof direct === 'string' && direct.trim() && direct.trim().toLowerCase() !== 'geral') {
+    return direct.trim()
+  }
+
+  if (Array.isArray(reqs) && reqs.length > 0) {
+    if (q.id_requisicao) {
+      const found = reqs.find((r: any) => r.id === q.id_requisicao)
+      if (found?.disciplina_nome?.trim()) return found.disciplina_nome.trim()
+    }
+    const discId = q.id_disciplina || q.disciplina_id
+    if (discId) {
+      const found = reqs.find((r: any) => r.id_disciplina === discId)
+      if (found?.disciplina_nome?.trim()) return found.disciplina_nome.trim()
+    }
+    const matched = reqs.find((r: any) => isQuestionForRequisicao(q, r, reqs, false))
+    if (matched?.disciplina_nome?.trim()) return matched.disciplina_nome.trim()
+
+    if (reqs.length === 1 && reqs[0]?.disciplina_nome?.trim()) {
+      return reqs[0].disciplina_nome.trim()
+    }
+
+    let accumulated = 0
+    for (const r of reqs) {
+      const count = Number(r.qtd_questoes) || 0
+      if (idx >= accumulated && idx < accumulated + count) {
+        if (r.disciplina_nome?.trim()) return r.disciplina_nome.trim()
+      }
+      accumulated += count
+    }
+  }
+
+  if (direct && typeof direct === 'string' && direct.trim()) {
+    return direct.trim()
+  }
+
+  return 'Geral'
+}
+
 export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModalProps) {
   const [loading, setLoading] = useState(true)
   const [prova, setProva] = useState<any>(null)
   const [questoes, setQuestoes] = useState<any[]>([])
+  const [selectedDiscipline, setSelectedDiscipline] = useState<string>('todas')
+
+  const questoesValidas = React.useMemo(() => {
+    return (questoes || []).filter((q: any) => !isTextoApoio(q))
+  }, [questoes])
+
+  const disciplinasAgrupadas = React.useMemo(() => {
+    const reqs = prova?.provas_upload_requisicoes || []
+    const groups: {
+      disciplina: string
+      questoes: { q: any; num: number; letra: string }[]
+    }[] = []
+
+    questoesValidas.forEach((q: any, idx: number) => {
+      const num = q.numero && typeof q.numero === 'number' && q.numero > 0 ? q.numero : idx + 1
+      const alt = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
+      const letra = alt ? (alt.letter || alt.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
+      const discNome = getDisciplineName(q, idx, reqs)
+
+      let group = groups.find(g => g.disciplina.toLowerCase() === discNome.toLowerCase())
+      if (!group) {
+        group = { disciplina: discNome, questoes: [] }
+        groups.push(group)
+      }
+      group.questoes.push({ q, num, letra })
+    })
+
+    groups.forEach(g => {
+      g.questoes.sort((a, b) => a.num - b.num)
+    })
+
+    return groups
+  }, [questoesValidas, prova])
+
+  const disciplinasVisiveis = React.useMemo(() => {
+    if (selectedDiscipline === 'todas') return disciplinasAgrupadas
+    return disciplinasAgrupadas.filter(g => g.disciplina.toLowerCase() === selectedDiscipline.toLowerCase())
+  }, [disciplinasAgrupadas, selectedDiscipline])
 
   useEffect(() => {
     async function loadData() {
       try {
-        const { data, error } = await supabase.from('provas_upload').select('*').eq('id', provaUploadId).single()
+        const { data, error } = await supabase
+          .from('provas_upload')
+          .select('*, provas_upload_requisicoes(*)')
+          .eq('id', provaUploadId)
+          .single()
         const p = data as any
         if (error) throw error
 
@@ -28,8 +110,17 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
           if (b) bimestreNome = (b as any).nome
         }
 
+        let reqs = p?.provas_upload_requisicoes || []
+        if (!reqs || reqs.length === 0) {
+          const { data: rData } = await supabase
+            .from('provas_upload_requisicoes')
+            .select('*')
+            .eq('id_prova_upload', provaUploadId)
+          if (rData && rData.length > 0) reqs = rData
+        }
+
         if (p) {
-          setProva({ ...p, simulados_bimestres: { nome: bimestreNome } })
+          setProva({ ...p, simulados_bimestres: { nome: bimestreNome }, provas_upload_requisicoes: reqs })
           setQuestoes(p.questoes_json || [])
         }
       } catch (err) {
@@ -110,12 +201,40 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
         #gabarito-print-area > div:first-child { margin-bottom: 12px !important; }
         
         #gabarito-print-area .print-grid-container {
-          padding: 8px !important;
+          padding: 4px !important;
           background: #ffffff !important;
           background-color: #ffffff !important;
-          border: 1px solid #e2e8f0 !important;
+          border: none !important;
+          gap: 10px !important;
         }
-        #gabarito-print-area .print-grid-columns { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; column-count: auto !important; }
+        .gabarito-disciplina-block {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+          margin-bottom: 10px !important;
+          padding: 8px 10px !important;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 6px !important;
+          background: #ffffff !important;
+          box-shadow: none !important;
+        }
+        .gabarito-disciplina-header {
+          margin-bottom: 6px !important;
+          padding-bottom: 4px !important;
+          border-bottom: 1px solid #e2e8f0 !important;
+        }
+        .gabarito-disciplina-header h3 {
+          font-size: 11px !important;
+          font-weight: 800 !important;
+          color: #000000 !important;
+        }
+        .gabarito-disciplina-badge {
+          font-size: 9px !important;
+          padding: 1px 6px !important;
+          border: 1px solid #cbd5e1 !important;
+          color: #000000 !important;
+          background: #f8fafc !important;
+        }
+        #gabarito-print-area .print-grid-columns { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; column-count: auto !important; }
         
         .gabarito-list-item {
           padding: 3px 6px !important;
@@ -125,7 +244,7 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
           box-shadow: none !important;
           background: #ffffff !important;
         }
-        .gabarito-list-item span { font-size: 10px !important; }
+        .gabarito-list-item span { font-size: 10px !important; color: #000000 !important; }
         .gabarito-bubble {
           width: 18px !important; height: 18px !important; font-size: 10px !important;
           border: 1px solid #000 !important; color: #000 !important; background: #fff !important;
@@ -285,73 +404,237 @@ export function GabaritoProvaModal({ provaUploadId, onClose }: GabaritoProvaModa
                     <Users size={14} /> <span>Turmas: {Array.isArray(prova?.series) ? prova.series.join(', ') : (prova?.series || 'Geral')}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
-                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoes.filter(q => !isTextoApoio(q)).length} Questões</span>
+                    <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoesValidas.length} Questões</span>
                   </div>
+                  {disciplinasAgrupadas.length > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#10b981' }}>
+                      <BookOpen size={14} /> <span>{disciplinasAgrupadas.length} Disciplinas</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Grid de Respostas */}
-              <div className="print-grid-container" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, breakInside: 'avoid' }}>
-                {(() => {
-                  const meQuestoes = questoes.filter(q => !isTextoApoio(q))
-                  return (
-                    <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-                      {[
-                        meQuestoes.slice(0, Math.ceil(meQuestoes.length / 2)),
-                        meQuestoes.slice(Math.ceil(meQuestoes.length / 2))
-                      ].map((colQuestoes, colIndex) => (
-                        <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
-                          {colQuestoes.map((q, idx) => {
-                            const num = colIndex === 0 ? idx + 1 : Math.ceil(meQuestoes.length / 2) + idx + 1
-                        const alternativaCorreta = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
-                        const letraCorreta = alternativaCorreta ? (alternativaCorreta.letter || alternativaCorreta.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
+              {/* Filtros rápidos por Disciplina (No Print) */}
+              {disciplinasAgrupadas.length > 1 && (
+                <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDiscipline('todas')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 14px',
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      border: selectedDiscipline === 'todas' ? '1px solid #10b981' : '1px solid #e2e8f0',
+                      background: selectedDiscipline === 'todas' ? '#10b981' : '#ffffff',
+                      color: selectedDiscipline === 'todas' ? '#ffffff' : '#64748b',
+                      boxShadow: selectedDiscipline === 'todas' ? '0 2px 8px rgba(16,185,129,0.3)' : '0 1px 2px rgba(0,0,0,0.05)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    Todas as Disciplinas
+                    <span style={{
+                      fontSize: 11,
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      background: selectedDiscipline === 'todas' ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                      color: selectedDiscipline === 'todas' ? '#ffffff' : '#64748b'
+                    }}>
+                      {questoesValidas.length}
+                    </span>
+                  </button>
+                  {disciplinasAgrupadas.map(group => {
+                    const isSelected = selectedDiscipline.toLowerCase() === group.disciplina.toLowerCase()
+                    return (
+                      <button
+                        key={group.disciplina}
+                        type="button"
+                        onClick={() => setSelectedDiscipline(isSelected ? 'todas' : group.disciplina)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '6px 14px',
+                          borderRadius: 20,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: isSelected ? '1px solid #10b981' : '1px solid #e2e8f0',
+                          background: isSelected ? '#10b981' : '#ffffff',
+                          color: isSelected ? '#ffffff' : '#64748b',
+                          boxShadow: isSelected ? '0 2px 8px rgba(16,185,129,0.3)' : '0 1px 2px rgba(0,0,0,0.05)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        {group.disciplina}
+                        <span style={{
+                          fontSize: 11,
+                          padding: '1px 6px',
+                          borderRadius: 10,
+                          background: isSelected ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                          color: isSelected ? '#ffffff' : '#64748b'
+                        }}>
+                          {group.questoes.length}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
-                        return (
-                          <div 
-                            key={q.id || num} 
-                            className="gabarito-list-item"
-                            style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'space-between',
-                              background: '#ffffff',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: 8,
-                              padding: '8px 12px',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                              marginBottom: 8,
-                              breakInside: 'avoid',
-                              pageBreakInside: 'avoid'
+              {/* Grid de Respostas Agrupadas por Disciplina */}
+              <div className="print-grid-container" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {disciplinasVisiveis.map((group) => {
+                  const qList = group.questoes
+                  const startNum = qList[0]?.num
+                  const endNum = qList[qList.length - 1]?.num
+                  const rangeText = qList.length === 1
+                    ? `Questão ${String(startNum).padStart(2, '0')}`
+                    : `Questões ${String(startNum).padStart(2, '0')} a ${String(endNum).padStart(2, '0')}`
+
+                  const half = Math.ceil(qList.length / 2)
+                  const col1 = qList.slice(0, half)
+                  const col2 = qList.slice(half)
+
+                  return (
+                    <div
+                      key={group.disciplina}
+                      className="gabarito-disciplina-block"
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 14,
+                        padding: '16px 20px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                      }}
+                    >
+                      {/* Cabeçalho da Disciplina */}
+                      <div
+                        className="gabarito-disciplina-header"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 14,
+                          paddingBottom: 10,
+                          borderBottom: '1px solid #e2e8f0',
+                          flexWrap: 'wrap',
+                          gap: 8
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.15))',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#10b981',
+                            flexShrink: 0
+                          }}>
+                            <BookOpen size={16} />
+                          </div>
+                          <h3 style={{
+                            margin: 0,
+                            fontSize: 15,
+                            fontWeight: 800,
+                            color: '#0f172a',
+                            letterSpacing: '-0.01em',
+                            textTransform: 'uppercase'
+                          }}>
+                            {group.disciplina}
+                          </h3>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span
+                            className="gabarito-disciplina-badge"
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: '#059669',
+                              background: 'rgba(16,185,129,0.1)',
+                              padding: '3px 10px',
+                              borderRadius: 999,
+                              border: '1px solid rgba(16,185,129,0.25)'
                             }}
                           >
-                            <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
-                              Questão {num.toString().padStart(2, '0')}
-                            </span>
-                            <div 
-                              className="gabarito-bubble"
-                              style={{ 
-                                width: 28, 
-                                height: 28, 
-                                borderRadius: '50%', 
-                                background: letraCorreta !== '?' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', 
-                                color: letraCorreta !== '?' ? '#10b981' : '#ef4444', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center', 
-                                fontSize: 14, 
-                                fontWeight: 800,
-                                border: letraCorreta !== '?' ? '2px solid rgba(16,185,129,0.2)' : '2px dashed rgba(239,68,68,0.3)'
-                              }}
-                            >
-                              {letraCorreta}
-                            </div>
+                            {qList.length} {qList.length === 1 ? 'questão' : 'questões'}
+                          </span>
+                          <span
+                            className="gabarito-disciplina-badge"
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: '#64748b',
+                              background: '#ffffff',
+                              padding: '3px 10px',
+                              borderRadius: 999,
+                              border: '1px solid #e2e8f0'
+                            }}
+                          >
+                            {rangeText}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Grid de Questões */}
+                      <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
+                        {[col1, col2].filter(col => col.length > 0).map((colQuestoes, colIndex) => (
+                          <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
+                            {colQuestoes.map(({ q, num, letra }) => (
+                              <div
+                                key={q.id || num}
+                                className="gabarito-list-item"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  background: '#ffffff',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: 8,
+                                  padding: '8px 12px',
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                                  marginBottom: 8,
+                                  breakInside: 'avoid',
+                                  pageBreakInside: 'avoid'
+                                }}
+                              >
+                                <span style={{ fontSize: 13, fontWeight: 700, color: '#334155' }}>
+                                  Questão {num.toString().padStart(2, '0')}
+                                </span>
+                                <div
+                                  className="gabarito-bubble"
+                                  style={{
+                                    width: 30,
+                                    height: 30,
+                                    borderRadius: '50%',
+                                    background: letra !== '?' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.1)',
+                                    color: letra !== '?' ? '#10b981' : '#ef4444',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: 14,
+                                    fontWeight: 800,
+                                    border: letra !== '?' ? '2px solid rgba(16,185,129,0.3)' : '2px dashed rgba(239,68,68,0.3)'
+                                  }}
+                                >
+                                  {letra}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        )
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )})()}
+                  )
+                })}
               </div>
             </>
           )}

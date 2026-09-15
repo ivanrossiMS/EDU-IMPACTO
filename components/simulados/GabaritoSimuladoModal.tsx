@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
-import { isTextoApoio } from '@/lib/utils'
+import { isTextoApoio, isQuestionForRequisicao, getQuestionCorrectAnswer, getSimuladoPrintOrderedQuestoes } from '@/lib/utils'
 
 interface GabaritoSimuladoModalProps {
   simuladoUploadId: string
@@ -30,17 +30,101 @@ interface Correcao {
   created_at: string
 }
 
+function getDisciplineName(q: any, idx: number, reqs: any[] = []): string {
+  // 1. Nome direto na questão
+  const direct = q.disciplina_nome || q.disciplina
+  if (direct && typeof direct === 'string' && direct.trim() && direct.trim().toLowerCase() !== 'geral') {
+    return direct.trim()
+  }
+
+  if (Array.isArray(reqs) && reqs.length > 0) {
+    // 2. Vínculo direto por id_requisicao
+    if (q.id_requisicao) {
+      const found = reqs.find((r: any) => r.id === q.id_requisicao)
+      if (found?.disciplina_nome?.trim()) return found.disciplina_nome.trim()
+    }
+
+    // 3. Vínculo por id_disciplina / disciplina_id
+    const discId = q.id_disciplina || q.disciplina_id
+    if (discId) {
+      const found = reqs.find((r: any) => r.id_disciplina === discId)
+      if (found?.disciplina_nome?.trim()) return found.disciplina_nome.trim()
+    }
+
+    // 4. Correspondência inteligente via helper isQuestionForRequisicao
+    const matched = reqs.find((r: any) => isQuestionForRequisicao(q, r, reqs, false))
+    if (matched?.disciplina_nome?.trim()) return matched.disciplina_nome.trim()
+
+    // 5. Se há apenas 1 requisição no simulado
+    if (reqs.length === 1 && reqs[0]?.disciplina_nome?.trim()) {
+      return reqs[0].disciplina_nome.trim()
+    }
+
+    // 6. Mapeamento por faixas sequenciais de questões (qtd_questoes)
+    let accumulated = 0
+    for (const r of reqs) {
+      const count = Number(r.qtd_questoes) || 0
+      if (idx >= accumulated && idx < accumulated + count) {
+        if (r.disciplina_nome?.trim()) return r.disciplina_nome.trim()
+      }
+      accumulated += count
+    }
+  }
+
+  // 7. Se a questão tinha 'Geral' ou valor string genérico
+  if (direct && typeof direct === 'string' && direct.trim()) {
+    return direct.trim()
+  }
+
+  return 'Geral'
+}
+
 export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSimuladoModalProps) {
   const isMobile = useIsMobile()
   const [activeTab, setActiveTab] = useState<'gabarito' | 'correcoes'>('gabarito')
   const [simulado, setSimulado] = useState<any>(null)
   const [questoes, setQuestoes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedDiscipline, setSelectedDiscipline] = useState<string>('todas')
 
   // Filtra rigorosamente questões reais (exclui textos de apoio)
   const questoesValidas = React.useMemo(() => {
     return (questoes || []).filter((q: any) => !isTextoApoio(q))
   }, [questoes])
+
+  // Agrupa questões por disciplina mantendo ordem sequencial canônica e numeração da impressão
+  const disciplinasAgrupadas = React.useMemo(() => {
+    const reqs = simulado?.simulados_upload_requisicoes || []
+    const groups: {
+      disciplina: string
+      questoes: { q: any; num: number; letra: string }[]
+    }[] = []
+
+    questoesValidas.forEach((q: any, idx: number) => {
+      const num = q.numero && typeof q.numero === 'number' && q.numero > 0 ? q.numero : idx + 1
+      const letra = getQuestionCorrectAnswer(q)
+      const discNome = getDisciplineName(q, idx, reqs)
+
+      let group = groups.find(g => g.disciplina.toLowerCase() === discNome.toLowerCase())
+      if (!group) {
+        group = { disciplina: discNome, questoes: [] }
+        groups.push(group)
+      }
+      group.questoes.push({ q, num, letra })
+    })
+
+    // Garante que dentro de cada grupo as questões fiquem ordenadas pelo número oficial
+    groups.forEach(g => {
+      g.questoes.sort((a, b) => a.num - b.num)
+    })
+
+    return groups
+  }, [questoesValidas, simulado])
+
+  const disciplinasVisiveis = React.useMemo(() => {
+    if (selectedDiscipline === 'todas') return disciplinasAgrupadas
+    return disciplinasAgrupadas.filter(g => g.disciplina.toLowerCase() === selectedDiscipline.toLowerCase())
+  }, [disciplinasAgrupadas, selectedDiscipline])
 
   // Upload modal state
   const [showUploadModal, setShowUploadModal] = useState(false)
@@ -69,7 +153,11 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: p, error } = await (supabase as any).from('simulados_upload').select('*').eq('id', simuladoUploadId).single()
+        const { data: p, error } = await (supabase as any)
+          .from('simulados_upload')
+          .select('*, simulados_upload_requisicoes(*)')
+          .eq('id', simuladoUploadId)
+          .single()
         if (error) throw error
         const pd = p as any
         let bimestreNome = 'Sem Bimestre'
@@ -77,9 +165,66 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
           const { data: b } = await (supabase as any).from('simulados_bimestres').select('nome').eq('id', pd.id_bimestre).single()
           if (b) bimestreNome = (b as any).nome
         }
+        let reqs = pd?.simulados_upload_requisicoes || []
+        if (!reqs || reqs.length === 0) {
+          const { data: rData } = await (supabase as any)
+            .from('simulados_upload_requisicoes')
+            .select('*')
+            .eq('id_simulado_upload', simuladoUploadId)
+          if (rData && rData.length > 0) reqs = rData
+        }
+
+        // Ordena requisições de acordo com config_estudio para garantir ordem idêntica à impressão
+        const savedOrder = Array.isArray(pd?.config_estudio?.ordem_requisicoes) ? pd.config_estudio.ordem_requisicoes : []
+        const savedDiscOrder = Array.isArray(pd?.config_estudio?.ordem_disciplinas) ? pd.config_estudio.ordem_disciplinas : []
+        if (savedOrder.length > 0) {
+          reqs.sort((a: any, b: any) => {
+            const idxA = savedOrder.indexOf(a.id)
+            const idxB = savedOrder.indexOf(b.id)
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB
+            if (idxA !== -1) return -1
+            if (idxB !== -1) return 1
+            return 0
+          })
+        } else if (savedDiscOrder.length > 0) {
+          reqs.sort((a: any, b: any) => {
+            const idxA = savedDiscOrder.indexOf(a.id_disciplina)
+            const idxB = savedDiscOrder.indexOf(b.id_disciplina)
+            if (idxA !== -1 && idxB !== -1) return idxA - idxB
+            if (idxA !== -1) return -1
+            if (idxB !== -1) return 1
+            return 0
+          })
+        }
+
         if (pd) {
-          setSimulado({ ...pd, simulados_bimestres: { nome: bimestreNome } })
-          setQuestoes(pd.questoes_json || [])
+          const canonicalQuestoes = getSimuladoPrintOrderedQuestoes(pd, reqs)
+          const finalQuestoes = canonicalQuestoes.length > 0 ? canonicalQuestoes : (pd.questoes_json || [])
+          setSimulado({ ...pd, simulados_bimestres: { nome: bimestreNome }, simulados_upload_requisicoes: reqs })
+          setQuestoes(finalQuestoes)
+
+          // Auto-heal no banco de dados se a ordem de questoes_json estiver divergente da impressão
+          const rawDbQuestions = Array.isArray(pd.questoes_json) ? pd.questoes_json : []
+          const isOrderDivergent = canonicalQuestoes.length > 0 && (
+            rawDbQuestions.length !== canonicalQuestoes.length ||
+            canonicalQuestoes.some((cq: any, i: number) => {
+              const rq = rawDbQuestions[i]
+              return !rq || (rq._internalId || rq.id) !== (cq._internalId || cq.id) || rq.numero !== cq.numero
+            })
+          )
+
+          if (isOrderDivergent) {
+            const validCount = canonicalQuestoes.filter((q: any) => !isTextoApoio(q)).length
+            ;(supabase as any)
+              .from('simulados_upload')
+              .update({
+                questoes_json: canonicalQuestoes,
+                questoes_count: validCount,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', simuladoUploadId)
+              .then(() => {})
+          }
         }
       } catch (err) {
         console.error('Erro ao carregar gabarito:', err)
@@ -172,14 +317,42 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
         #gabarito-print-area h1 { font-size: 16px !important; margin-bottom: 6px !important; }
         #gabarito-print-area .print-header-info { font-size: 10px !important; gap: 8px !important; }
         #gabarito-print-area .print-grid-container {
-          padding: 8px !important;
+          padding: 4px !important;
           background: #ffffff !important;
           background-color: #ffffff !important;
-          border: 1px solid #e2e8f0 !important;
+          border: none !important;
+          gap: 10px !important;
         }
-        #gabarito-print-area .print-grid-columns { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+        .gabarito-disciplina-block {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+          margin-bottom: 10px !important;
+          padding: 8px 10px !important;
+          border: 1px solid #cbd5e1 !important;
+          border-radius: 6px !important;
+          background: #ffffff !important;
+          box-shadow: none !important;
+        }
+        .gabarito-disciplina-header {
+          margin-bottom: 6px !important;
+          padding-bottom: 4px !important;
+          border-bottom: 1px solid #e2e8f0 !important;
+        }
+        .gabarito-disciplina-header h3 {
+          font-size: 11px !important;
+          font-weight: 800 !important;
+          color: #000000 !important;
+        }
+        .gabarito-disciplina-badge {
+          font-size: 9px !important;
+          padding: 1px 6px !important;
+          border: 1px solid #cbd5e1 !important;
+          color: #000000 !important;
+          background: #f8fafc !important;
+        }
+        #gabarito-print-area .print-grid-columns { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; }
         .gabarito-list-item { padding: 3px 6px !important; margin-bottom: 4px !important; border: 1px solid #e2e8f0 !important; border-radius: 4px !important; box-shadow: none !important; background: #ffffff !important; }
-        .gabarito-list-item span { font-size: 10px !important; }
+        .gabarito-list-item span { font-size: 10px !important; color: #000000 !important; }
         .gabarito-bubble { width: 18px !important; height: 18px !important; font-size: 10px !important; border: 1px solid #000 !important; color: #000 !important; background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       }
     `
@@ -310,11 +483,11 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
     setUploadError(null)
 
     try {
-      // Build official answer key (exclui textos de apoio e numera 1..N)
+      // Build official answer key (com numeração e letras canônicas do exame impresso)
       const gabaritoOficial = questoesValidas.map((q: any, idx: number) => {
-        const correta = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
-        const letra = correta ? (correta.letter || correta.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
-        return { numero: idx + 1, resposta: String(letra).toUpperCase() }
+        const num = q.numero && typeof q.numero === 'number' && q.numero > 0 ? q.numero : idx + 1
+        const letra = getQuestionCorrectAnswer(q)
+        return { numero: num, resposta: String(letra).toUpperCase() }
       })
 
       // Call AI API
@@ -616,7 +789,7 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                 </div>
               ) : (
                 <>
-                  <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                  <div style={{ textAlign: 'center', marginBottom: 24 }}>
                     <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', margin: '0 0 12px', textTransform: 'uppercase' }}>Gabarito: {simulado?.titulo || 'Simulado'}</h1>
                     <div className="print-header-info" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20, flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#64748b', fontSize: 13 }}>
@@ -631,28 +804,240 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
                         <FileText size={14} color="#3b82f6" /> <span style={{ color: '#3b82f6' }}>Total: {questoesValidas.length} Questões</span>
                       </div>
+                      {disciplinasAgrupadas.length > 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#10b981' }}>
+                          <BookOpen size={14} /> <span>{disciplinasAgrupadas.length} Disciplinas</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="print-grid-container" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 }}>
-                    <div className="print-grid-columns" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20 }}>
-                      {[questoesValidas.slice(0, Math.ceil(questoesValidas.length / 2)), questoesValidas.slice(Math.ceil(questoesValidas.length / 2))].map((colQuestoes, colIndex) => (
-                        <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
-                          {colQuestoes.map((q: any, idx: number) => {
-                            const num = colIndex === 0 ? idx + 1 : Math.ceil(questoesValidas.length / 2) + idx + 1
-                            const alt = q.alternativas?.find((a: any) => a.correct || a.eh_correta)
-                            const letra = alt ? (alt.letter || alt.letra) : (q.gabarito ? String(q.gabarito).toUpperCase() : '?')
-                            return (
-                              <div key={q.id || `q-${num}`} className="gabarito-list-item" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.12)', marginBottom: 8 }}>
-                                <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Questão {num.toString().padStart(2, '0')}</span>
-                                <div className="gabarito-bubble" style={{ width: 32, height: 32, borderRadius: '50%', background: letra !== '?' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.1)', color: letra !== '?' ? '#10b981' : '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, border: letra !== '?' ? '2px solid rgba(16,185,129,0.35)' : '2px dashed rgba(239,68,68,0.4)' }}>
-                                  {letra}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ))}
+
+                  {/* Filtros rápidos por Disciplina (No Print) */}
+                  {disciplinasAgrupadas.length > 1 && (
+                    <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDiscipline('todas')}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '6px 14px',
+                          borderRadius: 20,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          border: selectedDiscipline === 'todas' ? '1px solid #10b981' : '1px solid #e2e8f0',
+                          background: selectedDiscipline === 'todas' ? '#10b981' : '#ffffff',
+                          color: selectedDiscipline === 'todas' ? '#ffffff' : '#64748b',
+                          boxShadow: selectedDiscipline === 'todas' ? '0 2px 8px rgba(16,185,129,0.3)' : '0 1px 2px rgba(0,0,0,0.05)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        Todas as Disciplinas
+                        <span style={{
+                          fontSize: 11,
+                          padding: '1px 6px',
+                          borderRadius: 10,
+                          background: selectedDiscipline === 'todas' ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                          color: selectedDiscipline === 'todas' ? '#ffffff' : '#64748b'
+                        }}>
+                          {questoesValidas.length}
+                        </span>
+                      </button>
+                      {disciplinasAgrupadas.map(group => {
+                        const isSelected = selectedDiscipline.toLowerCase() === group.disciplina.toLowerCase()
+                        return (
+                          <button
+                            key={group.disciplina}
+                            type="button"
+                            onClick={() => setSelectedDiscipline(isSelected ? 'todas' : group.disciplina)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '6px 14px',
+                              borderRadius: 20,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              border: isSelected ? '1px solid #10b981' : '1px solid #e2e8f0',
+                              background: isSelected ? '#10b981' : '#ffffff',
+                              color: isSelected ? '#ffffff' : '#64748b',
+                              boxShadow: isSelected ? '0 2px 8px rgba(16,185,129,0.3)' : '0 1px 2px rgba(0,0,0,0.05)',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            {group.disciplina}
+                            <span style={{
+                              fontSize: 11,
+                              padding: '1px 6px',
+                              borderRadius: 10,
+                              background: isSelected ? 'rgba(255,255,255,0.25)' : '#f1f5f9',
+                              color: isSelected ? '#ffffff' : '#64748b'
+                            }}>
+                              {group.questoes.length}
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
+                  )}
+
+                  {/* Container das Questões Agrupadas por Disciplina */}
+                  <div className="print-grid-container" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {disciplinasVisiveis.map((group) => {
+                      const qList = group.questoes
+                      const startNum = qList[0]?.num
+                      const endNum = qList[qList.length - 1]?.num
+                      const rangeText = qList.length === 1
+                        ? `Questão ${String(startNum).padStart(2, '0')}`
+                        : `Questões ${String(startNum).padStart(2, '0')} a ${String(endNum).padStart(2, '0')}`
+
+                      const half = Math.ceil(qList.length / 2)
+                      const col1 = qList.slice(0, half)
+                      const col2 = qList.slice(half)
+
+                      return (
+                        <div
+                          key={group.disciplina}
+                          className="gabarito-disciplina-block"
+                          style={{
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 14,
+                            padding: isMobile ? '12px 14px' : '16px 20px',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                          }}
+                        >
+                          {/* Cabeçalho da Disciplina */}
+                          <div
+                            className="gabarito-disciplina-header"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              marginBottom: 14,
+                              paddingBottom: 10,
+                              borderBottom: '1px solid #e2e8f0',
+                              flexWrap: 'wrap',
+                              gap: 8
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 8,
+                                background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.15))',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#10b981',
+                                flexShrink: 0
+                              }}>
+                                <BookOpen size={16} />
+                              </div>
+                              <h3 style={{
+                                margin: 0,
+                                fontSize: 15,
+                                fontWeight: 800,
+                                color: '#0f172a',
+                                letterSpacing: '-0.01em',
+                                textTransform: 'uppercase'
+                              }}>
+                                {group.disciplina}
+                              </h3>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span
+                                className="gabarito-disciplina-badge"
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 700,
+                                  color: '#059669',
+                                  background: 'rgba(16,185,129,0.1)',
+                                  padding: '3px 10px',
+                                  borderRadius: 999,
+                                  border: '1px solid rgba(16,185,129,0.25)'
+                                }}
+                              >
+                                {qList.length} {qList.length === 1 ? 'questão' : 'questões'}
+                              </span>
+                              <span
+                                className="gabarito-disciplina-badge"
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  color: '#64748b',
+                                  background: '#ffffff',
+                                  padding: '3px 10px',
+                                  borderRadius: 999,
+                                  border: '1px solid #e2e8f0'
+                                }}
+                              >
+                                {rangeText}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Grid em 2 Colunas */}
+                          <div
+                            className="print-grid-columns"
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+                              gap: isMobile ? 8 : 16
+                            }}
+                          >
+                            {[col1, col2].filter(col => col.length > 0).map((colQuestoes, colIndex) => (
+                              <div key={colIndex} style={{ display: 'flex', flexDirection: 'column' }}>
+                                {colQuestoes.map(({ q, num, letra }) => (
+                                  <div
+                                    key={q.id || `q-${num}`}
+                                    className="gabarito-list-item"
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      background: '#ffffff',
+                                      border: '1px solid #e2e8f0',
+                                      borderRadius: 8,
+                                      padding: '8px 14px',
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                                      marginBottom: 8
+                                    }}
+                                  >
+                                    <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                                      Questão {num.toString().padStart(2, '0')}
+                                    </span>
+                                    <div
+                                      className="gabarito-bubble"
+                                      style={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: '50%',
+                                        background: letra !== '?' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.1)',
+                                        color: letra !== '?' ? '#10b981' : '#ef4444',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: 14,
+                                        fontWeight: 900,
+                                        border: letra !== '?' ? '2px solid rgba(16,185,129,0.35)' : '2px dashed rgba(239,68,68,0.4)'
+                                      }}
+                                    >
+                                      {letra}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </>
               )}
@@ -869,53 +1254,131 @@ export function GabaritoSimuladoModal({ simuladoUploadId, onClose }: GabaritoSim
                                     <Edit3 size={12} /> Clique em uma questão para ajustar
                                   </div>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 8 }}>
-                                  {(c.gabarito_oficial || []).map((g: any, idx: number) => {
-                                    const respostaAluno = c.respostas_aluno?.find((r: any) => r.numero === g.numero)
-                                    const ra = respostaAluno?.resposta?.toUpperCase() || '–'
-                                    const rc = g.resposta?.toUpperCase()
-                                    const correto = ra === rc
-                                    const detalhe = respostaAluno?.detalhe
-                                    return (
-                                      <div
-                                        key={idx}
-                                        onClick={() => setEditingQuestion({
-                                          correcaoId: c.id,
-                                          numero: g.numero,
-                                          alunoNome: c.nome_aluno,
-                                          currentAnswer: ra === '–' ? null : ra,
-                                          gabaritoOficial: rc
-                                        })}
-                                        title={detalhe ? `${detalhe} (Clique para alterar)` : 'Clique para alterar resposta'}
-                                        style={{
-                                          background: correto ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
-                                          border: `1px solid ${correto ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
-                                          borderRadius: 10,
-                                          padding: '8px 10px',
-                                          display: 'flex',
-                                          flexDirection: 'column',
-                                          alignItems: 'center',
-                                          gap: 4,
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s ease',
-                                          position: 'relative'
-                                        }}
-                                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)' }}
-                                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
-                                      >
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                                          <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Q{g.numero}</span>
-                                          <Edit3 size={10} color="#94a3b8" />
+                                {disciplinasAgrupadas.length > 1 ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                    {disciplinasAgrupadas.map(group => {
+                                      const groupNums = new Set(group.questoes.map(q => q.num))
+                                      const groupGabarito = (c.gabarito_oficial || []).filter((g: any) => groupNums.has(g.numero))
+                                      if (groupGabarito.length === 0) return null
+
+                                      const groupAcertos = groupGabarito.filter((g: any) => {
+                                        const r = c.respostas_aluno?.find((ans: any) => ans.numero === g.numero)
+                                        return r?.resposta && r.resposta.toUpperCase() === g.resposta?.toUpperCase()
+                                      }).length
+                                      const groupPct = Math.round((groupAcertos / groupGabarito.length) * 100)
+                                      const groupColor = getScoreColor(groupPct)
+
+                                      return (
+                                        <div key={group.disciplina} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                                              <BookOpen size={14} color="#10b981" />
+                                              <span>{group.disciplina}</span>
+                                            </div>
+                                            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: `${groupColor}15`, color: groupColor }}>
+                                              {groupAcertos} de {groupGabarito.length} acertos ({groupPct}%)
+                                            </span>
+                                          </div>
+                                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 8 }}>
+                                            {groupGabarito.map((g: any, idx: number) => {
+                                              const respostaAluno = c.respostas_aluno?.find((r: any) => r.numero === g.numero)
+                                              const ra = respostaAluno?.resposta?.toUpperCase() || '–'
+                                              const rc = g.resposta?.toUpperCase()
+                                              const correto = ra === rc
+                                              const detalhe = respostaAluno?.detalhe
+                                              return (
+                                                <div
+                                                  key={idx}
+                                                  onClick={() => setEditingQuestion({
+                                                    correcaoId: c.id,
+                                                    numero: g.numero,
+                                                    alunoNome: c.nome_aluno,
+                                                    currentAnswer: ra === '–' ? null : ra,
+                                                    gabaritoOficial: rc
+                                                  })}
+                                                  title={detalhe ? `${detalhe} (Clique para alterar)` : 'Clique para alterar resposta'}
+                                                  style={{
+                                                    background: correto ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+                                                    border: `1px solid ${correto ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                                                    borderRadius: 10,
+                                                    padding: '8px 10px',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    gap: 4,
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.15s ease',
+                                                    position: 'relative'
+                                                  }}
+                                                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)' }}
+                                                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
+                                                >
+                                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Q{g.numero}</span>
+                                                    <Edit3 size={10} color="#94a3b8" />
+                                                  </div>
+                                                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                                    <span style={{ fontSize: 14, fontWeight: 900, color: correto ? '#10b981' : '#ef4444' }}>{ra}</span>
+                                                    {!correto && <span style={{ fontSize: 11, color: '#64748b' }}>({rc})</span>}
+                                                  </div>
+                                                  {correto ? <CheckCircle size={12} color="#10b981" /> : <XCircle size={12} color="#ef4444" />}
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
                                         </div>
-                                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                          <span style={{ fontSize: 14, fontWeight: 900, color: correto ? '#10b981' : '#ef4444' }}>{ra}</span>
-                                          {!correto && <span style={{ fontSize: 11, color: '#64748b' }}>({rc})</span>}
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 8 }}>
+                                    {(c.gabarito_oficial || []).map((g: any, idx: number) => {
+                                      const respostaAluno = c.respostas_aluno?.find((r: any) => r.numero === g.numero)
+                                      const ra = respostaAluno?.resposta?.toUpperCase() || '–'
+                                      const rc = g.resposta?.toUpperCase()
+                                      const correto = ra === rc
+                                      const detalhe = respostaAluno?.detalhe
+                                      return (
+                                        <div
+                                          key={idx}
+                                          onClick={() => setEditingQuestion({
+                                            correcaoId: c.id,
+                                            numero: g.numero,
+                                            alunoNome: c.nome_aluno,
+                                            currentAnswer: ra === '–' ? null : ra,
+                                            gabaritoOficial: rc
+                                          })}
+                                          title={detalhe ? `${detalhe} (Clique para alterar)` : 'Clique para alterar resposta'}
+                                          style={{
+                                            background: correto ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+                                            border: `1px solid ${correto ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                                            borderRadius: 10,
+                                            padding: '8px 10px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.15s ease',
+                                            position: 'relative'
+                                          }}
+                                          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)' }}
+                                          onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
+                                        >
+                                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Q{g.numero}</span>
+                                            <Edit3 size={10} color="#94a3b8" />
+                                          </div>
+                                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                            <span style={{ fontSize: 14, fontWeight: 900, color: correto ? '#10b981' : '#ef4444' }}>{ra}</span>
+                                            {!correto && <span style={{ fontSize: 11, color: '#64748b' }}>({rc})</span>}
+                                          </div>
+                                          {correto ? <CheckCircle size={12} color="#10b981" /> : <XCircle size={12} color="#ef4444" />}
                                         </div>
-                                        {correto ? <CheckCircle size={12} color="#10b981" /> : <XCircle size={12} color="#ef4444" />}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             </motion.div>
                           )}

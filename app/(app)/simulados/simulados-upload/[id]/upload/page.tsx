@@ -290,8 +290,14 @@ export default function UploadSimuladoPage() {
             (q.alternativas || []).some((a: any) => a.text && a.text.includes('[IMAGEM'))
           )
 
+          const isOrderDivergent = validReqQuestions.some((vq: any, i: number) => {
+            const rq = rawQuestions[i]
+            return !rq || (rq._internalId || rq.id) !== (vq._internalId || vq.id) || rq.numero !== (i + 1)
+          })
+
           const needsHealing = validReqQuestions.length > 0 && (
             hasUnnormalizedAlts ||
+            isOrderDivergent ||
             allQuestions.length !== validReqQuestions.length ||
             allQuestions.some((q: any) => !q.id_requisicao || !q.disciplina_nome) ||
             simuladoData?.questoes_count !== validReqQuestions.filter((q: any) => !isTextoApoio(q)).length
@@ -485,10 +491,32 @@ export default function UploadSimuladoPage() {
         }
       })
 
-      // 4. Merge preserved other questions with our updated active questions
+      // 4. Reconstruct the global list ordered by canonical requisitions (same order as exam print)
+      const combined = showAll ? myQuestionsToSave : [...otherQuestions, ...myQuestionsToSave]
+      let orderedMerged: any[] = []
+      const usedIds = new Set<string>()
+
+      if (allReqs.length > 0) {
+        orderedMerged = allReqs.flatMap((req: any) => {
+          const matching = combined.filter((q: any) => isQuestionForRequisicao(q, req, allReqs, false))
+          return matching.map((q: any) => {
+            const idKey = q._internalId || q.id || `${q.numero}-${(q.enunciado || '').slice(0, 20)}`
+            usedIds.add(idKey)
+            return q
+          })
+        })
+
+        const orphans = combined.filter((q: any) => {
+          const idKey = q._internalId || q.id || `${q.numero}-${(q.enunciado || '').slice(0, 20)}`
+          return !usedIds.has(idKey)
+        })
+        orderedMerged = [...orderedMerged, ...orphans]
+      } else {
+        orderedMerged = combined
+      }
+
       let globalNumCounter = 1
-      const mergedList = showAll ? myQuestionsToSave : [...otherQuestions, ...myQuestionsToSave]
-      const finalQToSave = mergedList.map((q: any) => {
+      const finalQToSave = orderedMerged.map((q: any) => {
         const isApoio = isTextoApoio(q)
         return {
           ...q,

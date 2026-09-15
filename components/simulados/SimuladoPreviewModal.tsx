@@ -487,7 +487,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
           id: altId,
           letra: alt.letter || alt.letra,
           texto: alt.text || alt.texto,
-          eh_correta: alt.correct || alt.eh_correta,
+          eh_correta: Boolean(alt.correct || alt.eh_correta || alt.correta),
           imagem_url: (alt as any).imagem_url,
           _uid: altId
         };
@@ -1066,7 +1066,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
                   letra: LETTERS[idx] || String.fromCharCode(65 + idx)
                 }));
 
-                const correctAlt = relettered.find((alt: any) => alt.correct || alt.eh_correta);
+                const correctAlt = relettered.find((alt: any) => alt.correct || alt.eh_correta || alt.correta);
                 const newGabarito = correctAlt ? (correctAlt.letter || correctAlt.letra) : q.gabarito;
 
                 return { ...q, alternativas: relettered, ...(newGabarito ? { gabarito: newGabarito } : {}) };
