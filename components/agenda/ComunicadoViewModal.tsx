@@ -7,6 +7,7 @@ import Image from 'next/image'
 import Portal from '@/components/Portal'
 import { UserAvatar } from '@/components/UserAvatar'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
+import { getCachedStudentPhoto, setCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache'
 
 // Helpers
 const parseAnexo = (anexoData: any) => {
@@ -184,6 +185,35 @@ export function ComunicadoViewModal({
       return () => clearInterval(cobInterval);
     }
   }, [comunicado.id, currentUserSlug, isAdminMode])
+
+  const [studentPhotosMap, setStudentPhotosMap] = useState<Record<string, string | null>>({});
+
+  // Pré-carrega fotos dos alunos caso o comunicado possua anexos de relatórios individuais
+  useEffect(() => {
+    if (!comunicado?.anexos || !Array.isArray(comunicado.anexos)) return;
+    const idsToFetch: string[] = [];
+    comunicado.anexos.forEach((a: any) => {
+      const aStr = typeof a === 'string' ? a : String(a?.url || '');
+      if (aStr.includes('payload:') || aStr.endsWith('|report-payload')) {
+        try {
+          const parts = aStr.split('|');
+          const p = parts.find(x => x.startsWith('payload:'));
+          if (p) {
+            const pay = JSON.parse(p.substring(8));
+            if (pay?.studentInfo?.id) idsToFetch.push(String(pay.studentInfo.id));
+            const vKeys = Object.keys(pay?.values || {});
+            if (vKeys[0]) idsToFetch.push(String(vKeys[0]));
+          }
+        } catch(e) {}
+      }
+    });
+
+    if (idsToFetch.length > 0) {
+      fetchStudentPhotos(idsToFetch).then(photos => {
+        setStudentPhotosMap(prev => ({ ...prev, ...photos }));
+      });
+    }
+  }, [comunicado?.anexos]);
 
   useEffect(() => {
     if ((!comunicado.conteudo && !comunicado.texto) && comunicado.id) {
@@ -1061,12 +1091,25 @@ export function ComunicadoViewModal({
                     )
                   } else {
                     let studentIdForCiencia = null;
+                    let reportStudentName = null;
+                    let reportStudentAvatar = null;
                     if (isReportPayload && parsed.url.startsWith('payload:')) {
                       try {
                         const pay = JSON.parse(parsed.url.substring(8));
-                        studentIdForCiencia = pay?.studentInfo?.id;
+                        studentIdForCiencia = pay?.studentInfo?.id || Object.keys(pay?.values || {})[0];
+                        reportStudentName = pay?.studentInfo?.name || null;
+                        reportStudentAvatar = pay?.studentInfo?.avatarUrl || null;
                       } catch(e) {}
                     }
+
+                    const cleanStuId = studentIdForCiencia ? String(studentIdForCiencia).replace(/^a_?/, '').replace(/^_*(ALU)?/, '') : null;
+                    const matchedAluno = cleanStuId && alunos ? alunos.find((a: any) => {
+                      const aId = String(a.id || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+                      return aId === cleanStuId || (reportStudentName && String(a.nome || '').trim().toLowerCase() === String(reportStudentName).trim().toLowerCase());
+                    }) : null;
+
+                    const finalPhoto = reportStudentAvatar || (cleanStuId ? (studentPhotosMap[cleanStuId] || getCachedStudentPhoto(cleanStuId)) : null) || matchedAluno?.foto || matchedAluno?.foto_url || matchedAluno?.avatarUrl || matchedAluno?.dados?.foto || matchedAluno?.dados?.avatarUrl || null;
+
                     const studentCienciaIso = studentIdForCiencia && comunicado.ciencias ? comunicado.ciencias[studentIdForCiencia] : null;
                     let cienciaString = '';
                     if (studentCienciaIso) {
@@ -1074,22 +1117,46 @@ export function ComunicadoViewModal({
                       cienciaString = cDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' às ' + cDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                     }
 
+                    const displayName = parsed.name.replace(/^(Formulário:|Relatório:|Tarefa de Relatório:)\s*/, '');
+                    const initialLetter = (reportStudentName || displayName.replace(/^Relatório Personalizado:\s*/, '') || 'A').trim().charAt(0).toUpperCase();
+
                     // Document Card
                     return (
                       <div key={idx} style={{ maxWidth: 800, width: '100%', padding: '16px', background: '#ffffff', borderRadius: 16, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }} 
                            onClick={() => {
                              if (isReportTask && setOpenedReportTask) setOpenedReportTask(anexo)
-                             else if (isReportPayload && setOpenedReportPayload) setOpenedReportPayload(anexo)
+                             else if (isReportPayload && setOpenedReportPayload) {
+                               if (finalPhoto && cleanStuId) {
+                                 setCachedStudentPhoto(cleanStuId, finalPhoto);
+                               }
+                               setOpenedReportPayload(anexo);
+                             }
                              else if ((isForm || isRel) && setOpenedFormStr) setOpenedFormStr(anexo)
                              else handleDownload(parsed)
                            }}>
-                        <div style={{ width: 48, height: 48, borderRadius: 12, background: isReportTask ? '#ecfdf5' : '#f1f5f9', color: isReportTask ? '#10b981' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                           <FileText size={24} />
-                        </div>
+                        {isReportPayload ? (
+                          <div style={{ width: 48, height: 48, borderRadius: 14, overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {finalPhoto ? (
+                              <img 
+                                src={finalPhoto} 
+                                alt={displayName} 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                              />
+                            ) : (
+                              <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18 }}>
+                                {initialLetter}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ width: 48, height: 48, borderRadius: 12, background: isReportTask ? '#ecfdf5' : '#f1f5f9', color: isReportTask ? '#10b981' : '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <FileText size={24} />
+                          </div>
+                        )}
                         <div style={{ flex: 1 }}>
-                           <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{parsed.name.replace(/^(Formulário:|Relatório:|Tarefa de Relatório:)\s*/, '')}</div>
+                           <div style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{displayName}</div>
                            <div style={{ fontSize: 13, color: '#64748b' }}>
-                              {isForm ? 'Formulário' : isRel ? 'Relatório' : isReportTask ? 'Tarefa de Relatório' : 'Documento anexo'}
+                              {isForm ? 'Formulário' : isRel ? 'Relatório' : isReportTask ? 'Tarefa de Relatório' : isReportPayload ? 'Relatório Individual do Aluno' : 'Documento anexo'}
                               {!isForm && !isRel && !isReportTask && !isReportPayload && (
                                 <> • <AttachmentSize url={parsed.url} initialSize={parsed.size} /></>
                               )}

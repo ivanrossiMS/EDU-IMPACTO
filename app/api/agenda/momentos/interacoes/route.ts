@@ -3,6 +3,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getColaboradorIds } from '@/lib/server/notificationHelper'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,19 @@ export async function POST(request: Request) {
       dados.likes = likes
     } else if (action === 'comment') {
       if (!value) return NextResponse.json({ error: 'Comment value missing' }, { status: 400 })
+
+      // Verificar permissão no ad_config
+      const adminClient = getAdminClient()
+      const { data: cfgRow } = await adminClient
+        .from('configuracoes')
+        .select('valor')
+        .eq('chave', 'ad_config')
+        .maybeSingle()
+
+      if (cfgRow?.valor?.permissoes?.comentariosMural === false) {
+        return NextResponse.json({ error: 'Comentários no mural estão desativados.' }, { status: 403 })
+      }
+
       comments.push({
         id: Date.now().toString(),
         author: authorName,

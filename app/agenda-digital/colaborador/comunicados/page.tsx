@@ -1684,7 +1684,7 @@ function ColaboradorComunicadosContent() {
         isOpen={!!openedReportPayloadStr}
         onClose={() => setOpenedReportPayloadStr(null)}
         attachmentString={openedReportPayloadStr || ''}
-        alunos={alunosAtivos}
+        alunos={alunos}
       />
 
       <AnimatePresence>

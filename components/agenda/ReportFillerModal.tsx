@@ -7,6 +7,7 @@ import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 
 import { useData } from '@/lib/dataContext';
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils';
+import { getCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache';
 
 interface ReportFillerModalProps {
   isOpen: boolean
@@ -193,6 +194,28 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
       return val !== undefined && val !== null && val !== '' && (!Array.isArray(val) || val.length > 0);
     });
   }, [answers, activeStudents, currentField]);
+
+  const [loadedPhotos, setLoadedPhotos] = useState<Record<string, string | null>>({});
+
+  // Pré-carrega fotos dos alunos da turma/selecionados que não têm foto carregada
+  useEffect(() => {
+    if (!isOpen || !targetedStudents || targetedStudents.length === 0) return;
+    const idsToFetch = targetedStudents
+      .filter(a => !(a.foto || a.foto_url || a.avatarUrl || getCachedStudentPhoto(a.id)))
+      .map(a => a.id);
+
+    if (idsToFetch.length > 0) {
+      fetchStudentPhotos(idsToFetch).then(photos => {
+        setLoadedPhotos(prev => ({ ...prev, ...photos }));
+      });
+    }
+  }, [isOpen, targetedStudents]);
+
+  const getAlunoPhoto = (aluno: any) => {
+    if (!aluno) return null;
+    const cleanId = String(aluno.id || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+    return aluno.foto || aluno.foto_url || aluno.avatarUrl || aluno.dados?.foto || aluno.dados?.avatarUrl || loadedPhotos[cleanId] || loadedPhotos[aluno.id] || getCachedStudentPhoto(cleanId) || null;
+  };
 
   // Initialize selected students or reset when payload changes
   useEffect(() => {
@@ -392,7 +415,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
          studentInfo: {
             id: aluno.id,
             name: aluno.nome,
-            avatarUrl: aluno.foto || aluno.avatarUrl || null,
+            avatarUrl: getAlunoPhoto(aluno),
             turma: `${getTurmaName(aluno)} - ${aluno.dados?.anoLetivo || aluno.ano_letivo || aluno.ano || new Date().getFullYear().toString()}`
          }
       }
@@ -434,7 +457,7 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
           studentInfo: {
             id: aluno.id,
             name: aluno.nome,
-            avatarUrl: aluno.foto || aluno.avatarUrl || null,
+            avatarUrl: getAlunoPhoto(aluno),
             turma: `${getTurmaName(aluno)} - ${aluno.dados?.anoLetivo || aluno.ano_letivo || aluno.ano || new Date().getFullYear().toString()}`
           }
        }
@@ -991,9 +1014,9 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                                 }
                               }}
                             />
-                            <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
-                              {aluno.foto_url || aluno.foto ? (
-                                <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                            <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0, overflow: 'hidden' }}>
+                              {getAlunoPhoto(aluno) ? (
+                                <img src={getAlunoPhoto(aluno)!} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                               ) : (
                                 <User size={15} />
                               )}
@@ -1150,8 +1173,8 @@ export function ReportFillerModal({ isOpen, anexoStr, onClose, onBack, currentUs
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px', background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 auto' }}>
-                              <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
-                                {aluno.foto_url || aluno.foto ? <img src={aluno.foto_url || aluno.foto} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <User size={16} />}
+                              <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0, overflow: 'hidden' }}>
+                                {getAlunoPhoto(aluno) ? <img src={getAlunoPhoto(aluno)!} alt={aluno.nome} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : <User size={16} />}
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', minWidth: 0 }}>
                                 <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>

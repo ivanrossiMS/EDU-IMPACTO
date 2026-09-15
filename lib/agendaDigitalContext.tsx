@@ -307,7 +307,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   
   // Inicia com banner do cache síncrono (0ms de espera visual)
   const [bannerUrl, setBannerUrlState] = useState<string | null>(getInitialBanner)
-  const [adConfig, setAdConfig] = useState<ADConfig>(() => getInitialConfig(defaultInitialConfig))
+  const [adConfig, setAdConfigState] = useState<ADConfig>(() => getInitialConfig(defaultInitialConfig))
 
   const setBannerUrl = useCallback((url: string | null) => {
     setBannerUrlState(url)
@@ -322,12 +322,34 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
     }
   }, [])
 
+  const setAdConfig = useCallback((updater: React.SetStateAction<ADConfig>) => {
+    setAdConfigState(prev => {
+      const next = typeof updater === 'function' ? (updater as (prevState: ADConfig) => ADConfig)(prev) : updater
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(next))
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: CONFIG_STORAGE_KEY,
+            newValue: JSON.stringify(next)
+          }))
+        } catch (_) {}
+      }
+      return next
+    })
+  }, [])
+
   // Sincronização multi-abas e multi-janelas instantânea via StorageEvent
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onStorage = (e: StorageEvent) => {
       if (e.key === BANNER_STORAGE_KEY) {
         setBannerUrlState(e.newValue)
+      }
+      if (e.key === CONFIG_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue)
+          setAdConfigState(parsed)
+        } catch (_) {}
       }
     }
     window.addEventListener('storage', onStorage)

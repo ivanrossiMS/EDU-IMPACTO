@@ -130,6 +130,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   }
 
   const handlePublishComment = async (momentId: number | string) => {
+    if (!canComment) return
     const text = commentInputs[momentId]
     if (!text?.trim()) return
 

@@ -7,6 +7,7 @@ import { X, Heart, Sparkles, Star, FileText, User, Utensils, Book, Edit3, Bath, 
 import { ReportPayload, MOCK_TEMPLATES } from './types';
 import { useData } from '@/lib/dataContext';
 import StudentProfileBackground from './StudentProfileBackground';
+import { getCachedStudentPhoto, setCachedStudentPhoto, fetchStudentPhotos } from '@/lib/studentPhotoCache';
 
 interface ReportPayloadViewProps {
   isOpen: boolean;
@@ -28,6 +29,8 @@ export function ReportPayloadView({
   alunos: propAlunos
 }: ReportPayloadViewProps) {
   const [mounted, setMounted] = useState(false);
+  const [dynamicAvatar, setDynamicAvatar] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
   const { turmas = [], alunos: contextAlunos = [] } = useData();
   const alunos = propAlunos || contextAlunos;
 
@@ -37,6 +40,7 @@ export function ReportPayloadView({
 
   useEffect(() => {
     if (isOpen) {
+      setAvatarError(false);
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => {
@@ -57,6 +61,63 @@ export function ReportPayloadView({
       return null;
     }
   }, [attachmentString]);
+
+  // Efeito para garantir a obtenção da foto do aluno sob demanda se não estiver presente
+  useEffect(() => {
+    if (!isOpen || !payload) {
+      setDynamicAvatar(null);
+      return;
+    }
+
+    const firstStudentId = Object.keys(payload.values || {})[0];
+    const studentIdToUse = targetStudentId || firstStudentId || payload.studentInfo?.id;
+    if (!studentIdToUse) return;
+
+    // Se já veio avatar válido direto nas props ou payload, armazena no cache e usa
+    const staticAvatar = targetStudentAvatar || payload.studentInfo?.avatarUrl;
+    if (staticAvatar && typeof staticAvatar === 'string' && staticAvatar.length > 20) {
+      setCachedStudentPhoto(studentIdToUse, staticAvatar);
+      return;
+    }
+
+    // 1. Verifica no cache em memória
+    const cached = getCachedStudentPhoto(studentIdToUse);
+    if (cached) {
+      setDynamicAvatar(cached);
+      return;
+    }
+
+    // 2. Tenta encontrar na lista de alunos passada
+    if (alunos && alunos.length > 0) {
+      const cleanId = String(studentIdToUse).replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+      const foundAluno = alunos.find((a: any) => {
+        const aId = String(a.id || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+        return aId === cleanId || String(a.nome || '').trim().toLowerCase() === String(payload.studentInfo?.name || '').trim().toLowerCase();
+      });
+
+      const alunoFoto = foundAluno?.foto || foundAluno?.foto_url || foundAluno?.avatarUrl || foundAluno?.dados?.foto || foundAluno?.dados?.avatarUrl;
+      if (alunoFoto && typeof alunoFoto === 'string' && alunoFoto.length > 20) {
+        setCachedStudentPhoto(studentIdToUse, alunoFoto);
+        setDynamicAvatar(alunoFoto);
+        return;
+      }
+    }
+
+    // 3. Busca da API sob demanda
+    let isCancelled = false;
+    fetchStudentPhotos([studentIdToUse]).then(photos => {
+      if (isCancelled) return;
+      const cleanId = String(studentIdToUse).replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+      const photo = photos[cleanId] || photos[studentIdToUse] || null;
+      if (photo) {
+        setDynamicAvatar(photo);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isOpen, payload, targetStudentId, targetStudentAvatar, alunos]);
 
   const { resolvedStudentInfo, resolvedTemplate, observacaoValue, standardFields } = useMemo(() => {
     if (!payload) return { resolvedStudentInfo: null, resolvedTemplate: null, observacaoValue: null, standardFields: [] };
@@ -80,11 +141,16 @@ export function ReportPayloadView({
     const firstStudentId = Object.keys(payload.values || {})[0];
     const studentIdToUse = targetStudentId || firstStudentId || payload.studentInfo?.id;
     
-    let currentAvatarUrl = targetStudentAvatar || payload.studentInfo?.avatarUrl || null;
+    let currentAvatarUrl = targetStudentAvatar || dynamicAvatar || payload.studentInfo?.avatarUrl || getCachedStudentPhoto(studentIdToUse) || null;
     if (!currentAvatarUrl && studentIdToUse && alunos && alunos.length > 0) {
-      const foundAluno = alunos.find((a: any) => String(a.id) === String(studentIdToUse) || String(a.id) === String(studentIdToUse).replace(/^a_?/, ''));
-      if (foundAluno && foundAluno.foto) {
-         currentAvatarUrl = foundAluno.foto;
+      const cleanId = String(studentIdToUse).replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+      const foundAluno = alunos.find((a: any) => {
+        const aId = String(a.id || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+        return aId === cleanId || String(a.nome || '').trim().toLowerCase() === String(payload.studentInfo?.name || '').trim().toLowerCase();
+      });
+      const alunoFoto = foundAluno?.foto || foundAluno?.foto_url || foundAluno?.avatarUrl || foundAluno?.dados?.foto || foundAluno?.dados?.avatarUrl;
+      if (alunoFoto) {
+         currentAvatarUrl = alunoFoto;
       }
     }
     
@@ -127,7 +193,7 @@ export function ReportPayloadView({
     }
 
     return { resolvedStudentInfo: info, resolvedTemplate: temp, observacaoValue: obsValue, standardFields: fields };
-  }, [payload, attachmentString, turmas, targetStudentId, targetStudentName, targetStudentAvatar]);
+  }, [payload, attachmentString, turmas, targetStudentId, targetStudentName, targetStudentAvatar, dynamicAvatar, alunos]);
 
   const studentInfo = resolvedStudentInfo || { id: 'unknown', name: 'Aluno(a)', avatarUrl: null, turma: '' };
   const template = resolvedTemplate;
@@ -221,12 +287,13 @@ export function ReportPayloadView({
 
               {/* Avatar and Names */}
               <div className="relative flex flex-col items-center z-10" style={{ marginTop: '16px', marginBottom: '16px', padding: '0 24px' }}>
-                {studentInfo.avatarUrl ? (
+                {studentInfo.avatarUrl && !avatarError ? (
                   <img 
                     src={studentInfo.avatarUrl} 
                     alt={studentInfo.name} 
                     className="rounded-full object-cover border-white shadow-[0_8px_30px_rgba(0,0,0,0.12)] bg-slate-100" 
                     style={{ width: '100px', height: '100px', borderWidth: '4px' }}
+                    onError={() => setAvatarError(true)}
                   />
                 ) : (
                   <div 
