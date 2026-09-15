@@ -87,14 +87,19 @@ export async function GET(request: Request) {
     }
   }
 
+  const NO_CACHE_HEADERS = {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+  };
+
   if (!user) {
     if (isNetworkError) {
       return NextResponse.json(
         { error: 'Serviço de autenticação temporariamente indisponível (falha de rede/DNS)', isNetworkError: true },
-        { status: 503 }
+        { status: 503, headers: NO_CACHE_HEADERS }
       );
     }
-    return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401, headers: NO_CACHE_HEADERS });
   }
 
   // Fetch the latest profile data from system_users to ensure it is always up to date
@@ -135,7 +140,7 @@ export async function GET(request: Request) {
   };
 
   return NextResponse.json({ user: userData, ip }, {
-    headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+    headers: NO_CACHE_HEADERS
   });
 }
 

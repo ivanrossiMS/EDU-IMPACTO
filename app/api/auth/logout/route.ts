@@ -7,42 +7,51 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   const redirectUrl = new URL('/login', request.url)
   const response = NextResponse.redirect(redirectUrl, { status: 302 })
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  response.headers.set('Pragma', 'no-cache')
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const projectRef = supabaseUrl.replace(/^https?:\/\//, '').split('.')[0]
+  const projectCookiePrefix = `sb-${projectRef}-auth-token`
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseUrl,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
-          // Write cookie changes into the redirect response
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            response.cookies.set(name, value, {
+              ...options,
+              path: options?.path || '/',
+              maxAge: 0,
+              expires: new Date(0),
+            })
           )
         },
       },
     }
   )
 
-  // Sign out — Supabase will clear session cookies via setAll above
   try {
     await supabase.auth.signOut()
   } catch (error) {
-    // Ignore invalid refresh token errors during logout
+    // Silencia erros de token durante signOut
   }
 
-  // Belt-and-suspenders: forcibly expire every sb-* cookie and keep-connected flag from this request
+  // Limpeza explícita RFC 6265 restrita ao projeto atual e migração de cookies legados HttpOnly
   request.cookies.getAll().forEach(cookie => {
-    if (cookie.name.startsWith('sb-') || cookie.name === 'edu_keep_connected') {
+    if (cookie.name === projectCookiePrefix || cookie.name.startsWith(`${projectCookiePrefix}.`) || cookie.name === 'edu_keep_connected') {
       response.cookies.set(cookie.name, '', {
         maxAge: 0,
+        expires: new Date(0),
         path: '/',
-        httpOnly: true,
         sameSite: 'lax',
       })
     }
   })
-  response.cookies.set('edu_keep_connected', '', { maxAge: 0, path: '/' })
+  response.cookies.set('edu_keep_connected', '', { maxAge: 0, expires: new Date(0), path: '/' })
 
   return response
 }
@@ -50,16 +59,27 @@ export async function GET(request: NextRequest) {
 // POST: programmatic API call — returns JSON OK
 export async function POST(request: NextRequest) {
   const response = NextResponse.json({ ok: true })
+  response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  response.headers.set('Pragma', 'no-cache')
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const projectRef = supabaseUrl.replace(/^https?:\/\//, '').split('.')[0]
+  const projectCookiePrefix = `sb-${projectRef}-auth-token`
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    supabaseUrl,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            response.cookies.set(name, value, {
+              ...options,
+              path: options?.path || '/',
+              maxAge: 0,
+              expires: new Date(0),
+            })
           )
         },
       },
@@ -69,20 +89,20 @@ export async function POST(request: NextRequest) {
   try {
     await supabase.auth.signOut()
   } catch (error) {
-    // Ignore invalid refresh token errors during logout
+    // Silencia erros durante signOut
   }
 
   request.cookies.getAll().forEach(cookie => {
-    if (cookie.name.startsWith('sb-') || cookie.name === 'edu_keep_connected') {
+    if (cookie.name === projectCookiePrefix || cookie.name.startsWith(`${projectCookiePrefix}.`) || cookie.name === 'edu_keep_connected') {
       response.cookies.set(cookie.name, '', {
         maxAge: 0,
+        expires: new Date(0),
         path: '/',
-        httpOnly: true,
         sameSite: 'lax',
       })
     }
   })
-  response.cookies.set('edu_keep_connected', '', { maxAge: 0, path: '/' })
+  response.cookies.set('edu_keep_connected', '', { maxAge: 0, expires: new Date(0), path: '/' })
 
   return response
 }

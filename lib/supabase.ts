@@ -91,16 +91,27 @@ const customStorage = {
       const valid = decodeAndValidate(secVal)
       if (valid) return valid
 
-      // Backup: check general session key in SecureStorage
+      // Backup 1: checa chave canônica geral SESSION_KEY no Keychain
       const secBackup = await getSecureStorageWithRetry(SESSION_KEY)
       const validBackup = decodeAndValidate(secBackup)
       if (validBackup) return validBackup
 
-      // No mobile nativo, NÃO lê tokens brutos de Preferences nem de localStorage
+      // Backup 2: se o Keychain estiver temporariamente inacessível (ex: cold boot / lock transitório),
+      // verifica se há contingência em Preferences e migra de volta de forma segura
+      try {
+        const { value: prefKeyVal } = await Preferences.get({ key })
+        const validPrefKey = decodeAndValidate(prefKeyVal)
+        if (validPrefKey) return validPrefKey
+
+        const { value: prefSessionVal } = await Preferences.get({ key: SESSION_KEY })
+        const validPrefSession = decodeAndValidate(prefSessionVal)
+        if (validPrefSession) return validPrefSession
+      } catch (e) {}
+
       return null
     }
 
-    // 2. Web Browser: document.cookie chunks MUST take precedence!
+    // 2. Web Browser: document.cookie chunks têm precedência para manter sincronia com SSR
     if (typeof document !== 'undefined') {
       try {
         const parsedCookies = document.cookie.split('; ').reduce((acc, c) => {
@@ -124,7 +135,7 @@ const customStorage = {
       } catch (e) {}
     }
 
-    // 3. Fallback to localStorage (apenas no Web)
+    // 3. Fallback to localStorage (Web)
     try {
       const localVal = window.localStorage.getItem(key) || window.localStorage.getItem(SESSION_KEY)
       const valid = decodeAndValidate(localVal)
@@ -136,27 +147,23 @@ const customStorage = {
   setItem: async (key: string, value: string) => {
     if (typeof window === 'undefined') return
 
-    // Persiste no Capacitor SecureStorage com retry (Keychain / Keystore)
+    // 1. Persiste no Capacitor SecureStorage com await obrigatório
     if (Capacitor.isNativePlatform()) {
-      setSecureStorageWithRetry(key, value).catch(() => {})
-      // Limpa qualquer chave desprotegida antiga em Preferences
-      Preferences.remove({ key }).catch(() => {})
-      // No mobile nativo, NÃO salva refresh_token bruto no localStorage nem em Preferences!
+      await setSecureStorageWithRetry(key, value)
     } else {
-      // Web browser padrão:
       try {
         window.localStorage.setItem(key, value)
       } catch (e) {}
     }
 
-    // Sincroniza com os cookies do navegador para que o Next.js Middleware/SSR reconheça
+    // 2. Sincroniza com os cookies do navegador para Next.js SSR / Edge Middleware
     syncDocumentCookie(key, value)
 
-    // Também garante sincronização com a chave segura padrão
+    // 3. Sincroniza atômica com a chave de sessão padrão garantindo await
     try {
       const parsed = JSON.parse(value)
       if (parsed?.access_token && parsed?.refresh_token) {
-        saveSessionSecurely(parsed).catch(() => {})
+        await saveSessionSecurely(parsed)
       }
     } catch {}
   },
@@ -196,14 +203,14 @@ if (isBrowser) {
       }
     })
 
-    // Listener automático para salvar sessão na Keychain/Keystore e atualizar cookies
-    newClient.auth.onAuthStateChange((event, session) => {
+    // Listener automático para salvar sessão no Keychain/Keystore e atualizar cookies
+    newClient.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session) {
-          saveSessionSecurely(session).catch(() => {})
+          await saveSessionSecurely(session).catch(() => {})
         }
       } else if (event === 'SIGNED_OUT') {
-        clearSessionSecurely().catch(() => {})
+        await clearSessionSecurely().catch(() => {})
         if (typeof window !== 'undefined') {
           try {
             window.localStorage.removeItem('edu-current-user')

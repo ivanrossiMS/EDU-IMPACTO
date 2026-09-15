@@ -23,7 +23,9 @@ import { supabase } from '@/lib/supabase'
 import {
   refreshSessionCentralized,
   isSessionExpiredOrExpiringSoon,
-  getSessionFromStorageTiers
+  getSessionFromStorageTiers,
+  getLogoutBarrier,
+  clearLogoutBarrier
 } from '@/lib/auth/secureSession'
 
 const LOGOUT_FLAG = 'edu-logout-pending'
@@ -34,19 +36,27 @@ export function CapacitorResumeGuard() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    // 1. Ao montar: verificar se havia um logout pendente (app foi fechado durante logout)
-    const logoutPending = localStorage.getItem(LOGOUT_FLAG)
-    if (logoutPending) {
-      localStorage.removeItem(LOGOUT_FLAG)
-      if (window.location.pathname !== '/login') {
-        console.log('[CapacitorResumeGuard] Logout pendente — redirecionando para /login')
-        window.location.replace('/login')
+    // 1. Ao montar: verificar se havia um logout pendente (app foi fechado durante logout ou offline logout)
+    const checkBarrierAndFreshen = async () => {
+      const hasBarrier = await getLogoutBarrier()
+      const legacyPending = localStorage.getItem(LOGOUT_FLAG)
+      if (hasBarrier || legacyPending) {
+        localStorage.removeItem(LOGOUT_FLAG)
+        if (window.location.pathname !== '/login') {
+          console.log('[CapacitorResumeGuard] Marcador de logout ativo — redirecionando para /login')
+          window.location.replace('/login')
+        }
+        return
       }
-      return
+
+      await checkAndFreshenSession('cold boot / montagem inicial')
     }
 
     // Função para verificar se a sessão necessita de renovação proativa
     const checkAndFreshenSession = async (reason: string) => {
+      // Se houver barreira de logout, nunca renova nem restaura
+      if (await getLogoutBarrier()) return
+
       const now = Date.now()
       // Throttle: não verificar mais de uma vez a cada 10 segundos
       if (now - lastCheckRef.current < 10000) return
@@ -69,7 +79,7 @@ export function CapacitorResumeGuard() {
     }
 
     // Executa verificação imediata na montagem (cold boot)
-    checkAndFreshenSession('cold boot / montagem inicial')
+    checkBarrierAndFreshen()
 
     // 2. Listener para reconexão de internet (online)
     const handleOnline = () => {
@@ -79,10 +89,11 @@ export function CapacitorResumeGuard() {
     window.addEventListener('online', handleOnline)
 
     // 3. Listener para mudança de visibilidade da aba/webview
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible') {
+        const hasBarrier = await getLogoutBarrier()
         const pending = localStorage.getItem(LOGOUT_FLAG)
-        if (pending) {
+        if (hasBarrier || pending) {
           localStorage.removeItem(LOGOUT_FLAG)
           window.location.replace('/login')
           return
@@ -97,9 +108,10 @@ export function CapacitorResumeGuard() {
 
     if (Capacitor.isNativePlatform()) {
       import('@capacitor/app').then(({ App }) => {
-        App.addListener('resume', () => {
+        App.addListener('resume', async () => {
+          const hasBarrier = await getLogoutBarrier()
           const pending = localStorage.getItem(LOGOUT_FLAG)
-          if (pending) {
+          if (hasBarrier || pending) {
             localStorage.removeItem(LOGOUT_FLAG)
             if (window.location.pathname !== '/login') {
               console.log('[CapacitorResumeGuard] App retomado com logout pendente — reload para /login')

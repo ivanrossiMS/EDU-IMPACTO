@@ -23,10 +23,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isMobile = useIsMobile()
 
-  // 4 estados de auth: 'checking' | 'authorized' | 'unauthorized' | 'blocked'
-  const [authState, setAuthState] = useState<'checking' | 'authorized' | 'unauthorized' | 'blocked'>('checking')
+  // 5 estados de auth explícitos: 'restoring' | 'authorized' | 'offline_authorized' | 'unauthorized' | 'blocked'
+  const [authState, setAuthState] = useState<'restoring' | 'authorized' | 'offline_authorized' | 'unauthorized' | 'blocked'>('restoring')
 
-  // EFFECT 1: Check Auth On Mount ONLY — SECURE VERSION
+  // EFFECT 1: Check Auth On Mount ONLY — SECURE & RESILIENT VERSION
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -39,7 +39,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         })
 
         if (!res.ok) {
-          if (res.status === 401 || res.status === 403) {
+          // Cenário 12: Resposta 403 da API NÃO desloga o usuário — mantém sessão ativa
+          if (res.status === 403) {
+            console.warn('[Auth] Resposta 403 da API (permissão restrita). Mantendo sessão ativa.')
+            if (restored.success || currentUser) {
+              setAuthState('authorized')
+              hideSplashScreen(300)
+              return
+            }
+          }
+
+          if (res.status === 401) {
             // Sessão pode estar apenas com access_token vencido — renova com mutex centralizado
             try {
               const { session: refreshedSession, error: refreshErr } = await refreshSessionCentralized(supabase)
@@ -59,11 +69,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 }
               }
 
-              // Se o refresh falhou por erro de rede/offline, NÃO faz logout!
+              // Se o refresh falhou por erro de rede/offline, NÃO faz logout! Libera UI em modo offline
               if (isNetworkOrTransientError(refreshErr)) {
-                console.warn('[Auth] Falha de rede ao renovar sessão. Mantendo usuário local offline.')
-                if (restored || currentUser) {
-                  setAuthState('authorized')
+                console.warn('[Auth] Falha de rede ao renovar sessão. Liberando modo offline local.')
+                if (restored.success || currentUser) {
+                  if (restored.session?.user && !currentUser) {
+                    setCurrentUser(restored.session.user as any)
+                  }
+                  setAuthState('offline_authorized')
                   hideSplashScreen(300)
                   return
                 }
@@ -78,18 +91,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             } catch (refreshCatch: any) {
               if (isNetworkOrTransientError(refreshCatch)) {
                 console.warn('[Auth] Exceção de rede na renovação. Mantendo acesso offline.')
-                if (restored || currentUser) {
-                  setAuthState('authorized')
+                if (restored.success || currentUser) {
+                  if (restored.session?.user && !currentUser) {
+                    setCurrentUser(restored.session.user as any)
+                  }
+                  setAuthState('offline_authorized')
                   hideSplashScreen(300)
                   return
                 }
               }
             }
 
-            // Se temos a sessão local restaurada, mantém logado e não expulsa
-            if (restored || currentUser) {
-              console.warn('[Auth] 401 temporário, mas credenciais locais presentes. Mantendo acesso.')
-              setAuthState('authorized')
+            // Se temos a sessão local restaurada e o status da restauração foi offline, mantém offline_authorized
+            if (restored.isOffline && (restored.success || currentUser)) {
+              console.warn('[Auth] 401 temporário durante instabilidade de rede. Mantendo acesso offline.')
+              if (restored.session?.user && !currentUser) {
+                setCurrentUser(restored.session.user as any)
+              }
+              setAuthState('offline_authorized')
               hideSplashScreen(300)
               return
             }
@@ -99,10 +118,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             return
           }
 
-          // Erro de servidor (5xx) — temporário. Se tivermos a sessão local recuperada, mantemos logado!
-          if (restored || currentUser) {
-            console.warn('[Auth] Server error 5xx, mas sessão local restaurada. Mantendo acesso.')
-            setAuthState('authorized')
+          // Erro de servidor (5xx) — temporário. Se tivermos a sessão local recuperada, mantemos em modo offline!
+          if (restored.success || currentUser) {
+            console.warn('[Auth] Server error 5xx, mas sessão local restaurada. Mantendo acesso offline.')
+            if (restored.session?.user && !currentUser) {
+              setCurrentUser(restored.session.user as any)
+            }
+            setAuthState('offline_authorized')
             hideSplashScreen(300)
             return
           }
@@ -116,8 +138,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         if (!serverUser) {
           // Resposta 200 mas sem usuário — tenta usar usuário local se presente
-          if (restored || currentUser) {
-            setAuthState('authorized')
+          if (restored.success || currentUser) {
+            if (restored.session?.user && !currentUser) {
+              setCurrentUser(restored.session.user as any)
+            }
+            setAuthState('offline_authorized')
             hideSplashScreen(300)
             return
           }
@@ -136,14 +161,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         hideSplashScreen(300)
       } catch (err) {
         // Erro de rede (falta de internet ou timeout)
-        console.warn('[Auth] Network error checking session.');
+        console.warn('[Auth] Falha de conexão ao verificar sessão com servidor.');
         
         // Verificamos se há sessão válida local (seja do SecureStorage, Cache do Supabase ou currentUser)
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
         if (session || currentUser) {
           console.log('[Auth] Modo offline ativo: Sessão local válida mantida.');
-          setAuthState('authorized');
+          if (session?.user && !currentUser) {
+            setCurrentUser(session.user as any);
+          }
+          setAuthState('offline_authorized');
           hideSplashScreen(300);
           return;
         }
@@ -156,12 +184,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Runs ONLY on mount
 
-  // (EFFECT 2 removido: a pedido do usuário, a navegação agora é estritamente manual via cliques no menu)
-
-  // Enquanto verifica auth, renderiza o shell do layout com conteúdo mascarado.
-  // Isso elimina o flash de tela em branco: a sidebar, topbar e estrutura ficam visíveis
-  // imediatamente enquanto o fetch de auth ocorre em paralelo (~100ms).
-  if (authState === 'checking') {
+  // Enquanto restaura auth, renderiza o shell do layout com conteúdo mascarado.
+  if (authState === 'restoring') {
     return (
       <div className="app-wrapper" style={{ pointerEvents: 'none', userSelect: 'none' }}>
         {/* Sidebar fantasma com shimmer */}
@@ -329,6 +353,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <Menu size={24} />
                 </button>
                 <div style={{ marginLeft: 12, fontWeight: 800, fontSize: 16, color: 'hsl(var(--text-primary))' }}>Impacto Edu</div>
+              </div>
+            )}
+            {authState === 'offline_authorized' && (
+              <div style={{
+                background: 'linear-gradient(90deg, #92400e 0%, #b45309 100%)',
+                color: '#fef3c7',
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '8px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                zIndex: 50,
+                borderBottom: '1px solid rgba(245, 158, 11, 0.3)',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+              }}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#fbbf24' }} />
+                <span>Modo Offline: exibindo dados em cache local. Conexão com o servidor pendente.</span>
               </div>
             )}
             <RouteGuard>

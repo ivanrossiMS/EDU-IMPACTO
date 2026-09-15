@@ -135,8 +135,12 @@ export async function POST(request: NextRequest) {
     const expiresDate = new Date(Date.now() + INFINITE_SESSION_SECONDS * 1000)
     const capturedCookiesToSet: { name: string; value: string; options: any }[] = []
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const projectRef = supabaseUrl.replace(/^https?:\/\//, '').split('.')[0]
+    const projectCookiePrefix = `sb-${projectRef}-auth-token`
+
     const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseUrl,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
@@ -144,10 +148,10 @@ export async function POST(request: NextRequest) {
           setAll(cookiesToSet) {
             const newNames = cookiesToSet.map(c => c.name)
             cookieStore.getAll().forEach(c => {
-               if (c.name.startsWith('sb-') && !newNames.includes(c.name)) {
+               if ((c.name === projectCookiePrefix || c.name.startsWith(`${projectCookiePrefix}.`)) && !newNames.includes(c.name)) {
                   try { 
-                    cookieStore.set(c.name, '', { maxAge: 0, path: '/' }) 
-                    capturedCookiesToSet.push({ name: c.name, value: '', options: { maxAge: 0, path: '/' } })
+                    cookieStore.set(c.name, '', { maxAge: 0, expires: new Date(0), path: '/' }) 
+                    capturedCookiesToSet.push({ name: c.name, value: '', options: { maxAge: 0, expires: new Date(0), path: '/' } })
                   } catch(e) {}
                }
             })
@@ -157,7 +161,7 @@ export async function POST(request: NextRequest) {
                   ...options,
                   path: options?.path || '/',
                   sameSite: options?.sameSite || 'lax',
-                  httpOnly: options?.httpOnly !== undefined ? options.httpOnly : true,
+                  httpOnly: options?.httpOnly !== undefined ? options.httpOnly : false,
                 };
                 if (keepConnected === false) {
                   delete sessionOptions.maxAge;
@@ -343,6 +347,8 @@ export async function POST(request: NextRequest) {
     }
 
     const response = NextResponse.json({ user: enrichedUser, session: session }, { status: 200 })
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    response.headers.set('Pragma', 'no-cache')
 
     // Garantir que todos os cookies de sessão sejam anexados no cabeçalho Set-Cookie da resposta
     capturedCookiesToSet.forEach(({ name, value, options }) => {

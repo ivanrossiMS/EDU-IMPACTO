@@ -56,6 +56,21 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(p => pathname.startsWith(p))
 }
 
+function getProjectRef(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  try {
+    const hostname = new URL(url).hostname
+    return hostname.split('.')[0] || 'default'
+  } catch {
+    return 'default'
+  }
+}
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  'Pragma': 'no-cache',
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -148,12 +163,12 @@ export async function middleware(request: NextRequest) {
       if (isTransientError) {
         return NextResponse.json(
           { error: 'Serviço de autenticação temporariamente indisponível.', isNetworkError: true },
-          { status: 503 }
+          { status: 503, headers: NO_CACHE_HEADERS }
         )
       }
       return NextResponse.json(
         { error: 'Não autorizado. Token expirado ou inválido.', code: 'token_expired' },
-        { status: 401, headers: { 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
+        { status: 401, headers: { ...NO_CACHE_HEADERS, 'WWW-Authenticate': 'Bearer error="invalid_token"' } }
       )
     }
   } else {
@@ -191,23 +206,38 @@ export async function middleware(request: NextRequest) {
       if (isTransientError) {
         return NextResponse.json(
           { error: 'Serviço de autenticação temporariamente indisponível.', isNetworkError: true },
-          { status: 503 }
+          { status: 503, headers: NO_CACHE_HEADERS }
         )
       }
       return NextResponse.json(
         { error: 'Não autorizado. Faça login para continuar.' },
-        { status: 401 }
+        { status: 401, headers: NO_CACHE_HEADERS }
       )
     }
 
     // Para requisições de página (HTML):
+    const projectRef = getProjectRef()
     const allCookies = request.cookies.getAll()
-    const hasAuthCookie = allCookies.some(c => c.name.startsWith('sb-') && c.value.length > 0)
+    const hasAuthCookie = allCookies.some(
+      c => (c.name === `sb-${projectRef}-auth-token` || c.name.startsWith(`sb-${projectRef}-auth-token.`)) && c.value.length > 0
+    )
     const hasKeepConnected = request.cookies.has('edu_keep_connected')
+    const hasLogoutBarrier = request.cookies.has('edu_logout_pending_barrier')
     const userAgent = request.headers.get('user-agent') || ''
     const isCapacitorClient = userAgent.includes('Capacitor') || request.headers.has('x-capacitor-platform')
 
-    // Se houve erro de rede/timeout OU se o cliente possui cookie de sessão / app móvel,
+    // Se houve logout explícito recente (marcador persistente), NUNCA permite bypass para restaurar credencial
+    if (hasLogoutBarrier) {
+      const loginUrl = new URL('/login', request.url)
+      loginUrl.searchParams.set('next', pathname)
+      const redirectResponse = NextResponse.redirect(loginUrl)
+      response.cookies.getAll().forEach(c => {
+        redirectResponse.cookies.set(c.name, c.value, c)
+      })
+      return redirectResponse
+    }
+
+    // Se houve erro de rede/timeout OU se o cliente possui cookie de sessão do projeto / app móvel,
     // permite o carregamento da página para que o client-side restaure do Keychain/Preferences
     if (isTransientError || hasAuthCookie || hasKeepConnected || isCapacitorClient) {
       return response
@@ -274,7 +304,7 @@ export async function middleware(request: NextRequest) {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json(
           { error: 'Acesso negado. Seu perfil não tem permissão para esta operação.' },
-          { status: 403 }
+          { status: 403, headers: NO_CACHE_HEADERS }
         )
       }
       return NextResponse.redirect(new URL('/agenda-digital', request.url))
