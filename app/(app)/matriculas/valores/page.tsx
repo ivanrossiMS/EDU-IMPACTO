@@ -1537,14 +1537,11 @@ export default function ValoresPage() {
     window.print()
   }
 
-  // Gera o arquivo PDF oficial no tamanho EXATO da proposta (Single Page, alta fidelidade e zero sobras em branco)
-  // Gera o arquivo PDF oficial no tamanho EXATO da proposta (Single Page, alta fidelidade e zero sobras em branco)
-  const generateProposalPdfBlob = async (): Promise<{ blob: Blob; fileName: string; canvas: HTMLCanvasElement }> => {
+  // Renderiza o card da proposta em um canvas de alta fidelidade
+  const generateProposalCanvas = async (): Promise<{ canvas: HTMLCanvasElement; baseFileName: string }> => {
     if (!propostaCardRef.current) throw new Error('Card da proposta não encontrado')
 
     const html2canvas = (await import('html2canvas')).default
-    const { jsPDF } = await import('jspdf')
-
     const cardEl = propostaCardRef.current
     const targetWidth = 860
 
@@ -1618,6 +1615,18 @@ export default function ValoresPage() {
       }
     })
 
+    const nomeLimpo = (nomeAluno || 'comercial').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    const baseFileName = `proposta-impacto-${nomeLimpo}-${anoLetivo}`
+
+    return { canvas, baseFileName }
+  }
+
+  // Gera o arquivo PDF oficial no tamanho EXATO da proposta (Single Page, alta fidelidade e zero sobras em branco)
+  const generateProposalPdfBlob = async (): Promise<{ blob: Blob; fileName: string; canvas: HTMLCanvasElement }> => {
+    const { canvas, baseFileName } = await generateProposalCanvas()
+    const { jsPDF } = await import('jspdf')
+    const targetWidth = 860
+
     const imgData = canvas.toDataURL('image/png')
     const pdfWidth = targetWidth
     // Altura proporcional exata da proposta — tamanho dinâmico e automático para não sobrar espaço
@@ -1633,8 +1642,7 @@ export default function ValoresPage() {
     pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST')
 
     const blob = pdf.output('blob')
-    const nomeLimpo = (nomeAluno || 'comercial').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
-    const fileName = `proposta-impacto-${nomeLimpo}-${anoLetivo}.pdf`
+    const fileName = `${baseFileName}.pdf`
 
     return { blob, fileName, canvas }
   }
@@ -1704,32 +1712,101 @@ export default function ValoresPage() {
     setIsCopyingProposal(true)
     showToast('Copiando proposta para a Área de Transferência... 📋')
 
+    // Garante foco na janela atual logo no clique do usuário para autorizar a API de Clipboard
+    if (typeof window !== 'undefined') {
+      window.focus()
+    }
+
+    const nomeLimpo = (nomeAluno || 'comercial').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    let fallbackFileName = `proposta-impacto-${nomeLimpo}-${anoLetivo}.png`
+    let generatedBlob: Blob | null = null
+
+    // Função de download direto como contingência caso a área de transferência esteja bloqueada pelo sistema/foco
+    const downloadImageFallback = (blob: Blob, toastMsg?: string) => {
+      const downloadUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = fallbackFileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000)
+      showToast(toastMsg || 'Imagem baixada para colar onde quiser! 📥')
+    }
+
     try {
-      const { canvas, fileName } = await generateProposalPdfBlob()
-      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-      if (!blob) throw new Error('Falha ao gerar imagem da proposta')
+      // Método 1: Modern ClipboardItem com Promise (Chromium 121+, Safari 16.4+)
+      // Dispara o navigator.clipboard.write imediatamente no contexto do clique do usuário,
+      // evitando expiração do user activation e erro "Document is not focused" durante o processamento do html2canvas.
+      if (typeof window !== 'undefined' && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+        try {
+          const blobPromise = (async () => {
+            const { canvas, baseFileName } = await generateProposalCanvas()
+            fallbackFileName = `${baseFileName}.png`
+            const b = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+            if (!b) throw new Error('Falha ao renderizar imagem')
+            generatedBlob = b
+            return b
+          })()
+
+          // Chamada imediata preserva a transient activation do clique
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blobPromise })
+          ])
+
+          setProposalCopiedSuccess(true)
+          setTimeout(() => setProposalCopiedSuccess(false), 3500)
+          showToast('📋 Proposta copiada para a Área de Transferência! Cole onde desejar (Ctrl+V ou Cmd+V).')
+          return
+        } catch (firstErr: any) {
+          console.warn('Tentativa 1 (Promise em ClipboardItem) falhou:', firstErr)
+          // Se o erro foi rejeição ou falta de suporte à promise no ClipboardItem, tenta o método 2
+        }
+      }
+
+      // Método 2: Obter o blob pronto (se já não foi gerado pelo blobPromise) e tentar copiar com foco
+      if (!generatedBlob) {
+        const { canvas, baseFileName } = await generateProposalCanvas()
+        fallbackFileName = `${baseFileName}.png`
+        const b = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+        if (!b) throw new Error('Falha ao gerar imagem da proposta')
+        generatedBlob = b
+      }
+
+      // Tenta re-focar antes da escrita direta
+      if (typeof window !== 'undefined') {
+        window.focus()
+      }
 
       if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ])
-        setProposalCopiedSuccess(true)
-        setTimeout(() => setProposalCopiedSuccess(false), 3500)
-        showToast('📋 Proposta copiada para a Área de Transferência! Cole onde desejar (Ctrl+V ou Cmd+V).')
-      } else {
-        const downloadUrl = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = downloadUrl
-        a.download = fileName.replace('.pdf', '.png')
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000)
-        showToast('Imagem baixada para colar onde quiser!')
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': generatedBlob })
+          ])
+          setProposalCopiedSuccess(true)
+          setTimeout(() => setProposalCopiedSuccess(false), 3500)
+          showToast('📋 Proposta copiada para a Área de Transferência! Cole onde desejar (Ctrl+V ou Cmd+V).')
+          return
+        } catch (secondErr: any) {
+          console.warn('Tentativa 2 (Blob direto em ClipboardItem) falhou:', secondErr)
+        }
+      }
+
+      // Fallback seguro: se a API de Clipboard falhou (ex: Document is not focused / NotAllowedError / permissão negada)
+      // baixa a imagem PNG para garantir que o usuário nunca fique na mão
+      if (generatedBlob) {
+        downloadImageFallback(
+          generatedBlob,
+          'A janela perdeu o foco para cópia direta. Baixamos a imagem PNG para você! 📥'
+        )
       }
     } catch (err: any) {
-      console.error('Erro ao copiar proposta:', err)
-      showToast('Não foi possível copiar imagem. Tente salvar em PDF.')
+      console.error('Erro ao processar proposta para cópia:', err)
+      if (generatedBlob) {
+        downloadImageFallback(generatedBlob)
+      } else {
+        showToast('Não foi possível copiar imagem. Tente salvar em PDF.')
+      }
     } finally {
       setIsCopyingProposal(false)
     }
