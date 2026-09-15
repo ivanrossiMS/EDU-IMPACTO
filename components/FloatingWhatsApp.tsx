@@ -119,15 +119,16 @@ export function FloatingWhatsApp() {
 
         @media (max-width: 768px) {
           .fab-button {
-            width: 56px;
-            height: 56px;
+            width: 48px;
+            height: 48px;
           }
           .fab-icon {
-            width: 24px;
-            height: 24px;
+            width: 22px;
+            height: 22px;
           }
           .fab-container {
-            bottom: max(110px, calc(110px + env(safe-area-inset-bottom, 0px)));
+            bottom: max(95px, calc(95px + env(safe-area-inset-bottom, 0px)));
+            right: 16px;
           }
         }
       `}</style>

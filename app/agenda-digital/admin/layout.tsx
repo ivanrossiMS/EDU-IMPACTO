@@ -60,15 +60,48 @@ export default function AgendaDigitalAdminLayout({
       <style dangerouslySetInnerHTML={{__html: `
         @media (max-width: 768px) {
           .ad-admin-header {
-            padding: 16px 20px !important; flex-direction: column !important;
-            align-items: center !important; text-align: center !important;
+            padding: 10px 14px !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 12px !important;
+            border-radius: 14px !important;
+            margin-bottom: 0px !important;
           }
-          .ad-admin-header-content { flex-direction: column !important; text-align: center !important; gap: 12px !important; justify-content: center !important; }
-          .ad-admin-header h2 { font-size: 18px !important; }
-          .ad-admin-header p { font-size: 12px !important; }
-          .ad-admin-header-actions { width: 100% !important; justify-content: center !important; margin-top: 12px !important; }
+          .ad-admin-header-content {
+            flex-direction: row !important;
+            text-align: left !important;
+            gap: 10px !important;
+            justify-content: flex-start !important;
+          }
+          .ad-admin-badge-icon {
+            width: 38px !important;
+            height: 38px !important;
+            font-size: 14px !important;
+            border-radius: 10px !important;
+          }
+          .ad-admin-header h2 {
+            font-size: 15px !important;
+            font-weight: 800 !important;
+            line-height: 1.2 !important;
+          }
+          .ad-admin-header p {
+            display: none !important;
+          }
+          .ad-admin-header-actions {
+            width: auto !important;
+            justify-content: flex-end !important;
+            margin-top: 0 !important;
+          }
+          .ad-admin-user-btn {
+            padding: 6px 10px !important;
+            gap: 6px !important;
+          }
+          .ad-admin-user-btn .user-subtext {
+            display: none !important;
+          }
           .ad-admin-layout-container {
-            padding-bottom: 24px !important;
+            padding-bottom: 120px !important;
           }
         }
         @keyframes premiumFloat {
@@ -85,7 +118,7 @@ export default function AgendaDigitalAdminLayout({
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24
       }}>
         <div className="ad-admin-header-content" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{
+          <div className="ad-admin-badge-icon" style={{
             width: 56, height: 56, fontSize: 20, fontWeight: 900,
             background: 'var(--gradient-purple)', color: 'white',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -109,6 +142,7 @@ export default function AgendaDigitalAdminLayout({
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowUserMenu(v => !v)}
+              className="ad-admin-user-btn"
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
                 borderRadius: 12, background: 'hsl(var(--bg-main))',
@@ -128,7 +162,7 @@ export default function AgendaDigitalAdminLayout({
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-main))', lineHeight: 1.2 }}>
                   {nomeUsuario.split(' ')[0]}
                 </div>
-                <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{currentUserPerfil || 'Admin'}</div>
+                <div className="user-subtext" style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>{currentUserPerfil || 'Admin'}</div>
               </div>
               <ChevronDown size={14} color="hsl(var(--text-muted))" style={{ transition: 'transform 0.2s', transform: showUserMenu ? 'rotate(180deg)' : '' }} />
             </button>

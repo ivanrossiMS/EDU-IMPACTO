@@ -18,7 +18,16 @@ export default function ADAdminRelatorios() {
   }
 
   return (
-    <div className="ad-admin-page-container ad-mobile-optimized" style={{ height: 'calc(100vh - 120px)', marginTop: -24, display: 'flex', flexDirection: 'column' }}>
+    <div className="ad-admin-page-container ad-mobile-optimized ad-relatorios-wrapper" style={{ height: 'calc(100vh - 120px)', marginTop: -24, display: 'flex', flexDirection: 'column' }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-relatorios-wrapper {
+            height: auto !important;
+            min-height: 100% !important;
+            margin-top: 0 !important;
+          }
+        }
+      `}} />
       {activeView === 'list' && <ReportList onNavigate={navigateTo} />}
       {activeView === 'builder' && <ReportBuilder templateId={activeTemplateId} onNavigate={navigateTo} />}
       {activeView === 'records' && <ReportRecords templateId={activeTemplateId} onNavigate={navigateTo} />}

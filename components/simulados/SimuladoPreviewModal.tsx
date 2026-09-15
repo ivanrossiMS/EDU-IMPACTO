@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, Reorder } from 'framer-motion'
 import { ArrowLeft, Printer, Save, Loader2, Settings, Type, LayoutList, Columns, CheckSquare, Info, ChevronLeft, Move, X, Trash2, RotateCcw, FileEdit, PenTool, FileText, Maximize2 } from 'lucide-react'
@@ -392,10 +392,13 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
     ))
   }
 
+  const [isPaginating, setIsPaginating] = useState(false)
+
   const handlePrint = () => {
+    if (isPaginating) return
     setTimeout(() => {
       window.print()
-    }, 300)
+    }, 150)
   }
 
   const handleSaveAndPrint = async () => {
@@ -449,61 +452,71 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
     return () => clearTimeout(timer);
   }, [leftMarginOffset, rightMarginOffset, topMarginOffset, bottomMarginOffset, pageMargins, enunciadoFontSize, alternativasFontSize, columns, alternativasLayout, adicionarPaginaRedacao, headerLayout, mounted]);
 
-  const mappedQuestoes = localQuestoes.map((rawQ, idx) => {
-    const q = normalizeQuestionImages(rawQ)
-    let enunciadoHtml = q.enunciado || ''
+  const mappedQuestoes = useMemo(() => {
+    return localQuestoes.map((rawQ, idx) => {
+      const q = normalizeQuestionImages(rawQ)
+      let enunciadoHtml = q.enunciado || ''
 
-    // Clean up excessive newlines
-    enunciadoHtml = enunciadoHtml.replace(/(?:<br\s*\/?>\s*){3,}/gi, '<br><br>')
-    enunciadoHtml = enunciadoHtml.replace(/(?:\r\n|\r|\n){3,}/g, '\n\n')
+      // Clean up excessive newlines
+      enunciadoHtml = enunciadoHtml.replace(/(?:<br\s*\/?>\s*){3,}/gi, '<br><br>')
+      enunciadoHtml = enunciadoHtml.replace(/(?:\r\n|\r|\n){3,}/g, '\n\n')
 
-    const reqs = simulado?.simulados_upload_requisicoes || []
-    let matchedReq: any = null
-    if (q.id_requisicao) {
-      matchedReq = reqs.find((r: any) => r.id === q.id_requisicao)
-    }
-    if (!matchedReq && q.id_disciplina) {
-      matchedReq = reqs.find((r: any) => r.id_disciplina === q.id_disciplina)
-    }
-    if (!matchedReq && q.id_professor) {
-      matchedReq = reqs.find((r: any) => r.id_professor === q.id_professor)
-    }
-    if (!matchedReq && reqs.length === 1) {
-      matchedReq = reqs[0]
-    }
+      const reqs = simulado?.simulados_upload_requisicoes || []
+      let matchedReq: any = null
+      if (q.id_requisicao) {
+        matchedReq = reqs.find((r: any) => r.id === q.id_requisicao)
+      }
+      if (!matchedReq && q.id_disciplina) {
+        matchedReq = reqs.find((r: any) => r.id_disciplina === q.id_disciplina)
+      }
+      if (!matchedReq && q.id_professor) {
+        matchedReq = reqs.find((r: any) => r.id_professor === q.id_professor)
+      }
+      if (!matchedReq && reqs.length === 1) {
+        matchedReq = reqs[0]
+      }
 
-    const discName = q.disciplina_nome || q.disciplina || matchedReq?.disciplina_nome || matchedReq?.simulados_disciplinas?.nome || ''
-    const discId = q.id_disciplina || q.disciplina_id || matchedReq?.id_disciplina || null
+      const discName = q.disciplina_nome || q.disciplina || matchedReq?.disciplina_nome || matchedReq?.simulados_disciplinas?.nome || ''
+      const discId = q.id_disciplina || q.disciplina_id || matchedReq?.id_disciplina || null
 
-    return {
-      id: q._internalId,
-      ordem: idx,
-      tipo_questao: q.tipo_questao || 'multipla_escolha',
-      enunciado: `<div style="white-space: pre-wrap;">${enunciadoHtml.trim()}</div>`,
-      imagens: q.imagens?.map((img: any) => img.src) || [],
-      simulados_alternativas: (q.alternativas || []).map((alt: any, i: number) => {
-        const altId = alt._uid || alt.id || `alt-${q._internalId || q.id || idx}-${i}-${alt.letter || alt.letra || ''}`;
-        return {
-          id: altId,
-          letra: alt.letter || alt.letra,
-          texto: alt.text || alt.texto,
-          eh_correta: Boolean(alt.correct || alt.eh_correta || alt.correta),
-          imagem_url: (alt as any).imagem_url,
-          _uid: altId
-        };
-      }),
-      id_disciplina: discId,
-      disciplina_nome: discName,
-      disciplina: discName,
-      simulados_disciplinas: discName ? { nome: discName } : null
-    }
-  })
+      return {
+        id: q._internalId,
+        ordem: idx,
+        tipo_questao: q.tipo_questao || 'multipla_escolha',
+        enunciado: `<div style="white-space: pre-wrap;">${enunciadoHtml.trim()}</div>`,
+        imagens: q.imagens?.map((img: any) => img.src) || [],
+        simulados_alternativas: (q.alternativas || []).map((alt: any, i: number) => {
+          const altId = alt._uid || alt.id || `alt-${q._internalId || q.id || idx}-${i}-${alt.letter || alt.letra || ''}`;
+          return {
+            id: altId,
+            letra: alt.letter || alt.letra,
+            texto: alt.text || alt.texto,
+            eh_correta: Boolean(alt.correct || alt.eh_correta || alt.correta),
+            imagem_url: (alt as any).imagem_url,
+            _uid: altId
+          };
+        }),
+        id_disciplina: discId,
+        disciplina_nome: discName,
+        disciplina: discName,
+        simulados_disciplinas: discName ? { nome: discName } : null
+      }
+    })
+  }, [localQuestoes, simulado?.simulados_upload_requisicoes]);
+
+  const selectedQuestoes = useMemo(() => {
+    return mappedQuestoes.filter(q => selectedIds.has(q.id));
+  }, [mappedQuestoes, selectedIds]);
+
+  const unselectedQuestoes = useMemo(() => {
+    return mappedQuestoes.filter(q => !selectedIds.has(q.id));
+  }, [mappedQuestoes, selectedIds]);
 
   if (!mounted) return null
 
   return createPortal(
     <motion.div
-      id="print-root"
+      className="simulado-preview-modal-root"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -513,36 +526,6 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
         display: 'flex', flexDirection: 'row',
       }}
     >
-      <style>{`
-        @page {
-          size: A4 portrait;
-          margin: 0;
-        }
-        @media print {
-          body > *:not(#print-root) {
-            display: none !important;
-          }
-          #print-root {
-            position: static !important;
-            display: block !important;
-            height: auto !important;
-            background: white !important;
-          }
-          .canvas-layout {
-            display: block !important;
-            overflow: visible !important;
-            padding: 0 !important;
-            height: auto !important;
-          }
-          .print-wrapper {
-            display: block !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
       {/* Sidebar de Configurações (No Print) */}
       <div className="no-print sidebar-layout" style={{ width: 380, background: 'white', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', boxShadow: '4px 0 24px rgba(0,0,0,0.02)', zIndex: 10, flexShrink: 0 }}>
         <div style={{ padding: '24px 32px', borderBottom: '1px solid #e2e8f0' }}>
@@ -893,20 +876,29 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
           </button>
           
           <button 
-            disabled={saving}
+            disabled={saving || isPaginating}
             onClick={handlePrint} 
             style={{ 
               flex: 1, 
               height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, 
               borderRadius: 12, border: '1px solid rgba(59, 130, 246, 0.2)', 
-              background: onSave ? 'rgba(59, 130, 246, 0.1)' : '#3b82f6', 
-              color: onSave ? '#3b82f6' : 'white', 
-              cursor: saving ? 'wait' : 'pointer', transition: 'all 0.2s', fontWeight: 700, fontSize: 13, padding: '0 12px' 
+              background: (saving || isPaginating) ? '#94a3b8' : (onSave ? 'rgba(59, 130, 246, 0.1)' : '#3b82f6'), 
+              color: (saving || isPaginating) ? 'white' : (onSave ? '#3b82f6' : 'white'), 
+              cursor: (saving || isPaginating) ? 'wait' : 'pointer', transition: 'all 0.2s', fontWeight: 700, fontSize: 13, padding: '0 12px' 
             }}
             title="Imprimir / PDF"
           >
-            <Printer size={16} />
-            Imprimir
+            {isPaginating ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Paginando...
+              </>
+            ) : (
+              <>
+                <Printer size={16} />
+                Imprimir
+              </>
+            )}
           </button>
 
           {onSave && (
@@ -976,7 +968,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
       <div className="canvas-layout" style={{ flex: 1, overflowY: 'auto', padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div className="print-wrapper" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <PaginationEngine
-            questoes={mappedQuestoes.filter(q => selectedIds.has(q.id))}
+            questoes={selectedQuestoes}
             columns={columns}
             enunciadoFontSize={enunciadoFontSize}
             alternativasFontSize={alternativasFontSize}
@@ -1000,6 +992,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
             pageMargins={pageMargins}
             onPageMarginChange={handlePageMarginChange}
             adicionarPaginaRedacao={adicionarPaginaRedacao}
+            onPaginatingChange={setIsPaginating}
             onEditEnunciado={isReadOnly ? () => {} : (qId, newText) => {
               setLocalQuestoes(prev => prev.map(q => {
                 if ((q._internalId || q.id) !== qId) return q
@@ -1100,7 +1093,7 @@ export function SimuladoPreviewModal({ questoes, setQuestoes, simulado, config, 
           />
         </div>
         <IgnoredQuestionsList
-          questoes={mappedQuestoes.filter(q => !selectedIds.has(q.id))}
+          questoes={unselectedQuestoes}
           onToggle={handleToggleQuestion}
         />
       </div>

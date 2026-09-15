@@ -438,54 +438,142 @@ export default function ADAdminComunicados() {
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-comunicados-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 14px !important;
+            margin-bottom: 20px !important;
+          }
+          .ad-comunicados-header h2 {
+            font-size: 22px !important;
+            line-height: 1.2 !important;
+            margin: 0 !important;
+          }
+          .ad-comunicados-header p {
+            font-size: 13px !important;
+            margin-top: 4px !important;
+          }
+          .ad-comunicados-actions {
+            width: 100% !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+          }
+          .ad-comunicados-top-row {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            width: 100% !important;
+          }
+          .ad-comunicados-top-row .form-input,
+          .ad-comunicados-top-row select {
+            width: 100% !important;
+          }
+          .ad-comunicados-btn-row {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+            width: 100% !important;
+          }
+          .ad-comunicados-btn-row button {
+            flex: 1 1 calc(50% - 8px) !important;
+            justify-content: center !important;
+            font-size: 12px !important;
+            padding: 8px 10px !important;
+          }
+          .ad-comunicados-btn-primary {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            padding: 10px !important;
+          }
+          .ad-comunicados-tabs {
+            width: 100% !important;
+            display: flex !important;
+            margin-bottom: 16px !important;
+          }
+          .ad-comunicados-tabs .tab-trigger {
+            flex: 1 !important;
+            justify-content: center !important;
+            font-size: 12px !important;
+            padding: 8px 12px !important;
+          }
+          .ad-comunicado-card {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
+            padding: 14px 16px !important;
+          }
+          .ad-comunicado-stats {
+            border-left: none !important;
+            padding-left: 0 !important;
+            min-width: 0 !important;
+            width: 100% !important;
+            border-top: 1px solid #f1f5f9 !important;
+            padding-top: 10px !important;
+          }
+          .ad-comunicado-actions {
+            width: 100% !important;
+            padding-left: 0 !important;
+            border-top: 1px solid #f1f5f9 !important;
+            padding-top: 10px !important;
+            justify-content: flex-end !important;
+          }
+        }
+      `}} />
+
+      <div className="ad-comunicados-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Caixa de Comunicados</h2>
           <p style={{ color: 'hsl(var(--text-muted))' }}>Gerencie o envio, relatórios de leitura e arquivos anexos.</p>
         </div>
         
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          <div style={{ position: 'relative' }}>
-            <Filter size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
-            <select 
-              className="form-input" 
-              value={authorFilter}
-              onChange={e => setAuthorFilter(e.target.value)}
-              style={{ paddingLeft: 36, width: 200, appearance: 'none', cursor: 'pointer', fontWeight: 600, color: 'hsl(var(--text-main))' }}
-            >
-              <option value="todos">Todos os Autores</option>
-              <option value="meus">Meus Comunicados</option>
-              {availableRoles.length > 0 && <optgroup label="Filtrar por Cargo">
-                {availableRoles.map(role => <option key={`role-${role}`} value={`cargo:${role}`}>{role}</option>)}
-              </optgroup>}
-              {availableAuthors.length > 0 && <optgroup label="Filtrar por Usuário">
-                {availableAuthors.map(autor => <option key={`aut-${autor}`} value={`autor:${autor}`}>{autor}</option>)}
-              </optgroup>}
-            </select>
+        <div className="ad-comunicados-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div className="ad-comunicados-top-row" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <Filter size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))', pointerEvents: 'none' }} />
+              <select 
+                className="form-input" 
+                value={authorFilter}
+                onChange={e => setAuthorFilter(e.target.value)}
+                style={{ paddingLeft: 36, width: 200, appearance: 'none', cursor: 'pointer', fontWeight: 600, color: 'hsl(var(--text-main))' }}
+              >
+                <option value="todos">Todos os Autores</option>
+                <option value="meus">Meus Comunicados</option>
+                {availableRoles.length > 0 && <optgroup label="Filtrar por Cargo">
+                  {availableRoles.map(role => <option key={`role-${role}`} value={`cargo:${role}`}>{role}</option>)}
+                </optgroup>}
+                {availableAuthors.length > 0 && <optgroup label="Filtrar por Usuário">
+                  {availableAuthors.map(autor => <option key={`aut-${autor}`} value={`autor:${autor}`}>{autor}</option>)}
+                </optgroup>}
+              </select>
+            </div>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <Search size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))' }} />
+              <input 
+                className="form-input" 
+                placeholder="Buscar..." 
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ paddingLeft: 36, width: 180 }} 
+              />
+            </div>
           </div>
-          <div style={{ position: 'relative' }}>
-            <Search size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))' }} />
-            <input 
-              className="form-input" 
-              placeholder="Buscar..." 
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{ paddingLeft: 36, width: 180 }} 
-            />
+          <div className="ad-comunicados-btn-row" style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-secondary" onClick={() => setShowMonthlyReport(true)} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Calendar size={16} /> Relatório Mensal
+            </button>
+            <button className="btn btn-secondary" onClick={() => setShowEngagementDashboard(true)} style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderColor: 'transparent' }}>
+              <Activity size={16} /> Engajamento
+            </button>
+            <button className="btn btn-primary ad-comunicados-btn-primary" onClick={handleNovo}>
+              <Plus size={16} /> Novo Comunicado
+            </button>
           </div>
-          <button className="btn btn-secondary" onClick={() => setShowMonthlyReport(true)} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Calendar size={16} /> Relatório Mensal
-          </button>
-          <button className="btn btn-secondary" onClick={() => setShowEngagementDashboard(true)} style={{ display: 'flex', gap: 8, alignItems: 'center', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderColor: 'transparent' }}>
-            <Activity size={16} /> Engajamento
-          </button>
-          <button className="btn btn-primary" onClick={handleNovo}>
-            <Plus size={16} /> Novo Comunicado
-          </button>
         </div>
       </div>
 
-      <div className="tab-list" style={{ marginBottom: 24, width: 'fit-content' }}>
+      <div className="tab-list ad-comunicados-tabs" style={{ marginBottom: 24, width: 'fit-content' }}>
         <button className={`tab-trigger ${tab === 'enviados' ? 'active' : ''}`} onClick={() => setTab('enviados')}>
           <SendIcon size={14} /> Enviados
         </button>
@@ -586,13 +674,14 @@ export default function ADAdminComunicados() {
              const progresso = targetCount > 0 ? Math.min(100, (lidas / targetCount) * 100) : 0
              const dateObj = (c.dataEnvio || (c as any).data) ? new Date(c.dataEnvio || (c as any).data) : null
 
-             return (
-              <motion.div 
+              return (
+               <motion.div 
                 key={c.id}
                 layout
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 onClick={() => setViewingCom(c)}
+                className="ad-comunicado-card"
                 style={{ 
                   background: '#ffffff',
                   borderRadius: 20,
@@ -691,7 +780,7 @@ export default function ADAdminComunicados() {
                 </div>
 
                 {/* Column: Stats */}
-                <div style={{ minWidth: 160, display: 'flex', alignItems: 'center', gap: 16, borderLeft: '1px solid #e2e8f0', paddingLeft: 24 }}>
+                <div className="ad-comunicado-stats" style={{ minWidth: 160, display: 'flex', alignItems: 'center', gap: 16, borderLeft: '1px solid #e2e8f0', paddingLeft: 24 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Leitura</span>
@@ -712,7 +801,7 @@ export default function ADAdminComunicados() {
                 </div>
 
                 {/* Column: Actions */}
-                <div style={{ display: 'flex', gap: 8, paddingLeft: 12 }}>
+                <div className="ad-comunicado-actions" style={{ display: 'flex', gap: 8, paddingLeft: 12 }}>
                    <button className="btn btn-ghost btn-sm" style={{ width: 36, height: 36, padding: 0, borderRadius: 12, color: '#64748b' }} onClick={e => { e.stopPropagation(); handleReenviar(c) }} title="Reenviar"><SendIcon size={16} /></button>
                    <button className="btn btn-primary btn-sm" style={{ padding: '0 16px', height: 36, borderRadius: 12, fontSize: 12, fontWeight: 800, background: '#0f172a', borderColor: '#0f172a' }} onClick={e => { e.stopPropagation(); setSelectedCom(c) }}>
                       Detalhes

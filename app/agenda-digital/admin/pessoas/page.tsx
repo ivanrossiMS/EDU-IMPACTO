@@ -112,42 +112,105 @@ export default function ADAdminPessoas() {
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-pessoas-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 14px !important;
+            margin-bottom: 20px !important;
+          }
+          .ad-pessoas-header h2 {
+            font-size: 22px !important;
+            line-height: 1.2 !important;
+            margin: 0 !important;
+          }
+          .ad-pessoas-header p {
+            font-size: 13px !important;
+            margin-top: 4px !important;
+          }
+          .ad-pessoas-filters {
+            width: 100% !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+          }
+          .ad-pessoas-search-wrap {
+            width: 100% !important;
+          }
+          .ad-pessoas-search-input {
+            width: 100% !important;
+          }
+          .ad-pessoas-selects-row {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+            width: 100% !important;
+          }
+          .ad-pessoas-selects-row select {
+            flex: 1 1 calc(50% - 8px) !important;
+            font-size: 12px !important;
+            padding: 8px 10px !important;
+          }
+          .ad-pessoas-desktop-table {
+            display: none !important;
+          }
+          .ad-pessoas-mobile-cards {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+            padding: 8px !important;
+          }
+          .ad-pessoas-pagination {
+            flex-direction: column !important;
+            align-items: center !important;
+            gap: 12px !important;
+            padding: 16px 12px !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .ad-pessoas-mobile-cards {
+            display: none !important;
+          }
+        }
+      `}} />
+
+      <div className="ad-pessoas-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Pessoas vinculadas</h2>
           <p style={{ color: 'hsl(var(--text-muted))' }}>Gestao de responsaveis e alunos conectados a Agenda Digital.</p>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ position: 'relative' }}>
+        <div className="ad-pessoas-filters" style={{ display: 'flex', gap: 12 }}>
+          <div className="ad-pessoas-search-wrap" style={{ position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'hsl(var(--text-muted))' }} />
-            <input className="form-input" placeholder="Buscar por nome ou matricula..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 36, width: 260 }} />
+            <input className="form-input ad-pessoas-search-input" placeholder="Buscar por nome ou matricula..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 36, width: 260 }} />
           </div>
-          {uniqueAnos.length > 0 && (
-            <select className="form-input" value={filterAno} onChange={e => setFilterAno(e.target.value)}>
-              <option value="">Anos Letivos</option>
-              {uniqueAnos.map(a => <option key={a} value={a}>{a}</option>)}
+          <div className="ad-pessoas-selects-row" style={{ display: 'flex', gap: 10 }}>
+            {uniqueAnos.length > 0 && (
+              <select className="form-input" value={filterAno} onChange={e => setFilterAno(e.target.value)}>
+                <option value="">Anos Letivos</option>
+                {uniqueAnos.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            )}
+            {uniqueTurmas.length > 0 && (
+              <select className="form-input" value={filterTurma} onChange={e => setFilterTurma(e.target.value)}>
+                <option value="">Todas as Turmas</option>
+                {uniqueTurmas.map(t => {
+                  const tName = turmas.find((tt: any) => tt.id === t)?.nome || t;
+                  return <option key={t as string} value={t as string}>{tName}</option>
+                })}
+              </select>
+            )}
+            <select className="form-input" value={filterType} onChange={e => setFilterType(e.target.value)}>
+              <option value="todos">Todos os Niveis</option>
+              <option value="alto">Engajamento: Alto</option>
+              <option value="baixo">Engajamento: Baixo (Risco)</option>
             </select>
-          )}
-          {uniqueTurmas.length > 0 && (
-            <select className="form-input" value={filterTurma} onChange={e => setFilterTurma(e.target.value)}>
-              <option value="">Todas as Turmas</option>
-              {uniqueTurmas.map(t => {
-                const tName = turmas.find((tt: any) => tt.id === t)?.nome || t;
-                return <option key={t as string} value={t as string}>{tName}</option>
-              })}
-            </select>
-          )}
-          <select className="form-input" value={filterType} onChange={e => setFilterType(e.target.value)}>
-            <option value="todos">Todos os Niveis</option>
-            <option value="alto">Engajamento: Alto</option>
-            <option value="baixo">Engajamento: Baixo (Risco)</option>
-          </select>
-          <button className="btn btn-secondary"><Filter size={16} /> Mais Filtros</button>
+          </div>
         </div>
       </div>
 
       <div className="card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table className="table ad-pessoas-desktop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid hsl(var(--border-subtle))', textAlign: 'left' }}>
               <th style={{ padding: '12px 16px', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Usuario / Familia</th>
@@ -263,6 +326,106 @@ export default function ADAdminPessoas() {
           </tbody>
         </table>
 
+        {/* Mobile Cards View */}
+        <div className="ad-pessoas-mobile-cards">
+          {paginatedAlunos.map(a => {
+            const engj = getEngajamento(a.id)
+            const resps = responsaveisMap[a.id] || a.responsaveis || []
+            const devCount = resps.length > 0 ? resps.length : (a.status === 'matriculado' || a.status === 'ativo' ? 1 : 0)
+            const turmaNome = turmas.find((t: any) => t.id === a.turma)?.nome || a.turma
+
+            return (
+              <div
+                key={a.id}
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 16,
+                  border: '1px solid hsl(var(--border-subtle))',
+                  padding: '14px 16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                }}
+              >
+                {/* Header do Card */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <UserAvatar userId={a.id} name={a.nome} fotoUrl={a.foto} size={44} />
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {a.nome}
+                        {a.bloqueadoAgenda && <span className="badge" style={{ background: '#ef4444', color: 'white', fontSize: 9, padding: '2px 5px' }}>BLOQUEADO</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
+                        Turma: {turmaNome || 'Sem Turma'}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button className="btn btn-ghost btn-sm" title="Gerenciar Senhas e Perfil" onClick={() => handleOpenProfile(a)} disabled={loadingProfile} style={{ padding: '6px' }}>
+                      {loadingProfile ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Settings size={15} />}
+                    </button>
+                    <button className="btn btn-ghost btn-sm" title={a.bloqueadoAgenda ? "Desbloquear" : "Bloquear"} style={{ color: a.bloqueadoAgenda ? '#10b981' : '#ef4444', padding: '6px' }}
+                      onClick={() => {
+                        const action = a.bloqueadoAgenda ? 'Desbloquear' : 'Bloquear';
+                        adConfirm(`${action} acesso desta familia ao App imediatamente?`, `${action} Acesso`, () => {
+                          setAlunos((prev: any) => prev.map((al: any) => al.id === a.id ? { ...al, bloqueadoAgenda: !al.bloqueadoAgenda } : al));
+                          adAlert(a.bloqueadoAgenda ? 'Acesso Liberado!' : 'Acesso Suspenso!', 'Acao Realizada');
+                        });
+                      }}
+                    >
+                      {a.bloqueadoAgenda ? <CheckCircle size={15} /> : <Lock size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Responsáveis badges */}
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {resps && resps.length > 0 ? (
+                    resps.map((r: any, i: number) => {
+                      if (!r.nome) return null;
+                      let badgeStyle = { background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-secondary))' };
+                      let label = 'Resp: ';
+                      const isFin = r.respFinanceiro || r.isFinanceiro;
+                      const isPed = r.respPedagogico || r.isPedagogico;
+                      if (isFin && isPed) { badgeStyle = { background: 'rgba(236,72,153,0.1)', color: '#ec4899' }; label = 'Fin/Ped: '; }
+                      else if (isFin) { badgeStyle = { background: 'rgba(16,185,129,0.1)', color: '#10b981' }; label = 'Fin: '; }
+                      else if (isPed) { badgeStyle = { background: 'rgba(99,102,241,0.1)', color: '#4f46e5' }; label = 'Ped: '; }
+                      return <span key={i} className="badge" style={{ ...badgeStyle, fontSize: 10, padding: '2px 7px' }}>{label}{r.nome}</span>
+                    })
+                  ) : (
+                    <>
+                      {a.responsavelFinanceiro && <span className="badge" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 10, padding: '2px 7px' }}>Fin: {a.responsavelFinanceiro}</span>}
+                      {a.responsavelPedagogico && <span className="badge" style={{ background: 'rgba(99,102,241,0.1)', color: '#4f46e5', fontSize: 10, padding: '2px 7px' }}>Ped: {a.responsavelPedagogico}</span>}
+                      {!a.responsavel && !a.responsavelFinanceiro && !a.responsavelPedagogico && (
+                        <span className="badge badge-ghost text-muted" style={{ fontSize: 10, padding: '2px 7px' }}>Resp. Pendente</span>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Footer Info Row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Smartphone size={13} />
+                      <span>{devCount === 0 ? '0 Disp.' : `${devCount} Disp.`}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ color: 'hsl(var(--text-muted))' }}>Leitura:</span>
+                      <span style={{ fontWeight: 800, color: engj.color }}>{engj.label}</span>
+                    </div>
+                  </div>
+                  <Link href={`/agenda-digital/admin/pessoas/${a.id}`} className="btn btn-secondary btn-sm" style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, textDecoration: 'none', color: 'inherit', borderRadius: 8 }}>
+                    <User size={12} /> Ver Perfil
+                  </Link>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
         {isAlunosLoading && (!alunos || alunos.length === 0) ? (
           <div style={{ padding: 60, textAlign: 'center', color: 'hsl(var(--text-muted))', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <Loader2 size={36} className="animate-spin" style={{ marginBottom: 16, opacity: 0.6 }} />
@@ -276,7 +439,7 @@ export default function ADAdminPessoas() {
           </div>
         )}
 
-        <div style={{
+        <div className="ad-pessoas-pagination" style={{
           padding: '16px 24px',
           display: 'flex',
           justifyContent: 'space-between',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { HtmlContent } from '../HtmlContent';
 import { Loader2, X, BookOpen } from 'lucide-react';
@@ -49,6 +49,7 @@ interface PaginationEngineProps {
   pageMargins?: PageMarginsMap;
   onPageMarginChange?: (pageIndex: number, delta: Partial<PageMargin>) => void;
   adicionarPaginaRedacao?: boolean;
+  onPaginatingChange?: (isPaginating: boolean) => void;
 }
 
 export function cleanEnunciadoHtml(html: string): string {
@@ -328,8 +329,111 @@ export function PaginationEngine({
   showMargins, topMarginOffset, onTopMarginOffsetChange, bottomMarginOffset, onBottomMarginOffsetChange,
   leftMarginOffset, onLeftMarginOffsetChange, rightMarginOffset, onRightMarginOffsetChange,
   pageMargins, onPageMarginChange,
-  readOnly = false, adicionarPaginaRedacao
+  readOnly = false, adicionarPaginaRedacao, onPaginatingChange
 }: PaginationEngineProps) {
+  // Inject unified, robust print styles into document.head
+  useEffect(() => {
+    const existing = document.getElementById('pagination-engine-print-styles');
+    if (existing) existing.remove();
+
+    const style = document.createElement('style');
+    style.id = 'pagination-engine-print-styles';
+    style.innerHTML = `
+      #print-root {
+        display: none !important;
+      }
+
+      @media print {
+        @page {
+          size: A4 portrait;
+          margin: 0 !important;
+        }
+
+        html, body {
+          width: 210mm !important;
+          min-width: 210mm !important;
+          max-width: 210mm !important;
+          height: auto !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          overflow: visible !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        body > *:not(#print-root) {
+          display: none !important;
+        }
+
+        #print-root {
+          display: block !important;
+          position: static !important;
+          width: 210mm !important;
+          min-width: 210mm !important;
+          max-width: 210mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          overflow: visible !important;
+        }
+
+        .print-page {
+          width: 210mm !important;
+          height: 297mm !important;
+          min-height: 297mm !important;
+          max-height: 297mm !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          page-break-after: always !important;
+          break-after: page !important;
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+          position: relative !important;
+          background: #ffffff !important;
+          background-color: #ffffff !important;
+          background-size: 210mm 297mm !important;
+          background-repeat: no-repeat !important;
+          background-position: center !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        .print-page:last-child {
+          page-break-after: auto !important;
+          break-after: auto !important;
+        }
+
+        .no-print,
+        .texto-apoio-badge,
+        .texto-apoio-spacer,
+        .field-label-tag,
+        .reorder-popover,
+        .reorder-trigger,
+        .alt-img-actions,
+        .alt-lines-btn {
+          display: none !important;
+        }
+
+        .header-field {
+          outline: none !important;
+          background: transparent !important;
+          border: none !important;
+          cursor: default !important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      const el = document.getElementById('pagination-engine-print-styles');
+      if (el) el.remove();
+    };
+  }, []);
+
   const getAllItemIds = () => {
     const ids = [
       simulado?.id,
@@ -342,7 +446,8 @@ export function PaginationEngine({
     return Array.from(new Set(ids))
   }
 
-  const resolvedHeaderLayout = headerLayout || (() => {
+  const resolvedHeaderLayout = useMemo(() => {
+    if (headerLayout) return headerLayout;
     let savedLocal: any = null
     if (typeof window !== 'undefined') {
       for (const id of getAllItemIds()) {
@@ -384,18 +489,56 @@ export function PaginationEngine({
     if (merged.title) merged.title.fontSize = merged.title.fontSize || 13
     if (merged.orientacoes) merged.orientacoes.whiteSpace = 'pre-wrap'
     return merged
-  })()
+  }, [headerLayout, simulado?.config_estudio, simulado?.isRedacao, config?.redacao_enem_header_layout, config?.provas_header_layout])
+
+  const questoesKey = useMemo(() => {
+    return JSON.stringify(
+      (questoes || []).map((q: any) => ({
+        id: q.id || q._internalId,
+        ordem: q.ordem,
+        tipo: q.tipo_questao,
+        enun: q.enunciado,
+        imgs: q.imagens,
+        alts: (q.simulados_alternativas || q.alternativas || []).map((a: any) => ({
+          id: a.id || a._uid,
+          letra: a.letra || a.letter,
+          texto: a.texto || a.text,
+          img: a.imagem_url
+        })),
+        disc: q.disciplina_nome || q.disciplina || q.simulados_disciplinas?.nome
+      }))
+    );
+  }, [questoes]);
+
+  const headerLayoutKey = useMemo(() => JSON.stringify(resolvedHeaderLayout || {}), [resolvedHeaderLayout]);
+  const pageMarginsKey = useMemo(() => JSON.stringify(pageMargins || {}), [pageMargins]);
 
   const [pages, setPages] = useState<any[]>([]);
   const [isPaginating, setIsPaginating] = useState(true);
   const [trigger, setTrigger] = useState(0); // For forcing re-pagination on edits
   const shadowRef = useRef<HTMLDivElement>(null);
 
+  const onPaginatingChangeRef = useRef(onPaginatingChange);
+  useEffect(() => {
+    onPaginatingChangeRef.current = onPaginatingChange;
+  });
+
+  const prevPaginatingRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (prevPaginatingRef.current !== isPaginating) {
+      prevPaginatingRef.current = isPaginating;
+      onPaginatingChangeRef.current?.(isPaginating);
+    }
+  }, [isPaginating]);
+
   useEffect(() => {
     setIsPaginating(true);
     
     const timer = setTimeout(() => {
-      if (!shadowRef.current) return;
+      if (!shadowRef.current) {
+        setIsPaginating(false);
+        return;
+      }
       
       const shadow = shadowRef.current;
       const heights: Record<string, number> = {};
@@ -919,8 +1062,7 @@ export function PaginationEngine({
       setIsPaginating(false);
     }, 300);
     
-    return () => clearTimeout(timer);
-  }, [questoes, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayout, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMargins]);
+  }, [questoesKey, columns, enunciadoFontSize, alternativasFontSize, trigger, forceExtraPage, headerLayoutKey, alternativasLayout, simulado?.isRedacao, adicionarPaginaRedacao, topMarginOffset, bottomMarginOffset, leftMarginOffset, rightMarginOffset, pageMarginsKey]);
 
   const forceRepaginate = () => setTrigger(t => t + 1);
   const MM = 3.7795275591;
@@ -940,6 +1082,7 @@ export function PaginationEngine({
       
       <div 
         ref={shadowRef} 
+        className="no-print"
         style={{ 
           position: 'absolute', 
           visibility: 'hidden', 
@@ -1297,19 +1440,19 @@ export function PaginationEngine({
                 alternativasFontSize={alternativasFontSize} 
                 config={config} 
                 simulado={simulado} 
-                onEditEnunciado={onEditEnunciado} 
-                onEditEnunciadoImage={onEditEnunciadoImage}
-                onEditAlternativa={onEditAlternativa} 
-                onRemoveAlternativa={onRemoveAlternativa} 
-                onMoveAlternativa={onMoveAlternativa}
-                onToggleQuestion={onToggleQuestion} 
-                forceRepaginate={forceRepaginate} 
-                isEditHeaderMode={isEditHeaderMode} 
+                onEditEnunciado={() => {}} 
+                onEditEnunciadoImage={() => {}} 
+                onEditAlternativa={() => {}} 
+                onRemoveAlternativa={() => {}} 
+                onMoveAlternativa={() => {}} 
+                onToggleQuestion={() => {}} 
+                forceRepaginate={() => {}} 
+                isEditHeaderMode={false} 
                 headerLayout={resolvedHeaderLayout} 
-                onUpdateHeaderField={onUpdateHeaderField}
+                onUpdateHeaderField={() => {}}
                 alternativasLayout={alternativasLayout} 
-                onEditAlternativaImage={onEditAlternativaImage}
-                showMargins={showMargins}
+                onEditAlternativaImage={() => {}}
+                showMargins={false}
                 topMarginOffset={topMarginOffset} 
                 onTopMarginOffsetChange={onTopMarginOffsetChange}
                 bottomMarginOffset={bottomMarginOffset} 
@@ -1320,7 +1463,7 @@ export function PaginationEngine({
                 onRightMarginOffsetChange={onRightMarginOffsetChange}
                 pageMargin={pageMargins?.[pIndex]}
                 onPageMarginChange={onPageMarginChange}
-                readOnly={readOnly}
+                readOnly={true}
                 totalPages={pages.length}
                 adicionarPaginaRedacao={adicionarPaginaRedacao}
               />

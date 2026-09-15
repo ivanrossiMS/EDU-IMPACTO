@@ -365,23 +365,23 @@ export default function ADAdminTurmas() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Header */}
-        <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="ad-turmas-detalhe-header" style={{ marginBottom: 32, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <button onClick={() => { setTelaAtual('lista'); }} style={{ width: 44, height: 44, borderRadius: 22, border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <button onClick={() => { setTelaAtual('lista'); }} style={{ width: 44, height: 44, borderRadius: 22, border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
               <ArrowLeft size={20} />
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 12, height: 12, borderRadius: 6, background: activeGrupo.cor }} />
+              <div style={{ width: 12, height: 12, borderRadius: 6, background: activeGrupo.cor, flexShrink: 0 }} />
               <div>
-                <h2 style={{ fontSize: 28, fontWeight: 900, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', margin: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <h2 style={{ fontSize: 24, fontWeight: 900, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', margin: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   {activeGrupo.nome}
-                  {activeGrupo.isEquipeEscolar && <span style={{ fontSize: 12, padding: '4px 10px', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderRadius: 20, textTransform: 'none', fontWeight: 700, letterSpacing: 'normal' }}>Equipe Escolar</span>}
+                  {activeGrupo.isEquipeEscolar && <span style={{ fontSize: 12, padding: '3px 9px', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderRadius: 20, textTransform: 'none', fontWeight: 700, letterSpacing: 'normal' }}>Equipe Escolar</span>}
                 </h2>
-                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 14, margin: 0 }}>{alunosVinculados.length} alunos · {todosFuncionarios.length} colaboradores</p>
+                <p style={{ color: 'hsl(var(--text-muted))', fontSize: 13, margin: 0 }}>{alunosVinculados.length} alunos · {todosFuncionarios.length} colaboradores</p>
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div className="ad-turmas-detalhe-header-actions" style={{ display: 'flex', gap: 12 }}>
             <button onClick={() => { setEditingGroupId(activeGrupo.id); setNovoNome(activeGrupo.nome); setNovoAno(activeGrupo.ano || ''); setNovaCor(activeGrupo.cor); setNovoIsGlobal(!!activeGrupo.isGlobalAccess); setNovoIsEquipeEscolar(!!activeGrupo.isEquipeEscolar); setShowNovoGrupo(true); }} className="btn btn-secondary" style={{ border: '1px solid hsl(var(--border-subtle))', background: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Pencil size={16} /> Editar Grupo
             </button>
@@ -391,9 +391,9 @@ export default function ADAdminTurmas() {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, flex: 1 }}>
+        <div className="ad-turmas-detalhe-grid" style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 24, flex: 1 }}>
           {/* Tabs */}
-          <div style={{ background: 'white', border: '1px solid hsl(var(--border-subtle))', borderRadius: 24, padding: 12, display: 'flex', flexDirection: 'column', gap: 6, height: 'fit-content' }}>
+          <div className="ad-turmas-detalhe-tabs" style={{ background: 'white', border: '1px solid hsl(var(--border-subtle))', borderRadius: 24, padding: 12, display: 'flex', flexDirection: 'column', gap: 6, height: 'fit-content' }}>
             {[
               { id: 'alunos', label: 'Alunos', count: alunosVinculados.length, icon: Users, color: '#6366f1' },
               { id: 'colaboradores', label: 'Colaboradores', count: colsDiretos.length, icon: UserCheck, color: '#10b981' },
@@ -410,7 +410,7 @@ export default function ADAdminTurmas() {
             })}
 
             {/* Resumo visual */}
-            <div style={{ marginTop: 16, padding: '14px', borderRadius: 14, background: 'rgba(0,0,0,0.02)', border: '1px solid hsl(var(--border-subtle))' }}>
+            <div className="ad-turmas-detalhe-resumo" style={{ marginTop: 16, padding: '14px', borderRadius: 14, background: 'rgba(0,0,0,0.02)', border: '1px solid hsl(var(--border-subtle))' }}>
               <p style={{ fontSize: 11, fontWeight: 800, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Resumo</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -614,13 +614,85 @@ export default function ADAdminTurmas() {
   // ═══════════════════════════════════════════════════════════════════
   return (
     <div>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-turmas-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 14px !important;
+            margin-bottom: 20px !important;
+          }
+          .ad-turmas-header h2 {
+            font-size: 22px !important;
+            line-height: 1.2 !important;
+          }
+          .ad-turmas-header p {
+            font-size: 13px !important;
+          }
+          .ad-turmas-actions {
+            width: 100% !important;
+            flex-wrap: wrap !important;
+            gap: 8px !important;
+            justify-content: flex-start !important;
+          }
+          .ad-turmas-actions select,
+          .ad-turmas-actions button {
+            flex: 1 1 calc(50% - 8px) !important;
+            justify-content: center !important;
+            font-size: 12px !important;
+            padding: 8px 10px !important;
+          }
+          .ad-turmas-table-wrap {
+            display: none !important;
+          }
+          .ad-turmas-cards-wrap {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+          }
+          .ad-turmas-detalhe-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 14px !important;
+            margin-bottom: 20px !important;
+          }
+          .ad-turmas-detalhe-header-actions {
+            width: 100% !important;
+            justify-content: flex-start !important;
+          }
+          .ad-turmas-detalhe-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+          .ad-turmas-detalhe-tabs {
+            flex-direction: row !important;
+            overflow-x: auto !important;
+            padding: 8px !important;
+            border-radius: 16px !important;
+          }
+          .ad-turmas-detalhe-tabs > div {
+            flex: 1 !important;
+            justify-content: center !important;
+            white-space: nowrap !important;
+          }
+          .ad-turmas-detalhe-resumo {
+            display: none !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .ad-turmas-cards-wrap {
+            display: none !important;
+          }
+        }
+      `}} />
+
       {/* ── Header ──────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
+      <div className="ad-turmas-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
         <div>
           <h2 style={{ fontSize: 32, fontWeight: 900, fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '-0.02em', margin: 0 }}>Gestão de Turmas</h2>
           <p style={{ color: 'hsl(var(--text-muted))', marginTop: 4 }}>Organize grupos digitais de turmas para comunicação eficiente.</p>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="ad-turmas-actions" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <select className="form-input" style={{ width: 140, borderRadius: 20, fontSize: 13 }} value={anoParaImportar} onChange={e => setAnoParaImportar(e.target.value)}>
             <option value="">Todos Anos</option>
             {cfgCalendarioLetivo.map((c: any) => <option key={c.ano} value={c.ano}>{c.ano}</option>)}
@@ -703,7 +775,8 @@ export default function ADAdminTurmas() {
                   <div style={{ flex: 1, height: 1, background: 'hsl(var(--border-subtle))' }} />
                 </div>
                 
-                <div style={{ background: 'white', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.02)' }}>
+                {/* Desktop Table View */}
+                <div className="ad-turmas-table-wrap" style={{ background: 'white', borderRadius: 24, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.02)' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid hsl(var(--border-subtle))', background: 'rgba(0,0,0,0.01)' }}>
@@ -770,6 +843,70 @@ export default function ADAdminTurmas() {
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Cards View */}
+                <div className="ad-turmas-cards-wrap">
+                  {gruposPorAno[ano].map(g => {
+                    const todosColabs = resolveColaboradoresGrupo(g).filter(colId => (apenasColaboradores || []).some((f: any) => f.id === colId))
+                    const turmaERP = turmas.find(t => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome)
+                    const alunosDoGrupoCount = (alunos || []).filter((a: any) => {
+                      if (turmaERP) return isAlunoCursandoTurma(a, turmaERP, g.ano || turmaERP?.ano)
+                      return (g.alunosIds || []).includes(a.id) || isAlunoCursandoTurma(a, g, g.ano)
+                    }).length
+
+                    return (
+                      <div
+                        key={g.id}
+                        onClick={() => { setActiveGrupoId(g.id); setTelaAtual('detalhe-grupo'); setTabDetalheGrupo('alunos') }}
+                        style={{
+                          background: '#ffffff',
+                          borderRadius: 16,
+                          border: '1px solid hsl(var(--border-subtle))',
+                          padding: '14px 16px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 10,
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ width: 40, height: 40, borderRadius: 12, background: g.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0, boxShadow: `0 4px 12px ${g.cor}40` }}>
+                              <BookOpen size={18} />
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: 15, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                {g.nome}
+                                {g.isEquipeEscolar && <span style={{ fontSize: 10, padding: '2px 7px', background: 'rgba(79, 70, 229, 0.1)', color: '#4f46e5', borderRadius: 8, fontWeight: 700 }}>Equipe Escolar</span>}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 1 }}>Mural Digital Ativo</div>
+                            </div>
+                          </div>
+                          <ChevronRight size={18} color="hsl(var(--text-muted))" />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 10 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                            {ano !== 'Equipe Escolar' && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))' }}>
+                                <Users size={14} color="#6366f1" />
+                                <span>{alunosDoGrupoCount} alunos</span>
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-secondary))' }}>
+                              <UserCheck size={14} color="#10b981" />
+                              <span>{todosColabs.length} colab.</span>
+                            </div>
+                          </div>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 100, background: 'rgba(16,185,129,0.1)', color: '#10b981', fontSize: 10, fontWeight: 800 }}>
+                            <Check size={10} strokeWidth={3} /> Sincronizado
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ))}

@@ -924,3 +924,112 @@ export function compareTurmasBySerie(a: any, b: any): number {
   const nomeB = b?.nome || b?.title || b?.turma || strB
   return String(nomeA).localeCompare(String(nomeB), 'pt-BR', { numeric: true, sensitivity: 'base' })
 }
+
+/**
+ * Rigorously checks whether a given momento is visible to a specific student.
+ * Ensures moments targeted to specific students, classes or groups only appear for them.
+ */
+export function canStudentViewMomento(
+  momento: any,
+  cleanAlunoId: string,
+  studentTurmaNames: Set<string> | string[],
+  studentTurmaIds: Set<string> | string[],
+  studentGroupNames: Set<string> | string[] = [],
+  studentGroupIds: Set<string> | string[] = []
+): boolean {
+  if (!momento) return false;
+  const d = momento.dados || momento;
+
+  const tClassesSet = new Set(Array.isArray(studentTurmaNames) ? studentTurmaNames.map(s => s.toLowerCase().trim()) : Array.from(studentTurmaNames).map(s => s.toLowerCase().trim()));
+  const tIdsSet = new Set(Array.isArray(studentTurmaIds) ? studentTurmaIds.map(s => s.toLowerCase().trim()) : Array.from(studentTurmaIds).map(s => s.toLowerCase().trim()));
+  const gNamesSet = new Set(Array.isArray(studentGroupNames) ? studentGroupNames.map(s => s.toLowerCase().trim()) : Array.from(studentGroupNames).map(s => s.toLowerCase().trim()));
+  const gIdsSet = new Set(Array.isArray(studentGroupIds) ? studentGroupIds.map(s => s.toLowerCase().trim()) : Array.from(studentGroupIds).map(s => s.toLowerCase().trim()));
+
+  const targetClasses: string[] = [
+    ...(d.targetClasses || []),
+    ...(d.turmas || [])
+  ].map((x: any) => String(x).trim().toLowerCase()).filter(Boolean);
+
+  const targetClassesIds: string[] = [
+    ...(d.targetClassesIds || []),
+    ...(d.turmasIds || [])
+  ].map((x: any) => String(x).replace(/^[tg]_?/, '').trim().toLowerCase()).filter(Boolean);
+
+  const alunosIds: string[] = [
+    ...(d.alunosIds || []),
+    ...(d.targetStudents || [])
+  ].map((x: any) => String(x).replace(/^(a_|_ALU)/, '').trim()).filter(Boolean);
+
+  const grupos: string[] = [
+    ...(d.grupos || []),
+    ...(d.targetGrupos || []),
+    ...(d.dados?.grupos || []),
+    ...(d.dados?.targetGrupos || [])
+  ].map((x: any) => String(x).trim().toLowerCase()).filter(Boolean);
+
+  const gruposIds: string[] = [
+    ...(d.gruposIds || []),
+    ...(d.dados?.gruposIds || [])
+  ].map((x: any) => String(x).replace(/^[tg]_?/, '').trim().toLowerCase()).filter(Boolean);
+
+  const funcionariosIds: string[] = [
+    ...(d.funcionariosIds || []),
+    ...(d.colaboradoresIds || [])
+  ].map((x: any) => String(x).replace(/^f_?/, '').trim().toLowerCase()).filter(Boolean);
+
+  // 1. Momento global para toda a escola
+  const isGlobal = targetClasses.some(tc => 
+    ['todos', 'toda a escola', 'todas', 'todas as turmas', 'institucional'].includes(tc)
+  ) || d.destino === 'todos';
+  if (isGlobal) return true;
+
+  // 2. O aluno foi marcado explicitamente na lista de alunos?
+  if (cleanAlunoId && alunosIds.includes(cleanAlunoId)) {
+    return true;
+  }
+
+  // 3. Se o momento tiver alunos específicos marcados (alunosIds não vazio)
+  // e este aluno NÃO estiver na lista:
+  // Só pode ver se a turma inteira dele foi explicitamente incluída em targetClasses
+  if (alunosIds.length > 0) {
+    const classIncluded = Array.from(tClassesSet).some(stn => targetClasses.includes(stn)) ||
+                          Array.from(tIdsSet).some(sti => targetClassesIds.includes(sti));
+    if (classIncluded) return true;
+    return false; // Alunos específicos marcados e o aluno não é um deles!
+  }
+
+  // 4. Momentos exclusivos de equipe escolar / funcionários (sem nenhuma turma nem grupo do aluno)
+  const isStaffOnlyTarget = (targetClasses.length > 0 && targetClasses.every(tc => 
+    ['equipe escolar', 'equipe', 'funcionários', 'colaboradores', 'direção', 'coordenação'].some(s => tc.includes(s))
+  )) || (targetClasses.length === 0 && grupos.length === 0 && funcionariosIds.length > 0);
+
+  if (isStaffOnlyTarget) {
+    return false;
+  }
+
+  // 5. Se o momento não tiver NENHUM destinatário (vazio), não exibir para ninguém
+  if (targetClasses.length === 0 && targetClassesIds.length === 0 && grupos.length === 0 && gruposIds.length === 0 && alunosIds.length === 0) {
+    return false;
+  }
+
+  // 6. Turma do aluno corresponde?
+  const matchesClass = Array.from(tClassesSet).some(stn => 
+    targetClasses.some(tc => tc === stn || tc.includes(stn) || stn.includes(tc))
+  ) || Array.from(tIdsSet).some(sti => 
+    targetClassesIds.some(tId => tId === sti || tId.includes(sti) || sti.includes(tId))
+  );
+  if (matchesClass) return true;
+
+  // 7. Grupo de aluno corresponde?
+  const matchesGroup = Array.from(gNamesSet).some(sgn => 
+    grupos.some(g => g === sgn || g.includes(sgn) || sgn.includes(g)) ||
+    targetClasses.some(tc => tc === sgn || tc.includes(sgn) || sgn.includes(tc))
+  ) || Array.from(gIdsSet).some(sgi => 
+    gruposIds.some(gid => gid === sgi || gid.includes(sgi) || sgi.includes(gid)) ||
+    targetClassesIds.some(tId => tId === sgi || tId.includes(sgi) || sgi.includes(tId))
+  );
+  if (matchesGroup) return true;
+
+  return false;
+}
+

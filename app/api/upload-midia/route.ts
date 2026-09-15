@@ -50,15 +50,15 @@ export async function POST(request: Request) {
     const allowedTypes = [
       'image/jpeg', 'image/png', 'image/webp', 'image/gif', 
       'application/pdf', 
-      'video/mp4', 'video/webm'
+      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'
     ]
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json({ error: 'Tipo de arquivo não permitido.' }, { status: 415 })
     }
 
-    const MAX_SIZE = 50 * 1024 * 1024 // 50MB
+    const MAX_SIZE = 100 * 1024 * 1024 // 100MB
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: 'Arquivo muito grande. Máximo: 50MB' }, { status: 413 })
+      return NextResponse.json({ error: 'Arquivo muito grande. Máximo: 100MB' }, { status: 413 })
     }
 
     const safeBaseName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80)

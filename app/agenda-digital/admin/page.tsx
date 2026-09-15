@@ -184,10 +184,23 @@ export default function ADAdminDashboard() {
     <div className="ad-admin-page-container">
       <style dangerouslySetInnerHTML={{__html: `
         @media (max-width: 768px) {
-          .ad-admin-page-container { padding: 0 16px !important; }
-          .dash-kpi-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 10px !important; }
-          .dash-main-grid { grid-template-columns: 1fr !important; }
-          .dash-quick-grid { grid-template-columns: repeat(2, 1fr) !important; }
+          .ad-admin-page-container { padding: 0 !important; }
+          .dash-kpi-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+          .dash-main-grid { grid-template-columns: 1fr !important; gap: 16px !important; }
+          .dash-quick-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+          .dash-card-compact { padding: 16px !important; }
+          .dash-recent-item {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 10px !important;
+          }
+          .dash-recent-progress {
+            width: 100% !important;
+            justify-content: space-between !important;
+          }
+          .dash-recent-progress > div:first-child {
+            flex: 1 !important;
+          }
         }
       `}} />
 
@@ -346,7 +359,7 @@ export default function ADAdminDashboard() {
       </div>
 
       {/* Feed de comunicados recentes */}
-      <div className="card" style={{ padding: 24 }}>
+      <div className="card dash-card-compact" style={{ padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Bell size={16} /> Comunicados Recentes
@@ -372,19 +385,20 @@ export default function ADAdminDashboard() {
               const prioColor = c.prioridade === 'urgente' ? '#ef4444' : c.prioridade === 'alta' ? '#f59e0b' : '#10b981'
 
               return (
-                <div key={c.id} style={{
-                  display: 'grid', gridTemplateColumns: '1fr auto',
+                <div key={c.id} className="dash-recent-item" style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
                   gap: 16, alignItems: 'center',
                   padding: '14px 0',
                   borderBottom: i < recentComms.length - 1 ? '1px solid hsl(var(--border-subtle))' : 'none'
                 }}>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', minWidth: 0, flex: 1 }}>
                     <div style={{ width: 8, height: 8, borderRadius: 4, background: prioColor, flexShrink: 0 }} />
-                    <div style={{ minWidth: 0 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 14, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                         {c.titulo}
                       </div>
-                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 8 }}>
+                      <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <Clock size={10} /> {(() => {
                             const rawDate = c.dataEnvio || (c as any).data || (c as any).created_at;
@@ -402,7 +416,7 @@ export default function ADAdminDashboard() {
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="dash-recent-progress" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                     <div style={{ width: 80, height: 5, borderRadius: 3, background: 'hsl(var(--border-subtle))', overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${pctL}%`, background: pctL >= 60 ? '#10b981' : pctL >= 30 ? '#f59e0b' : '#ef4444', borderRadius: 3, transition: 'width 0.4s' }} />
                     </div>

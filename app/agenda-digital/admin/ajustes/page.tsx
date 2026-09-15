@@ -139,32 +139,146 @@ export default function ADAdminAjustes() {
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-ajustes-header {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
+            margin-bottom: 16px !important;
+          }
+          .ad-ajustes-header h2 {
+            font-size: 20px !important;
+            line-height: 1.2 !important;
+            margin: 0 !important;
+          }
+          .ad-ajustes-header p {
+            font-size: 13px !important;
+            margin-top: 2px !important;
+          }
+          .ad-ajustes-actions {
+            width: 100% !important;
+          }
+          .ad-ajustes-actions button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .ad-ajustes-layout {
+            flex-direction: column !important;
+            gap: 14px !important;
+            min-height: auto !important;
+          }
+          .ad-ajustes-sidebar {
+            width: 100% !important;
+            flex-direction: row !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding-bottom: 4px !important;
+            gap: 8px !important;
+            scrollbar-width: none;
+          }
+          .ad-ajustes-sidebar::-webkit-scrollbar {
+            display: none;
+          }
+          .ad-ajustes-nav-btn {
+            white-space: nowrap !important;
+            flex-shrink: 0 !important;
+            padding: 8px 14px !important;
+            font-size: 13px !important;
+            border-radius: 20px !important;
+          }
+          .ad-ajustes-content {
+            overflow-y: visible !important;
+            border-radius: 14px !important;
+          }
+          .ad-ajustes-card-header {
+            padding: 16px !important;
+          }
+          .ad-ajustes-card-header h3 {
+            font-size: 16px !important;
+          }
+          .ad-ajustes-card-header p {
+            font-size: 12px !important;
+          }
+          .ad-ajustes-card-body {
+            padding: 16px !important;
+            gap: 14px !important;
+          }
+          .ad-ajustes-toggle-row {
+            padding: 14px 12px !important;
+            gap: 12px !important;
+          }
+          .ad-ajustes-toggle-title {
+            font-size: 14px !important;
+          }
+          .ad-ajustes-toggle-desc {
+            font-size: 12px !important;
+            line-height: 1.35 !important;
+          }
+          .ad-notif-header-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
+          }
+          .ad-notif-header-row a,
+          .ad-notif-header-row button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .ad-notif-banner-wrap {
+            padding: 14px 16px 0 !important;
+          }
+          .ad-notif-banner {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
+            padding: 14px !important;
+          }
+          .ad-notif-banner a,
+          .ad-notif-banner button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .ad-upload-row {
+            flex-direction: column !important;
+            gap: 8px !important;
+          }
+          .ad-upload-row input {
+            width: 100% !important;
+          }
+          .ad-upload-row button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+        }
+      `}} />
+
+      <div className="ad-ajustes-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Ajustes do Aplicativo</h2>
           <p style={{ color: 'hsl(var(--text-muted))' }}>Configurações de permissões e personalização.</p>
         </div>
         
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div className="ad-ajustes-actions" style={{ display: 'flex', gap: 12 }}>
           <button className="btn btn-primary" style={{ background: '#4f46e5', color: 'white' }} onClick={handleSave}>
             <Save size={16} /> Salvar Alterações
           </button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 32, flex: 1, minHeight: 0 }}>
+      <div className="ad-ajustes-layout" style={{ display: 'flex', gap: 32, flex: 1, minHeight: 0 }}>
          {/* Sidebar Navigation */}
-         <div style={{ width: 240, display: 'flex', flexDirection: 'column', gap: 8 }}>
+         <div className="ad-ajustes-sidebar" style={{ width: 240, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button 
               onClick={() => setActiveTab('permissoes')}
-              className={activeTab === 'permissoes' ? 'btn' : 'btn btn-ghost'} 
+              className={`ad-ajustes-nav-btn ${activeTab === 'permissoes' ? 'btn' : 'btn btn-ghost'}`}
               style={{ justifyContent: 'flex-start', background: activeTab === 'permissoes' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'permissoes' ? '#4f46e5' : 'inherit' }}
             >
               <Shield size={18} style={{ marginRight: 8 }}/> Permissões e Uso
             </button>
             <button 
               onClick={() => setActiveTab('notificacoes')}
-              className={activeTab === 'notificacoes' ? 'btn' : 'btn btn-ghost'} 
+              className={`ad-ajustes-nav-btn ${activeTab === 'notificacoes' ? 'btn' : 'btn btn-ghost'}`}
               style={{ justifyContent: 'flex-start', background: activeTab === 'notificacoes' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'notificacoes' ? '#4f46e5' : 'inherit' }}
             >
               <Bell size={18} style={{ marginRight: 8 }}/> Notificações Push
@@ -172,21 +286,21 @@ export default function ADAdminAjustes() {
 
             <button 
               onClick={() => setActiveTab('personalizacao')}
-              className={activeTab === 'personalizacao' ? 'btn' : 'btn btn-ghost'} 
+              className={`ad-ajustes-nav-btn ${activeTab === 'personalizacao' ? 'btn' : 'btn btn-ghost'}`}
               style={{ justifyContent: 'flex-start', background: activeTab === 'personalizacao' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'personalizacao' ? '#4f46e5' : 'inherit' }}
             >
               <Palette size={18} style={{ marginRight: 8 }}/> Personalização (Cores)
             </button>
             <button 
               onClick={() => setActiveTab('saudacao')}
-              className={activeTab === 'saudacao' ? 'btn' : 'btn btn-ghost'} 
+              className={`ad-ajustes-nav-btn ${activeTab === 'saudacao' ? 'btn' : 'btn btn-ghost'}`}
               style={{ justifyContent: 'flex-start', background: activeTab === 'saudacao' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'saudacao' ? '#4f46e5' : 'inherit' }}
             >
               <Smartphone size={18} style={{ marginRight: 8 }}/> Mensagem de Saudação
             </button>
             <button 
               onClick={() => setActiveTab('whatsapp')}
-              className={activeTab === 'whatsapp' ? 'btn' : 'btn btn-ghost'} 
+              className={`ad-ajustes-nav-btn ${activeTab === 'whatsapp' ? 'btn' : 'btn btn-ghost'}`}
               style={{ justifyContent: 'flex-start', background: activeTab === 'whatsapp' ? 'rgba(79,70,229,0.1)' : 'transparent', color: activeTab === 'whatsapp' ? '#4f46e5' : 'inherit' }}
             >
               <MessageCircle size={18} style={{ marginRight: 8 }}/> Contatos WhatsApp
@@ -194,20 +308,20 @@ export default function ADAdminAjustes() {
          </div>
 
          {/* Content Area */}
-         <div className="card" style={{ flex: 1, overflowY: 'auto', background: 'hsl(var(--bg-surface))' }}>
+         <div className="card ad-ajustes-content" style={{ flex: 1, overflowY: 'auto', background: 'hsl(var(--bg-surface))' }}>
            {activeTab === 'permissoes' && (
               <div>
-                <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                <div className="ad-ajustes-card-header" style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
                   <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Permissões das Famílias</h3>
                   <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>O que os responsáveis podem ou não fazer dentro do aplicativo escolar.</p>
                 </div>
 
-                <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div className="ad-ajustes-card-body" style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
                   {/* 1. Comentários Mural */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Comentários no Mural (Momentos)</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita comentários na rede social interna da escola. Recomenda-se moderação.</div>
+                      <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Comentários no Mural (Momentos)</div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita comentários na rede social interna da escola. Recomenda-se moderação.</div>
                     </div>
                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.permissoes.comentariosMural} onChange={e => updatePerm('comentariosMural', e.target.checked)} />
@@ -218,10 +332,10 @@ export default function ADAdminAjustes() {
                   </div>
 
                   {/* 2. Aniversariantes */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Aniversariantes do Mês</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Permite que as famílias vejam os aniversariantes do mês na área do aluno.</div>
+                      <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Aniversariantes do Mês</div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Permite que as famílias vejam os aniversariantes do mês na área do aluno.</div>
                     </div>
                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarAniversariantes} onChange={e => updatePerm('visualizarAniversariantes', e.target.checked)} />
@@ -232,10 +346,10 @@ export default function ADAdminAjustes() {
                   </div>
 
                   {/* 6. Financeiro */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Painel Financeiro</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Permite que as famílias vejam faturas, boletos e realizem pagamentos via Pix ou código de barras no app.</div>
+                      <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Painel Financeiro</div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Permite que as famílias vejam faturas, boletos e realizem pagamentos via Pix ou código de barras no app.</div>
                     </div>
                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarFinanceiro} onChange={e => updatePerm('visualizarFinanceiro', e.target.checked)} />
@@ -246,10 +360,10 @@ export default function ADAdminAjustes() {
                   </div>
 
                   {/* 7. Notas */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Boletim e Notas</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe o boletim escolar com as notas bimestrais, faltas oficiais e avaliações parciais do aluno.</div>
+                      <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Boletim e Notas</div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe o boletim escolar com as notas bimestrais, faltas oficiais e avaliações parciais do aluno.</div>
                     </div>
                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarNotas} onChange={e => updatePerm('visualizarNotas', e.target.checked)} />
@@ -260,10 +374,10 @@ export default function ADAdminAjustes() {
                   </div>
 
                   {/* 8. Frequência */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Frequência Escolar</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe o histórico de presença e faltas e permite justificar faltas enviando atestados médicos direto pelo app.</div>
+                      <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Frequência Escolar</div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe o histórico de presença e faltas e permite justificar faltas enviando atestados médicos direto pelo app.</div>
                     </div>
                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarFrequencia} onChange={e => updatePerm('visualizarFrequencia', e.target.checked)} />
@@ -274,10 +388,10 @@ export default function ADAdminAjustes() {
                   </div>
 
                   {/* 9. Ocorrências */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Ocorrências Disciplinares</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe registros comportamentais e ocorrências lançadas pela coordenação pedagógica.</div>
+                      <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Visualizar Ocorrências Disciplinares</div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Exibe registros comportamentais e ocorrências lançadas pela coordenação pedagógica.</div>
                     </div>
                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.visualizarOcorrencias} onChange={e => updatePerm('visualizarOcorrencias', e.target.checked)} />
@@ -288,10 +402,10 @@ export default function ADAdminAjustes() {
                   </div>
 
                   {/* 10. Chamada Portaria */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Ativar Chamada de Alunos na Portaria (Saída)</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita o botão de chamada rápida no banner do aluno para que os responsáveis solicitem a liberação da portaria ao se aproximarem da escola.</div>
+                      <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Ativar Chamada de Alunos na Portaria (Saída)</div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Habilita o botão de chamada rápida no banner do aluno para que os responsáveis solicitem a liberação da portaria ao se aproximarem da escola.</div>
                     </div>
                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.permissoes.chamadaAlunoPortaria} onChange={e => updatePerm('chamadaAlunoPortaria', e.target.checked)} />
@@ -306,8 +420,8 @@ export default function ADAdminAjustes() {
 
 {activeTab === 'notificacoes' && (
              <div>
-                 <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                 <div className="ad-ajustes-card-header" style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                   <div className="ad-notif-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                      <div>
                        <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Notificações Push no App</h3>
                        <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>Controle quais eventos disparam alertas no celular dos responsáveis.</p>
@@ -321,8 +435,8 @@ export default function ADAdminAjustes() {
                  </div>
 
                  {/* Banner Destaque para Simulador de Push */}
-                 <div style={{ padding: '20px 32px 0' }}>
-                   <div style={{
+                 <div className="ad-notif-banner-wrap" style={{ padding: '20px 32px 0' }}>
+                   <div className="ad-notif-banner" style={{
                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16,
                      padding: '16px 20px', borderRadius: 14,
                      background: 'linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(124, 58, 237, 0.08) 100%)',
@@ -349,13 +463,13 @@ export default function ADAdminAjustes() {
                    </div>
                  </div>
 
-                <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                <div className="ad-ajustes-card-body" style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
+                   <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                      <div>
-                       <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Novos Comunicados</div>
-                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Sempre que a coordenação enviar um comunicado geral ou turma.</div>
+                       <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Novos Comunicados</div>
+                       <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Sempre que a coordenação enviar um comunicado geral ou turma.</div>
                      </div>
-                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.notificacoes.pushComunicados} onChange={e => updateNotif('pushComunicados', e.target.checked)} />
                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushComunicados ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushComunicados ? 'translateX(20px)' : 'none' }}></span>
@@ -363,12 +477,12 @@ export default function ADAdminAjustes() {
                      </label>
                    </div>
                    
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                   <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                      <div>
-                       <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Novos Momentos</div>
-                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Aumenta o engajamento enviando Push quando uma foto da criança é postada.</div>
+                       <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Novos Momentos</div>
+                       <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Aumenta o engajamento enviando Push quando uma foto da criança é postada.</div>
                      </div>
-                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.notificacoes.pushMomentos} onChange={e => updateNotif('pushMomentos', e.target.checked)} />
                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushMomentos ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushMomentos ? 'translateX(20px)' : 'none' }}></span>
@@ -376,12 +490,12 @@ export default function ADAdminAjustes() {
                      </label>
                    </div>
                    
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                   <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                      <div>
-                       <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar Alertas Financeiros</div>
-                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Lembrete de vencimento próximo ou parcela vencida.</div>
+                       <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Disparar Alertas Financeiros</div>
+                       <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Lembrete de vencimento próximo ou parcela vencida.</div>
                      </div>
-                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.notificacoes.pushFinanceiro} onChange={e => updateNotif('pushFinanceiro', e.target.checked)} />
                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushFinanceiro ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushFinanceiro ? 'translateX(20px)' : 'none' }}></span>
@@ -389,12 +503,12 @@ export default function ADAdminAjustes() {
                      </label>
                    </div>
                    
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                   <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                      <div>
-                       <div style={{ fontWeight: 600, fontSize: 16 }}>Eventos no Calendário (1 dia antes)</div>
-                       <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Lembrete automático para eventos, reuniões e provas da turma.</div>
+                       <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Eventos no Calendário (1 dia antes)</div>
+                       <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Lembrete automático para eventos, reuniões e provas da turma.</div>
                      </div>
-                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                     <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                         <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.notificacoes.pushCalendario} onChange={e => updateNotif('pushCalendario', e.target.checked)} />
                         <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.notificacoes.pushCalendario ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
                            <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.notificacoes.pushCalendario ? 'translateX(20px)' : 'none' }}></span>
@@ -402,10 +516,10 @@ export default function ADAdminAjustes() {
                      </label>
                    </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Registro de Frequência / Faltas</div>
-                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Avisa o responsável imediatamente quando a chamada for realizada e houver presença ou falta registrada.</div>
+                        <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Registro de Frequência / Faltas</div>
+                        <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Avisa o responsável imediatamente quando a chamada for realizada e houver presença ou falta registrada.</div>
                       </div>
                       <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                          <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushFrequencia} onChange={e => updateNotif('pushFrequencia', e.target.checked)} />
@@ -415,10 +529,10 @@ export default function ADAdminAjustes() {
                       </label>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Ocorrências Disciplinares</div>
-                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Envia um alerta push quando a coordenação pedagógica registrar uma ocorrência do aluno.</div>
+                        <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Ocorrências Disciplinares</div>
+                        <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Envia um alerta push quando a coordenação pedagógica registrar uma ocorrência do aluno.</div>
                       </div>
                       <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                          <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushOcorrencias} onChange={e => updateNotif('pushOcorrencias', e.target.checked)} />
@@ -428,10 +542,10 @@ export default function ADAdminAjustes() {
                       </label>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Lançamento de Boletim e Notas</div>
-                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Alerta os responsáveis quando novas notas ou o boletim escolar forem lançados no sistema.</div>
+                        <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Lançamento de Boletim e Notas</div>
+                        <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Alerta os responsáveis quando novas notas ou o boletim escolar forem lançados no sistema.</div>
                       </div>
                       <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                          <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushNotas} onChange={e => updateNotif('pushNotas', e.target.checked)} />
@@ -441,10 +555,10 @@ export default function ADAdminAjustes() {
                       </label>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Chamada de Portaria / Saída</div>
-                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Notifica a equipe e os responsáveis em tempo real durante a chamada de saída de alunos.</div>
+                        <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Disparar em Chamada de Portaria / Saída</div>
+                        <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Notifica a equipe e os responsáveis em tempo real durante a chamada de saída de alunos.</div>
                       </div>
                       <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                          <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushSaidaPortaria} onChange={e => updateNotif('pushSaidaPortaria', e.target.checked)} />
@@ -454,10 +568,10 @@ export default function ADAdminAjustes() {
                       </label>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
+                    <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: 16 }}>Notificar em Alterações de Calendário</div>
-                        <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Notifica os responsáveis em caso de alterações críticas de datas ou horários de eventos no calendário.</div>
+                        <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Notificar em Alterações de Calendário</div>
+                        <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Notifica os responsáveis em caso de alterações críticas de datas ou horários de eventos no calendário.</div>
                       </div>
                       <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                          <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={!!localConfig.notificacoes.pushAlteracaoCalendario} onChange={e => updateNotif('pushAlteracaoCalendario', e.target.checked)} />
@@ -472,16 +586,16 @@ export default function ADAdminAjustes() {
 
            {activeTab === 'personalizacao' && (
              <div>
-                <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                <div className="ad-ajustes-card-header" style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
                   <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Identidade Visual</h3>
                   <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>Personalize as cores e a imagem de capa da Área da Família.</p>
                 </div>
 
-                <div style={{ padding: 32 }}>
+                <div className="ad-ajustes-card-body" style={{ padding: 32 }}>
                   <div style={{ marginBottom: 32 }}>
                     <label className="form-label">Imagem de Capa (Banner Principal)</label>
                     <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 12 }}>Insira a URL direta ou faça upload de uma imagem panorâmica. (Recomendado: 1200x300px)</p>
-                    <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="ad-upload-row" style={{ display: 'flex', gap: 12 }}>
                       <input 
                         type="text" 
                         className="form-input" 
@@ -513,18 +627,18 @@ export default function ADAdminAjustes() {
 
            {activeTab === 'saudacao' && (
              <div>
-                <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                <div className="ad-ajustes-card-header" style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
                   <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Mensagem de Saudação</h3>
                   <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>Configure o comunicado de boas-vindas automático ao cadastrar um novo aluno.</p>
                 </div>
 
-                <div style={{ padding: 32 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <div className="ad-ajustes-card-body" style={{ padding: 32 }}>
+                  <div className="ad-ajustes-toggle-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, padding: 20, border: '1px solid hsl(var(--border-subtle))', borderRadius: 12 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 16 }}>Ativar Mensagem de Saudação</div>
-                      <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Quando ativado, um comunicado será gerado automaticamente. O autor será o "Diretor Geral".</div>
+                      <div className="ad-ajustes-toggle-title" style={{ fontWeight: 600, fontSize: 16 }}>Ativar Mensagem de Saudação</div>
+                      <div className="ad-ajustes-toggle-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Quando ativado, um comunicado será gerado automaticamente. O autor será o "Diretor Geral".</div>
                     </div>
-                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24 }}>
+                    <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, flexShrink: 0 }}>
                        <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={localConfig.saudacao?.ativa || false} onChange={e => setLocalConfig(p => ({...p, saudacao: {...(p.saudacao || {titulo:'', mensagem:'', imagemUrl:''}), ativa: e.target.checked}}))} />
                        <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: localConfig.saudacao?.ativa ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
                           <span style={{ position: 'absolute', content: '""', height: 18, width: 18, left: 3, bottom: 3, background: 'white', transition: '.4s', borderRadius: '50%', transform: localConfig.saudacao?.ativa ? 'translateX(20px)' : 'none' }}></span>
@@ -546,7 +660,7 @@ export default function ADAdminAjustes() {
                       <div>
                         <label className="form-label">Imagem / Anexo (Opcional)</label>
                         <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginBottom: 12 }}>Insira a URL direta da imagem ou faça upload de uma imagem do seu computador.</p>
-                        <div style={{ display: 'flex', gap: 12 }}>
+                        <div className="ad-upload-row" style={{ display: 'flex', gap: 12 }}>
                           <input 
                             type="text" 
                             className="form-input" 
@@ -575,8 +689,9 @@ export default function ADAdminAjustes() {
                     </div>
                   )}
                 </div>
-             </div>
-           )}
+              </div>
+            )}
+
            {activeTab === 'whatsapp' && (
              <AdminWhatsAppContactsManager 
                localConfig={localConfig} 

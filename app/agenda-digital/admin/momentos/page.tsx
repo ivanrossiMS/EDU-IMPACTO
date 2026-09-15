@@ -14,12 +14,12 @@ const ClientPortal = ({ children }: { children: React.ReactNode }) => {
   }, []);
   return mounted ? createPortal(children, document.body) : null;
 };
-import { Image as ImageIcon, X, Filter, Plus, ChevronDown, ChevronUp, ChevronRight, Video, Loader2, Check, Camera, Send, Smile, Users, Globe, Upload } from 'lucide-react'
+import { Image as ImageIcon, X, Filter, Plus, ChevronDown, ChevronUp, ChevronRight, Video, Loader2, Check, Camera, Send, Smile, Users, Globe, Upload, PlayCircle } from 'lucide-react'
 import { useAgendaDigital, ADMomento, ADMedia } from '@/lib/agendaDigitalContext'
 import { useData } from '@/lib/dataContext'
 import { useApp } from '@/lib/context'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
-import { compressImage, compressVideo } from '@/lib/mediaCompressor'
+import { compressImage, compressVideo, formatFileSize, extractVideoThumbnail } from '@/lib/mediaCompressor'
 import { useQueryClient } from '@tanstack/react-query'
 import { DestinatariosModal } from '@/components/agenda/DestinatariosModal'
 import { MomentoPostCard } from '@/components/agenda/MomentoPostCard'
@@ -41,6 +41,9 @@ export default function ADAdminMomentos() {
   const [showAllDestinatarios, setShowAllDestinatarios] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
+  const [mediaThumbnails, setMediaThumbnails] = useState<Record<string, string>>({})
+  const [mediaOriginalSizes, setMediaOriginalSizes] = useState<Record<string, number>>({})
+  const [isProcessingMedia, setIsProcessingMedia] = useState(false)
   const [newPost, setNewPost] = useState({
     mediaFiles: [] as File[],
     targetClasses: [] as { id: string; name: string; type: 'turma' | 'funcionario' | 'aluno' | 'grupo' }[],
@@ -113,16 +116,67 @@ export default function ADAdminMomentos() {
     }
   };
 
+  const handleMediaSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return
+    const rawFiles = Array.from(e.target.files)
+    e.target.value = ''
+
+    const MAX_LIMIT = 100 * 1024 * 1024 // 100MB
+    const validFiles: File[] = []
+
+    for (const f of rawFiles) {
+      if (f.size > MAX_LIMIT) {
+        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 100MB.`, 'Arquivo muito grande')
+        continue
+      }
+      validFiles.push(f)
+    }
+
+    if (validFiles.length === 0) return
+
+    setIsProcessingMedia(true)
+    try {
+      const processedFiles: File[] = []
+      for (const file of validFiles) {
+        setMediaOriginalSizes(prev => ({ ...prev, [file.name]: file.size }))
+
+        if (file.type.startsWith('image/')) {
+          // Pré-comprime a foto na seleção de forma rápida e converte para WebP
+          const compressed = await compressImage(file, { maxWidth: 1920, maxHeight: 1920, quality: 0.75 })
+          processedFiles.push(compressed)
+          setMediaThumbnails(prev => ({ ...prev, [compressed.name]: URL.createObjectURL(compressed) }))
+        } else if (file.type.includes('video') || file.name.toLowerCase().endsWith('.mov')) {
+          processedFiles.push(file)
+          const { thumbnailUrl } = await extractVideoThumbnail(file)
+          if (thumbnailUrl) {
+            setMediaThumbnails(prev => ({ ...prev, [file.name]: thumbnailUrl }))
+          }
+        } else {
+          processedFiles.push(file)
+        }
+      }
+
+      setNewPost(p => ({
+        ...p,
+        mediaFiles: [...p.mediaFiles, ...processedFiles]
+      }))
+    } catch (err) {
+      console.error('[Admin Momentos] Erro ao processar mídias:', err)
+    } finally {
+      setIsProcessingMedia(false)
+    }
+  }
+
   const submitPost = async () => {
     if (isSubmitting) return
     if (!newPost.mediaFiles.length) return adAlert('Selecione ao menos uma foto ou vídeo para publicar.', 'Atenção')
     if (!newPost.targetClasses.length) return adAlert('Por favor, selecione ao menos um destinatário (Turma, Grupo ou Aluno) para publicar o momento.', 'Destinatários obrigatórios')
     
-    // Validar tamanhos
-    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
+    // Validar tamanhos (100MB)
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100MB
     for (const f of newPost.mediaFiles) {
-      if (f.type.includes('video') && f.size > MAX_VIDEO_SIZE) {
-        return adAlert(`O vídeo "${f.name}" é muito grande. O limite é 50MB.`, 'Arquivo muito grande')
+      if ((f.type.includes('video') || f.name.toLowerCase().endsWith('.mov')) && f.size > MAX_VIDEO_SIZE) {
+        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) é muito grande. O limite é 100MB.`, 'Arquivo muito grande')
       }
     }
 
@@ -130,18 +184,23 @@ export default function ADAdminMomentos() {
     setUploadProgress({})
     
     try {
+      const uploadedMediaReport: { name: string; type: string; originalSize: number; finalSize: number }[] = []
+
       const mediaArray: ADMedia[] = await Promise.all(newPost.mediaFiles.map(async (file, idx) => {
         const bucket = 'comunicados-midia'
         let fileToUpload: File = file
+        const originalSize = mediaOriginalSizes[file.name] || file.size
 
         if (file.type.startsWith('image/')) {
+          setUploadProgress(prev => ({ ...prev, [file.name]: 20 }))
+          if (file.size > 2 * 1024 * 1024) {
+            fileToUpload = await compressImage(file, { quality: 0.70, format: 'image/webp' })
+          }
+          setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
+        } else if (file.type.startsWith('video/') || file.type.includes('video') || file.name.toLowerCase().endsWith('.mov')) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 10 }))
-          fileToUpload = await compressImage(file, { quality: 0.65, format: 'image/webp' })
-          setUploadProgress(prev => ({ ...prev, [file.name]: 40 }))
-        } else if (file.type.startsWith('video/')) {
-          setUploadProgress(prev => ({ ...prev, [file.name]: 5 }))
           fileToUpload = await compressVideo(file, (percent) => {
-            const scaled = Math.round(5 + (percent * 0.45))
+            const scaled = Math.round(10 + (percent * 0.40))
             setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
           }) as File
         }
@@ -152,17 +211,24 @@ export default function ADAdminMomentos() {
         const uploadRes = await uploadFileToSupabase({
           bucket,
           file: fileToUpload,
-          usageType: 'common' // Momentos são parecidos com comunicados, cache curto
+          usageType: 'common'
         })
 
         if (!uploadRes.ok || !uploadRes.url) {
           throw new Error(uploadRes.error || 'Upload falhou')
         }
         
+        uploadedMediaReport.push({
+          name: file.name,
+          type: (file.type.includes('video') || file.name.toLowerCase().endsWith('.mov')) ? 'video' : 'image',
+          originalSize,
+          finalSize: fileToUpload.size
+        })
+
         // Sucesso
         setUploadProgress(prev => ({ ...prev, [file.name]: 100 }))
 
-        return { type: file.type.includes('video') ? 'video' : 'image', url: uploadRes.url }
+        return { type: (file.type.includes('video') || file.name.toLowerCase().endsWith('.mov')) ? 'video' : 'image', url: uploadRes.url }
       }))
 
       const isSelected = newPost.targetClasses.length > 0;
@@ -214,7 +280,18 @@ export default function ADAdminMomentos() {
       setShowModal(false)
       setShowAllDestinatarios(false)
       setNewPost({ mediaFiles: [], targetClasses: [], desc: '' })
-      adAlert('Momento publicado com sucesso!', '🎉 Sucesso')
+      setMediaThumbnails({})
+      setMediaOriginalSizes({})
+
+      const finalSizeDetails = uploadedMediaReport.map(item => {
+        const rotulo = item.type === 'video' ? '🎬 Vídeo' : '📷 Foto'
+        if (item.originalSize > item.finalSize) {
+          return `${rotulo}: ${formatFileSize(item.originalSize)} → ${formatFileSize(item.finalSize)} (final)`
+        }
+        return `${rotulo}: ${formatFileSize(item.finalSize)} (final)`
+      }).join('\n')
+
+      adAlert(`Momento publicado com sucesso!\n\nTamanho final das mídias:\n${finalSizeDetails}`, '🎉 Sucesso')
 
       try {
         const res = await fetch('/api/agenda/momentos', {
@@ -254,7 +331,11 @@ export default function ADAdminMomentos() {
       const targetAlunos = p.alunosIds || []
 
       // Se for global
-      if (targetClasses.length === 0 && targetAlunos.length === 0) return true
+      const isGlobal = targetClasses.some((tc: string) => {
+        const tcl = String(tc).toLowerCase().trim()
+        return ['todos', 'toda a escola', 'todas', 'todas as turmas', 'institucional'].includes(tcl)
+      }) || ((p as any).destino === 'todos' || (p as any).dados?.destino === 'todos')
+      if (isGlobal) return true
 
       // Se for direcionado a turmas ou grupos
       const cleanFilter = filterTurma.replace(/^[tg]_?/, '');
@@ -264,7 +345,6 @@ export default function ADAdminMomentos() {
 
       if (
         targetClasses.includes(filterTurma) ||
-        targetClasses.includes('Toda a Escola') ||
         targetClassesIds.includes(filterTurma) ||
         targetClassesIds.includes(cleanFilter) ||
         targetClassesIds.includes(`t_${cleanFilter}`) ||
@@ -329,10 +409,57 @@ export default function ADAdminMomentos() {
   }, [pagedFeed, currentUser?.id]);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', padding: '28px 32px', fontFamily: 'Inter, Outfit, sans-serif' }}>
+    <div className="ad-momentos-container" style={{ minHeight: '100vh', background: '#f8fafc', padding: '28px 32px', fontFamily: 'Inter, Outfit, sans-serif' }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-momentos-container {
+            padding: 0 0 20px 0 !important;
+            background: transparent !important;
+          }
+          .ad-momentos-header {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 14px !important;
+            margin-bottom: 16px !important;
+          }
+          .ad-momentos-header h1 {
+            font-size: 22px !important;
+          }
+          .ad-momentos-actions {
+            width: 100% !important;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 10px !important;
+          }
+          .ad-momentos-actions > div {
+            width: 100% !important;
+          }
+          .ad-momentos-actions select {
+            width: 100% !important;
+          }
+          .ad-momentos-actions button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .ad-momentos-banner {
+            padding: 14px 16px !important;
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 12px !important;
+            margin-bottom: 20px !important;
+          }
+          .ad-momentos-banner-decor {
+            display: none !important;
+          }
+          .ad-momentos-grid {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+        }
+      `}} />
 
       {/* === HEADER === */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
+      <div className="ad-momentos-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 900, color: '#111827', margin: 0 }}>
             Momentos <span style={{ background: 'linear-gradient(90deg, #a855f7, #ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>(Mural)</span>
@@ -340,7 +467,7 @@ export default function ADAdminMomentos() {
           <p style={{ margin: '4px 0 0', fontSize: 13, color: '#6b7280' }}>Moderação de fotos e atividades postadas pelas professoras.</p>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="ad-momentos-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           {/* Filter: Turmas */}
           <div style={{ position: 'relative' }}>
             <Filter size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#6b7280', pointerEvents: 'none' }} />
@@ -364,7 +491,7 @@ export default function ADAdminMomentos() {
       </div>
 
       {/* === BANNER === */}
-      <div style={{
+      <div className="ad-momentos-banner" style={{
         background: 'linear-gradient(135deg, #1e1b4b 0%, #4c1d95 30%, #7c3aed 60%, #db2777 85%, #f97316 100%)',
         borderRadius: 20,
         padding: '14px 32px',
@@ -392,7 +519,7 @@ export default function ADAdminMomentos() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, zIndex: 1 }}>
+        <div className="ad-momentos-banner-decor" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, zIndex: 1 }}>
           <span style={{ fontSize: 16, opacity: 0.7 }}>✦</span>
           <span style={{ fontSize: 12, opacity: 0.5 }}>✦</span>
           <span style={{ fontSize: 60, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.3))' }}>🚀</span>
@@ -404,7 +531,7 @@ export default function ADAdminMomentos() {
       </div>
 
       {/* === GRID === */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
+      <div className="ad-momentos-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 24 }}>
         {pagedFeed.map((post, i) => (
           <MomentoPostCard
             key={post.id}
@@ -595,8 +722,15 @@ export default function ADAdminMomentos() {
                   </div>
 
                   <input type="file" multiple accept="image/*,video/*" id="upload-midia-admin" style={{ display: 'none' }}
-                    onChange={e => { if (e.target.files) setNewPost(p => ({ ...p, mediaFiles: [...p.mediaFiles, ...Array.from(e.target.files!)] })) }} />
+                    onChange={handleMediaSelect} />
                   
+                  {isProcessingMedia && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: '#f5f3ff', borderRadius: 12, border: '1px solid #ddd6fe', marginBottom: 12, fontSize: 12, color: '#6d28d9', fontWeight: 600 }}>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Otimizando mídias selecionadas...</span>
+                    </div>
+                  )}
+
                   {newPost.mediaFiles.length === 0 ? (
                     <label htmlFor="upload-midia-admin" style={{ 
                       display: 'flex', 
@@ -623,49 +757,79 @@ export default function ADAdminMomentos() {
                       </div>
                       <div>
                         <span style={{ fontSize: 13.5, fontWeight: 700, color: '#334155' }}>Toque para escolher fotos ou vídeos</span>
-                        <p style={{ fontSize: 11.5, color: '#64748b', margin: '3px 0 0' }}>JPG, PNG ou MP4 (máximo 50MB)</p>
+                        <p style={{ fontSize: 11.5, color: '#64748b', margin: '3px 0 0' }}>JPG, PNG, MP4 ou MOV (máximo 100MB)</p>
                       </div>
                     </label>
                   ) : (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: 10 }}>
-                      {newPost.mediaFiles.map((file, i) => (
-                        <div key={i} style={{ 
-                          aspectRatio: '1/1', 
-                          borderRadius: 14, 
-                          overflow: 'hidden', 
-                          position: 'relative', 
-                          background: '#0f172a', 
-                          border: '1.5px solid #e2e8f0', 
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.06)' 
-                        }}>
-                          {file.type.includes('video') ? (
-                            <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #1e1b4b, #312e81)' }}>
-                              <Video size={24} color="#a5b4fc" />
-                              <span style={{ fontSize: 9, fontWeight: 700, color: '#c7d2fe', marginTop: 4, textTransform: 'uppercase' }}>Vídeo</span>
-                            </div>
-                          ) : (
-                            <img src={URL.createObjectURL(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Preview" />
-                          )}
+                      {newPost.mediaFiles.map((file, i) => {
+                        const isVid = file.type.includes('video') || file.name.toLowerCase().endsWith('.mov');
+                        const thumb = mediaThumbnails[file.name] || (file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
+                        const origSize = mediaOriginalSizes[file.name];
+                        const showDiff = origSize && origSize > file.size;
 
-                          <button 
-                            type="button"
-                            onClick={() => setNewPost(p => ({ ...p, mediaFiles: p.mediaFiles.filter((_, idx) => idx !== i) }))}
-                            style={{ 
-                              position: 'absolute', top: 5, right: 5, 
-                              width: 22, height: 22, borderRadius: '50%', 
-                              background: 'rgba(15, 23, 42, 0.8)', 
-                              backdropFilter: 'blur(4px)',
-                              border: '1px solid rgba(255,255,255,0.25)', 
-                              color: '#ffffff', 
-                              cursor: 'pointer', 
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                              boxShadow: '0 2px 6px rgba(0,0,0,0.2)' 
-                            }}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
+                        return (
+                          <div key={i} style={{ 
+                            aspectRatio: '1/1', 
+                            borderRadius: 14, 
+                            overflow: 'hidden', 
+                            position: 'relative', 
+                            background: '#0f172a', 
+                            border: '1.5px solid #e2e8f0', 
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.06)' 
+                          }}>
+                            {isVid ? (
+                              thumb ? (
+                                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                                  <img src={thumb} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Video Preview" />
+                                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.25)' }}>
+                                    <PlayCircle size={26} color="#ffffff" style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))' }} />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #1e1b4b, #312e81)' }}>
+                                  <Video size={24} color="#a5b4fc" />
+                                  <span style={{ fontSize: 9, fontWeight: 700, color: '#c7d2fe', marginTop: 4, textTransform: 'uppercase' }}>Vídeo</span>
+                                </div>
+                              )
+                            ) : (
+                              <img src={thumb || URL.createObjectURL(file)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Preview" />
+                            )}
+
+                            {/* Badge de Tamanho */}
+                            <div style={{ 
+                              position: 'absolute', bottom: 0, left: 0, right: 0, 
+                              background: 'linear-gradient(180deg, transparent 0%, rgba(15,23,42,0.85) 100%)', 
+                              padding: '10px 4px 3px', 
+                              display: 'flex', justifyContent: 'center', alignItems: 'center',
+                              pointerEvents: 'none'
+                            }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
+                                {isVid ? `Vídeo • ${formatFileSize(file.size)}` : (showDiff ? `${formatFileSize(file.size)}` : formatFileSize(file.size))}
+                              </span>
+                            </div>
+
+                            {/* Botão de Excluir */}
+                            <button 
+                              type="button"
+                              onClick={() => setNewPost(p => ({ ...p, mediaFiles: p.mediaFiles.filter((_, idx) => idx !== i) }))}
+                              style={{ 
+                                position: 'absolute', top: 5, right: 5, 
+                                width: 22, height: 22, borderRadius: '50%', 
+                                background: 'rgba(15, 23, 42, 0.8)', 
+                                backdropFilter: 'blur(4px)',
+                                border: '1px solid rgba(255,255,255,0.25)', 
+                                color: '#ffffff', 
+                                cursor: 'pointer', 
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.2)' 
+                              }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        );
+                      })}
 
                       <label htmlFor="upload-midia-admin" style={{ 
                         aspectRatio: '1/1', 

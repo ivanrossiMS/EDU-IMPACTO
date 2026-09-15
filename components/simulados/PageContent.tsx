@@ -340,11 +340,24 @@ export function PageContent({
           z-index: 100 !important;
         }
 
-        :global(.a4-page-content img), :global(.preview-area img), :global(.print-page img) {
+        :global(.a4-page-content img:not(.cover-bg-img)), 
+        :global(.preview-area img:not(.cover-bg-img)), 
+        :global(.print-page img:not(.cover-bg-img)) {
           max-width: 100% !important;
           max-height: 220mm !important;
           height: auto !important;
           object-fit: contain;
+        }
+
+        .cover-bg-img,
+        .print-cover-image img,
+        .print-repeating-bg img {
+          width: 100% !important;
+          height: 100% !important;
+          max-width: 100% !important;
+          max-height: 100% !important;
+          object-fit: fill !important;
+          display: block !important;
         }
 
         .field-label-tag {
@@ -384,12 +397,12 @@ export function PageContent({
       `}</style>
       {pIndex === 0 && (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config?.provas_modelo_pdf_url : config?.modelo_pdf_url)) && (
         <div className="print-cover-image" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
-          <img src={(simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config.provas_modelo_pdf_url : config.modelo_pdf_url)) || undefined} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img className="cover-bg-img" src={(simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_url : (simulado?.isProva ? config.provas_modelo_pdf_url : config.modelo_pdf_url)) || undefined} alt="Capa" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
       {pIndex > 0 && (isLastRedacaoPage ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config?.provas_modelo_pdf_outras_paginas_url : config?.modelo_pdf_outras_paginas_url))) && (
         <div className="print-repeating-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none', margin: 0, padding: 0 }}>
-          <img src={(isLastRedacaoPage ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config.provas_modelo_pdf_outras_paginas_url : config.modelo_pdf_outras_paginas_url))) || undefined} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
+          <img className="cover-bg-img" src={(isLastRedacaoPage ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isRedacao ? config?.redacao_enem_modelo_pdf_outras_paginas_url : (simulado?.isProva ? config.provas_modelo_pdf_outras_paginas_url : config.modelo_pdf_outras_paginas_url))) || undefined} alt="Fundo Interna" style={{ width: '100%', height: '100%', objectFit: 'fill', margin: 0, padding: 0, display: 'block' }} />
         </div>
       )}
 

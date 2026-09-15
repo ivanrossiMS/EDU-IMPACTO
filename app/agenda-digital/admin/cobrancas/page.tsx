@@ -117,7 +117,93 @@ export default function ADAdminCobrancas() {
 
   return (
     <div className="ad-admin-page-container ad-mobile-optimized" style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-cobrancas-header {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 14px !important;
+            margin-bottom: 20px !important;
+          }
+          .ad-cobrancas-header h2 {
+            font-size: 22px !important;
+            line-height: 1.2 !important;
+            margin: 0 !important;
+          }
+          .ad-cobrancas-header p {
+            font-size: 13px !important;
+            margin-top: 4px !important;
+          }
+          .ad-cobrancas-kpi-grid {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 10px !important;
+            margin-bottom: 16px !important;
+          }
+          .ad-cobrancas-kpi-grid > div:last-child {
+            grid-column: span 2 !important;
+          }
+          .ad-cobrancas-kpi-card {
+            padding: 12px 14px !important;
+            gap: 10px !important;
+          }
+          .ad-cobrancas-kpi-card .kpi-val {
+            font-size: 18px !important;
+          }
+          .ad-cobrancas-kpi-card .kpi-lbl {
+            font-size: 11px !important;
+          }
+          .ad-cobrancas-toolbar {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 10px !important;
+            padding: 12px !important;
+          }
+          .ad-cobrancas-tabs {
+            width: 100% !important;
+            display: flex !important;
+            gap: 8px !important;
+          }
+          .ad-cobrancas-tabs button {
+            flex: 1 !important;
+            font-size: 12px !important;
+            text-align: center !important;
+            padding: 8px 4px !important;
+          }
+          .ad-cobrancas-controls {
+            width: 100% !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+          }
+          .ad-cobrancas-controls .search-box {
+            width: 100% !important;
+          }
+          .ad-cobrancas-controls select {
+            width: 100% !important;
+          }
+          .ad-cobrancas-desktop-table {
+            display: none !important;
+          }
+          .ad-cobrancas-mobile-cards {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+            padding: 8px !important;
+          }
+        }
+        @media (min-width: 769px) {
+          .ad-cobrancas-kpi-grid {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+          }
+          .ad-cobrancas-mobile-cards {
+            display: none !important;
+          }
+        }
+      `}} />
+
+      <div className="ad-cobrancas-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h2 style={{ fontSize: 24, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Cobranças Rápidas</h2>
           <p style={{ color: 'hsl(var(--text-muted))' }}>Gerencie arrecadações extras e as cobranças anexadas aos comunicados.</p>
@@ -128,39 +214,39 @@ export default function ADAdminCobrancas() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
-         <div className="card" style={{ flex: 1, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
-           <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="ad-cobrancas-kpi-grid">
+         <div className="card ad-cobrancas-kpi-card" style={{ flex: 1, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
+           <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
              <BadgeDollarSign size={20} />
            </div>
            <div>
-             <div style={{ fontSize: 22, fontWeight: 800, color: '#3b82f6', lineHeight: 1 }}>{pendingCount}</div>
-             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Aguardando Pgto.</div>
+             <div className="kpi-val" style={{ fontSize: 22, fontWeight: 800, color: '#3b82f6', lineHeight: 1 }}>{pendingCount}</div>
+             <div className="kpi-lbl" style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Aguardando Pgto.</div>
            </div>
          </div>
-         <div className="card" style={{ flex: 1, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
-           <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(239, 68, 68,0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+         <div className="card ad-cobrancas-kpi-card" style={{ flex: 1, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
+           <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(239, 68, 68,0.1)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
              <AlertCircle size={20} />
            </div>
            <div>
-             <div style={{ fontSize: 22, fontWeight: 800, color: '#ef4444', lineHeight: 1 }}>R$ {pendingTotal.toFixed(2)}</div>
-             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Volume Pendente</div>
+             <div className="kpi-val" style={{ fontSize: 22, fontWeight: 800, color: '#ef4444', lineHeight: 1 }}>R$ {pendingTotal.toFixed(2)}</div>
+             <div className="kpi-lbl" style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Volume Pendente</div>
            </div>
          </div>
-         <div className="card" style={{ flex: 1, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
-           <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(16,185,129,0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+         <div className="card ad-cobrancas-kpi-card" style={{ flex: 1, padding: 20, display: 'flex', alignItems: 'center', gap: 16 }}>
+           <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(16,185,129,0.1)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
              <CheckCircle2 size={20} />
            </div>
            <div>
-             <div style={{ fontSize: 22, fontWeight: 800, color: '#10b981', lineHeight: 1 }}>R$ {successTotal.toFixed(2)}</div>
-             <div style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Total Recebido In-App</div>
+             <div className="kpi-val" style={{ fontSize: 22, fontWeight: 800, color: '#10b981', lineHeight: 1 }}>R$ {successTotal.toFixed(2)}</div>
+             <div className="kpi-lbl" style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 4 }}>Total Recebido In-App</div>
            </div>
          </div>
       </div>
 
       <div className="card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '8px 16px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', gap: 24 }}>
+        <div className="ad-cobrancas-toolbar" style={{ padding: '8px 16px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)' }}>
+          <div className="ad-cobrancas-tabs" style={{ display: 'flex', gap: 24 }}>
              <button 
                onClick={() => setActiveTab('app')}
                style={{ background: 'transparent', border: 0, fontWeight: 600, padding: '12px 0', borderBottom: activeTab === 'app' ? '2px solid #4f46e5' : '2px solid transparent', color: activeTab === 'app' ? '#4f46e5' : 'hsl(var(--text-secondary))', cursor: 'pointer' }}
@@ -170,8 +256,8 @@ export default function ADAdminCobrancas() {
                style={{ background: 'transparent', border: 0, fontWeight: 600, padding: '12px 0', borderBottom: activeTab === 'erp' ? '2px solid #4f46e5' : '2px solid transparent', color: activeTab === 'erp' ? '#4f46e5' : 'hsl(var(--text-secondary))', cursor: 'pointer' }}
              >Ver Mensalidades (ERP)</button>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-             <div style={{ position: 'relative', width: 240 }}>
+          <div className="ad-cobrancas-controls" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+             <div className="search-box" style={{ position: 'relative', width: 240 }}>
                <Search size={14} color="#94a3b8" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
                <input 
                  type="text" 
@@ -196,7 +282,8 @@ export default function ADAdminCobrancas() {
 
         {activeTab === 'app' ? (
            <div style={{ flex: 1, overflowY: 'auto' }}>
-             <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+             {/* Desktop Table */}
+             <table className="table ad-cobrancas-desktop-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                <thead>
                  <tr style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid hsl(var(--border-subtle))', textAlign: 'left', position: 'sticky', top: 0, zIndex: 1 }}>
                    <th style={{ padding: '12px 16px', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>Motivo (Comunicado)</th>
@@ -249,6 +336,71 @@ export default function ADAdminCobrancas() {
                  })}
                </tbody>
              </table>
+
+             {/* Mobile Cards View */}
+             <div className="ad-cobrancas-mobile-cards">
+               {loading ? (
+                 <div style={{ padding: 32, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>Carregando cobranças...</div>
+               ) : filteredGroupedArray.length === 0 ? (
+                 <div style={{ padding: 32, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>Nenhuma cobrança encontrada.</div>
+               ) : filteredGroupedArray.map(group => {
+                 const cobrancaObj = group.cobranca;
+                 const totalEnviados = group.destinatarios.length;
+                 const totalPagos = group.destinatarios.filter((d: any) => d.status === 'CONFIRMED' || d.status === 'RECEIVED').length;
+                 const isFullyPaid = totalPagos === totalEnviados && totalEnviados > 0;
+
+                 return (
+                   <div
+                     key={group.id}
+                     style={{
+                       background: '#ffffff',
+                       borderRadius: 16,
+                       border: '1px solid hsl(var(--border-subtle))',
+                       padding: '14px 16px',
+                       display: 'flex',
+                       flexDirection: 'column',
+                       gap: 10,
+                       boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                     }}
+                   >
+                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                       <div>
+                         <div style={{ fontWeight: 800, fontSize: 15, color: 'hsl(var(--text-main))' }}>
+                           {cobrancaObj.titulo || 'Sem Título'}
+                         </div>
+                         <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                           <CreditCard size={12} color="#3b82f6"/> 
+                           Criado via Comunicado
+                         </div>
+                       </div>
+                       <div style={{ fontSize: 16, fontWeight: 900, color: 'hsl(var(--text-main))', whiteSpace: 'nowrap' }}>
+                         R$ {(cobrancaObj.valor || 0).toFixed(2).replace('.', ',')}
+                       </div>
+                     </div>
+
+                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 10 }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                         <span className="badge" style={{
+                           background: isFullyPaid ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
+                           color: isFullyPaid ? '#10b981' : '#3b82f6',
+                           fontSize: 11,
+                           padding: '2px 8px',
+                           fontWeight: 700
+                         }}>
+                           {totalPagos} de {totalEnviados} pagos
+                         </span>
+                         <span style={{ fontSize: 11, color: 'hsl(var(--text-muted))' }}>
+                           Venc: {cobrancaObj.vencimento ? new Date(cobrancaObj.vencimento).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '--'}
+                         </span>
+                       </div>
+                       <button className="btn btn-secondary btn-sm" style={{ padding: '4px 12px', fontSize: 11, fontWeight: 700 }} onClick={() => setSelectedGroupId(group.id)}>
+                         Detalhes
+                       </button>
+                     </div>
+                   </div>
+                 )
+               })}
+             </div>
            </div>
         ) : (
           <div style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-muted))' }}>

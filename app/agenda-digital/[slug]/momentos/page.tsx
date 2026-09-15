@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRouter, useSearchParams, useParams } from 'next/navigation'
 import { useQueryMomentos } from '@/lib/hooks/useAgendaQueries';
 import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-import { getAlunoTurmaCursando, getAlunoTodasTurmasEGrupos, getAlunoNomesTurmasEGrupos } from '@/lib/studentTurmaUtils';
+import { getAlunoTurmaCursando, getAlunoTodasTurmasEGrupos, getAlunoNomesTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma } from '@/lib/studentTurmaUtils';
 
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -205,14 +205,58 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     return `${namesList.slice(0, -1).join(', ')} e ${namesList[namesList.length - 1]}`
   }, [aluno, turmas, grupos])
 
-  // Momentos já filtrados e autorizados com segurança pelo backend para este aluno
+  // Momentos filtrados e autorizados com segurança pelo backend e checagem defensiva para este aluno
   const meusMomentos = React.useMemo(() => {
-    return [...fetchMomentos].sort((a, b) => {
+    const cleanId = String(aluno?.id || resolvedParams?.slug || '').replace(/^(a_|_ALU)/, '');
+    
+    // Conjuntos de turmas e grupos do aluno
+    const studentTurmaNames = new Set<string>();
+    const studentTurmaIds = new Set<string>();
+    const studentGroupNames = new Set<string>();
+    const studentGroupIds = new Set<string>();
+
+    if (aluno) {
+      if (aluno.turma) studentTurmaIds.add(String(aluno.turma).trim());
+      if (aluno.turma_nome) studentTurmaNames.add(String(aluno.turma_nome).trim());
+
+      turmas.forEach((t: any) => {
+        if (isAlunoCursandoTurma(aluno, t, t.ano, turmas)) {
+          if (t.nome) studentTurmaNames.add(String(t.nome).trim());
+          if (t.id != null) studentTurmaIds.add(String(t.id).trim());
+          if (t.codigo) studentTurmaIds.add(String(t.codigo).trim());
+        }
+      });
+
+      grupos.forEach((g: any) => {
+        let aIds = g.alunosIds || g.dados?.alunosIds || [];
+        if (typeof aIds === 'string') {
+          try { aIds = JSON.parse(aIds); } catch { aIds = []; }
+        }
+        const isMember = (Array.isArray(aIds) ? aIds : []).some(
+          (id: any) => String(id).replace(/^(a_|_ALU)/, '') === cleanId
+        );
+        const gTurmaRef = turmas.find((t: any) => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome || t.nome === g.dados?.nome);
+        const isCursando = gTurmaRef ? isAlunoCursandoTurma(aluno, gTurmaRef, gTurmaRef.ano, turmas) : false;
+
+        if (isMember || isCursando) {
+          const gNome = g.nome || g.dados?.nome;
+          if (gNome) studentGroupNames.add(String(gNome).trim());
+          if (g.id != null) studentGroupIds.add(String(g.id).replace(/^[tg]_?/, '').trim());
+        }
+      });
+    }
+
+    const filtered = fetchMomentos.filter(m => {
+      if (!cleanId) return true;
+      return canStudentViewMomento(m, cleanId, studentTurmaNames, studentTurmaIds, studentGroupNames, studentGroupIds);
+    });
+
+    return [...filtered].sort((a, b) => {
       const dateA = new Date((a as any).date || (a as any).created_at || 0).getTime();
       const dateB = new Date((b as any).date || (b as any).created_at || 0).getTime();
       return dateB - dateA;
     });
-  }, [fetchMomentos]);
+  }, [fetchMomentos, aluno, turmas, grupos, resolvedParams?.slug]);
 
   useEffect(() => {
     if (!aluno?.id || meusMomentos.length === 0) return;

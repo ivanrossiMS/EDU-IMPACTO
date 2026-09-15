@@ -7,7 +7,7 @@ import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
 import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
-import { getAlunoTodasTurmasEGrupos } from '@/lib/studentTurmaUtils'
+import { getAlunoTodasTurmasEGrupos, canStudentViewMomento, isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 
 export const dynamic = 'force-dynamic'
@@ -103,6 +103,11 @@ export async function GET(request: Request) {
     let query = supabase.from('momentos').select('*');
 
     // Filtragem segura no Backend
+    const studentTurmaNames = new Set<string>();
+    const studentTurmaIds = new Set<string>();
+    const studentGroupNames = new Set<string>();
+    const studentGroupIds = new Set<string>();
+
     if (alunoId) {
       let resolvedTargets: string[] = [];
       const [alunoRes, turmasRes, gruposRes] = await Promise.all([
@@ -112,17 +117,54 @@ export async function GET(request: Request) {
       ]);
 
       const alunoData = alunoRes.data;
+      const allTurmas = turmasRes.data || [];
+      const allGrupos = gruposRes.data || [];
+
       if (alunoData) {
-        // Enviar turmasRes.data completo para isAlunoCursandoTurma preservar turno, modalidade, serie e segmento
-        resolvedTargets = getAlunoTodasTurmasEGrupos(alunoData, turmasRes.data || [], gruposRes.data || []);
+        resolvedTargets = getAlunoTodasTurmasEGrupos(alunoData, allTurmas, allGrupos);
+
+        // Mapear turmas cursando do aluno
+        allTurmas.forEach((t: any) => {
+          if (isAlunoCursandoTurma(alunoData, t, t.ano, allTurmas)) {
+            if (t.nome) studentTurmaNames.add(String(t.nome).trim());
+            if (t.id != null) studentTurmaIds.add(String(t.id).trim());
+            if (t.codigo) studentTurmaIds.add(String(t.codigo).trim());
+          }
+        });
+        if (alunoData.turma) {
+          studentTurmaIds.add(String(alunoData.turma).trim());
+          const matchTurma = allTurmas.find((t: any) => String(t.id) === String(alunoData.turma) || String(t.codigo) === String(alunoData.turma) || t.nome === alunoData.turma);
+          if (matchTurma?.nome) studentTurmaNames.add(String(matchTurma.nome).trim());
+        }
+        if (alunoData.turma_nome) {
+          studentTurmaNames.add(String(alunoData.turma_nome).trim());
+        }
+
+        // Mapear grupos do aluno
+        const cleanId = String(alunoId).replace(/^(a_|_ALU)/, '');
+        allGrupos.forEach((g: any) => {
+          let aIds = g.alunosIds || g.dados?.alunosIds || [];
+          if (typeof aIds === 'string') {
+            try { aIds = JSON.parse(aIds); } catch { aIds = []; }
+          }
+          const isMember = (Array.isArray(aIds) ? aIds : []).some(
+            (id: any) => String(id).replace(/^(a_|_ALU)/, '') === cleanId
+          );
+          const gTurmaRef = allTurmas.find((t: any) => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome || t.nome === g.dados?.nome);
+          const isCursando = gTurmaRef ? isAlunoCursandoTurma(alunoData, gTurmaRef, gTurmaRef.ano, allTurmas) : false;
+
+          if (isMember || isCursando) {
+            const gNome = g.nome || g.dados?.nome;
+            if (gNome) studentGroupNames.add(String(gNome).trim());
+            if (g.id != null) studentGroupIds.add(String(g.id).replace(/^[tg]_?/, '').trim());
+          }
+        });
       }
 
       const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
       const conditions: string[] = [];
 
-      // Momentos públicos para "Toda a escola", "TODOS" ou sem array (empty array)
-      conditions.push(`dados->targetClasses.eq."[]"`);
-      conditions.push(`dados->targetClasses.is.null`);
+      // Momentos públicos para toda a escola
       conditions.push(`dados->targetClasses.cs.["Todos"]`);
       conditions.push(`dados->targetClasses.cs.["todos"]`);
       conditions.push(`dados->targetClasses.cs.["TODOS"]`);
@@ -131,6 +173,8 @@ export async function GET(request: Request) {
       conditions.push(`dados->targetClasses.cs.["toda a escola"]`);
       conditions.push(`dados->targetClasses.cs.["Todas"]`);
       conditions.push(`dados->targetClasses.cs.["todas"]`);
+      conditions.push(`dados->targetClasses.cs.["Institucional"]`);
+      conditions.push(`dados->>destino.eq.todos`);
 
       // Se tiver aluno especifico
       conditions.push(`dados->alunosIds.cs.["${cleanAlunoId}"]`);
@@ -148,6 +192,11 @@ export async function GET(request: Request) {
           conditions.push(`dados->targetClassesIds.cs.["t_${tStr}"]`);
           conditions.push(`dados->targetClassesIds.cs.["g_${tStr}"]`);
         }
+      });
+
+      studentGroupNames.forEach(gName => {
+        conditions.push(`dados->grupos.cs.["${gName}"]`);
+        conditions.push(`dados->targetGrupos.cs.["${gName}"]`);
       });
 
       query = query.or(conditions.join(','));
@@ -182,8 +231,6 @@ export async function GET(request: Request) {
 
           const conditions: string[] = [];
           // Momentos globais da escola e equipe escolar
-          conditions.push(`dados->targetClasses.eq."[]"`);
-          conditions.push(`dados->targetClasses.is.null`);
           conditions.push(`dados->targetClasses.cs.["Toda a escola"]`);
           conditions.push(`dados->targetClasses.cs.["Toda a Escola"]`);
           conditions.push(`dados->targetClasses.cs.["Todos"]`);
@@ -323,7 +370,23 @@ export async function GET(request: Request) {
     const { data, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
     if (error) throw new Error(error.message)
     
-    const itemIds = data ? data.map((d: any) => String(d.id)) : [];
+    // Filtragem defensiva e rigorosa no backend
+    let safeData = data || [];
+    if (alunoId) {
+      const cleanAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
+      safeData = safeData.filter(row => {
+        return canStudentViewMomento(
+          row,
+          cleanAlunoId,
+          studentTurmaNames,
+          studentTurmaIds,
+          studentGroupNames,
+          studentGroupIds
+        );
+      });
+    }
+
+    const itemIds = safeData.map((d: any) => String(d.id));
     let allReads: any[] = [];
   
     if (itemIds.length > 0) {
@@ -331,7 +394,7 @@ export async function GET(request: Request) {
        allReads = readsRes.data || [];
     }
 
-    const result = (data || []).map(row => {
+    const result = safeData.map(row => {
       const merged = { ...row, ...(row.dados || {}) }
       
       merged.leituras = merged.leituras && typeof merged.leituras === 'object' && !Array.isArray(merged.leituras) ? merged.leituras : {}
@@ -557,10 +620,14 @@ export async function POST(request: Request) {
 }
 
 function buildRowAuth(body: any) {
-  const { id, ...rest } = body
+  const { id, dados: innerDados, ...rest } = body
+  const combined = {
+    ...rest,
+    ...(innerDados && typeof innerDados === 'object' ? innerDados : {}),
+  }
   return {
     id: id || crypto.randomUUID(),
-    dados: rest,
+    dados: combined,
   }
 }
 

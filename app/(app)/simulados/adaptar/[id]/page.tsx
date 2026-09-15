@@ -73,56 +73,6 @@ export default function AdaptarSimuladoPage() {
     loadData()
   }, [id])
 
-  // --- Print Styles Injection ---
-  useEffect(() => {
-    const style = document.createElement('style')
-    style.innerHTML = `
-      #print-root {
-        display: none !important;
-      }
-
-      @media print {
-        body > *:not(#print-root) {
-          display: none !important;
-        }
-
-        #print-root {
-          display: block !important;
-          position: static !important;
-          width: 210mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-
-        .print-page {
-          width: 210mm !important;
-          height: 297mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          page-break-after: always !important;
-          break-after: page !important;
-          overflow: hidden !important;
-          background-size: 210mm 297mm !important;
-          background-repeat: no-repeat !important;
-          background-position: center !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-
-        @page {
-          size: A4 portrait;
-          margin: 0;
-        }
-
-        .no-print {
-          display: none !important;
-        }
-      }
-    `
-    document.head.appendChild(style)
-    return () => { document.head.removeChild(style) }
-  }, [])
-
   const handleToggleQuestion = (qId: string) => {
     const next = new Set(selectedIds)
     if (next.has(qId)) next.delete(qId)

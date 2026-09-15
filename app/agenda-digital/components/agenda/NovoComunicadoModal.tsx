@@ -183,12 +183,12 @@ export default function NovoComunicadoModal({
     const filesArray = Array.from(files);
     e.target.value = '';
     
-    const MAX_SIZE = 50 * 1024 * 1024;
+    const MAX_SIZE = 100 * 1024 * 1024;
 
     // Valida o limite de tamanho para cada arquivo
     for (const file of filesArray) {
       if (file.size > MAX_SIZE) {
-        alert(`O arquivo "${file.name}" excede o limite de tamanho permitido de 50MB.`);
+        alert(`O arquivo "${file.name}" excede o limite de tamanho permitido de 100MB.`);
         return;
       }
     }

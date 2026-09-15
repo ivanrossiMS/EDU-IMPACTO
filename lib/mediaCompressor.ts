@@ -19,6 +19,85 @@ interface VideoCompressOptions {
 }
 
 /**
+ * Formata bytes em formato legível (ex: 350 KB, 14.2 MB)
+ */
+export function formatFileSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+/**
+ * Extrai o frame (aos 0.5s ou início) de um arquivo de vídeo para thumbnail
+ */
+export async function extractVideoThumbnail(file: File): Promise<{ thumbnailUrl: string; duration: number }> {
+  return new Promise((resolve) => {
+    try {
+      const video = document.createElement('video');
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      const url = URL.createObjectURL(file);
+      video.src = url;
+
+      let resolved = false;
+      const cleanup = () => {
+        if (!resolved) {
+          resolved = true;
+          URL.revokeObjectURL(url);
+          try { video.remove(); } catch {}
+        }
+      };
+
+      video.onloadedmetadata = () => {
+        const targetTime = Math.min(0.5, Math.max(0, (video.duration || 1) / 2));
+        video.currentTime = targetTime;
+      };
+
+      video.onseeked = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const width = Math.min(video.videoWidth || 640, 640);
+          const ratio = (video.videoHeight || 360) / (video.videoWidth || 640);
+          const height = Math.round(width * ratio) || 360;
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, width, height);
+            const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.75);
+            const duration = video.duration || 0;
+            cleanup();
+            resolve({ thumbnailUrl, duration });
+            return;
+          }
+        } catch (err) {
+          console.warn('[Video Thumbnail] Erro no render canvas:', err);
+        }
+        const duration = video.duration || 0;
+        cleanup();
+        resolve({ thumbnailUrl: '', duration });
+      };
+
+      video.onerror = () => {
+        cleanup();
+        resolve({ thumbnailUrl: '', duration: 0 });
+      };
+
+      setTimeout(() => {
+        cleanup();
+        resolve({ thumbnailUrl: '', duration: video.duration || 0 });
+      }, 3500);
+    } catch (e) {
+      resolve({ thumbnailUrl: '', duration: 0 });
+    }
+  });
+}
+
+/**
  * Comprime uma imagem utilizando HTML5 Canvas e converte para WebP (ou JPEG).
  * Adapta a resolução e a qualidade dinamicamente com base no tamanho do arquivo.
  */
@@ -32,94 +111,107 @@ export async function compressImage(
   let maxHeight = options.maxHeight;
   const format = options.format || 'image/webp';
 
-  // Se a imagem for WebP e for menor que 100KB, não precisa comprimir mais
-  if (fileSize < 100 * 1024 && file.type === 'image/webp') {
+  // Se a imagem já for WebP e for menor que 150KB, não precisa comprimir mais
+  if (fileSize < 150 * 1024 && file.type === 'image/webp') {
     return file;
   }
 
-  // Definição de qualidade e dimensões baseadas nas regras do usuário
-  if (quality === undefined || maxWidth === undefined || maxHeight === undefined) {
-    if (fileSize > 5 * 1024 * 1024) { // > 5MB
-      if (quality === undefined) quality = 0.50;
-      if (maxWidth === undefined) maxWidth = 1600;
-      if (maxHeight === undefined) maxHeight = 1600;
-    } else if (fileSize > 1 * 1024 * 1024) { // 1MB - 5MB
-      if (quality === undefined) quality = 0.60;
-      if (maxWidth === undefined) maxWidth = 1920;
-      if (maxHeight === undefined) maxHeight = 1920;
-    } else { // < 1MB
-      if (quality === undefined) quality = 0.80;
-      if (maxWidth === undefined) maxWidth = 2048;
-      if (maxHeight === undefined) maxHeight = 2048;
-    }
+  // Definição de qualidade e dimensões adaptativas
+  if (quality === undefined) {
+    if (fileSize > 8 * 1024 * 1024) quality = 0.65;
+    else if (fileSize > 3 * 1024 * 1024) quality = 0.72;
+    else quality = 0.80;
   }
+  if (maxWidth === undefined) maxWidth = 1920;
+  if (maxHeight === undefined) maxHeight = 1920;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onerror = (err) => reject(err);
+    reader.onerror = () => resolve(file); // Fallback suave: mantém original se leitor falhar
     reader.onload = (event) => {
       const img = new Image();
       img.src = event.target?.result as string;
-      img.onerror = (err) => reject(err);
+      img.onerror = () => resolve(file); // Fallback suave se decodificação falhar (ex: formato exótico)
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
 
-        // Calcular novas dimensões mantendo o aspect ratio
-        if (width > maxWidth! || height > maxHeight!) {
-          if (width > height) {
-            height = Math.round((height * maxWidth!) / width);
-            width = maxWidth!;
-          } else {
-            width = Math.round((width * maxHeight!) / height);
-            height = maxHeight!;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          return reject(new Error('Não foi possível obter o contexto 2D do Canvas'));
-        }
-
-        // Desenhar imagem no Canvas
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Exportar para WebP/JPEG com a qualidade definida
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              return reject(new Error('Erro ao converter Canvas para Blob'));
-            }
-
-            // Gerar o novo nome do arquivo com a extensão correta
-            const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-            const extension = format === 'image/webp' ? 'webp' : 'jpg';
-            const newName = `${baseName}.${extension}`;
-
-            const compressedFile = new File([blob], newName, {
-              type: format,
-              lastModified: Date.now()
-            });
-
-            // Se por algum motivo o arquivo comprimido ficou maior que o original, usa o original
-            if (compressedFile.size >= file.size) {
-              resolve(file);
+          // Calcular novas dimensões mantendo proporção
+          if (width > maxWidth! || height > maxHeight!) {
+            if (width > height) {
+              height = Math.round((height * maxWidth!) / width);
+              width = maxWidth!;
             } else {
-              resolve(compressedFile);
+              width = Math.round((width * maxHeight!) / height);
+              height = maxHeight!;
             }
-          },
-          format,
-          quality
-        );
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            return resolve(file);
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Verifica se o navegador suporta exportar WebP
+          const targetFormat = format;
+
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                return resolve(file);
+              }
+
+              // Se o navegador não suporta WebP e gerou PNG muito grande, tentar JPEG
+              if (targetFormat === 'image/webp' && blob.type === 'image/png') {
+                canvas.toBlob((jpgBlob) => {
+                  if (!jpgBlob || jpgBlob.size >= file.size) {
+                    return resolve(file);
+                  }
+                  const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+                  const compressedFile = new File([jpgBlob], `${baseName}.jpg`, {
+                    type: 'image/jpeg',
+                    lastModified: Date.now()
+                  });
+                  resolve(compressedFile);
+                }, 'image/jpeg', quality);
+                return;
+              }
+
+              const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+              const extension = blob.type.includes('webp') ? 'webp' : 'jpg';
+              const newName = `${baseName}.${extension}`;
+
+              const compressedFile = new File([blob], newName, {
+                type: blob.type,
+                lastModified: Date.now()
+              });
+
+              // Usa o comprimido se for menor
+              if (compressedFile.size < file.size) {
+                resolve(compressedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            targetFormat,
+            quality
+          );
+        } catch (e) {
+          console.warn('[Image Compressor] Erro ao processar:', e);
+        }
       };
     };
   });
 }
+
 
 /**
  * Comprime bytes de imagens JPEG incorporados dentro de arquivos PDF.

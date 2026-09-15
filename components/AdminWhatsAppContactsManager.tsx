@@ -56,7 +56,43 @@ export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig, onSa
 
   return (
     <div>
-      <div style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @media (max-width: 768px) {
+          .ad-wa-header {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
+            padding: 16px !important;
+          }
+          .ad-wa-header button {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .ad-wa-body {
+            padding: 16px !important;
+          }
+          .ad-wa-edit-inputs {
+            flex-direction: column !important;
+            gap: 12px !important;
+          }
+          .ad-wa-contact-content {
+            padding: 14px 12px !important;
+          }
+          .ad-wa-contact-row {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            gap: 14px !important;
+          }
+          .ad-wa-contact-actions {
+            width: 100% !important;
+            justify-content: flex-end !important;
+            border-top: 1px solid hsl(var(--border-subtle));
+            padding-top: 10px !important;
+          }
+        }
+      `}} />
+
+      <div className="ad-wa-header" style={{ padding: '24px 32px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px 0' }}>Contatos Rápidos do WhatsApp</h3>
           <p style={{ margin: 0, color: 'hsl(var(--text-muted))', fontSize: 14 }}>Configure os atalhos de contato que aparecerão no botão flutuante da Agenda Digital.</p>
@@ -66,7 +102,7 @@ export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig, onSa
         </button>
       </div>
 
-      <div style={{ padding: 32 }}>
+      <div className="ad-wa-body" style={{ padding: 32 }}>
         {contatos.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', background: 'rgba(0,0,0,0.02)', borderRadius: 12, border: '1px dashed hsl(var(--border-subtle))' }}>
             <p style={{ color: 'hsl(var(--text-muted))', marginBottom: 16 }}>Nenhum contato cadastrado.</p>
@@ -87,10 +123,10 @@ export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig, onSa
                   </button>
                 </div>
 
-                <div style={{ flex: 1, padding: 20 }}>
+                <div className="ad-wa-contact-content" style={{ flex: 1, padding: 20 }}>
                   {isEditing === contato.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      <div style={{ display: 'flex', gap: 16 }}>
+                      <div className="ad-wa-edit-inputs" style={{ display: 'flex', gap: 16 }}>
                         <div style={{ flex: 1 }}>
                           <label className="form-label" style={{ fontSize: 12, marginBottom: 4, display: 'block', fontWeight: 600, color: '#4b5563' }}>Setor</label>
                           <input type="text" className="form-input" value={editForm.setor || ''} onChange={e => setEditForm({ ...editForm, setor: e.target.value })} style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6 }} placeholder="Ex: Coordenação" />
@@ -118,9 +154,9 @@ export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig, onSa
                       </div>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div className="ad-wa-contact-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4, flexWrap: 'wrap' }}>
                           <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#111827' }}>{contato.nome}</h4>
                           {contato.setor && (
                             <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 12, background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
@@ -134,7 +170,7 @@ export function AdminWhatsAppContactsManager({ localConfig, setLocalConfig, onSa
                         <div style={{ fontSize: 14, color: '#4b5563', marginBottom: 2 }}>{contato.telefone || 'Sem telefone'}</div>
                         {contato.descricao && <div style={{ fontSize: 13, color: '#6b7280' }}>{contato.descricao}</div>}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div className="ad-wa-contact-actions" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <label style={{ position: 'relative', display: 'inline-block', width: 44, height: 24, cursor: 'pointer' }}>
                           <input type="checkbox" style={{ opacity: 0, width: 0, height: 0 }} checked={contato.ativo} onChange={() => handleToggle(contato.id, contato.ativo)} />
                           <span style={{ position: 'absolute', inset: 0, background: contato.ativo ? '#10b981' : 'hsl(var(--border-subtle))', borderRadius: 24, transition: '.4s' }}>
