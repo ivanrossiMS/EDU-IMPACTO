@@ -110,7 +110,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
-  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 5, { enabled: true })
+  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 20, { enabled: true })
   const comunicados = comunicadosData?.pages?.flat() || []
   
   const searchParams = useSearchParams()
@@ -691,6 +691,16 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             if (c.destino === 'interno' || c.destino === 'funcionarios') return false;
             if (c.id && c.id.startsWith('AD-COM-REL-COLAB')) return false;
             if (c.tipo === 'AD-COM-REL-TURMA' || (c.id && c.id.startsWith('AD-COM-REL-TURMA'))) return false;
+
+            // Relatórios individuais: apenas exibir se pertencer a este aluno
+            if (c.id && c.id.startsWith('AD-COM-REL-STU-')) {
+              const currentAlunoId = String(aluno?.id || resolvedParams?.slug || '').replace(/^(a_|_ALU)/, '');
+              const cAlunos = [
+                ...(c.alunosIds || []),
+                ...(c.dados?.alunosIds || [])
+              ].map((id: any) => String(id).replace(/^(a_|_ALU)/, ''));
+              if (!cAlunos.includes(currentAlunoId)) return false;
+            }
 
             if (!searchTerm) return true;
             const term = searchTerm.toLowerCase();

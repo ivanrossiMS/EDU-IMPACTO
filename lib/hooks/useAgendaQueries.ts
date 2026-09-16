@@ -4,7 +4,7 @@ import { useApp } from '@/lib/context'
 // --- COMUNICADOS ---
 export function useQueryComunicados(
   fetchUrl: string | null = '/api/comunicados',
-  pageSize: number = 5,
+  pageSize: number = 20,
   options?: { enabled?: boolean }
 ) {
   const { currentUser } = useApp()
@@ -24,7 +24,7 @@ export function useQueryComunicados(
       return Array.isArray(data) ? data : []
     },
     getNextPageParam: (lastPage, allPages) => {
-      return lastPage.length === pageSize ? allPages.length : undefined
+      return (lastPage && lastPage.length >= pageSize) ? allPages.length : undefined
     },
     staleTime: 1000 * 30, // 30s de cache antes de considerar obsoleto
     gcTime: 1000 * 60 * 10, // 10 min na memória

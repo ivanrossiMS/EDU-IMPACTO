@@ -998,21 +998,12 @@ export function canStudentViewMomento(
     return false; // Alunos específicos marcados e o aluno não é um deles!
   }
 
-  // 4. Momentos exclusivos de equipe escolar / funcionários (sem nenhuma turma nem grupo do aluno)
-  const isStaffOnlyTarget = (targetClasses.length > 0 && targetClasses.every(tc => 
-    ['equipe escolar', 'equipe', 'funcionários', 'colaboradores', 'direção', 'coordenação'].some(s => tc.includes(s))
-  )) || (targetClasses.length === 0 && grupos.length === 0 && funcionariosIds.length > 0);
-
-  if (isStaffOnlyTarget) {
-    return false;
-  }
-
-  // 5. Se o momento não tiver NENHUM destinatário (vazio), não exibir para ninguém
+  // 4. Se o momento não tiver NENHUM destinatário (vazio), não exibir para ninguém
   if (targetClasses.length === 0 && targetClassesIds.length === 0 && grupos.length === 0 && gruposIds.length === 0 && alunosIds.length === 0) {
     return false;
   }
 
-  // 6. Turma do aluno corresponde?
+  // 5. Turma do aluno corresponde?
   const matchesClass = Array.from(tClassesSet).some(stn => 
     targetClasses.some(tc => tc === stn || tc.includes(stn) || stn.includes(tc))
   ) || Array.from(tIdsSet).some(sti => 
@@ -1020,7 +1011,7 @@ export function canStudentViewMomento(
   );
   if (matchesClass) return true;
 
-  // 7. Grupo de aluno corresponde?
+  // 6. Grupo de aluno corresponde?
   const matchesGroup = Array.from(gNamesSet).some(sgn => 
     grupos.some(g => g === sgn || g.includes(sgn) || sgn.includes(g)) ||
     targetClasses.some(tc => tc === sgn || tc.includes(sgn) || sgn.includes(tc))
@@ -1029,6 +1020,15 @@ export function canStudentViewMomento(
     targetClassesIds.some(tId => tId === sgi || tId.includes(sgi) || sgi.includes(tId))
   );
   if (matchesGroup) return true;
+
+  // 7. Momentos exclusivos de equipe escolar / funcionários (sem nenhuma turma nem grupo do aluno)
+  const isStaffOnlyTarget = (targetClasses.length > 0 && targetClasses.every(tc => 
+    ['equipe escolar', 'funcionários', 'colaboradores', 'direção', 'coordenação', 'secretaria', 'financeiro'].some(s => tc.toLowerCase().includes(s))
+  )) || (targetClasses.length === 0 && grupos.length === 0 && funcionariosIds.length > 0);
+
+  if (isStaffOnlyTarget) {
+    return false;
+  }
 
   return false;
 }

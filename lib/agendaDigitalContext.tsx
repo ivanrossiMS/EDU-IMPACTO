@@ -172,11 +172,11 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const isComunicadosRoute = pathname.includes('comunicados') || pathname === '/agenda-digital/admin'
   const isMomentosRoute = pathname.includes('momentos') || pathname === '/agenda-digital/admin'
 
-  const comunicadosQuery = useQueryComunicados('/api/comunicados', 5, { enabled: !isFamilyFetch && isComunicadosRoute })
+  const comunicadosQuery = useQueryComunicados('/api/comunicados', 20, { enabled: !isFamilyFetch && isComunicadosRoute })
   const comunicados = comunicadosQuery.data?.pages?.flat() || []
   const comunicadosLoading = comunicadosQuery.isLoading || comunicadosQuery.isFetching
 
-  const applyFlatUpdater = (oldData: any, updater: any, limit = 5) => {
+  const applyFlatUpdater = (oldData: any, updater: any, limit = 20) => {
     if (Array.isArray(oldData)) {
       if (typeof updater === 'function') {
         return updater(oldData);

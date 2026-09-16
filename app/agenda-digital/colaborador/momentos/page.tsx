@@ -466,6 +466,14 @@ export default function ADMomentosPage() {
 
     (chatGroups || []).forEach((g: any) => {
       if (!g || !g.nome) return;
+      const syncId = String(g.syncId || g.dados?.syncId || g.id || '');
+      // Grupos sincronizados de turmas acadêmicas são turmas, não equipes
+      if (syncId.startsWith('sync-')) return;
+
+      const isEquipe = g.isEquipeEscolar === true || g.dados?.isEquipeEscolar === true || g.tipo === 'equipe';
+      const isStaffDept = ['coordenação', 'direção', 'secretaria', 'financeiro', 'inspetor', 'recepção', 'equipe', 'professores', 'ti'].some(d => g.nome.toLowerCase().includes(d));
+      if (!isEquipe && !isStaffDept) return;
+
       let colabs = g.colaboradoresIds || g.dados?.colaboradoresIds || [];
       if (typeof colabs === 'string') {
         try { colabs = JSON.parse(colabs); } catch { colabs = []; }
@@ -1660,15 +1668,17 @@ export default function ADMomentosPage() {
                             const classes = m.targetClasses || [];
                             if (classes.some((c: string) => c.toLowerCase() === 'todos' || c.toLowerCase() === 'toda a escola' || c.toLowerCase() === 'todas')) return 'Toda a Escola';
                             const classNames = classes.map((c: string) => {
+                              const turmaMatch = turmas.find((t: any) => String(t.id) === String(c) || String(t.codigo) === String(c) || String(t.nome).trim().toLowerCase() === String(c).trim().toLowerCase());
+                              if (turmaMatch) return turmaMatch.nome;
                               const equipeMatch = equipeEscolarGrupos.find(eg => eg.id === c || eg.nome.toLowerCase() === c.toLowerCase());
                               if (equipeMatch) return `${equipeMatch.nome} (Equipe)`;
-                              const turmaMatch = turmas.find((t: any) => String(t.id) === String(c) || String(t.codigo) === String(c) || String(t.nome) === String(c));
-                              return turmaMatch ? turmaMatch.nome : c;
+                              return c;
                             });
                             if (classNames.length > 2) return `${classNames.length} Destinos`;
                             return classNames.join(', ');
                           })()
-                          const isEquipeOnly = !hasAlunos && (m.targetClasses || []).some((c: string) => equipeEscolarGrupos.some(eg => eg.id === c || eg.nome.toLowerCase() === c.toLowerCase()));
+                          const hasTurmaMatch = (m.targetClasses || []).some((c: string) => turmas.some((t: any) => String(t.id) === String(c) || String(t.codigo) === String(c) || String(t.nome).trim().toLowerCase() === String(c).trim().toLowerCase()));
+                          const isEquipeOnly = !hasAlunos && !hasTurmaMatch && (m.targetClasses || []).some((c: string) => equipeEscolarGrupos.some(eg => eg.id === c || eg.nome.toLowerCase() === c.toLowerCase()));
                           return `${hasAlunos ? 'Alunos' : (isEquipeOnly ? 'Equipe' : 'Turma')}: ${label}`;
                         })()} • {displayTime}
                       </div>

@@ -85,8 +85,8 @@ export async function GET(request: Request) {
       (aluno as any).turno = 'Integral/Intermediário';
     } else {
       const [allTurmasRes, allGruposRes] = await Promise.all([
-        supabase.from('turmas').select('id, nome, turno, modalidade, ano, dados'),
-        supabase.from('agenda_grupos').select('id, nome, alunosIds, dados')
+        supabase.from('turmas').select('id, nome, turno, ano, dados'),
+        supabase.from('agenda_grupos').select('id, dados')
       ]);
       allTurmasDbData = allTurmasRes.data || [];
       allGruposDbData = allGruposRes.data || [];
@@ -164,8 +164,8 @@ export async function GET(request: Request) {
               if (turmasData) {
                 if (allTurmasDbData.length === 0 && allGruposDbData.length === 0) {
                   const [allTurmasRes, allGruposRes] = await Promise.all([
-                    supabase.from('turmas').select('id, nome, turno, modalidade, ano, dados'),
-                    supabase.from('agenda_grupos').select('id, nome, alunosIds, dados')
+                    supabase.from('turmas').select('id, nome, turno, ano, dados'),
+                    supabase.from('agenda_grupos').select('id, dados')
                   ]);
                   allTurmasDbData = allTurmasRes.data || [];
                   allGruposDbData = allGruposRes.data || [];

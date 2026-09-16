@@ -111,9 +111,9 @@ export async function GET(request: Request) {
     if (alunoId) {
       let resolvedTargets: string[] = [];
       const [alunoRes, turmasRes, gruposRes] = await Promise.all([
-        supabase.from('alunos').select('id, turma, turma_nome, created_at, dados').eq('id', alunoId).maybeSingle(),
-        supabase.from('turmas').select('id, nome, codigo, ano, turno, modalidade, dados'),
-        supabase.from('agenda_grupos').select('id, nome, syncId, alunosIds, dados')
+        supabase.from('alunos').select('id, turma, created_at, dados').eq('id', alunoId).maybeSingle(),
+        supabase.from('turmas').select('id, nome, codigo, ano, turno, dados'),
+        supabase.from('agenda_grupos').select('id, dados')
       ]);
 
       const alunoData = alunoRes.data;
@@ -136,25 +136,27 @@ export async function GET(request: Request) {
           const matchTurma = allTurmas.find((t: any) => String(t.id) === String(alunoData.turma) || String(t.codigo) === String(alunoData.turma) || t.nome === alunoData.turma);
           if (matchTurma?.nome) studentTurmaNames.add(String(matchTurma.nome).trim());
         }
-        if (alunoData.turma_nome) {
-          studentTurmaNames.add(String(alunoData.turma_nome).trim());
+        const alunoTurmaNome = (alunoData as any).turma_nome || alunoData.dados?.turma_nome;
+        if (alunoTurmaNome) {
+          studentTurmaNames.add(String(alunoTurmaNome).trim());
         }
 
         // Mapear grupos do aluno
         const cleanId = String(alunoId).replace(/^(a_|_ALU)/, '');
         allGrupos.forEach((g: any) => {
-          let aIds = g.alunosIds || g.dados?.alunosIds || [];
+          let aIds = g.dados?.alunosIds || g.alunosIds || [];
           if (typeof aIds === 'string') {
             try { aIds = JSON.parse(aIds); } catch { aIds = []; }
           }
           const isMember = (Array.isArray(aIds) ? aIds : []).some(
             (id: any) => String(id).replace(/^(a_|_ALU)/, '') === cleanId
           );
-          const gTurmaRef = allTurmas.find((t: any) => (g.syncId && (g.syncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === g.nome || t.nome === g.dados?.nome);
+          const gSyncId = g.dados?.syncId || g.syncId;
+          const gNome = g.dados?.nome || g.nome;
+          const gTurmaRef = allTurmas.find((t: any) => (gSyncId && (gSyncId === `sync-${t.id}` || g.id === `sync-${t.id}`)) || t.nome === gNome);
           const isCursando = gTurmaRef ? isAlunoCursandoTurma(alunoData, gTurmaRef, gTurmaRef.ano, allTurmas) : false;
 
           if (isMember || isCursando) {
-            const gNome = g.nome || g.dados?.nome;
             if (gNome) studentGroupNames.add(String(gNome).trim());
             if (g.id != null) studentGroupIds.add(String(g.id).replace(/^[tg]_?/, '').trim());
           }

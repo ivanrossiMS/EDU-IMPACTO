@@ -603,7 +603,18 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     ]
     const turmas = extractCleanTerms(rawTurmas)
     const grupos = extractCleanTerms(rawGrupos)
-    const allGroupTerms = Array.from(new Set([...turmas, ...grupos]))
+    let allGroupTerms = Array.from(new Set([...turmas, ...grupos]))
+
+    const itemId = String((dados as any)?.id || innerDados.id || (dados as any)?.itemId || '')
+    const isIndividualStudentReport = Boolean(
+      itemId.startsWith('AD-COM-REL-STU-') ||
+      (dados as any).tipoRelatorio === 'individual' ||
+      innerDados.tipoRelatorio === 'individual'
+    )
+
+    if (isIndividualStudentReport) {
+      allGroupTerms = []
+    }
 
     // Separar alunosIds de colaboradoresIds: itens com prefixo f_ são colaboradores
     // (fallback para dados antigos salvos antes do fix do DestinatariosModal)

@@ -120,8 +120,8 @@ export async function GET(request: Request) {
     // Batch 1: busca dados do aluno, todas as turmas e todos os grupos ao mesmo tempo
     const [alunoRes, turmasRes, gruposRes] = await Promise.all([
       supabase.from('alunos').select('id, turma, created_at, dados').eq('id', alunoId).maybeSingle(),
-      supabase.from('turmas').select('id, nome, codigo, ano, turno, modalidade, dados'),
-      supabase.from('agenda_grupos').select('id, dados, nome, alunosIds'),
+      supabase.from('turmas').select('id, nome, codigo, ano, turno, dados'),
+      supabase.from('agenda_grupos').select('id, dados'),
     ]);
 
     const alunoData = alunoRes.data;
@@ -308,6 +308,11 @@ export async function GET(request: Request) {
   if (!isFamilyOrStudent && !idParam && !alunoId) {
     query = query.not('id', 'like', 'AD-COM-REL-STU-%');
   }
+
+  // Ocultar relatórios de colaboradores (COLAB) do feed de alunos e famílias
+  if ((alunoId || isFamilyOrStudent) && !idParam) {
+    query = query.not('id', 'like', 'AD-COM-REL-COLAB-%');
+  }
   
   query = query.order('data', { ascending: false });
   
@@ -319,8 +324,25 @@ export async function GET(request: Request) {
      query = query.limit(30);
   }
 
-  const { data, error } = await query;
+  let { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Blindagem rigorosa para relatórios individuais: se alunoId foi informado,
+  // nunca retornar relatórios individuais (AD-COM-REL-STU-) de outros alunos
+  if (alunoId && data) {
+    const cleanCurrentAlunoId = String(alunoId).replace(/^(a_|_ALU)/, '');
+    data = data.filter((c: any) => {
+      const cId = String(c.id || '');
+      if (cId.startsWith('AD-COM-REL-STU-')) {
+        const cAlunos = [
+          ...(c.alunosIds || []),
+          ...(c.dados?.alunosIds || [])
+        ].map((id: any) => String(id).replace(/^(a_|_ALU)/, ''));
+        return cAlunos.includes(cleanCurrentAlunoId);
+      }
+      return true;
+    });
+  }
 
   const itemIds = data ? data.map((d: any) => String(d.id)) : [];
   let allReads: any[] = [];
@@ -335,7 +357,7 @@ export async function GET(request: Request) {
      allCiencias = cienciasRes.data || [];
 
      // Fetch reads for dynamic STU reports related to COLAB reports
-     const colabs = data.filter((d: any) => d.id && String(d.id).startsWith('AD-COM-REL-COLAB-'));
+     const colabs = (data || []).filter((d: any) => d.id && String(d.id).startsWith('AD-COM-REL-COLAB-'));
      if (colabs.length > 0) {
        const colabReadsPromises = colabs.map(async (colab: any) => {
          try {
@@ -472,10 +494,27 @@ export async function POST(request: Request) {
         const allPushPromises = [];
         for (const row of rows) {
           const isInterno = row.destino === 'interno';
-          const { students, directColaboradores } = await getStudentTargetsForComunicados(row.dados)
+          const isIndividualStudentReport = Boolean(row.id && String(row.id).startsWith('AD-COM-REL-STU-'));
+          const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(row.dados || {}), id: row.id });
           
           if (!isInterno) {
-            if (students.length <= 5) {
+            if (isIndividualStudentReport) {
+              for (const student of students) {
+                if (student.responsaveis_ids.length > 0) {
+                  allPushPromises.push(
+                    sendAgendaPushNotification({
+                      type: 'comunicados',
+                      itemId: String(row.id),
+                      title: `📢 ${row.titulo}`,
+                      message: `${row.autor} disponibilizou o relatório diário de ${formatFriendlyStudentName(student.aluno_nome)}. Confira!`,
+                      targetUserIds: student.responsaveis_ids,
+                      targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${row.id}`,
+                      metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(row.id), rota: 'comunicados' }
+                    }).catch(err => console.error("Push Error Report Batch:", err))
+                  );
+                }
+              }
+            } else if (students.length <= 5) {
               for (const student of students) {
                 if (student.responsaveis_ids.length > 0) {
                   allPushPromises.push(
@@ -591,12 +630,29 @@ export async function POST(request: Request) {
     // 3. Disparar Push em background apenas se tudo deu certo
     after(async () => {
       const isInterno = data.destino === 'interno';
-      const { students, directColaboradores } = await getStudentTargetsForComunicados(data.dados);
+      const isIndividualStudentReport = Boolean(data.id && String(data.id).startsWith('AD-COM-REL-STU-'));
+      const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(data.dados || {}), id: data.id });
       console.log(`[Push Comunicado][${data.id}] students=${students.length} colaboradores=${directColaboradores.length} destino=${data.destino} funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds || [])}`);
       const pushPromises = [];
       
       if (!isInterno) {
-        if (students.length <= 5) {
+        if (isIndividualStudentReport) {
+          for (const student of students) {
+            if (student.responsaveis_ids.length > 0) {
+              pushPromises.push(
+                sendAgendaPushNotification({
+                  type: 'comunicados',
+                  itemId: String(data.id),
+                  title: `📢 ${data.titulo}`,
+                  message: `${data.autor} disponibilizou o relatório diário de ${formatFriendlyStudentName(student.aluno_nome)}. Confira!`,
+                  targetUserIds: student.responsaveis_ids,
+                  targetUrl: `/agenda-digital/${student.aluno_id}/comunicados?id=${data.id}`,
+                  metadata: { aluno_id: student.aluno_id, perfil_destino: 'familiar', item_id: String(data.id), rota: 'comunicados' }
+                }).catch(err => console.error("Push Error Report Single:", err))
+              );
+            }
+          }
+        } else if (students.length <= 5) {
           for (const student of students) {
             if (student.responsaveis_ids.length > 0) {
               pushPromises.push(
@@ -676,6 +732,14 @@ export async function PUT(request: Request) {
   try {
     const { id, dados } = await request.json()
     if (!id || !dados) return NextResponse.json({ error: 'id and dados required' }, { status: 400 })
+
+    if (id && String(id).startsWith('AD-COM-REL-STU-') && dados) {
+      if (Array.isArray(dados.turmas) && dados.turmas.length > 0) {
+        if (!dados.turma_nome) dados.turma_nome = dados.turmas[0];
+        dados.turmas = [];
+      }
+      dados.turmasIds = [];
+    }
 
     const { data, error } = await supabase.from('comunicados').update({ dados }).eq('id', id).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
@@ -830,8 +894,8 @@ async function enrichGruposRecipients(row: any) {
   }
   try {
     const [gruposRes, equipesRes] = await Promise.allSettled([
-      supabaseServer.from('agenda_grupos').select('id, dados, nome'),
-      supabaseServer.from('agenda_equipes').select('id, dados, nome'),
+      supabaseServer.from('agenda_grupos').select('id, dados'),
+      supabaseServer.from('agenda_equipes').select('id, dados'),
     ]);
     const allGrupos = gruposRes.status === 'fulfilled' && gruposRes.value.data ? gruposRes.value.data : [];
     const allEquipes = equipesRes.status === 'fulfilled' && equipesRes.value.data ? equipesRes.value.data : [];
@@ -928,6 +992,16 @@ function buildRow(c: any) {
     exigeCiencia: Boolean(rest.exigeCiencia),
     permiteResposta: Boolean(rest.permiteResposta),
   }
+
+  // Se for relatório individual de aluno, NUNCA associar a turmas inteiras
+  if (id && String(id).startsWith('AD-COM-REL-STU-')) {
+    if (dados.turmas.length > 0) {
+      if (!(dados as any).turma_nome) (dados as any).turma_nome = dados.turmas[0];
+      dados.turmas = [];
+    }
+    dados.turmasIds = [];
+  }
+
   const hasTargets = dados.turmas.length > 0 || dados.alunosIds.length > 0 || dados.grupos.length > 0 || dados.funcionariosIds.length > 0
   const merged = {
     id: id || `COM-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
