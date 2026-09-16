@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
@@ -19,19 +19,29 @@ import {
 export default function Root() {
   const router = useRouter()
   const { currentUser, hydrated } = useApp()
+  const [isReady, setIsReady] = useState(false)
+  const [targetRoute, setTargetRoute] = useState<string | null>(null)
+  const startTimeRef = useRef<number>(Date.now())
+  const hasTriggeredReadyRef = useRef(false)
 
+  // 1. Libera imediatamente a splash screen nativa para evitar telas pretas/brancas
+  useEffect(() => {
+    hideSplashScreen(250)
+  }, [])
+
+  // 2. Gerenciamento do ciclo de resolução da sessão e prontidão real
   useEffect(() => {
     // Escuta evento de navegação por push disparado pelo OneSignal durante o cold start
     const handlePushEvent = (e: any) => {
       const dest = e?.detail?.destination
       if (dest) {
         console.log('[Root] Evento edu:navigate-push recebido em cold start:', dest)
-        router.replace(dest)
+        triggerReadyTransition(dest)
       }
     }
     window.addEventListener('edu:navigate-push', handlePushEvent)
 
-    // Wait for AppProvider to hydrate the session from localStorage/Capacitor Preferences
+    // Aguarda o AppProvider hidratar a sessão a partir do armazenamento seguro
     if (!hydrated) {
       return () => {
         window.removeEventListener('edu:navigate-push', handlePushEvent)
@@ -40,15 +50,35 @@ export default function Root() {
 
     let isSubscribed = true
 
+    const triggerReadyTransition = (destination: string) => {
+      if (hasTriggeredReadyRef.current) return
+      hasTriggeredReadyRef.current = true
+
+      // Pré-carrega ativamente os chunks da rota de destino
+      try {
+        router.prefetch(destination)
+      } catch {}
+
+      // Mantém tempo mínimo estético (~700ms) para apresentação elegante sem criar espera artificial
+      const elapsed = Date.now() - startTimeRef.current
+      const delay = Math.max(0, 750 - elapsed)
+
+      setTimeout(() => {
+        if (!isSubscribed) return
+        setTargetRoute(destination)
+        setIsReady(true)
+      }, delay)
+    }
+
     const checkPendingPushAndRoute = async () => {
-      // Se estiver em ambiente nativo, concede janela de espera ativa (até 1000ms)
+      // Se estiver em ambiente nativo, concede janela de espera ativa (até 800ms)
       // para o OneSignal descarregar o clique de notificação em cold start
       let pendingPushRoute = typeof window !== 'undefined'
         ? ((window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY))
         : null
 
       if (!pendingPushRoute && Capacitor.isNativePlatform()) {
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 8; i++) {
           if (!isSubscribed) return
           await new Promise(r => setTimeout(r, 100))
           pendingPushRoute = (window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
@@ -69,26 +99,24 @@ export default function Root() {
       if (pendingPushRoute) {
         console.log('[Root] Notificação pendente detectada:', pendingPushRoute)
         if (currentUser) {
-          console.log('[Root] Usuário autenticado. Redirecionando direto para o item da notificação:', pendingPushRoute)
-          router.replace(pendingPushRoute)
+          triggerReadyTransition(pendingPushRoute)
           return
         } else {
-          console.log('[Root] Usuário deslogado. Enviando para login com redirect:', pendingPushRoute)
-          router.replace(`/login?redirect=${encodeURIComponent(pendingPushRoute)}`)
+          triggerReadyTransition(`/login?redirect=${encodeURIComponent(pendingPushRoute)}`)
           return
         }
       }
 
-      // If no user is logged in, redirect to /login on the client side.
+      // Se nenhum usuário estiver logado, redireciona para o login
       if (!currentUser) {
-        router.replace('/login')
+        triggerReadyTransition('/login')
         return
       }
 
       // 1. Família / Aluno / Responsável têm exclusivamente acesso à Agenda Digital
       if (isFamilyOrStudent(currentUser)) {
         const dest = getAgendaDigitalDestination(currentUser)
-        router.replace(dest)
+        triggerReadyTransition(dest)
         return
       }
 
@@ -106,13 +134,10 @@ export default function Root() {
 
       if (!isSubscribed) return
 
-      // Determina a rota correta:
-      // - Se o perfil tiver APENAS a Agenda Digital liberada: vai direto para ela.
-      // - Se tiver APENAS 1 outro módulo liberado (ex: ERP): vai direto para ele.
-      // - Se tiver MÚLTIPLOS módulos: vai para a tela de escolha (/login?step=choose_system).
+      // Determina a rota correta do perfil
       const initialRoute = getInitialRouteForUser(currentUser, userPerfilObj)
       console.log('[Root] Rota inicial resolvida para o perfil:', initialRoute)
-      router.replace(initialRoute)
+      triggerReadyTransition(initialRoute)
     }
 
     checkPendingPushAndRoute()
@@ -123,15 +148,28 @@ export default function Root() {
     }
   }, [hydrated, currentUser, router])
 
-  // Fallback de segurança para liberar a splash screen em caso extremo (ex: 4s sem resposta)
+  // Fallback de segurança para liberar a splash screen nativa em caso extremo
   useEffect(() => {
     const timer = setTimeout(() => {
       hideSplashScreen(300)
-    }, 4000)
+    }, 3000)
     return () => clearTimeout(timer)
   }, [])
 
-  // Renderiza tela de abertura ultra moderna e animada com a identidade visual do Impacto Edu
-  return <AppLoadingScreen />
+  // Renderiza tela de abertura moderna e animada fiel ao design de referência
+  return (
+    <AppLoadingScreen
+      isReady={isReady}
+      onFinish={() => {
+        if (targetRoute) {
+          router.replace(targetRoute)
+        }
+      }}
+      onRetry={() => {
+        window.location.reload()
+      }}
+    />
+  )
 }
+
 

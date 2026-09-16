@@ -99,12 +99,12 @@ async function fallbackServerUpload(bucket: string, folder: string, file: File):
  */
 export async function uploadFileToSupabase({ bucket, folder = 'uploads', file, usageType }: UploadOptions): Promise<UploadResult> {
   try {
-    // 0. Validação prévia de tamanho (50MB é o limite configurado no Supabase Storage)
-    const MAX_BUCKET_SIZE = 50 * 1024 * 1024
+    // 0. Validação prévia de tamanho (100MB é o limite configurado no Supabase Storage)
+    const MAX_BUCKET_SIZE = 100 * 1024 * 1024
     if (file.size > MAX_BUCKET_SIZE) {
       return {
         ok: false,
-        error: `O arquivo "${file.name}" ultrapassa o limite máximo permitido de 50MB pelo servidor.`
+        error: `O arquivo "${file.name}" ultrapassa o limite máximo permitido de 100MB pelo servidor.`
       }
     }
 
@@ -153,7 +153,7 @@ export async function uploadFileToSupabase({ bucket, folder = 'uploads', file, u
         console.warn('[uploadFileToSupabase] Direct upload failed with status:', uploadRes.status, errText)
 
         if (uploadRes.status === 413 || errText.includes('EntityTooLarge') || errText.includes('exceeded the maximum')) {
-          return { ok: false, error: `O arquivo "${file.name}" excede o limite máximo de 50MB suportado pelo servidor.` }
+          return { ok: false, error: `O arquivo "${file.name}" excede o limite máximo de 100MB suportado pelo servidor.` }
         }
         if (uploadRes.status === 415 || errText.includes('InvalidMimeType')) {
           directError = `Formato de mídia não suportado (${mimeType}).`

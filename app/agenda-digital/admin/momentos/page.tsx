@@ -121,12 +121,12 @@ export default function ADAdminMomentos() {
     const rawFiles = Array.from(e.target.files)
     e.target.value = ''
 
-    const MAX_LIMIT = 50 * 1024 * 1024 // 50MB (limite do servidor/bucket)
+    const MAX_LIMIT = 100 * 1024 * 1024 // 100MB (limite do servidor/bucket)
     const validFiles: File[] = []
 
     for (const f of rawFiles) {
       if (f.size > MAX_LIMIT) {
-        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 50MB suportado pelo servidor. Escolha um arquivo menor ou reduza a resolução.`, 'Arquivo muito grande')
+        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 100MB suportado pelo servidor. Escolha um arquivo menor ou reduza a resolução.`, 'Arquivo muito grande')
         continue
       }
       validFiles.push(f)
@@ -175,11 +175,11 @@ export default function ADAdminMomentos() {
     if (!newPost.mediaFiles.length) return adAlert('Selecione ao menos uma foto ou vídeo para publicar.', 'Atenção')
     if (!newPost.targetClasses.length) return adAlert('Por favor, selecione ao menos um destinatário (Turma, Grupo ou Aluno) para publicar o momento.', 'Destinatários obrigatórios')
     
-    // Validar tamanhos (50MB)
-    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
+    // Validar tamanhos (100MB)
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100MB
     for (const f of newPost.mediaFiles) {
       if ((f.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(f.name)) && f.size > MAX_VIDEO_SIZE) {
-        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) é muito grande. O limite máximo é 50MB.`, 'Arquivo muito grande')
+        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) é muito grande. O limite máximo é 100MB.`, 'Arquivo muito grande')
       }
     }
 
@@ -211,8 +211,8 @@ export default function ADAdminMomentos() {
           }) as File
         }
 
-        if (fileToUpload.size > 50 * 1024 * 1024) {
-          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)}) ultrapassa o limite de 50MB suportado pelo servidor.`)
+        if (fileToUpload.size > 100 * 1024 * 1024) {
+          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)}) ultrapassa o limite de 100MB suportado pelo servidor.`)
         }
 
         setUploadProgress(prev => ({ ...prev, [file.name]: 60 }))

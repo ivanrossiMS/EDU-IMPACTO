@@ -59,9 +59,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Tipo de arquivo não permitido: ${mimeType}` }, { status: 415 })
     }
 
-    const MAX_SIZE = 50 * 1024 * 1024 // 50MB (limite físico do Supabase Storage)
+    const MAX_SIZE = 100 * 1024 * 1024 // 100MB (limite físico do Supabase Storage)
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: 'Arquivo muito grande. O limite suportado pelo servidor é de 50MB.' }, { status: 413 })
+      return NextResponse.json({ error: 'Arquivo muito grande. O limite suportado pelo servidor é de 100MB.' }, { status: 413 })
     }
 
     const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : ''

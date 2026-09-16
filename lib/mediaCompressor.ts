@@ -571,84 +571,212 @@ export async function compressPDF(
 
 /**
  * Comprime um vídeo utilizando a MediaStream Capture API e o MediaRecorder nativo.
- * Transcodifica o vídeo em tempo real acelerado (1.5x) limitando a taxa de bits.
+ * Suporta Safari/iOS WebKit via fallback de Canvas captureStream e Web Audio API.
+ * Transcodifica com aceleração de reprodução (1.5x), downscale para 720p e limitação de bitrate.
  */
 export async function compressVideo(
   file: File,
   onProgress?: (percent: number) => void,
   options: VideoCompressOptions = {}
 ): Promise<File | Blob> {
-  // Reduzido o limite para 100KB para comprimir qualquer vídeo
-  if (file.size < 100 * 1024) {
+  // Ignora arquivos muito pequenos (< 1MB) para não gastar processamento à toa
+  if (file.size < 1024 * 1024) {
+    if (onProgress) onProgress(100);
+    return file;
+  }
+
+  // Verifica se o ambiente possui MediaRecorder suportado
+  if (typeof window === 'undefined' || typeof document === 'undefined' || typeof MediaRecorder === 'undefined') {
+    console.info('[Video Compressor] MediaRecorder não disponível neste ambiente. Mantendo original.');
     if (onProgress) onProgress(100);
     return file;
   }
 
   return new Promise((resolve) => {
     let video: HTMLVideoElement | null = null;
+    let canvas: HTMLCanvasElement | null = null;
     let progressInterval: NodeJS.Timeout | null = null;
+    let safetyTimeout: NodeJS.Timeout | null = null;
     let recorder: MediaRecorder | null = null;
+    let audioContext: any = null;
+    let animFrameId: number | null = null;
+    let isRendering = false;
+    let resolved = false;
+
+    const safeResolve = (result: File | Blob) => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      if (onProgress) onProgress(100);
+      resolve(result);
+    };
 
     const cleanup = () => {
+      isRendering = false;
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
       if (progressInterval) {
         clearInterval(progressInterval);
+        progressInterval = null;
+      }
+      if (safetyTimeout) {
+        clearTimeout(safetyTimeout);
+        safetyTimeout = null;
+      }
+      if (audioContext) {
+        try {
+          if (audioContext.state !== 'closed') {
+            audioContext.close().catch(() => {});
+          }
+        } catch {}
+        audioContext = null;
+      }
+      if (recorder && recorder.state !== 'inactive') {
+        try { recorder.stop(); } catch {}
       }
       if (video) {
         try {
           video.pause();
         } catch {}
         if (video.parentNode) {
-          video.parentNode.removeChild(video);
+          try { video.parentNode.removeChild(video); } catch {}
         }
-        URL.revokeObjectURL(video.src);
+        if (video.src) {
+          try { URL.revokeObjectURL(video.src); } catch {}
+        }
+        video = null;
+      }
+      if (canvas) {
+        canvas = null;
       }
     };
 
     try {
       const videoElement = document.createElement('video');
-      video = videoElement; // Atribui para acesso no cleanup se necessário
+      video = videoElement;
       
       videoElement.style.position = 'fixed';
       videoElement.style.top = '-10000px';
       videoElement.style.left = '-10000px';
-      videoElement.style.width = '100px';
-      videoElement.style.height = '100px';
+      videoElement.style.width = '160px';
+      videoElement.style.height = '120px';
       videoElement.style.opacity = '0';
       videoElement.style.pointerEvents = 'none';
       
-      document.body.appendChild(videoElement); // Inserido no DOM para forçar decodificação em segundo plano
+      document.body.appendChild(videoElement);
 
-      videoElement.src = URL.createObjectURL(file);
+      const objectUrl = URL.createObjectURL(file);
+      videoElement.src = objectUrl;
       videoElement.muted = true;
       videoElement.playsInline = true;
+      videoElement.preload = 'auto';
 
       videoElement.onloadedmetadata = () => {
         let duration = videoElement.duration;
         
-        // Se a duração for inválida ou infinita, tentamos estimar ou usar um valor seguro
-        if (isNaN(duration) || !isFinite(duration)) {
-          duration = 10; // Fallback
+        if (isNaN(duration) || !isFinite(duration) || duration <= 0) {
+          duration = 10;
         }
 
-        // Se o vídeo for maior que 600 segundos (10 minutos), cancelamos a compressão para evitar esperas longas
-        if (duration > 600) {
-          console.log('[Video Compressor] Vídeo longo (>60s). Ignorando compressão por performance.');
-          cleanup();
-          if (onProgress) onProgress(100);
-          resolve(file);
+        // Se o vídeo for longo (> 5 minutos), pula compressão no cliente para não travar o celular
+        if (duration > 300) {
+          console.info('[Video Compressor] Vídeo longo (>300s). Mantendo arquivo original.');
+          safeResolve(file);
           return;
         }
 
-        const stream = (videoElement as any).captureStream ? (videoElement as any).captureStream() : (videoElement as any).mozCaptureStream ? (videoElement as any).mozCaptureStream() : null;
+        let stream: MediaStream | null = null;
+
+        // 1. Tenta captureStream direto do elemento de vídeo
+        if (typeof (videoElement as any).captureStream === 'function') {
+          try {
+            stream = (videoElement as any).captureStream();
+          } catch {}
+        } else if (typeof (videoElement as any).mozCaptureStream === 'function') {
+          try {
+            stream = (videoElement as any).mozCaptureStream();
+          } catch {}
+        }
+
+        // 2. Se captureStream direto não existir (Safari / iOS WebKit), usa Canvas Stream
         if (!stream) {
-          console.log('[Video Compressor] O navegador não suporta captureStream. Mantendo original.');
-          cleanup();
-          if (onProgress) onProgress(100);
-          resolve(file);
+          canvas = document.createElement('canvas');
+          const origW = videoElement.videoWidth || 1280;
+          const origH = videoElement.videoHeight || 720;
+          const maxDim = 1280;
+          let w = origW;
+          let h = origH;
+
+          // Downscale proporcional se exceder 1280px
+          if (w > maxDim || h > maxDim) {
+            if (w >= h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+
+          // Codec H.264 exige dimensões pares
+          w = Math.max(2, w - (w % 2));
+          h = Math.max(2, h - (h % 2));
+          canvas.width = w;
+          canvas.height = h;
+
+          const ctx = canvas.getContext('2d', { alpha: false });
+          if (canvas && typeof (canvas as any).captureStream === 'function' && ctx) {
+            try {
+              stream = (canvas as any).captureStream(30);
+              isRendering = true;
+
+              const renderFrame = () => {
+                if (!isRendering || !ctx || !canvas || videoElement.paused || videoElement.ended) return;
+                try {
+                  ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                } catch {}
+
+                if ('requestVideoFrameCallback' in videoElement) {
+                  (videoElement as any).requestVideoFrameCallback(renderFrame);
+                } else {
+                  animFrameId = requestAnimationFrame(renderFrame);
+                }
+              };
+
+              // Inicia renderização contínua nos frames
+              renderFrame();
+            } catch (canvasErr) {
+              console.warn('[Video Compressor] Canvas captureStream falhou:', canvasErr);
+            }
+          }
+        }
+
+        if (!stream) {
+          console.info('[Video Compressor] Stream de vídeo não suportado pelo navegador. Mantendo original.');
+          safeResolve(file);
           return;
         }
 
-        // Seleção inteligente do codec suportado
+        // 3. Captura áudio via Web Audio API se possível
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            audioContext = new AudioContextClass();
+            const source = audioContext.createMediaElementSource(videoElement);
+            const dest = audioContext.createMediaStreamDestination();
+            source.connect(dest);
+            const audioTracks = dest.stream.getAudioTracks();
+            if (audioTracks && audioTracks.length > 0) {
+              stream.addTrack(audioTracks[0]);
+            }
+          }
+        } catch (audioErr) {
+          console.warn('[Video Compressor] Aviso ao capturar trilha de áudio:', audioErr);
+        }
+
+        // 4. Seleção inteligente de codec suportado
         let mimeType = '';
         if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
           mimeType = 'video/mp4;codecs=avc1';
@@ -662,21 +790,20 @@ export async function compressVideo(
           mimeType = 'video/webm';
         }
 
-        const recorderOptions = {
+        const recorderOptions = mimeType ? {
           mimeType,
-          videoBitsPerSecond: options.maxBitrate || 1000000 // 1.0 Mbps
-        };
+          videoBitsPerSecond: options.maxBitrate || 1500000 // 1.5 Mbps (~11MB por minuto de vídeo)
+        } : undefined;
 
         try {
-          recorder = new MediaRecorder(stream, recorderOptions);
-        } catch (e) {
-          console.warn('[Video Compressor] Erro ao criar MediaRecorder com opções, tentando padrão:', e);
+          recorder = recorderOptions ? new MediaRecorder(stream, recorderOptions) : new MediaRecorder(stream);
+        } catch (recErr) {
+          console.warn('[Video Compressor] Falha ao instanciar MediaRecorder com opções, tentando padrão:', recErr);
           try {
             recorder = new MediaRecorder(stream);
-          } catch (err2) {
-            cleanup();
-            if (onProgress) onProgress(100);
-            resolve(file);
+          } catch (recErr2) {
+            console.warn('[Video Compressor] Falha geral no MediaRecorder:', recErr2);
+            safeResolve(file);
             return;
           }
         }
@@ -690,68 +817,77 @@ export async function compressVideo(
         };
 
         recorder.onstop = () => {
-          const finalMime = recorder?.mimeType || mimeType || 'video/webm';
+          const finalMime = recorder?.mimeType || mimeType || 'video/mp4';
           const compressedBlob = new Blob(chunks, { type: finalMime });
           
           const ext = finalMime.includes('mp4') ? '.mp4' : '.webm';
           const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-          const newName = `${baseName}_comprimido${ext}`;
+          const newName = `${baseName}_opt${ext}`;
 
           const compressedFile = new File([compressedBlob as any], newName, {
             type: finalMime,
             lastModified: Date.now()
           });
 
-          cleanup();
-
-          if (compressedFile.size < file.size && compressedFile.size > 1024) {
-            console.log(`[Video Compressor] Vídeo reduzido de ${file.size} para ${compressedFile.size} bytes`);
-            resolve(compressedFile);
+          // Se reduziu o tamanho e o arquivo gerado é válido (> 5KB)
+          if (compressedFile.size < file.size && compressedFile.size > 5120) {
+            console.info(`[Video Compressor] Vídeo otimizado de ${formatFileSize(file.size)} para ${formatFileSize(compressedFile.size)}`);
+            safeResolve(compressedFile);
           } else {
-            console.log(`[Video Compressor] Arquivo comprimido (${compressedFile.size}) não é menor que original (${file.size}). Mantendo original.`);
-            resolve(file);
+            console.info(`[Video Compressor] Arquivo comprimido (${formatFileSize(compressedFile.size)}) não é menor que original (${formatFileSize(file.size)}). Mantendo original.`);
+            safeResolve(file);
           }
         };
 
-        recorder.start();
-        videoElement.playbackRate = 1.5; // Aceleração segura para transcodificação de frame rate estável
+        // Inicia gravação com fatiamento a cada 500ms
+        try {
+          recorder.start(500);
+        } catch {
+          recorder.start();
+        }
+
+        videoElement.playbackRate = 1.5; // Acelera 1.5x para compressão mais rápida
         
         const playPromise = videoElement.play();
         if (playPromise !== undefined) {
           playPromise.catch((err) => {
-            console.warn('[Video Compressor] Falha ao iniciar play do vídeo:', err);
-            cleanup();
-            if (onProgress) onProgress(100);
-            resolve(file);
+            console.warn('[Video Compressor] Falha no play do vídeo para transcode:', err);
+            safeResolve(file);
           });
         }
 
+        // Timeout de segurança baseado na duração (máximo 45 segundos)
+        const maxWaitMs = Math.min(45000, Math.max(5000, Math.round((duration / 1.5 + 4) * 1000)));
+        safetyTimeout = setTimeout(() => {
+          console.warn('[Video Compressor] Timeout atingido no transcode. Concluindo...');
+          try { recorder?.stop(); } catch {}
+          setTimeout(() => safeResolve(file), 1000);
+        }, maxWaitMs);
+
         progressInterval = setInterval(() => {
           if (videoElement.ended || videoElement.currentTime >= duration) {
-            clearInterval(progressInterval!);
+            if (progressInterval) clearInterval(progressInterval);
             try { recorder?.stop(); } catch {}
-            if (onProgress) onProgress(100);
           } else {
             const percent = Math.min(99, Math.round((videoElement.currentTime / duration) * 100));
             if (onProgress) onProgress(percent);
           }
-        }, 250);
+        }, 200);
 
         videoElement.onerror = () => {
-          cleanup();
-          resolve(file);
+          console.warn('[Video Compressor] Erro durante reprodução de vídeo.');
+          safeResolve(file);
         };
       };
 
       videoElement.onerror = () => {
-        cleanup();
-        resolve(file);
+        console.warn('[Video Compressor] Erro ao carregar elemento de vídeo.');
+        safeResolve(file);
       };
 
     } catch (e) {
-      console.warn('[Video Compressor] Erro geral no fluxo do vídeo:', e);
-      cleanup();
-      resolve(file);
+      console.warn('[Video Compressor] Exceção geral no processamento de vídeo:', e);
+      safeResolve(file);
     }
   });
 }

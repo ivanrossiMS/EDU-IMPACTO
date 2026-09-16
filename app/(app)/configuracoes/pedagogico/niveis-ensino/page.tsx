@@ -1,10 +1,7 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useData, ConfigNivelEnsino, SerieEnsino, newId } from '@/lib/dataContext'
-import { useState, useMemo, useEffect } from 'react'
-import { useApiQuery } from '@/hooks/useApi'
-import { CardSkeleton } from '@/components/skeletons/CardSkeleton'
-import { UpdatingIndicator } from '@/components/skeletons/States'
+import { useState, useMemo } from 'react'
 import { Plus, Edit2, Trash2, Check, GraduationCap, ChevronDown, ChevronUp, X, BookOpen, Hash, Sparkles, Building2 } from 'lucide-react'
 
 // ─── Cores por código ──────────────────────────────────────────────
@@ -160,15 +157,17 @@ function SeriesPanel({ nivel, onUpdate }: { nivel: ConfigNivelEnsino; onUpdate: 
 }
 
 export default function NiveisEnsinoPage() {
-  const { data: rawConfig, isLoading, isFetching } = useApiQuery<{ valor: ConfigNivelEnsino[] }>(['config-niveis-ensino'], '/api/configuracoes?chave=cfgNiveisEnsino')
-  const { data: rawMantenedores } = useApiQuery<any[]>(['mantenedores'], '/api/configuracoes/mantenedores')
-  
-  const [cfgNiveisEnsino, setCfgNiveisEnsino] = useState<ConfigNivelEnsino[]>([])
-  const mantenedores = Array.isArray(rawMantenedores) ? rawMantenedores : []
-  
+  const { cfgNiveisEnsino = [], setCfgNiveisEnsino, mantenedores = [] } = useData()
+
+  const mantenedoresList: any[] = Array.isArray(mantenedores)
+    ? mantenedores
+    : Array.isArray((mantenedores as any)?.data)
+      ? (mantenedores as any).data
+      : []
+
   const todasUnidades = useMemo(() => {
-    return mantenedores.flatMap((m: any) => Array.isArray(m.unidades) ? m.unidades : [])
-  }, [mantenedores])
+    return mantenedoresList.flatMap((m: any) => Array.isArray(m?.unidades) ? m.unidades : [])
+  }, [mantenedoresList])
 
   type FormNivel = { nome: string; faixaEtaria: string; duracaoAnos: number; situacao: 'ativo' | 'inativo'; unidadeIds: string[] }
   const BLANK: FormNivel = { nome: '', faixaEtaria: '', duracaoAnos: 1, situacao: 'ativo', unidadeIds: [] }
@@ -183,12 +182,6 @@ export default function NiveisEnsinoPage() {
   const [msNewNome, setMsNewNome] = useState('')
   const [msEditId, setMsEditId] = useState<string | null>(null)
   const [msEditNome, setMsEditNome] = useState('')
-
-  useEffect(() => {
-    if (rawConfig?.valor && Array.isArray(rawConfig.valor)) {
-      setCfgNiveisEnsino(rawConfig.valor)
-    }
-  }, [rawConfig])
 
   const codigosExistentes = cfgNiveisEnsino.map(n => n.codigo)
   const codigoPreview = editId ? editCodigo : gerarCodigoNivel(form.nome, codigosExistentes)
@@ -299,10 +292,7 @@ export default function NiveisEnsinoPage() {
     <div>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>Níveis de Ensino</span>
-            {isFetching && <UpdatingIndicator />}
-          </h1>
+          <h1 className="page-title">Níveis de Ensino</h1>
           <p className="page-subtitle">Segmentos padronizados com códigos paramétricos</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -318,14 +308,7 @@ export default function NiveisEnsinoPage() {
 
       {/* Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 24 }}>
-        {isLoading && cfgNiveisEnsino.length === 0 ? (
-          <>
-            <div className="card" style={{ padding: '20px', minHeight: 160 }}><CardSkeleton /></div>
-            <div className="card" style={{ padding: '20px', minHeight: 160 }}><CardSkeleton /></div>
-            <div className="card" style={{ padding: '20px', minHeight: 160 }}><CardSkeleton /></div>
-          </>
-        ) : (
-          cfgNiveisEnsino.map(n => {
+        {cfgNiveisEnsino.map(n => {
           const cor = getCor(n.codigo)
           const series = (n.series ?? []).filter(s => s.ativo).sort((a, b) => a.ordem - b.ordem)
           const isExpanded = expandedId === n.id
@@ -397,8 +380,7 @@ export default function NiveisEnsinoPage() {
               </button>
             </div>
           )
-        })
-        )}
+        })}
 
         <div className="card" style={{ padding: '20px', borderTop: '3px dashed hsl(var(--border-default))', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', gap: 8, opacity: 0.5, minHeight: 160 }} onClick={openNew}>
           <Plus size={24} /><span style={{ fontSize: 13 }}>Adicionar nível</span>

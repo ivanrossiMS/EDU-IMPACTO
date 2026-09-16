@@ -466,9 +466,23 @@ export default function ColaboradorFrequenciaPage() {
     const p = alunosNoDiaSelecionado.filter(a => a.status === 'P').length
     const f = alunosNoDiaSelecionado.filter(a => a.status === 'F').length
     const j = alunosNoDiaSelecionado.filter(a => a.status === 'J').length
+    const sr = alunosNoDiaSelecionado.filter(a => a.status === '-').length
     const s = alunosNoDiaSelecionado.filter(a => !!a.horaSaida).length
-    return { total, p, f, j, s }
+    return { total, p, f, j, sr, s }
   }, [alunosNoDiaSelecionado])
+
+  const [modalStatusFilter, setModalStatusFilter] = useState<'all' | 'P' | 'F' | 'J' | '-' | 'S'>('all')
+
+  useEffect(() => {
+    setModalStatusFilter('all')
+  }, [selectedDate, modalTurmaId])
+
+  const alunosExibidosNoModal = useMemo(() => {
+    if (modalStatusFilter === 'all') return alunosNoDiaSelecionado
+    if (modalStatusFilter === 'S') return alunosNoDiaSelecionado.filter(a => !!a.horaSaida)
+    return alunosNoDiaSelecionado.filter(a => a.status === modalStatusFilter)
+  }, [alunosNoDiaSelecionado, modalStatusFilter])
+
 
   const turmaCounts = useMemo(() => {
     const counts: Record<string, number> = { all: alunosVinculados.length }
@@ -953,6 +967,7 @@ export default function ColaboradorFrequenciaPage() {
                       Filtrar por Turma
                     </label>
                     <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                      {modalStatusFilter !== 'all' ? `${alunosExibidosNoModal.length} de ` : ''}
                       {alunosNoDiaSelecionado.length} {alunosNoDiaSelecionado.length === 1 ? 'aluno listado' : 'alunos listados'}
                     </span>
                   </div>
@@ -1050,28 +1065,131 @@ export default function ColaboradorFrequenciaPage() {
                   {/* Resumo de métricas do dia */}
                   <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: statsNoDia.j > 0 && statsNoDia.s > 0 ? 'repeat(4, 1fr)' : statsNoDia.j > 0 || statsNoDia.s > 0 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', 
+                    gridTemplateColumns: `repeat(${3 + (statsNoDia.j > 0 ? 1 : 0) + (statsNoDia.s > 0 ? 1 : 0)}, minmax(0, 1fr))`, 
                     gap: 6 
                   }}>
-                    <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '5px 8px', borderRadius: 10, textAlign: 'center' }}>
+                    {/* Presentes */}
+                    <button
+                      type="button"
+                      onClick={() => setModalStatusFilter(prev => prev === 'P' ? 'all' : 'P')}
+                      title="Filtrar alunos presentes (clique para alternar)"
+                      style={{
+                        background: modalStatusFilter === 'P' ? '#dcfce7' : '#ecfdf5',
+                        border: modalStatusFilter === 'P' ? '1.5px solid #059669' : '1px solid #a7f3d0',
+                        boxShadow: modalStatusFilter === 'P' ? '0 0 0 2px rgba(5, 150, 105, 0.25)' : 'none',
+                        padding: '5px 8px',
+                        borderRadius: 10,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}
+                    >
                       <div style={{ fontSize: 13, fontWeight: 900, color: '#059669', lineHeight: 1 }}>{statsNoDia.p}</div>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#047857', marginTop: 2 }}>Presentes</div>
-                    </div>
-                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '5px 8px', borderRadius: 10, textAlign: 'center' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#047857', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Presentes</div>
+                    </button>
+
+                    {/* Faltas */}
+                    <button
+                      type="button"
+                      onClick={() => setModalStatusFilter(prev => prev === 'F' ? 'all' : 'F')}
+                      title="Filtrar faltas (clique para alternar)"
+                      style={{
+                        background: modalStatusFilter === 'F' ? '#fee2e2' : '#fef2f2',
+                        border: modalStatusFilter === 'F' ? '1.5px solid #dc2626' : '1px solid #fecaca',
+                        boxShadow: modalStatusFilter === 'F' ? '0 0 0 2px rgba(220, 38, 38, 0.25)' : 'none',
+                        padding: '5px 8px',
+                        borderRadius: 10,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}
+                    >
                       <div style={{ fontSize: 13, fontWeight: 900, color: '#dc2626', lineHeight: 1 }}>{statsNoDia.f}</div>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginTop: 2 }}>Faltas</div>
-                    </div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Faltas</div>
+                    </button>
+
+                    {/* Justificadas */}
                     {statsNoDia.j > 0 && (
-                      <div style={{ background: '#fef3c7', border: '1px solid #fde68a', padding: '5px 8px', borderRadius: 10, textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => setModalStatusFilter(prev => prev === 'J' ? 'all' : 'J')}
+                        title="Filtrar justificadas (clique para alternar)"
+                        style={{
+                          background: modalStatusFilter === 'J' ? '#fde68a' : '#fef3c7',
+                          border: modalStatusFilter === 'J' ? '1.5px solid #d97706' : '1px solid #fde68a',
+                          boxShadow: modalStatusFilter === 'J' ? '0 0 0 2px rgba(217, 119, 6, 0.25)' : 'none',
+                          padding: '5px 8px',
+                          borderRadius: 10,
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          outline: 'none',
+                          fontFamily: 'inherit',
+                          width: '100%',
+                          boxSizing: 'border-box'
+                        }}
+                      >
                         <div style={{ fontSize: 13, fontWeight: 900, color: '#d97706', lineHeight: 1 }}>{statsNoDia.j}</div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', marginTop: 2 }}>Justificadas</div>
-                      </div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Justificadas</div>
+                      </button>
                     )}
+
+                    {/* Sem Registro */}
+                    <button
+                      type="button"
+                      onClick={() => setModalStatusFilter(prev => prev === '-' ? 'all' : '-')}
+                      title="Filtrar alunos sem registro (clique para alternar)"
+                      style={{
+                        background: modalStatusFilter === '-' ? '#e2e8f0' : '#f8fafc',
+                        border: modalStatusFilter === '-' ? '1.5px solid #475569' : '1px solid #cbd5e1',
+                        boxShadow: modalStatusFilter === '-' ? '0 0 0 2px rgba(71, 85, 105, 0.25)' : 'none',
+                        padding: '5px 8px',
+                        borderRadius: 10,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        outline: 'none',
+                        fontFamily: 'inherit',
+                        width: '100%',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 900, color: '#475569', lineHeight: 1 }}>{statsNoDia.sr}</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Sem Registro</div>
+                    </button>
+
+                    {/* Saídas */}
                     {statsNoDia.s > 0 && (
-                      <div style={{ background: '#fdf4ff', border: '1px solid #f5d0fe', padding: '5px 8px', borderRadius: 10, textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => setModalStatusFilter(prev => prev === 'S' ? 'all' : 'S')}
+                        title="Filtrar registros de saída (clique para alternar)"
+                        style={{
+                          background: modalStatusFilter === 'S' ? '#f5d0fe' : '#fdf4ff',
+                          border: modalStatusFilter === 'S' ? '1.5px solid #c026d3' : '1px solid #f5d0fe',
+                          boxShadow: modalStatusFilter === 'S' ? '0 0 0 2px rgba(192, 38, 211, 0.25)' : 'none',
+                          padding: '5px 8px',
+                          borderRadius: 10,
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          outline: 'none',
+                          fontFamily: 'inherit',
+                          width: '100%',
+                          boxSizing: 'border-box'
+                        }}
+                      >
                         <div style={{ fontSize: 13, fontWeight: 900, color: '#c026d3', lineHeight: 1 }}>{statsNoDia.s}</div>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: '#a21caf', marginTop: 2 }}>Saídas</div>
-                      </div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#a21caf', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Saídas</div>
+                      </button>
                     )}
                   </div>
                 </div>
@@ -1086,16 +1204,41 @@ export default function ColaboradorFrequenciaPage() {
                 flexDirection: 'column', 
                 gap: 10 
               }}>
-                {alunosNoDiaSelecionado.length === 0 ? (
+                {alunosExibidosNoModal.length === 0 ? (
                   <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b' }}>
                     <Activity size={40} color="#cbd5e1" style={{ margin: '0 auto 12px' }} />
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#475569' }}>Nenhum aluno encontrado</div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#475569' }}>
+                      {modalStatusFilter !== 'all' ? 'Nenhum aluno com este status' : 'Nenhum aluno encontrado'}
+                    </div>
                     <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
-                      {isFuture(selectedDate) ? 'Data futura ou feriado letivo.' : 'Não há registros para esta seleção.'}
+                      {modalStatusFilter !== 'all' ? (
+                        <span>
+                          Filtrado por status.{' '}
+                          <button
+                            type="button"
+                            onClick={() => setModalStatusFilter('all')}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#0284c7',
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              textDecoration: 'underline',
+                              padding: 0
+                            }}
+                          >
+                            Mostrar todos
+                          </button>
+                        </span>
+                      ) : isFuture(selectedDate) ? (
+                        'Data futura ou feriado letivo.'
+                      ) : (
+                        'Não há registros para esta seleção.'
+                      )}
                     </div>
                   </div>
                 ) : (
-                  alunosNoDiaSelecionado.map((item, idx) => {
+                  alunosExibidosNoModal.map((item, idx) => {
                     const isP = item.status === 'P'
                     const isJ = item.status === 'J'
                     const isF = item.status === 'F'
@@ -1275,9 +1418,30 @@ export default function ColaboradorFrequenciaPage() {
                 gap: 12,
                 flexShrink: 0
               }}>
-                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
-                  {alunosNoDiaSelecionado.length} {alunosNoDiaSelecionado.length === 1 ? 'aluno listado' : 'alunos listados'}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                    {modalStatusFilter !== 'all' ? `${alunosExibidosNoModal.length} de ` : ''}
+                    {alunosNoDiaSelecionado.length} {alunosNoDiaSelecionado.length === 1 ? 'aluno listado' : 'alunos listados'}
+                  </span>
+                  {modalStatusFilter !== 'all' && (
+                    <button
+                      type="button"
+                      onClick={() => setModalStatusFilter('all')}
+                      style={{
+                        background: '#e0f2fe',
+                        border: 'none',
+                        color: '#0284c7',
+                        borderRadius: 6,
+                        padding: '2px 8px',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Ver todos
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => setSelectedDate(null)}

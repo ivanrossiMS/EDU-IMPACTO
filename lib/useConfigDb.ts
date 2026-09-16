@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { apiFetch } from '@/lib/api/apiClient'
 
 // ─── Shared in-memory cache for all config keys ───────────────────────────────
 // Survives React navigation — configs rarely change during a session
@@ -54,7 +55,7 @@ function fetchAllConfigs(): Promise<Record<string, any[]>> {
 
   // Fire single bulk request
   const chavesList = ALL_CONFIG_CHAVES.join(',')
-  configCache.promise = fetch(`/api/configuracoes?chaves=${encodeURIComponent(chavesList)}`)
+  configCache.promise = apiFetch(`/api/configuracoes?chaves=${encodeURIComponent(chavesList)}`)
     .then(r => r.ok ? r.json() : Promise.resolve({}))
     .then((result: Record<string, any>) => {
       configCache.data = {}
@@ -149,7 +150,7 @@ export function useConfigDb<T>(chave: string, defaultValue: T[] = []) {
       } else if (defaultValue.length > 0) {
         // Empty in DB → seed with default and persist
         setDataState(defaultValue)
-        fetch('/api/configuracoes', {
+        apiFetch('/api/configuracoes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chave, valor: defaultValue }),
@@ -171,7 +172,7 @@ export function useConfigDb<T>(chave: string, defaultValue: T[] = []) {
     // Optimistically update shared cache
     configCache.data[chave] = next as any[]
     try {
-      const res = await fetch('/api/configuracoes', {
+      const res = await apiFetch('/api/configuracoes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chave, valor: next }),

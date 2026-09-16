@@ -27,7 +27,21 @@ const GRAV_CONFIG: Record<GravOcorrencia, { color: string; bg: string; label: st
   grave: { color: '#dc2626', bg: '#fee2e2', label: 'Grave',  border: '#fecaca', glow: 'rgba(220, 38, 38, 0.2)' },
 }
 
-const TIPOS_FALLBACK = ['Indisciplina','Atraso recorrente','Bullying','Briga','Uso de celular','Desrespeito ao professor','Dano ao patrimônio','Outro']
+const TIPOS_FALLBACK = [
+  'Indisciplina em sala de aula',
+  'Atraso recorrente',
+  'Bullying / Cyberbullying',
+  'Agressão física (Briga)',
+  'Uso de celular não autorizado',
+  'Desrespeito ao professor/funcionário',
+  'Dano ao patrimônio escolar',
+  'Evasão de aula / Matada',
+  'Linguagem inadequada',
+  'Porte de objetos proibidos',
+  'Advertência Verbal',
+  'Advertência Escrita',
+  'Suspensão'
+]
 
 const BLANK: Omit<Ocorrencia,'id'|'createdAt'> = {
   alunoId:'', alunoNome:'', turma:'', tipo:'',
@@ -258,14 +272,25 @@ function OcorrenciaModal({ form, setForm, onSave, onClose, alunosDaTurma, todosA
                 }} 
                 value={form.tipo} 
                 onChange={e => {
-                  s('tipo', e.target.value)
+                  const val = e.target.value
+                  s('tipo', val)
                   clearError('tipo')
+                  const match = tiposOcorrencia.find(t => t.label === val)
+                  if (match?.gravidade) {
+                    s('gravidade', match.gravidade)
+                    clearError('gravidade')
+                  }
                 }}
               >
                 {tiposOcorrencia.length > 0 ? (
-                  tiposOcorrencia.map(t => <option key={t.label} value={t.label}>{t.label}</option>)
+                  <>
+                    {tiposOcorrencia.map(t => <option key={t.label} value={t.label}>{t.label}</option>)}
+                    {form.tipo && !tiposOcorrencia.some(t => t.label === form.tipo) && (
+                      <option key={form.tipo} value={form.tipo}>{form.tipo}</option>
+                    )}
+                  </>
                 ) : (
-                  TIPOS_FALLBACK.map(t => <option key={t}>{t}</option>)
+                  TIPOS_FALLBACK.map(t => <option key={t} value={t}>{t}</option>)
                 )}
               </select>
             </div>
@@ -468,23 +493,22 @@ export default function OcorrenciasPage() {
     {},
     { noCache: true }
   );
-  const { cfgCalendarioLetivo = [], cfgNiveisEnsino = [] } = useData();
+  const { cfgCalendarioLetivo = [], cfgNiveisEnsino = [], cfgTiposOcorrencia = [] } = useData();
   const { currentUser: authUser } = useApp();
   const currentUser: any = authUser || {};
   
   const { data: rawTurmas, isLoading: isLoadingTurmas } = useApiQuery<any[]>(['turmas'], `/api/turmas`);
   const { data: rawAlunos, isLoading: isLoadingAlunos } = useApiQuery<any[]>(['alunos'], `/api/alunos?all=true&lightweight=true`);
-  // Removido endpoint 404 edu-cfg-tipos-ocorrencia
-  const rawCfgTipos: any[] = []; const isLoadingTipos = false;
 
   const ocorrencias = rawOcorrencias || [];
   const turmas = (rawTurmas as any)?.data || [];
-  const cfgTiposOcorrencia = rawCfgTipos || [];
   const alunos = (rawAlunos as any)?.data || rawAlunos || [];
 
-  const tiposAtivos = cfgTiposOcorrencia
-    .filter(t => t.situacao === 'ativo')
-    .map(t => ({ label: t.descricao, gravidade: t.gravidade }))
+  const tiposAtivos = useMemo(() => {
+    return (cfgTiposOcorrencia || [])
+      .filter((t: any) => t.situacao === 'ativo')
+      .map((t: any) => ({ label: t.descricao, gravidade: t.gravidade as GravOcorrencia }))
+  }, [cfgTiposOcorrencia])
 
   const [turmaSel, setTurmaSel] = useState<string | null>(null)
   const [modoHome, setModoHome] = useState<'turma'|'aluno'>('turma')
@@ -558,8 +582,10 @@ export default function OcorrenciasPage() {
     setEditingId(null)
     setMetaCriacao('')
     setMetaConfirmacao('')
-    const primeiroTipo = tiposAtivos[0]?.label || TIPOS_FALLBACK[0]
-    setForm({ ...BLANK, turma: turmaSel ?? '', tipo: primeiroTipo })
+    const primeiroTipoObj = tiposAtivos[0]
+    const primeiroTipo = primeiroTipoObj?.label || TIPOS_FALLBACK[0]
+    const primeiraGravidade = (primeiroTipoObj?.gravidade || 'leve') as GravOcorrencia
+    setForm({ ...BLANK, turma: turmaSel ?? '', tipo: primeiroTipo, gravidade: primeiraGravidade })
     setValidationErrors([])
     setIsValidationModalOpen(false)
     setModalOpen(true)
@@ -1300,8 +1326,10 @@ export default function OcorrenciasPage() {
                             <button 
                               onClick={() => {
                                 setEditingId(null);
-                                const primeiroTipo = tiposAtivos[0]?.label || TIPOS_FALLBACK[0];
-                                setForm({ ...BLANK, turma: turma.nome, tipo: primeiroTipo });
+                                const primeiroTipoObj = tiposAtivos[0];
+                                const primeiroTipo = primeiroTipoObj?.label || TIPOS_FALLBACK[0];
+                                const primeiraGravidade = (primeiroTipoObj?.gravidade || 'leve') as GravOcorrencia;
+                                setForm({ ...BLANK, turma: turma.nome, tipo: primeiroTipo, gravidade: primeiraGravidade });
                                 setValidationErrors([]);
                                 setIsValidationModalOpen(false);
                                 setModalOpen(true);

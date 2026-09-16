@@ -1,10 +1,7 @@
 'use client'
 import { motion, AnimatePresence } from 'framer-motion';
 import { useData, ConfigSerie, newId } from '@/lib/dataContext'
-import { useState, useEffect } from 'react'
-import { useApiQuery } from '@/hooks/useApi'
-import { CardSkeleton } from '@/components/skeletons/CardSkeleton'
-import { UpdatingIndicator } from '@/components/skeletons/States'
+import { useState } from 'react'
 import { Plus, Edit2, Trash2, Check, X, BookOpen, Building2, Sparkles, AlertCircle } from 'lucide-react'
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -12,20 +9,14 @@ const LEVEL_COLORS: Record<string, string> = {
 }
 
 export default function SeriesPage() {
-  const { data: rawConfig, isLoading, isFetching } = useApiQuery<{ valor: ConfigSerie[] }>(['config-series'], '/api/configuracoes?chave=cfgSeries')
-  const { data: rawNiveis } = useApiQuery<{ valor: any[] }>(['config-niveis-ensino'], '/api/configuracoes?chave=cfgNiveisEnsino')
-  const { data: rawMantenedores } = useApiQuery<any[]>(['mantenedores'], '/api/configuracoes/mantenedores')
-  
-  const [cfgSeries, setCfgSeries] = useState<ConfigSerie[]>([])
-  const cfgNiveisEnsino = rawNiveis?.valor || []
-  const mantenedores = rawMantenedores || []
-  const todasUnidades = (mantenedores || []).flatMap((m: any) => m.unidades ?? [])
+  const { cfgSeries = [], setCfgSeries, cfgNiveisEnsino = [], mantenedores = [] } = useData()
 
-  useEffect(() => {
-    if (rawConfig?.valor) {
-      setCfgSeries(rawConfig.valor)
-    }
-  }, [rawConfig])
+  const mantenedoresList: any[] = Array.isArray(mantenedores)
+    ? mantenedores
+    : Array.isArray((mantenedores as any)?.data)
+      ? (mantenedores as any).data
+      : []
+  const todasUnidades = mantenedoresList.flatMap((m: any) => Array.isArray(m?.unidades) ? m.unidades : [])
   const niveisAtivos = (cfgNiveisEnsino || []).filter(n => n.situacao === 'ativo')
 
   type FormSerie = { nome: string; nivelEnsinoId: string; situacao: 'ativo' | 'inativo'; unidadeIds: string[] }
@@ -89,10 +80,7 @@ export default function SeriesPage() {
     <div>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>Séries e Anos</span>
-            {isFetching && <UpdatingIndicator />}
-          </h1>
+          <h1 className="page-title">Séries e Anos</h1>
           <p className="page-subtitle">Gerenciamento independente das séries vinculadas aos Níveis de Ensino</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -100,13 +88,7 @@ export default function SeriesPage() {
         </div>
       </div>
 
-      {isLoading && cfgSeries.length === 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>
-            <div className="card" style={{ padding: '20px', minHeight: 160 }}><CardSkeleton /></div>
-            <div className="card" style={{ padding: '20px', minHeight: 160 }}><CardSkeleton /></div>
-            <div className="card" style={{ padding: '20px', minHeight: 160 }}><CardSkeleton /></div>
-          </div>
-        ) : cfgSeries.length === 0 ? (
+      {cfgSeries.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', background: 'hsl(var(--bg-elevated))', borderRadius: 12, border: '1px dashed hsl(var(--border-subtle))' }}>
             <BookOpen size={48} style={{ opacity: 0.1, margin: '0 auto 16px' }} />
             <h3 style={{ fontSize: 16, fontWeight: 700 }}>Nenhuma série cadastrada</h3>

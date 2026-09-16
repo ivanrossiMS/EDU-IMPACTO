@@ -1,5 +1,5 @@
 'use client'
-import { useData, ConfigTipoOcorrencia, newId } from '@/lib/dataContext'
+import { useData, ConfigTipoOcorrencia, newId, TIPOS_OCORRENCIA_DEFAULT } from '@/lib/dataContext'
 import { useState } from 'react'
 import { Plus, Edit2, Trash2, Check, AlertTriangle, Bell, BellOff } from 'lucide-react'
 
@@ -12,22 +12,6 @@ const GRAV_CFG = {
 const BLANK: Omit<ConfigTipoOcorrencia, 'id' | 'createdAt'> = {
   codigo: '', descricao: '', gravidade: 'leve', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo',
 }
-
-const PADROES_OCORRENCIAS = [
-  { codigo: '1', descricao: 'Indisciplina em sala de aula', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo' },
-  { codigo: '2', descricao: 'Atraso recorrente', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 2, situacao: 'ativo' },
-  { codigo: '3', descricao: 'Bullying / Cyberbullying', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo' },
-  { codigo: '4', descricao: 'Agressão física (Briga)', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 0, situacao: 'ativo' },
-  { codigo: '5', descricao: 'Uso de celular não autorizado', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 2, situacao: 'ativo' },
-  { codigo: '6', descricao: 'Desrespeito ao professor/funcionário', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo' },
-  { codigo: '7', descricao: 'Dano ao patrimônio escolar', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo' },
-  { codigo: '8', descricao: 'Evasão de aula / Matada', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 2, situacao: 'ativo' },
-  { codigo: '9', descricao: 'Linguagem inadequada', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 3, situacao: 'ativo' },
-  { codigo: '10', descricao: 'Porte de objetos proibidos', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 0, situacao: 'ativo' },
-  { codigo: '11', descricao: 'Advertência Verbal', gravidade: 'leve', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo' },
-  { codigo: '12', descricao: 'Advertência Escrita', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo' },
-  { codigo: '13', descricao: 'Suspensão', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo' },
-] as const
 
 export default function TipoOcorrenciasPage() {
   const { cfgTiposOcorrencia, setCfgTiposOcorrencia } = useData()
@@ -56,7 +40,7 @@ export default function TipoOcorrenciasPage() {
   const handleCarregarPadroes = () => {
     setCfgTiposOcorrencia(prev => {
       const existingCodes = new Set(prev.map(p => p.codigo))
-      const news = PADROES_OCORRENCIAS.filter(p => !existingCodes.has(p.codigo)).map(p => ({
+      const news = TIPOS_OCORRENCIA_DEFAULT.filter(p => !existingCodes.has(p.codigo)).map(p => ({
         ...p, id: newId('TO'), gravidade: p.gravidade as 'leve'|'media'|'grave', createdAt: new Date().toISOString()
       }))
       return [...prev, ...news]

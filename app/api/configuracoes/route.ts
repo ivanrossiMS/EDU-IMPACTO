@@ -29,18 +29,18 @@ export async function GET(request: Request) {
 
   // Se não for uma requisição apenas de chaves públicas, exige autenticação
   if (!isPublicRequest) {
-    const { user, errorResponse } = await requireAuth()
+    const { user, errorResponse } = await requireAuth(request)
     if (errorResponse) return errorResponse
   }
 
-  const cacheHeaders: Record<string, string> = isPublicRequest
-    ? {
-        'Cache-Control': 'public, max-age=180, stale-while-revalidate=86400',
-        'CDN-Cache-Control': 'public, max-age=300, stale-while-revalidate=86400',
-      }
-    : {
-        'Cache-Control': 'private, no-cache, no-store, must-revalidate',
-      };
+  // Cabeçalhos estritos contra cache em CDN Edge / Proxy para evitar cache poisoning
+  const cacheHeaders: Record<string, string> = {
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'CDN-Cache-Control': 'no-store',
+    'Netlify-CDN-Cache-Control': 'no-store',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  };
 
   const supabase = getAdminClient();
 
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
 
 // POST /api/configuracoes  { chave: 'cfgDisciplinas', valor: [...] }
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   const supabase = getAdminClient();

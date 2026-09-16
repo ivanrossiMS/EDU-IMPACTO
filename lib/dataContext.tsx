@@ -1053,16 +1053,20 @@ const DISCIPLINAS_DEFAULT: ConfigDisciplina[] = [
   { id: 'D15', codigo: 'MVT001', nome: 'Movimento', cargaHoraria: 2, niveisEnsino: ['EI'], obrigatoria: true, situacao: 'ativa', createdAt: new Date().toISOString() },
 ]
 
-const TIPOS_OCORRENCIA_DEFAULT: ConfigTipoOcorrencia[] = [
-  { id: 'O1', codigo: 'T001', descricao: 'Atraso', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 1, situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'O2', codigo: 'T002', descricao: 'Fardamento Incompleto', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 1, situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'O3', codigo: 'T003', descricao: 'Tarefa não realizada', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 1, situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'O4', codigo: 'T004', descricao: 'Uso de celular em sala', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 2, situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'O5', codigo: 'T005', descricao: 'Indisciplina em sala', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 2, situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'O6', codigo: 'T006', descricao: 'Matar aula (Evasão escolar)', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'O7', codigo: 'T007', descricao: 'Desrespeito ao professor/funcionário', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'O8', codigo: 'T008', descricao: 'Agressão física/verbal entre alunos', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo', createdAt: new Date().toISOString() },
-  { id: 'O9', codigo: 'T009', descricao: 'Dano ao patrimônio escolar', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo', createdAt: new Date().toISOString() },
+export const TIPOS_OCORRENCIA_DEFAULT: ConfigTipoOcorrencia[] = [
+  { id: 'TO1', codigo: '1', descricao: 'Indisciplina em sala de aula', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO2', codigo: '2', descricao: 'Atraso recorrente', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 2, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO3', codigo: '3', descricao: 'Bullying / Cyberbullying', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO4', codigo: '4', descricao: 'Agressão física (Briga)', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 0, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO5', codigo: '5', descricao: 'Uso de celular não autorizado', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 2, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO6', codigo: '6', descricao: 'Desrespeito ao professor/funcionário', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO7', codigo: '7', descricao: 'Dano ao patrimônio escolar', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO8', codigo: '8', descricao: 'Evasão de aula / Matada', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 2, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO9', codigo: '9', descricao: 'Linguagem inadequada', gravidade: 'leve', notificarResponsavel: false, pontosEscalonamento: 3, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO10', codigo: '10', descricao: 'Porte de objetos proibidos', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 0, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO11', codigo: '11', descricao: 'Advertência Verbal', gravidade: 'leve', notificarResponsavel: true, pontosEscalonamento: 1, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO12', codigo: '12', descricao: 'Advertência Escrita', gravidade: 'media', notificarResponsavel: true, pontosEscalonamento: 3, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
+  { id: 'TO13', codigo: '13', descricao: 'Suspensão', gravidade: 'grave', notificarResponsavel: true, pontosEscalonamento: 5, situacao: 'ativo', createdAt: '2026-01-01T00:00:00.000Z' },
 ]
 
 export interface UnidadeFiscal {
@@ -1353,7 +1357,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { data: cfgDisciplinas, setData: setCfgDisciplinas } = useConfigDb<ConfigDisciplina>('cfgDisciplinas')
   const { data: cfgNiveisEnsino, setData: setCfgNiveisEnsino } = useConfigDb<ConfigNivelEnsino>('cfgNiveisEnsino')
   const { data: cfgSeries, setData: setCfgSeries } = useConfigDb<ConfigSerie>('cfgSeries')
-  const { data: cfgTiposOcorrencia, setData: setCfgTiposOcorrencia } = useConfigDb<ConfigTipoOcorrencia>('cfgTiposOcorrencia')
+  const { data: cfgTiposOcorrencia, setData: setCfgTiposOcorrencia } = useConfigDb<ConfigTipoOcorrencia>('cfgTiposOcorrencia', TIPOS_OCORRENCIA_DEFAULT)
   const { data: cfgGruposAvaliacao, setData: setCfgGruposAvaliacao } = useConfigDb<ConfigGrupoAvaliacao>('cfgGruposAvaliacao')
   const { data: cfgArredondamentos, setData: setCfgArredondamentos } = useConfigDb<ConfigArredondamento>('cfgArredondamentos')
 

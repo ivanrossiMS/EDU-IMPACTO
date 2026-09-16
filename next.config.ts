@@ -59,7 +59,7 @@ const nextConfig: NextConfig = {
       static: 300,   // rotas estáticas: 5min (padrão do Next.js)
     },
     serverActions: {
-      bodySizeLimit: '50mb',
+      bodySizeLimit: '100mb',
     },
   },
 
