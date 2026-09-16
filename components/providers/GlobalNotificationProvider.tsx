@@ -5,19 +5,23 @@
  *
  * Provedor central e global de notificações push (OneSignal) e deep linking.
  * Roda na raiz do aplicativo (app/layout.tsx), garantindo que:
- * 1. O OneSignal seja inicializado imediatamente (Capacitor nativo ou Web SDK).
- * 2. Cliques em notificações push sejam capturados em cold start (app fechado)
+ * 1. O NotificationService seja inicializado de forma controlada e segura.
+ * 2. NENHUMA chamada a requestPermission(true) ocorra no startup (eliminando o popup indevido em inglês).
+ * 3. Cliques em notificações push sejam capturados em cold start (app fechado)
  *    ou resume (em segundo plano), em qualquer rota.
- * 3. O usuário seja redirecionado diretamente para o item da Agenda Digital
+ * 4. O usuário seja redirecionado diretamente para o item da Agenda Digital
  *    (comunicado, momentos ou calendário), contornando a tela de escolha de módulos.
- * 4. O usuário autenticado seja sincronizado com tags e external_id no OneSignal.
+ * 5. O usuário autenticado seja sincronizado com tags e external_id no OneSignal.
+ * 6. Exiba o modal controlado em português caso as notificações estejam efetivamente negadas.
  */
 
-import { useEffect, useRef } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
+import { notificationService } from '@/lib/notifications/notificationService'
+import { NotificationPermissionModal } from '@/components/notifications/NotificationPermissionModal'
 
 export const PENDING_PUSH_ROUTE_KEY = 'edu_pending_push_route'
 
@@ -93,7 +97,9 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
   const isColab =
     data.perfil_destino === 'colaborador' ||
     data.isColab === true ||
-    (currentUser?.perfil && !['Família', 'Responsável', 'Aluno'].includes(currentUser.perfil) && !['Responsável', 'Aluno'].includes(currentUser?.cargo || ''))
+    (currentUser?.perfil &&
+      !['Família', 'Responsável', 'Aluno'].includes(currentUser.perfil) &&
+      !['Responsável', 'Aluno'].includes(currentUser?.cargo || ''))
 
   let destination = ''
   if (isColab) {
@@ -129,9 +135,15 @@ export function GlobalNotificationProvider() {
     hydratedRef.current = hydrated
   }, [hydrated])
 
-  // Limpa rota pendente apenas quando o usuário efetivamente entra na tela de destino
+  // Limpa rota pendente apenas quando o usuário entra na tela de destino
   useEffect(() => {
-    if (pathname && (pathname.startsWith('/agenda-digital/') || pathname.includes('/comunicados') || pathname.includes('/momentos') || pathname.includes('/calendario'))) {
+    if (
+      pathname &&
+      (pathname.startsWith('/agenda-digital/') ||
+        pathname.includes('/comunicados') ||
+        pathname.includes('/momentos') ||
+        pathname.includes('/calendario'))
+    ) {
       if (typeof window !== 'undefined') {
         delete (window as any).__EDU_PENDING_PUSH_ROUTE__
       }
@@ -148,6 +160,7 @@ export function GlobalNotificationProvider() {
   const handlePushClick = (data: any) => {
     console.log('[GlobalPush] Notificação clicada com dados:', data)
     const destination = resolveDestinationFromPayload(data, currentUserRef.current)
+
     if (!destination) {
       console.warn('[GlobalPush] Não foi possível resolver a rota de destino da notificação:', data)
       return
@@ -157,7 +170,7 @@ export function GlobalNotificationProvider() {
 
     // 1. Armazenar em memória global síncrona
     if (typeof window !== 'undefined') {
-      (window as any).__EDU_PENDING_PUSH_ROUTE__ = destination
+      ;(window as any).__EDU_PENDING_PUSH_ROUTE__ = destination
     }
 
     // 2. Salvar como rota pendente resiliente em localStorage e Preferences
@@ -168,15 +181,20 @@ export function GlobalNotificationProvider() {
       }
     } catch {}
 
-    // 3. Notificar qualquer listener ativo na janela
+    // 3. Notificar listeners ativos na janela
     try {
       window.dispatchEvent(new CustomEvent('edu:navigate-push', { detail: { destination } }))
     } catch {}
 
     // 4. Se houver item_id de comunicado, dispara evento personalizado
-    if (data.item_id && (data.type === 'comunicados' || data.type === 'comunicado' || data.rota === 'comunicados')) {
+    if (
+      data.item_id &&
+      (data.type === 'comunicados' || data.type === 'comunicado' || data.rota === 'comunicados')
+    ) {
       try {
-        window.dispatchEvent(new CustomEvent('ad:open-comunicado', { detail: { id: String(data.item_id) } }))
+        window.dispatchEvent(
+          new CustomEvent('ad:open-comunicado', { detail: { id: String(data.item_id) } })
+        )
       } catch {}
     }
 
@@ -184,83 +202,58 @@ export function GlobalNotificationProvider() {
     const isHydrated = hydratedRef.current
 
     if (user) {
-      console.log(`[GlobalPush] Usuário autenticado. Navegando diretamente para ${destination}`)
+      console.log(`[GlobalPush] Usuário autenticado. Navegando para ${destination}`)
       router.replace(destination)
     } else if (isHydrated) {
-      console.log(`[GlobalPush] Usuário não logado (sessão hidratada). Redirecionando para login com redirect pendente.`)
+      console.log(`[GlobalPush] Usuário não logado. Redirecionando para login com redirect pendente.`)
       router.replace(`/login?redirect=${encodeURIComponent(destination)}`)
     } else {
-      console.log(`[GlobalPush] App ainda hidratando sessão no cold start. Rota salva aguardando conclusão: ${destination}`)
+      console.log(`[GlobalPush] App hidratando sessão no cold start. Rota salva: ${destination}`)
     }
   }
 
-  // 1. Inicialização do OneSignal e listeners de clique
+  // 1. Inicialização segura via NotificationService e listeners de clique
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
-    if (!appId) {
-      console.warn('[GlobalPush] NEXT_PUBLIC_ONESIGNAL_APP_ID não configurado.')
-      return
-    }
+    const init = async () => {
+      await notificationService.initialize()
 
-    const isNative = Capacitor.isNativePlatform()
+      const isNative = Capacitor.isNativePlatform()
 
-    if (isNative) {
-      if (!window.__OS_GLOBAL_INIT__) {
-        window.__OS_GLOBAL_INIT__ = true
-        console.log('📱 [GlobalPush] Inicializando OneSignal Nativo (Capacitor)...')
+      if (isNative) {
+        try {
+          const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
-        import('@onesignal/capacitor-plugin')
-          .then(async ({ default: OneSignalNative }) => {
-            try {
-              await OneSignalNative.initialize(appId)
-              window.__OS_NATIVE_READY__ = true
-              ;(window as any).__OS_INIT__ = true
-
-              // Solicitar permissão nativa de notificações (Android 13+ e iOS)
-              try {
-                const permResult = await OneSignalNative.Notifications.requestPermission(true)
-                console.log('📱 [GlobalPush] Permissão nativa solicitada:', permResult)
-                if (OneSignalNative.User?.pushSubscription?.optIn) {
-                  await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
-                }
-              } catch (permErr: any) {
-                console.warn('📱 [GlobalPush] Permissão nativa:', permErr?.message)
-              }
-
-              // Listener global de clique na notificação
-              OneSignalNative.Notifications.addEventListener('click', (event: any) => {
-                const notif = event?.notification || {}
-                const addData = notif.additionalData || {}
-                const launchURL = notif.launchURL || event?.result?.url
-                const data = {
-                  ...addData,
-                  launchURL,
-                  url: addData.url || addData.targetUrl || launchURL,
-                  targetUrl: addData.targetUrl || addData.url || launchURL,
-                }
-                handlePushClick(data)
-              })
-
-              // Foreground notification listener
-              OneSignalNative.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
-                console.log('📱 [GlobalPush] Notificação em foreground:', event)
-                try {
-                  window.dispatchEvent(new CustomEvent('ad:push-foreground', { detail: event }))
-                } catch {}
-              })
-
-              console.log('✅ [GlobalPush] OneSignal Nativo inicializado e listeners registrados!')
-            } catch (err: any) {
-              console.error('❌ [GlobalPush] Erro ao inicializar OneSignal Nativo:', err)
+          // Listener de clique nas notificações
+          OneSignalNative.Notifications.addEventListener('click', (event: any) => {
+            const notif = event?.notification || {}
+            const addData = notif.additionalData || {}
+            const launchURL = notif.launchURL || event?.result?.url
+            const data = {
+              ...addData,
+              launchURL,
+              url: addData.url || addData.targetUrl || launchURL,
+              targetUrl: addData.targetUrl || addData.url || launchURL,
             }
-          })
-          .catch(err => {
-            console.error('❌ [GlobalPush] Erro ao carregar plugin nativo OneSignal:', err)
+            handlePushClick(data)
           })
 
-        // Listener para Deep Links via Capacitor App (ex: esquemas de URL ou universal links)
+          // Foreground notification listener
+          OneSignalNative.Notifications.addEventListener(
+            'foregroundWillDisplay',
+            (event: any) => {
+              console.log('📱 [GlobalPush] Notificação recebida em foreground:', event)
+              try {
+                window.dispatchEvent(new CustomEvent('ad:push-foreground', { detail: event }))
+              } catch {}
+            }
+          )
+        } catch (err) {
+          console.error('[GlobalPush] Erro ao registrar listeners de clique:', err)
+        }
+
+        // Listener para Deep Links via Capacitor App (esquemas customizados)
         import('@capacitor/app')
           .then(({ App }) => {
             App.addListener('appUrlOpen', (event: any) => {
@@ -275,210 +268,42 @@ export function GlobalNotificationProvider() {
                 } catch {}
               }
             }).catch(() => {})
-
-            App.addListener('appStateChange', ({ isActive }) => {
-              if (isActive) {
-                console.log('📱 [GlobalPush] App voltou para o FOREGROUND')
-                try {
-                  window.dispatchEvent(new CustomEvent('ad:app-foreground'))
-                } catch {}
-              }
-            }).catch(() => {})
           })
           .catch(() => {})
-      }
-    } else {
-      // ── Web Push ────────────────────────────────────────────────────────
-      if (!window.__OS_GLOBAL_INIT__) {
-        window.__OS_GLOBAL_INIT__ = true
-
+      } else {
+        // Web Push Click Listener
         window.OneSignalDeferred = window.OneSignalDeferred || []
-        window.OneSignalDeferred.push(async function (OneSignal: any) {
-          try {
-            if (!OneSignal) return
-            await OneSignal.init({
-              appId,
-              allowLocalhostAsSecureOrigin: true,
-              serviceWorkerParam: { scope: '/' },
-            })
-            ;(window as any).__OS_INIT__ = true
-
-            // Garantir optIn na push subscription se suportado
-            try {
-              if (OneSignal.User?.pushSubscription?.optIn) {
-                await OneSignal.User.pushSubscription.optIn().catch(() => {})
+        window.OneSignalDeferred.push((OneSignal: any) => {
+          if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
+            OneSignal.Notifications.addEventListener('click', (event: any) => {
+              const data = {
+                ...(event?.notification?.additionalData || {}),
+                launchURL: event?.notification?.launchURL,
               }
-            } catch {}
-
-            // Listener de clique nas notificações Web
-            if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
-              OneSignal.Notifications.addEventListener('click', (event: any) => {
-                const data = {
-                  ...(event?.notification?.additionalData || {}),
-                  launchURL: event?.notification?.launchURL,
-                }
-                handlePushClick(data)
-              })
-            }
-            console.log('🔔 [GlobalPush] OneSignal Web inicializado com listener de clique!')
-          } catch (initErr: any) {
-            const msg = initErr?.message || ''
-            if (!msg.includes('already initialized')) {
-              console.warn('[GlobalPush] Erro inicialização Web:', initErr)
-            }
+              handlePushClick(data)
+            })
           }
         })
       }
     }
-  }, []) // Apenas na montagem
 
-  // 2. Gerenciamento Global de Usuário e Tags no OneSignal
+    init()
+  }, []) // Montagem única
+
+  // 2. Gerenciamento Global de Usuário no OneSignal via NotificationService
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const sincronizarUsuarioOneSignal = async (retryCount = 0) => {
-      try {
-        const isNative = Capacitor.isNativePlatform()
-        let OS: any = null
-
-        if (isNative) {
-          if (!window.__OS_NATIVE_READY__) {
-            if (retryCount >= 20) return
-            setTimeout(() => sincronizarUsuarioOneSignal(retryCount + 1), 250)
-            return
-          }
-          const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-          OS = OneSignalNative
-        } else {
-          OS = window.OneSignal
-          if (!OS && window.OneSignalDeferred) {
-            window.OneSignalDeferred.push(function (inst: any) {
-              if (inst) sincronizarUsuarioOneSignal()
-            })
-            return
-          }
-        }
-
-        if (!OS) return
-
-        if (currentUser?.id) {
-          const userId = String(currentUser.id)
-          if (window.__OS_GLOBAL_USER_ID__ !== userId) {
-            try {
-              if (typeof OS.login === 'function') {
-                await OS.login(userId)
-                window.__OS_GLOBAL_USER_ID__ = userId
-                ;(window as any).__OS_USER_ID__ = userId
-                console.log(`✅ [GlobalPush] Usuário autenticado no OneSignal: ${userId}`)
-
-                // Garantir optIn na push subscription
-                if (OS.User?.pushSubscription?.optIn) {
-                  await OS.User.pushSubscription.optIn().catch(() => {})
-                }
-
-                // Aliases para identificação flexível pelo backend
-                if (OS.User && typeof OS.User.addAlias === 'function') {
-                  if (currentUser.responsavel_id) {
-                    OS.User.addAlias('responsavel_id', String(currentUser.responsavel_id)).catch(() => {})
-                  }
-                  if (currentUser.aluno_id) {
-                    OS.User.addAlias('aluno_id', String(currentUser.aluno_id)).catch(() => {})
-                  }
-                  const colabId =
-                    currentUser.colaborador_id ||
-                    currentUser.system_user_id ||
-                    currentUser.user_metadata?.colaborador_id ||
-                    currentUser.user_metadata?.system_user_id
-                  if (colabId) {
-                    OS.User.addAlias('colaborador_id', String(colabId)).catch(() => {})
-                    OS.User.addAlias('system_user_id', String(colabId)).catch(() => {})
-                  }
-                  const cod = (currentUser as any).codigo || currentUser.user_metadata?.codigo
-                  if (cod) {
-                    OS.User.addAlias('codigo', String(cod)).catch(() => {})
-                  }
-                  if (currentUser.email) {
-                    OS.User.addAlias('email', String(currentUser.email).toLowerCase().trim()).catch(() => {})
-                  }
-                }
-              }
-            } catch (err: any) {
-              console.warn('[GlobalPush] Aviso no login do OneSignal:', err?.message)
-            }
-          }
-
-          // Atribuição de tags de segmentação
-          try {
-            const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master']
-            const cargoLower = String(currentUser.cargo || '').toLowerCase().trim()
-            const perfilLower = String(currentUser.perfil || '').toLowerCase().trim()
-            const isMaster = masterRoles.includes(cargoLower) || masterRoles.includes(perfilLower)
-
-            const tags: Record<string, string> = {
-              perfil: currentUser.perfil || '',
-              cargo: currentUser.cargo || '',
-              isMasterAdmin: isMaster ? 'true' : 'false',
-              acesso: isMaster ? 'institucional' : (currentUser.perfil || 'padrao'),
-            }
-            if (currentUser.aluno_id) tags['aluno_id'] = String(currentUser.aluno_id)
-            if (currentUser.responsavel_id) tags['responsavel_id'] = String(currentUser.responsavel_id)
-            const staffId =
-              currentUser.colaborador_id ||
-              currentUser.system_user_id ||
-              currentUser.user_metadata?.colaborador_id
-            if (staffId) tags['colaborador_id'] = String(staffId)
-            const codTag = (currentUser as any).codigo || currentUser.user_metadata?.codigo
-            if (codTag) tags['codigo'] = String(codTag)
-
-            if (OS.User && typeof OS.User.addTags === 'function') {
-              await OS.User.addTags(tags)
-            }
-          } catch {}
-
-          // Salvar estado da subscrição no window para diagnóstico rápido
-          try {
-            const pushSubId = OS.User?.pushSubscription?.id
-            const pushOptedIn = OS.User?.pushSubscription?.optedIn
-            ;(window as any).__OS_SUBSCRIPTION_STATE__ = {
-              platform: isNative ? 'native' : 'web',
-              userId,
-              pushSubId,
-              pushOptedIn,
-              updatedAt: new Date().toISOString(),
-            }
-            console.log('📱 [GlobalPush] Status da Inscrição OneSignal:', (window as any).__OS_SUBSCRIPTION_STATE__)
-          } catch {}
-        } else {
-          // Logout se o usuário deslogou
-          if (window.__OS_GLOBAL_USER_ID__) {
-            try {
-              if (typeof OS.logout === 'function') {
-                await OS.logout()
-                window.__OS_GLOBAL_USER_ID__ = undefined
-                console.log('🚪 [GlobalPush] Usuário deslogado do OneSignal')
-              }
-            } catch {}
-          }
-        }
-      } catch (err) {
-        console.error('[GlobalPush] Erro ao sincronizar usuário:', err)
-      }
-    }
-
-    sincronizarUsuarioOneSignal()
-
-    // Re-sincronizar quando o app volta para o foreground
-    const handleForegroundSync = () => {
-      window.__OS_GLOBAL_USER_ID__ = undefined
-      sincronizarUsuarioOneSignal()
-    }
-    window.addEventListener('ad:app-foreground', handleForegroundSync)
-
-    return () => {
-      window.removeEventListener('ad:app-foreground', handleForegroundSync)
+    if (currentUser?.id) {
+      notificationService.syncUser(currentUser).catch(err => {
+        console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
+      })
+    } else {
+      notificationService.clearUser().catch(err => {
+        console.warn('[GlobalPush] Aviso no logout do usuário:', err)
+      })
     }
   }, [currentUser?.id, currentUser?.perfil, currentUser?.cargo])
 
-  // Componente invisível
-  return null
+  return <NotificationPermissionModal />
 }

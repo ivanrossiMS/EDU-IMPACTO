@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { createClient } from '@/utils/supabase/client';
 import { removeSettingAsync } from '@/lib/context';
+import { notificationService } from '@/lib/notifications/notificationService';
 
 const LOGOUT_FLAG = 'edu-logout-pending';
 let logoutPromise: Promise<void> | null = null;
@@ -118,7 +119,15 @@ async function executeLogout(userId?: string): Promise<void> {
     console.warn('[Auth Logout] Erro no timeout do signOut:', error);
   }
 
-  // 7. Redireciona com segurança para /login
+  // 7. Desassocia o usuário no OneSignal mantendo a inscrição do aparelho
+  try {
+    await notificationService.clearUser();
+    console.log('[Auth Logout] Usuário desassociado do OneSignal.');
+  } catch (error) {
+    console.warn('[Auth Logout] Erro ao desassociar OneSignal:', error);
+  }
+
+  // 8. Redireciona com segurança para /login
   if (typeof window !== 'undefined') {
     if (window.location.pathname !== '/login') {
       window.location.replace('/login');

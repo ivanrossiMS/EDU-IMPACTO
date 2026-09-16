@@ -23,6 +23,7 @@ import {
   Settings, Shield, Zap, Activity, Info, Smartphone, Check,
 } from 'lucide-react'
 import { useApp } from '@/lib/context'
+import { notificationService } from '@/lib/notifications/notificationService'
 
 interface PushLog {
   id: string
@@ -79,13 +80,18 @@ export function PushDiagnosticoPanel() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      if ('Notification' in window) {
-        setDevicePermission(Notification.permission)
-      } else {
+      notificationService.refresh().then(diag => {
+        setDevicePermission(diag.permissionStatus)
+        setDeviceState({
+          platform: diag.platform,
+          userId: diag.subscription.userId,
+          pushSubId: diag.subscription.subscriptionId,
+          pushOptedIn: diag.subscription.optedIn,
+          updatedAt: diag.updatedAt,
+        })
+      }).catch(() => {
         setDevicePermission('unsupported')
-      }
-      const st = (window as any).__OS_SUBSCRIPTION_STATE__ || null
-      setDeviceState(st)
+      })
     }
   }, [])
 

@@ -135,6 +135,9 @@ workflows:
             echo "APS ENVIRONMENT:"
             /usr/libexec/PlistBuddy -c "Print :Entitlements:aps-environment" /tmp/profile.plist || true
           done
+      - name: Configure Production APNs Entitlements
+        script: |
+          /usr/libexec/PlistBuddy -c "Set :aps-environment production" "$CM_BUILD_DIR/ios/App/App/App.entitlements" || true
       - name: Apply iOS signing profile
         script: |
           xcode-project use-profiles \

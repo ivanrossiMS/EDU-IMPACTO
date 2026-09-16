@@ -16,6 +16,7 @@ import { LoadingGlass } from '@/components/LoadingGlass'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 import { useApp } from '@/lib/context'
 import { toast } from 'sonner'
+import { notificationService } from '@/lib/notifications/notificationService'
 
 // ── Tipos e Presets de Notificação ──────────────────────────────────────────
 type PushCategory =
@@ -303,53 +304,26 @@ export default function ADAdminPushTestPage() {
         isNative = !!(window as any).Capacitor?.isNativePlatform()
       } catch {}
 
-      const rawPlatform = isNative
-        ? ((window as any).Capacitor?.getPlatform() || 'native')
-        : 'web'
-
-      if (isNative) {
-        try {
-          const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-          const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
-          const nativePerm = await OneSignalNative.Notifications.permissionNative().catch(() => 0)
-          const subId = await OneSignalNative.User.pushSubscription.getIdAsync().catch(() => null)
-          const subToken = await OneSignalNative.User.pushSubscription.getTokenAsync().catch(() => null)
-          const optedIn = await OneSignalNative.User.pushSubscription.getOptedInAsync().catch(() => false)
-          const osId = await OneSignalNative.User.getOnesignalId().catch(() => null)
-          const extId = await OneSignalNative.User.getExternalId().catch(() => null)
-
-          setDeviceDiagnostic({
-            platform: rawPlatform === 'ios' ? 'iOS (iPhone / iPad)' : (rawPlatform === 'android' ? 'Android' : rawPlatform),
-            permission: hasPerm ? 'granted' : (nativePerm === 1 ? 'denied' : 'default'),
-            pushSubId: subId,
-            pushToken: subToken,
-            pushOptedIn: Boolean(optedIn),
-            onesignalId: osId,
-            externalId: extId,
-            loading: false,
-          })
-          return
-        } catch (nativeErr) {
-          console.warn('[DeviceCheck] Erro ao consultar plugin nativo:', nativeErr)
-        }
-      }
-
-      // Web fallback
-      const webPerm = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
-      const OS = (window as any).OneSignal
-      const osUser = OS?.User
-      const subId = osUser?.PushSubscription?.id || (window as any).__OS_SUBSCRIPTION_STATE__?.pushSubId || null
-      const optedIn = osUser?.PushSubscription?.optedIn ?? (webPerm === 'granted')
-      const extId = osUser?.externalId || (window as any).__OS_USER_ID__ || null
+      const diag = await notificationService.refresh()
 
       setDeviceDiagnostic({
-        platform: 'Navegador Web (PC / Mac)',
-        permission: webPerm,
-        pushSubId: subId,
-        pushToken: null,
-        pushOptedIn: Boolean(optedIn && webPerm === 'granted'),
-        onesignalId: null,
-        externalId: extId,
+        platform:
+          diag.platform === 'ios'
+            ? 'iOS (iPhone / iPad)'
+            : diag.platform === 'android'
+            ? 'Android'
+            : 'Navegador Web (PC / Mac)',
+        permission:
+          diag.permissionStatus === 'authorized' || diag.permissionStatus === 'provisional'
+            ? 'granted'
+            : diag.permissionStatus === 'denied'
+            ? 'denied'
+            : 'default',
+        pushSubId: diag.subscription.subscriptionId,
+        pushToken: diag.subscription.pushToken,
+        pushOptedIn: diag.subscription.optedIn,
+        onesignalId: diag.subscription.userId,
+        externalId: diag.subscription.userId,
         loading: false,
       })
     } catch (e) {
@@ -360,28 +334,11 @@ export default function ADAdminPushTestPage() {
   const handleResyncDevice = async () => {
     setIsResyncingDevice(true)
     try {
-      let isNative = false
-      try {
-        isNative = !!(window as any).Capacitor?.isNativePlatform()
-      } catch {}
+      // Solicita permissão de forma segura sem fallbackToSettings
+      await notificationService.requestNotificationPermission().catch(() => {})
 
-      if (isNative) {
-        const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-        await OneSignalNative.Notifications.requestPermission(true).catch(() => {})
-        if (OneSignalNative.User?.pushSubscription?.optIn) {
-          await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
-        }
-        if (currentUser?.id) {
-          await OneSignalNative.login(String(currentUser.id)).catch(() => {})
-          if (currentUser.responsavel_id) {
-            OneSignalNative.User.addAlias('responsavel_id', String(currentUser.responsavel_id)).catch(() => {})
-          }
-          if (currentUser.email) {
-            OneSignalNative.User.addAlias('email', String(currentUser.email).toLowerCase().trim()).catch(() => {})
-          }
-        }
-      } else if ((window as any).OneSignal?.User?.PushSubscription?.optIn) {
-        await (window as any).OneSignal.User.PushSubscription.optIn().catch(() => {})
+      if (currentUser?.id) {
+        await notificationService.syncUser(currentUser).catch(() => {})
       }
 
       await checkCurrentDevicePush()

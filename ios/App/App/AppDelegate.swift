@@ -47,3 +47,37 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
 }
+
+/**
+ * NativeSettingsPlugin — Plugin Capacitor para abertura dos Ajustes do iOS.
+ * Permite ao app abrir diretamente os Ajustes do Impacto Edu sem intermediários em inglês.
+ */
+@objc(NativeSettingsPlugin)
+public class NativeSettingsPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "NativeSettingsPlugin"
+    public let jsName = "NativeSettings"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "openSettings", returnType: CAPPluginReturnPromise)
+    ]
+
+    @objc func openSettings(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let url = URL(string: UIApplication.openSettingsURLString) else {
+                call.reject("Cannot create settings URL")
+                return
+            }
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url, options: [:]) { success in
+                    if success {
+                        call.resolve(["opened": true])
+                    } else {
+                        call.reject("Failed to open settings")
+                    }
+                }
+            } else {
+                call.reject("Cannot open settings URL")
+            }
+        }
+    }
+}
+
