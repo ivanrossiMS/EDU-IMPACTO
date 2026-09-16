@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { Suspense, useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
@@ -16,7 +16,8 @@ import {
   fetchPerfisWithCache
 } from '@/lib/auth/moduleRouting'
 
-export default function Root() {
+// Componente interno que usa useSearchParams (precisa estar dentro do Suspense)
+function RootInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { currentUser, hydrated } = useApp()
@@ -163,5 +164,15 @@ export default function Root() {
       isReady={!!targetRoute}
       onReadyComplete={handleTransitionComplete}
     />
+  )
+}
+
+// Export default envolve RootInner em Suspense.
+// Necessário porque useSearchParams() causa CSR bailout sem Suspense boundary.
+export default function Root() {
+  return (
+    <Suspense fallback={<AppLoadingScreen mode="app" isReady={false} />}>
+      <RootInner />
+    </Suspense>
   )
 }
