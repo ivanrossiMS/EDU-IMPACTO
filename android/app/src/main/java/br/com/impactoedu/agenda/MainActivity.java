@@ -9,20 +9,20 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        Thread.UncaughtExceptionHandler defaultHandler = Thread.getDefaultUncaughtExceptionHandler();
-        Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
-            Log.e(TAG, "FATAL CRASH on thread " + thread.getName() + ": " + throwable.getMessage(), throwable);
-            if (defaultHandler != null) {
-                defaultHandler.uncaughtException(thread, throwable);
-            }
-        });
+        CrashHandler.init(this);
 
         try {
             registerPlugin(NativeSettingsPlugin.class);
         } catch (Throwable t) {
             Log.e(TAG, "Falha ao registrar NativeSettingsPlugin: " + t.getMessage(), t);
         }
-        super.onCreate(savedInstanceState);
+
+        try {
+            super.onCreate(savedInstanceState);
+        } catch (Throwable t) {
+            Log.e(TAG, "FATAL EXCEPTION no super.onCreate: " + t.getMessage(), t);
+            CrashHandler.showCrash(this, t);
+        }
     }
 }
 

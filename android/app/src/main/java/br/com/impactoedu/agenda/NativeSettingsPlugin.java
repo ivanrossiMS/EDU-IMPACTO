@@ -13,6 +13,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "NativeSettings")
 public class NativeSettingsPlugin extends Plugin {
 
+    public NativeSettingsPlugin() {
+        super();
+    }
+
     @PluginMethod
     public void openSettings(PluginCall call) {
         try {
