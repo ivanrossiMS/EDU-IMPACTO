@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 
@@ -18,21 +18,29 @@ import {
 
 export default function Root() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { currentUser, hydrated } = useApp()
 
-  // 1. Libera imediatamente a splash screen nativa para exibir a tela de abertura web
+  const [targetRoute, setTargetRoute] = useState<string | null>(null)
+  const isRedirectingRef = useRef(false)
+
+  const isDemoMode = searchParams?.get('demo') === 'true'
+
+  // 1. Libera imediatamente a splash screen nativa para exibir a tela cinematográfica web
   useEffect(() => {
     hideSplashScreen(150)
   }, [])
 
-  // 2. Gerenciamento do ciclo de resolução da sessão e redirecionamento imediato
+  // 2. Gerenciamento do ciclo de resolução da sessão e cálculo da rota de destino
   useEffect(() => {
+    if (isDemoMode) return
+
     // Escuta evento de navegação por push disparado pelo OneSignal durante o cold start
     const handlePushEvent = (e: any) => {
       const dest = e?.detail?.destination
       if (dest) {
         console.log('[Root] Evento edu:navigate-push recebido em cold start:', dest)
-        router.replace(dest)
+        setTargetRoute(dest)
       }
     }
     window.addEventListener('edu:navigate-push', handlePushEvent)
@@ -46,7 +54,7 @@ export default function Root() {
 
     let isSubscribed = true
 
-    const checkPendingPushAndRoute = async () => {
+    const resolveDestination = async () => {
       // Se estiver em ambiente nativo, concede pequena janela de espera ativa (até 500ms)
       // para o OneSignal descarregar o clique de notificação em cold start
       let pendingPushRoute = typeof window !== 'undefined'
@@ -75,26 +83,24 @@ export default function Root() {
       if (pendingPushRoute) {
         console.log('[Root] Notificação pendente detectada:', pendingPushRoute)
         if (currentUser) {
-          console.log('[Root] Usuário autenticado. Redirecionando direto para o item da notificação:', pendingPushRoute)
-          router.replace(pendingPushRoute)
+          setTargetRoute(pendingPushRoute)
           return
         } else {
-          console.log('[Root] Usuário deslogado. Enviando para login com redirect:', pendingPushRoute)
-          router.replace(`/login?redirect=${encodeURIComponent(pendingPushRoute)}`)
+          setTargetRoute(`/login?redirect=${encodeURIComponent(pendingPushRoute)}`)
           return
         }
       }
 
-      // Se nenhum usuário estiver logado, redireciona imediatamente para o login
+      // Se nenhum usuário estiver logado, direciona para o login
       if (!currentUser) {
-        router.replace('/login')
+        setTargetRoute('/login')
         return
       }
 
       // 1. Família / Aluno / Responsável têm exclusivamente acesso à Agenda Digital
       if (isFamilyOrStudent(currentUser)) {
         const dest = getAgendaDigitalDestination(currentUser)
-        router.replace(dest)
+        setTargetRoute(dest)
         return
       }
 
@@ -115,18 +121,35 @@ export default function Root() {
       // Determina a rota correta do perfil
       const initialRoute = getInitialRouteForUser(currentUser, userPerfilObj)
       console.log('[Root] Rota inicial resolvida para o perfil:', initialRoute)
-      router.replace(initialRoute)
+      setTargetRoute(initialRoute)
     }
 
-    checkPendingPushAndRoute()
+    resolveDestination()
 
     return () => {
       isSubscribed = false
       window.removeEventListener('edu:navigate-push', handlePushEvent)
     }
-  }, [hydrated, currentUser, router])
+  }, [hydrated, currentUser, isDemoMode])
 
-  // Fallback de segurança para liberar a splash screen nativa em caso extremo
+  // Executa o redirecionamento com segurança garantindo que só ocorra uma vez
+  const handleTransitionComplete = useCallback(() => {
+    if (isRedirectingRef.current || !targetRoute) return
+    isRedirectingRef.current = true
+    router.replace(targetRoute)
+  }, [targetRoute, router])
+
+  // Fallback de segurança: se a rota foi calculada mas por qualquer motivo a animação
+  // demorar mais de 3.8s para chamar o callback, executa o redirecionamento forçado
+  useEffect(() => {
+    if (!targetRoute) return
+    const fallbackTimer = setTimeout(() => {
+      handleTransitionComplete()
+    }, 3800)
+    return () => clearTimeout(fallbackTimer)
+  }, [targetRoute, handleTransitionComplete])
+
+  // Fallback de segurança para liberar a splash screen nativa do Capacitor em caso extremo
   useEffect(() => {
     const timer = setTimeout(() => {
       hideSplashScreen(300)
@@ -134,8 +157,11 @@ export default function Root() {
     return () => clearTimeout(timer)
   }, [])
 
-  // Renderiza tela de abertura moderna e animada com a identidade visual do Impacto Edu
-  return <AppLoadingScreen />
+  return (
+    <AppLoadingScreen
+      mode={isDemoMode ? 'demo' : 'app'}
+      isReady={!!targetRoute}
+      onReadyComplete={handleTransitionComplete}
+    />
+  )
 }
-
-

@@ -48,6 +48,7 @@ const PUBLIC_PATHS = [
   '/regulamento-interno', // Regulamento Interno de Trabalho para Funcionários (Público/Orfão)
   '/politica-de-privacidade', // Política de Privacidade oficial (App Store / Google Play / LGPD)
   '/privacidade',             // Alias público de privacidade
+  '/splash-preview',          // Pré-visualização da tela cinematográfica de carregamento
   '/api/gestao-pessoas/materiais-divulgacao', // Central de materiais de divulgação (acesso público para incremento de visitas)
 ]
 

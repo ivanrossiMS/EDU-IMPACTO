@@ -1,0 +1,635 @@
+/* ==========================================================================
+   Impacto EDU — Cinematic Splash Animation Styles
+   Dimensões e Proporções de Referência: 720 × 1280 (9:16)
+   ========================================================================== */
+
+.rootContainer {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background-color: #020409;
+  background: radial-gradient(circle at 50% 41.4%, #0b1329 0%, #040817 48%, #020409 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: "Nimbus Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  z-index: 99999999;
+  isolation: isolate;
+}
+
+/* ── 1. Iluminação e Fundo Cósmico (100% da Tela) ── */
+
+.backgroundAtmosphere {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle at 50% 41.4%, #0b1329 0%, #040817 48%, #020409 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Foco suave que atravessa lentamente a região central */
+.ambientSpotlight {
+  position: absolute;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100vw;
+  max-width: 900px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(56, 189, 248, 0.08) 0%, rgba(99, 102, 241, 0.04) 45%, transparent 72%);
+  filter: blur(60px);
+  pointer-events: none;
+  animation: ambientLightDrift 14s ease-in-out infinite alternate;
+  z-index: 2;
+}
+
+/* Brilho difuso suave imediatamente atrás da logo */
+.logoBackdropGlow {
+  position: absolute;
+  top: 41.4%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.24) 0%, rgba(124, 58, 237, 0.14) 38%, rgba(2, 4, 9, 0) 70%);
+  filter: blur(40px);
+  pointer-events: none;
+  opacity: 0;
+  animation: glowReveal 2.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 2;
+}
+
+/* Pulso breve e sutil ao redor da logo na finalização (~6.35s) */
+.logoArrivalPulse {
+  position: absolute;
+  top: 41.4%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.75) 0%, rgba(56, 189, 248, 0.5) 40%, transparent 75%);
+  filter: blur(14px);
+  pointer-events: none;
+  opacity: 0;
+  z-index: 4;
+}
+
+.logoArrivalPulseActive {
+  animation: arrivalPulseKeyframe 0.75s cubic-bezier(0.1, 0.8, 0.25, 1) forwards;
+}
+
+/* Linhas curvas verticais delicadas laterais (SVG cobrindo toda a viewport) */
+.verticalCurvesSvg {
+  position: absolute;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Partículas sutis estelares */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  background-color: #e2e8f0;
+  pointer-events: none;
+  z-index: 2;
+  animation: particleFloat 4.8s ease-in-out infinite alternate;
+}
+
+/* ── 2. Palco Conteúdo ── */
+
+.stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+/* Logo e Container Squircle */
+.logoWrapper {
+  position: absolute;
+  top: 41.4%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1.05);
+  width: clamp(104px, 18vw, 132px);
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  animation: logoCameraEase 2.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  z-index: 3;
+}
+
+/* Squircle de vidro translúcido com reflexo e cantos suaves */
+.logoSquircle {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 28%;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(243, 247, 254, 0.94) 48%,
+    rgba(224, 236, 255, 0.90) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.48),
+    0 0 24px rgba(56, 189, 248, 0.22),
+    inset 0 1px 2px rgba(255, 255, 255, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Shimmer muito sutil e translúcido sobre o vidro */
+.logoShimmer {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.28) 49%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0.28) 51%,
+    transparent 58%
+  );
+  pointer-events: none;
+  animation: logoShimmerSweep 7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.logoImage {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-select: none;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.08));
+}
+
+/* ── 3. Tipografia ── */
+
+.textGroup {
+  position: absolute;
+  top: 55%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 3;
+}
+
+.titleImpacto {
+  font-size: clamp(22px, 5.2vw, 32px);
+  font-weight: 400;
+  letter-spacing: 0.38em;
+  text-indent: 0.38em; /* Compensa o letter-spacing para centralização perfeita */
+  color: #f8fafc;
+  text-shadow: 0 0 18px rgba(255, 255, 255, 0.24);
+  line-height: 1.1;
+  opacity: 0;
+  transform: translateY(4px);
+  animation: fadeInDownTitle 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 1.3s;
+}
+
+.subtitleEdu {
+  margin-top: clamp(8px, 1.8vw, 14px);
+  font-size: clamp(11.5px, 2.7vw, 15px);
+  font-weight: 500;
+  letter-spacing: 0.48em;
+  text-indent: 0.48em;
+  color: #94a3b8;
+  opacity: 0;
+  animation: fadeInSub 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 1.9s;
+}
+
+/* Frase inferior: Conectando escola e família */
+.footerPhrase {
+  position: absolute;
+  top: 84%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(11.5px, 2.8vw, 13.5px);
+  font-weight: 400;
+  letter-spacing: 0.025em;
+  color: rgba(255, 255, 255, 0.42);
+  white-space: nowrap;
+  opacity: 0;
+  animation: fadeInFooter 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 2.3s;
+  z-index: 3;
+}
+
+/* ── 4. Três Ícones Escolares e Pontos de Status ── */
+
+.iconsRow {
+  position: absolute;
+  top: 72%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(32px, 8.5vw, 60px);
+  z-index: 3;
+}
+
+/* Container de cada ícone para posicionamento e flutuação */
+.iconItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e1;
+  width: clamp(22px, 5.2vw, 28px);
+  height: clamp(22px, 5.2vw, 28px);
+  opacity: 0;
+  filter: drop-shadow(0 0 6px rgba(203, 213, 225, 0.35));
+}
+
+/* Entradas escalonadas dos ícones */
+.iconItemBook {
+  animation: iconEnterBook 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 2.1s;
+}
+
+.iconItemCap {
+  animation: iconEnterCap 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 2.25s;
+}
+
+.iconItemPencil {
+  animation: iconEnterPencil 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 2.4s;
+}
+
+/* Flutuação contínua suave no estado ambiente */
+.iconInnerFloat1 {
+  animation: iconGentleFloat 3.2s ease-in-out infinite alternate;
+}
+
+.iconInnerFloat2 {
+  animation: iconGentleFloat 3.6s ease-in-out infinite alternate;
+  animation-delay: 0.6s;
+}
+
+.iconInnerFloat3 {
+  animation: iconGentleFloat 3.4s ease-in-out infinite alternate;
+  animation-delay: 1.1s;
+}
+
+/* ── Convergência dos Ícones para a Logo (Finalização) ── */
+
+.convergeBook {
+  animation: trajectoryBook 1.9s cubic-bezier(0.42, 0, 0.15, 1) forwards !important;
+}
+
+.convergeCap {
+  animation: trajectoryCap 1.9s cubic-bezier(0.42, 0, 0.15, 1) forwards !important;
+}
+
+.convergePencil {
+  animation: trajectoryPencil 1.9s cubic-bezier(0.42, 0, 0.15, 1) forwards !important;
+}
+
+/* Três pequenos pontos de status (· · ·) */
+.statusDots {
+  position: absolute;
+  top: 77.8%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 3;
+  opacity: 0;
+  animation: fadeInDots 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: 2.4s;
+  transition: opacity 0.6s ease-out;
+}
+
+.statusDotsFadeOut {
+  opacity: 0 !important;
+}
+
+.dot {
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  background-color: rgba(148, 163, 184, 0.65);
+  box-shadow: 0 0 6px rgba(148, 163, 184, 0.4);
+}
+
+.dotPulse1 {
+  animation: dotPulse 1.6s ease-in-out infinite;
+}
+
+.dotPulse2 {
+  animation: dotPulse 1.6s ease-in-out infinite;
+  animation-delay: 0.3s;
+}
+
+.dotPulse3 {
+  animation: dotPulse 1.6s ease-in-out infinite;
+  animation-delay: 0.6s;
+}
+
+/* ── 5. Keyframes de Animação Cinematográfica ── */
+
+@keyframes glowReveal {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.85);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes logoCameraEase {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes logoShimmerSweep {
+  0% {
+    transform: translateX(-120%) rotate(25deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  45% {
+    transform: translateX(120%) rotate(25deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(120%) rotate(25deg);
+    opacity: 0;
+  }
+}
+
+@keyframes fadeInDownTitle {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInSub {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes fadeInFooter {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInDots {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes iconEnterBook {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  100% {
+    opacity: 0.9;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes iconEnterCap {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  100% {
+    opacity: 0.9;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes iconEnterPencil {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.9);
+  }
+  100% {
+    opacity: 0.9;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes iconGentleFloat {
+  0% {
+    transform: translateY(-2.5px);
+  }
+  100% {
+    transform: translateY(2.5px);
+  }
+}
+
+@keyframes dotPulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes ambientLightDrift {
+  0% {
+    transform: translate(-56%, -48%) scale(0.96);
+  }
+  100% {
+    transform: translate(-44%, -52%) scale(1.04);
+  }
+}
+
+@keyframes particleFloat {
+  0% {
+    transform: translateY(-6px) scale(0.9);
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(6px) scale(1.1);
+    opacity: 0.3;
+  }
+}
+
+@keyframes arrivalPulseKeyframe {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(1.18);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.45);
+  }
+}
+
+/* ── Trajetórias Bézier de Convergência ── */
+
+@keyframes trajectoryBook {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.9;
+  }
+  35% {
+    transform: translate(-65px, -110px) scale(0.88);
+    opacity: 0.85;
+  }
+  75% {
+    transform: translate(30px, -230px) scale(0.45);
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate(62px, -280px) scale(0.1);
+    opacity: 0;
+  }
+}
+
+@keyframes trajectoryCap {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.9;
+  }
+  35% {
+    transform: translate(55px, -105px) scale(0.88);
+    opacity: 0.85;
+  }
+  75% {
+    transform: translate(-10px, -225px) scale(0.45);
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate(0px, -280px) scale(0.1);
+    opacity: 0;
+  }
+}
+
+@keyframes trajectoryPencil {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.9;
+  }
+  35% {
+    transform: translate(75px, -115px) scale(0.88);
+    opacity: 0.85;
+  }
+  75% {
+    transform: translate(-35px, -235px) scale(0.45);
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate(-62px, -280px) scale(0.1);
+    opacity: 0;
+  }
+}
+
+/* ── 6. Suporte a prefers-reduced-motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .logoBackdropGlow,
+  .horizontalLightBeam,
+  .logoWrapper,
+  .titleImpacto,
+  .subtitleEdu,
+  .footerPhrase,
+  .iconItem,
+  .statusDots {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .logoWrapper {
+    transform: translate(-50%, -50%) !important;
+  }
+
+  .textGroup,
+  .footerPhrase,
+  .iconsRow,
+  .statusDots {
+    transform: translateX(-50%) !important;
+  }
+
+  .iconsRow {
+    transform: translate(-50%, -50%) !important;
+  }
+
+  .iconInnerFloat1,
+  .iconInnerFloat2,
+  .iconInnerFloat3,
+  .ambientSpotlight,
+  .particle,
+  .logoShimmer {
+    animation: none !important;
+  }
+}
