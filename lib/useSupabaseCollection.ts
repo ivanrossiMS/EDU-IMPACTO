@@ -11,6 +11,7 @@ interface CacheEntry<T> {
 }
 
 const CACHE_TTL_MS = 60_000   // 60 seconds stale-while-revalidate window
+const MAX_MEMCACHE_SIZE = 80
 const memCache = new Map<string, CacheEntry<any>>()
 
 function getCacheEntry<T>(key: string): CacheEntry<T> | undefined {
@@ -19,10 +20,37 @@ function getCacheEntry<T>(key: string): CacheEntry<T> | undefined {
 
 function setCacheEntry<T>(key: string, data: T): void {
   memCache.set(key, { data, timestamp: Date.now() })
+  if (memCache.size > MAX_MEMCACHE_SIZE) {
+    let count = 0
+    for (const k of memCache.keys()) {
+      memCache.delete(k)
+      count++
+      if (count >= 20) break
+    }
+  }
 }
 
 function isStale(entry: CacheEntry<any>): boolean {
   return Date.now() - entry.timestamp > CACHE_TTL_MS
+}
+
+export function hasDataChanged(prev: any, next: any): boolean {
+  if (prev === next) return false
+  if (!prev || !next) return true
+  if (Array.isArray(prev) && Array.isArray(next)) {
+    if (prev.length !== next.length) return true
+    for (let i = 0; i < prev.length; i++) {
+      const p = prev[i]
+      const n = next[i]
+      if (p?.id !== n?.id) return true
+      if (p?.status !== n?.status) return true
+      if (p?.confirmedAt !== n?.confirmedAt) return true
+      if (p?.calledAt !== n?.calledAt) return true
+      if (p?.updated_at !== n?.updated_at) return true
+    }
+    return JSON.stringify(prev) !== JSON.stringify(next)
+  }
+  return JSON.stringify(prev) !== JSON.stringify(next)
 }
 
 /** Manually invalidate a cache entry (call after write operations) */
@@ -310,7 +338,7 @@ export function useSupabaseCollection<T>(
               setCacheEntry(endpoint, normalized)
             }
             // Only update if data actually changed to avoid unnecessary re-renders
-            if (JSON.stringify(latestState.current) !== JSON.stringify(normalized)) {
+            if (hasDataChanged(latestState.current, normalized)) {
               setState(normalized)
             }
           })

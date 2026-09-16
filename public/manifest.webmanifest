@@ -2,7 +2,7 @@
   "name": "EDU-IMPACTO",
   "short_name": "EduImpacto",
   "description": "Agenda Digital EDU-IMPACTO — Comunicação escolar em tempo real",
-  "start_url": "/agenda-digital",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#4f46e5",

@@ -151,7 +151,10 @@ export async function GET(req: Request) {
           email: email,
           cargo: u.cargo || 'Não definido',
           perfil: perfilStr,
-          status: u.status || (authUser ? 'ativo' : 'inativo'),
+          foto: authUser?.user_metadata?.foto || u.dados?.foto || u.foto || null,
+          dados: u.dados || {},
+          telefone: u.dados?.telefone || u.telefone || '',
+          unidade: u.dados?.unidade || u.unidade || '',
           ultimoAcesso: authUser?.last_sign_in_at 
             ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
             : 'Nunca acessou'
@@ -222,6 +225,10 @@ export async function GET(req: Request) {
         cargo: u.cargo || 'Não definido',
         perfil: perfilStr,
         status: authUser ? 'ativo' : 'inativo',
+        foto: authUser?.user_metadata?.foto || u.dados?.foto || u.foto || null,
+        dados: u.dados || {},
+        telefone: u.dados?.telefone || u.telefone || '',
+        unidade: u.dados?.unidade || u.unidade || '',
         ultimoAcesso: authUser?.last_sign_in_at 
           ? new Date(authUser.last_sign_in_at).toLocaleDateString('pt-BR') 
           : 'Nunca acessou'

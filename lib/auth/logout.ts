@@ -2,6 +2,7 @@ import { clearSessionSecurely, clearSessionCookiesOnClient, setLogoutBarrier, ge
 import { Capacitor } from '@capacitor/core';
 import { Preferences } from '@capacitor/preferences';
 import { createClient } from '@/utils/supabase/client';
+import { removeSettingAsync } from '@/lib/context';
 
 const LOGOUT_FLAG = 'edu-logout-pending';
 let logoutPromise: Promise<void> | null = null;
@@ -78,6 +79,10 @@ async function executeLogout(userId?: string): Promise<void> {
   // 4. Limpa Keychain / Keystore e Preferences de forma seletiva
   try {
     await clearSessionSecurely(userId);
+    await removeSettingAsync('edu-current-user');
+    await removeSettingAsync('edu-current-perfil');
+    await removeSettingAsync('edu_auth_user');
+    await removeSettingAsync('edu-active-modules');
     console.log('[Auth Logout] Sessão segura removida do hardware de criptografia.');
   } catch (error) {
     console.error('[Auth Logout] Erro ao limpar sessão segura:', error);

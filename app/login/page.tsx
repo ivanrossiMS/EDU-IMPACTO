@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { useApp, loadSettingAsync, saveSetting, removeSettingAsync } from '@/lib/context'
 import { DEFAULT_PERFIS } from '@/lib/dataContext'
 import { performLogout } from '@/lib/auth/logout'
+import { getLogoutBarrier, isUserLoggedOut, clearSessionSecurely } from '@/lib/auth/secureSession'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { LogOut } from 'lucide-react'
@@ -215,12 +216,32 @@ export default function LoginPage() {
       const checkStoredUser = async () => {
         // Timeout de proteção: limite de segurança generoso para cold boot / reboot
         const timeoutId = setTimeout(() => {
+          console.warn('[Login] Timeout de segurança de checagem de usuário expirou (6s). Liberando tela de login.')
           setIsCheckingSavedUser(false)
           setStep('login')
           hideSplashScreen(300)
         }, 6000)
 
         try {
+          // 0. Se houver barreira de logout ativa ou usuário explicitamente deslogado, NÃO restaura sessão!
+          const barrier = await getLogoutBarrier()
+          const isLoggedOut = isUserLoggedOut() || Boolean(barrier)
+          if (isLoggedOut) {
+            console.log('[Login] Logout ativo/marcador detectado. Exibindo tela de login limpa.')
+            await removeSettingAsync('edu-current-user').catch(() => {})
+            await removeSettingAsync('edu-current-perfil').catch(() => {})
+            if (typeof window !== 'undefined') {
+              window.localStorage.removeItem('edu-current-user')
+              window.localStorage.removeItem('edu-current-perfil')
+            }
+            setCurrentUser(null)
+            clearTimeout(timeoutId)
+            setIsCheckingSavedUser(false)
+            setStep('login')
+            hideSplashScreen(300)
+            return
+          }
+
           let storedUser = await loadSettingAsync<any>('edu-current-user', null)
           if (!storedUser) {
             // Tenta restaurar do armazenamento seguro persistente (Keychain / Keystore / Preferences)
@@ -228,28 +249,25 @@ export default function LoginPage() {
               const { supabase } = await import('@/lib/supabase')
               const { restoreSessionSecurely } = await import('@/lib/auth/secureSession')
               const restored = await restoreSessionSecurely(supabase)
-              if (restored) {
-                const { data: sessionData } = await supabase.auth.getSession()
-                const user = sessionData?.session?.user || (await supabase.auth.getUser()).data.user
-                if (user) {
-                  const meta = user.user_metadata || {}
-                  storedUser = {
-                    id: user.id,
-                    nome: meta.nome || user.email?.split('@')[0],
-                    email: user.email,
-                    cargo: meta.cargo || 'Colaborador',
-                    perfil: meta.perfil || 'Usuário',
-                    foto: meta.foto,
-                    aluno_id: meta.aluno_id || '',
-                    responsavel_id: meta.responsavel_id || '',
-                    colaborador_id: meta.colaborador_id || meta.system_user_id || '',
-                    system_user_id: meta.system_user_id || meta.colaborador_id || '',
-                    hasDualRole: Boolean(meta.hasDualRole || meta.responsavel_id),
-                    user_metadata: meta
-                  }
-                  saveSetting('edu-current-user', storedUser)
-                  saveSetting('edu-current-perfil', storedUser.perfil)
+              if (restored?.success && restored?.session?.user) {
+                const user = restored.session.user
+                const meta = user.user_metadata || {}
+                storedUser = {
+                  id: user.id,
+                  nome: meta.nome || user.email?.split('@')[0],
+                  email: user.email,
+                  cargo: meta.cargo || 'Colaborador',
+                  perfil: meta.perfil || 'Usuário',
+                  foto: meta.foto,
+                  aluno_id: meta.aluno_id || '',
+                  responsavel_id: meta.responsavel_id || '',
+                  colaborador_id: meta.colaborador_id || meta.system_user_id || '',
+                  system_user_id: meta.system_user_id || meta.colaborador_id || '',
+                  hasDualRole: Boolean(meta.hasDualRole || meta.responsavel_id),
+                  user_metadata: meta
                 }
+                saveSetting('edu-current-user', storedUser)
+                saveSetting('edu-current-perfil', storedUser.perfil)
               }
             } catch (e) {}
           }
@@ -272,38 +290,36 @@ export default function LoginPage() {
             if (!meRes.ok && (meRes.status === 401 || meRes.status === 403)) {
               // Tenta silenciosamente renovar o token com o mutex centralizado
               const { supabase } = await import('@/lib/supabase')
-              const { refreshSessionCentralized, isPermanentTokenRevocation, isNetworkOrTransientError } = await import('@/lib/auth/secureSession')
-              const { session: refreshSession, error: refreshErr } = await refreshSessionCentralized(supabase)
+              const { refreshSessionCentralized, isNetworkOrTransientError } = await import('@/lib/auth/secureSession')
+              const { session: refreshSession, error: refreshErr, isOffline } = await refreshSessionCentralized(supabase)
               
               if (!refreshErr && refreshSession) {
                 console.log('[Login] Sessão renovada com sucesso via refresh_token centralizado.')
-              } else if (refreshErr) {
-                if (isPermanentTokenRevocation(refreshErr)) {
-                  console.warn('[Login] Sessão revogada permanentemente no servidor. Limpando credenciais locais:', refreshErr.message)
-                  await removeSettingAsync('edu-current-user')
-                  await removeSettingAsync('edu-current-perfil')
-                  if (typeof window !== 'undefined') {
-                    window.localStorage.removeItem('edu-current-user')
-                    window.localStorage.removeItem('edu-current-perfil')
-                  }
-                  const { clearSessionSecurely } = await import('@/lib/auth/secureSession')
-                  await clearSessionSecurely().catch(() => {})
-                  await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-                  setCurrentUser(null)
-                  clearTimeout(timeoutId)
-                  setIsCheckingSavedUser(false)
-                  setStep('login')
-                  hideSplashScreen(300)
-                  return
-                } else if (isNetworkOrTransientError(refreshErr)) {
-                  console.warn('[Login] Falha temporária de rede ao renovar sessão. Mantendo usuário local offline.')
-                  // NÃO desloga! Preserva storedUser para continuidade do app
+              } else if (isOffline || isNetworkOrTransientError(refreshErr)) {
+                console.warn('[Login] Falha temporária de rede ao renovar sessão. Mantendo usuário local offline.')
+                // Preserva storedUser para continuidade do app em caso de falha de rede/offline
+              } else {
+                // Sessão comprovadamente inválida/inexistente no servidor! Limpa dados e libera formulário de login
+                console.warn('[Login] Sessão revogada ou ausente no servidor. Limpando credenciais locais.')
+                await removeSettingAsync('edu-current-user').catch(() => {})
+                await removeSettingAsync('edu-current-perfil').catch(() => {})
+                if (typeof window !== 'undefined') {
+                  window.localStorage.removeItem('edu-current-user')
+                  window.localStorage.removeItem('edu-current-perfil')
                 }
+                await clearSessionSecurely().catch(() => {})
+                await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+                setCurrentUser(null)
+                clearTimeout(timeoutId)
+                setIsCheckingSavedUser(false)
+                setStep('login')
+                hideSplashScreen(300)
+                return
               }
             }
-          } catch {
-            // Em caso de offline ou timeout de rede, permite prosseguir com dados locais
-            console.log('[Login] Rede offline ou instável ao checar /api/auth/me. Mantendo usuário local.')
+          } catch (netErr: any) {
+            // Em caso de offline ou timeout de rede, permite prosseguir com dados locais se não for deslogado
+            console.log('[Login] Rede offline ou instável ao checar /api/auth/me:', netErr?.message)
           }
 
           // Restaura o usuário no contexto

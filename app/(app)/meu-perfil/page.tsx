@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams, usePathname } from 'next/navigation'
-import { useApp } from '@/lib/context'
+import { useApp, saveSetting } from '@/lib/context'
 import {
   User, Mail, Shield, Lock, Eye, EyeOff, Check, X,
   Save, Camera, Building2, BadgeCheck, Pencil, Key, Phone, FileText, Clock, Loader2
@@ -367,8 +367,11 @@ export default function MeuPerfilPage(props?: any) {
                         throw new Error(updateErr.error || 'Erro ao salvar a foto de perfil.')
                       }
 
-                      // 4. Atualizar UI e isolar foto no localStorage
-                      localStorage.setItem(`edu-user-photo-${effectiveUser.id}`, fotoUrl)
+                      // 4. Atualizar UI e isolar foto de forma resiliente
+                      saveSetting(`edu-user-photo-${effectiveUser.id}`, fotoUrl)
+                      if (currentUser?.id && currentUser.id !== effectiveUser.id) {
+                        saveSetting(`edu-user-photo-${currentUser.id}`, fotoUrl)
+                      }
                       
                       setForm(p => ({ ...p, foto: fotoUrl }))
                       const updated = { ...getProfileExtra(effectiveUser.id), foto: fotoUrl }

@@ -55,7 +55,15 @@ function SelecionarPerfilAdminContent() {
 
   useEffect(() => {
     setMounted(true)
-  }, [])
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.user?.foto && data.user.foto !== currentUser?.foto) {
+          setCurrentUser({ ...currentUser, ...data.user, foto: data.user.foto } as any)
+        }
+      })
+      .catch(() => {})
+  }, [currentUser?.id])
 
   const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Administrador';
 
@@ -609,7 +617,7 @@ function SelecionarPerfilAdminContent() {
             <Link href={`/agenda-digital/colaborador/${redirectTarget}`} className="portal-modern-card collaborator-theme">
               <div className="card-avatar-container collaborator-avatar" style={{ padding: 0 }}>
                 {currentUser?.foto ? (
-                  <img src={currentUser.foto} alt={currentUser.nome} className="card-avatar-img" />
+                  <img src={currentUser.foto} alt={currentUser.nome} loading="lazy" decoding="async" className="card-avatar-img" />
                 ) : (
                   getInitials(currentUser?.nome || 'Colaborador')
                 )}

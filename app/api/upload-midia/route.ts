@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
+import { resolveMimeType } from '@/lib/upload/uploadClient'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -46,32 +47,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nenhum arquivo enviado' }, { status: 400 })
     }
 
-    // VALIDATION: File type checking
+    // VALIDATION: Intelligent MIME type checking (prevents rejecting mobile files without browser MIME)
+    const mimeType = resolveMimeType(file.name, file.type)
     const allowedTypes = [
-      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/heic', 'image/heif',
       'application/pdf', 
-      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v'
+      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-m4v', 'video/3gpp', 'video/x-matroska', 'video/x-msvideo',
+      'application/octet-stream'
     ]
-    if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: 'Tipo de arquivo não permitido.' }, { status: 415 })
+    if (!allowedTypes.includes(mimeType) && !mimeType.startsWith('image/') && !mimeType.startsWith('video/')) {
+      return NextResponse.json({ error: `Tipo de arquivo não permitido: ${mimeType}` }, { status: 415 })
     }
 
-    const MAX_SIZE = 100 * 1024 * 1024 // 100MB
+    const MAX_SIZE = 50 * 1024 * 1024 // 50MB (limite físico do Supabase Storage)
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: 'Arquivo muito grande. Máximo: 100MB' }, { status: 413 })
+      return NextResponse.json({ error: 'Arquivo muito grande. O limite suportado pelo servidor é de 50MB.' }, { status: 413 })
     }
 
-    const safeBaseName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80)
-    const filePath = `uploads/${Date.now()}_${safeBaseName}`
+    const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : ''
+    const baseName = file.name.includes('.') ? file.name.slice(0, file.name.lastIndexOf('.')) : file.name
+    const safeBaseName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60)
+    const safeExt = ext.replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
+    const requestedFolder = formData.get('folder') as string
+    const folder = requestedFolder ? requestedFolder.replace(/[^a-zA-Z0-9_-]/g, '') : 'uploads'
+    const filePath = `${folder}/${Date.now()}_${safeBaseName || 'file'}${safeExt}`
 
     const arrayBuffer = await file.arrayBuffer()
 
     const { error } = await supabase.storage
       .from(bucket)
       .upload(filePath, arrayBuffer, {
-        contentType: file.type || 'application/octet-stream',
+        contentType: mimeType,
         upsert: false,
-        cacheControl: '31536000',
+        cacheControl: '2592000',
       })
 
     if (error) {
@@ -85,7 +93,7 @@ export async function POST(request: Request) {
       ok: true,
       url: publicData.publicUrl,
       name: file.name,
-      type: file.type,
+      type: mimeType,
       size: file.size,
       path: filePath,
     }, { status: 201 })

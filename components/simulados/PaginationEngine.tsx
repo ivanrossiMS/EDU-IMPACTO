@@ -413,10 +413,22 @@ export function PaginationEngine({
         .texto-apoio-spacer,
         .field-label-tag,
         .reorder-popover,
-        .reorder-trigger,
         .alt-img-actions,
         .alt-lines-btn {
           display: none !important;
+        }
+
+        .reorder-trigger {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border: 2px solid #cbd5e1 !important;
+          color: #475569 !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          cursor: default !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
 
         .header-field {

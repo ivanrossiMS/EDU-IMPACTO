@@ -769,11 +769,13 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                             }}
                           >
                             {med.type === 'video' || med.url.match(/\.(mp4|webm)$/i) ? (
-                              <video src={med.url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} controls playsInline />
+                              <video src={med.url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} controls playsInline preload="metadata" />
                             ) : (
                               <img 
                                 src={med.url} 
                                 alt="Momento Escolar" 
+                                loading="lazy"
+                                decoding="async"
                                 style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.5s ease' }} 
                                 onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.06)'}
                                 onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}

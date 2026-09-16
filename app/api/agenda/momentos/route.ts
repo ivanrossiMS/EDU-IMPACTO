@@ -111,9 +111,9 @@ export async function GET(request: Request) {
     if (alunoId) {
       let resolvedTargets: string[] = [];
       const [alunoRes, turmasRes, gruposRes] = await Promise.all([
-        supabase.from('alunos').select('*').eq('id', alunoId).maybeSingle(),
-        supabase.from('turmas').select('*'),
-        supabase.from('agenda_grupos').select('*')
+        supabase.from('alunos').select('id, turma, turma_nome, created_at, dados').eq('id', alunoId).maybeSingle(),
+        supabase.from('turmas').select('id, nome, codigo, ano, turno, modalidade, dados'),
+        supabase.from('agenda_grupos').select('id, nome, syncId, alunosIds, dados')
       ]);
 
       const alunoData = alunoRes.data;

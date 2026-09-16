@@ -52,30 +52,38 @@ export async function GET(request: Request) {
 
     if (error) throw error
 
-    // Buscar todos os alunos ativos para cálculo dos KPIs gerais (Alunos Matriculados e Alunos Integral/Intermediário)
-    const { data: alunosData } = await supabaseServer
-      .from('alunos')
-      .select('id, turma, status, dados')
+    const includeStats = url.searchParams.get('stats') !== 'false'
+    let totalAlunosMatriculados = 0
+    let totalAlunosIntegral = 0
+    let capacidadeTotal = 0
+    let vagasOcupadasPercent = 0
 
-    const activeAlunos = (alunosData || []).filter((a: any) => a.status !== 'inativo' && a.status !== 'Inativo')
-    const totalAlunosMatriculados = activeAlunos.length
+    if (includeStats) {
+      // Buscar todos os alunos ativos para cálculo dos KPIs gerais (Alunos Matriculados e Alunos Integral/Intermediário)
+      const { data: alunosData } = await supabaseServer
+        .from('alunos')
+        .select('id, turma, status, dados')
 
-    const totalAlunosIntegral = activeAlunos.filter((a: any) => isAlunoIntegralIntermediario(a)).length
+      const activeAlunos = (alunosData || []).filter((a: any) => a.status !== 'inativo' && a.status !== 'Inativo')
+      totalAlunosMatriculados = activeAlunos.length
 
-    // Buscar capacidade total de todas as turmas
-    const { data: allTurmasCap } = await supabaseServer
-      .from('turmas')
-      .select('capacidade')
+      totalAlunosIntegral = activeAlunos.filter((a: any) => isAlunoIntegralIntermediario(a)).length
 
-    const capacidadeTotal = (allTurmasCap || []).reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
-    const vagasOcupadasPercent = capacidadeTotal > 0 ? Math.round((totalAlunosMatriculados / capacidadeTotal) * 100) : 0
+      // Buscar capacidade total de todas as turmas
+      const { data: allTurmasCap } = await supabaseServer
+        .from('turmas')
+        .select('capacidade')
 
-    // Calcular matriculados por turma em tempo real para os itens da tabela
-    if (data && data.length > 0) {
-      data.forEach((t: any) => {
-        const countAlunos = activeAlunos.filter((a: any) => isAlunoCursandoTurma(a, t, t.ano)).length;
-        t.matriculados = countAlunos;
-      })
+      capacidadeTotal = (allTurmasCap || []).reduce((acc: number, t: any) => acc + (parseInt(t.capacidade) || 30), 0)
+      vagasOcupadasPercent = capacidadeTotal > 0 ? Math.round((totalAlunosMatriculados / capacidadeTotal) * 100) : 0
+
+      // Calcular matriculados por turma em tempo real para os itens da tabela
+      if (data && data.length > 0) {
+        data.forEach((t: any) => {
+          const countAlunos = activeAlunos.filter((a: any) => isAlunoCursandoTurma(a, t, t.ano)).length;
+          t.matriculados = countAlunos;
+        })
+      }
     }
 
     return NextResponse.json({

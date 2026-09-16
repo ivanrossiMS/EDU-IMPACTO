@@ -33,11 +33,16 @@ import {
   FileText
 } from 'lucide-react'
 
+import dynamic from 'next/dynamic'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { PixBottomSheet } from '../../components/PixBottomSheet'
-import { DeclaracaoIrpfModal } from '../../components/DeclaracaoIrpfModal'
+
+const DeclaracaoIrpfModal = dynamic(
+  () => import('../../components/DeclaracaoIrpfModal').then(mod => mod.DeclaracaoIrpfModal),
+  { ssr: false }
+)
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -1673,13 +1678,15 @@ export default function ADFinanceiroPage() {
       )}
 
       {/* ── Modal de Declaração de IRPF ─────────────────────────────────────── */}
-      <DeclaracaoIrpfModal
-        isOpen={irpfModalOpen}
-        onClose={() => setIrpfModalOpen(false)}
-        alunos={alunosOptions}
-        currentAno={selectedAno}
-        responsavelId={data?.guardianId}
-      />
+      {irpfModalOpen && (
+        <DeclaracaoIrpfModal
+          isOpen={irpfModalOpen}
+          onClose={() => setIrpfModalOpen(false)}
+          alunos={alunosOptions}
+          currentAno={selectedAno}
+          responsavelId={data?.guardianId}
+        />
+      )}
     </div>
   )
 }

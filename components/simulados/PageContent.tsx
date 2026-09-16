@@ -380,8 +380,20 @@ export function PageContent({
             border: none !important;
             cursor: default !important;
           }
-          .field-label-tag, .texto-apoio-badge, .texto-apoio-spacer, .no-print {
+          .field-label-tag, .texto-apoio-badge, .texto-apoio-spacer, .no-print, .reorder-popover {
             display: none !important;
+          }
+          .reorder-trigger {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border: 2px solid #cbd5e1 !important;
+            color: #475569 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            cursor: default !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
 
@@ -493,7 +505,7 @@ export function PageContent({
               paddingRight: cIndex < page.length - 1 ? '6mm' : 0
             }}>
             {col.map((block: any, bIndex: number) => {
-              const blockKey = `b-${block.type}-${block.q?.id || block.discName || ''}-${block.alt?.id || (block.chunkIndex !== undefined ? block.chunkIndex : (block.originalIndex !== undefined ? block.originalIndex : bIndex))}`;
+              const blockKey = `b-${bIndex}-${block.type}-${block.q?.id || block.q?._internalId || block.discName || ''}${block.originalIndex !== undefined ? `-orig-${block.originalIndex}` : ''}${block.chunkIndex !== undefined ? `-chunk-${block.chunkIndex}` : ''}${block.startChunkIndex !== undefined ? `-start-${block.startChunkIndex}` : ''}${block.alt?.id ? `-alt-${block.alt.id}` : ''}${block.lineIndex !== undefined ? `-line-${block.lineIndex}` : ''}`;
               
               if (block.type === 'part_disciplina') {
                 return (
@@ -1003,7 +1015,7 @@ export function PageContent({
                               };
 
                               return (
-                                <div key={a.id} className="alt-hover-group" style={{ 
+                                <div key={a.id || `alt-${aIndex}`} className="alt-hover-group" style={{ 
                                   display: 'flex', gap: 12, 
                                   marginTop: 6, 
                                   alignItems: 'flex-start', position: 'relative',
@@ -1749,7 +1761,7 @@ export function PageContent({
                           };
 
                           return (
-                            <div key={a.id} className="alt-hover-group" style={{ 
+                            <div key={a.id || `alt-${aIndex}`} className="alt-hover-group" style={{ 
                               display: 'flex', gap: 12, alignItems: 'flex-start', position: 'relative',
                               flex: qCols > 1 ? undefined : (effectiveWidth ? '0 0 auto' : '1 1 200px'),
                               fontSize: `${alternativasFontSize}px`,

@@ -608,12 +608,12 @@ export default function ADMomentosPage() {
     const rawFiles = Array.from(e.target.files)
     e.target.value = ''
 
-    const MAX_LIMIT = 100 * 1024 * 1024 // 100MB
+    const MAX_LIMIT = 50 * 1024 * 1024 // 50MB (limite do servidor/bucket)
     const validFiles: File[] = []
 
     for (const f of rawFiles) {
       if (f.size > MAX_LIMIT) {
-        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 100MB.`, 'Arquivo muito grande')
+        adAlert(`O arquivo "${f.name}" (${formatFileSize(f.size)}) excede o limite máximo de 50MB suportado pelo servidor. Escolha um arquivo menor ou reduza a resolução.`, 'Arquivo muito grande')
         continue
       }
       validFiles.push(f)
@@ -627,12 +627,15 @@ export default function ADMomentosPage() {
       for (const file of validFiles) {
         setMediaOriginalSizes(prev => ({ ...prev, [file.name]: file.size }))
 
-        if (file.type.startsWith('image/')) {
+        const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name)
+        const isVideo = file.type.startsWith('video/') || file.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(file.name)
+
+        if (isImage) {
           // Pré-comprime a foto na seleção de forma rápida e converte para WebP
           const compressed = await compressImage(file, { maxWidth: 1920, maxHeight: 1920, quality: 0.75 })
           processedFiles.push(compressed)
           setMediaThumbnails(prev => ({ ...prev, [compressed.name]: URL.createObjectURL(compressed) }))
-        } else if (file.type.includes('video') || file.name.toLowerCase().endsWith('.mov')) {
+        } else if (isVideo) {
           processedFiles.push(file)
           const { thumbnailUrl } = await extractVideoThumbnail(file)
           if (thumbnailUrl) {
@@ -659,11 +662,11 @@ export default function ADMomentosPage() {
     if (!newPost.mediaFiles.length) return adAlert('Selecione ao menos uma foto ou vídeo para publicar.', 'Atenção')
     if (!newPost.targetClasses.length) return adAlert('Por favor, selecione ao menos um destinatário (Turma, Grupo ou Aluno) para publicar o momento.', 'Destinatários obrigatórios')
     
-    // Validar tamanhos (100MB)
-    const MAX_VIDEO_SIZE = 100 * 1024 * 1024 // 100MB
+    // Validar tamanhos (50MB)
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
     for (const f of newPost.mediaFiles) {
-      if ((f.type.includes('video') || f.name.toLowerCase().endsWith('.mov')) && f.size > MAX_VIDEO_SIZE) {
-        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) é muito grande. O limite é 100MB.`, 'Arquivo muito grande')
+      if ((f.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(f.name)) && f.size > MAX_VIDEO_SIZE) {
+        return adAlert(`O vídeo "${f.name}" (${formatFileSize(f.size)}) é muito grande. O limite máximo é 50MB.`, 'Arquivo muito grande')
       }
     }
 
@@ -678,18 +681,25 @@ export default function ADMomentosPage() {
         let fileToUpload: File = file
         const originalSize = mediaOriginalSizes[file.name] || file.size
 
-        if (file.type.startsWith('image/')) {
+        const isImage = file.type.startsWith('image/') || /\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i.test(file.name)
+        const isVideo = file.type.startsWith('video/') || file.type.includes('video') || /\.(mp4|mov|webm|m4v|3gp|mkv|avi)$/i.test(file.name)
+
+        if (isImage) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 20 }))
           if (file.size > 2 * 1024 * 1024) {
             fileToUpload = await compressImage(file, { quality: 0.70, format: 'image/webp' })
           }
           setUploadProgress(prev => ({ ...prev, [file.name]: 50 }))
-        } else if (file.type.startsWith('video/') || file.type.includes('video') || file.name.toLowerCase().endsWith('.mov')) {
+        } else if (isVideo) {
           setUploadProgress(prev => ({ ...prev, [file.name]: 10 }))
           fileToUpload = await compressVideo(file, (percent) => {
             const scaled = Math.round(10 + (percent * 0.40))
             setUploadProgress(prev => ({ ...prev, [file.name]: scaled }))
           }) as File
+        }
+
+        if (fileToUpload.size > 50 * 1024 * 1024) {
+          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)}) ultrapassa o limite de 50MB suportado pelo servidor.`)
         }
 
         setUploadProgress(prev => ({ ...prev, [file.name]: 60 }))
@@ -707,7 +717,7 @@ export default function ADMomentosPage() {
         
         uploadedMediaReport.push({
           name: file.name,
-          type: (file.type.includes('video') || file.name.toLowerCase().endsWith('.mov')) ? 'video' : 'image',
+          type: isVideo ? 'video' : 'image',
           originalSize,
           finalSize: fileToUpload.size
         })
@@ -715,7 +725,7 @@ export default function ADMomentosPage() {
         // Sucesso
         setUploadProgress(prev => ({ ...prev, [file.name]: 100 }))
 
-        return { type: (file.type.includes('video') || file.name.toLowerCase().endsWith('.mov')) ? 'video' : 'image', url: uploadRes.url }
+        return { type: isVideo ? 'video' : 'image', url: uploadRes.url }
       }))
 
       const isSelected = newPost.targetClasses.length > 0;
@@ -1718,11 +1728,13 @@ export default function ADMomentosPage() {
                               }}
                             >
                               {med.type === 'video' || med.url.match(/\.(mp4|webm)$/i) ? (
-                                <video src={med.url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} controls playsInline />
+                                <video src={med.url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} controls playsInline preload="metadata" />
                               ) : (
                                 <img 
                                   src={med.url} 
                                   alt="Momento Escolar" 
+                                  loading="lazy"
+                                  decoding="async"
                                   style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.5s ease' }} 
                                   onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.06)'}
                                   onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}

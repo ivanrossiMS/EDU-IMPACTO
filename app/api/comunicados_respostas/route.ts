@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getColaboradorIds } from '@/lib/server/notificationHelper'
+import { getColaboradorIds, getInstitutionalMasterAdminIds } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 
@@ -189,18 +189,23 @@ export async function POST(request: Request) {
       const msgTexto = body.conteudo.length > 50 ? body.conteudo.substring(0, 50) + '...' : body.conteudo;
       const remetenteNome = body.remetente_nome || user.user_metadata?.nome || user.user_metadata?.name || (serverIsAdmin ? 'A Escola' : 'Usuário');
 
-      if (!body.is_admin) {
-        // Responsável/Aluno respondeu -> Notifica a Escola (Autor original do comunicado)
+      if (!serverIsAdmin) {
+        // Responsável/Aluno respondeu -> Notifica a Escola (Autor original do comunicado + Administradores Master Institucionais)
         const { data: comData } = await supabase
           .from('comunicados')
           .select('titulo, dados')
           .eq('id', body.comunicado_id)
           .single();
         
-        if (comData && comData.dados && comData.dados.autorId) {
-          const rawAutorId = comData.dados.autorId;
-          const resolvedIds = await getColaboradorIds([rawAutorId]);
-          const targetUserIds = resolvedIds.length > 0 ? resolvedIds : [rawAutorId];
+        if (comData) {
+          const rawAutorId = comData.dados?.autorId;
+          let baseTargets: string[] = [];
+          if (rawAutorId) {
+            const resolvedIds = await getColaboradorIds([rawAutorId]);
+            baseTargets = resolvedIds.length > 0 ? resolvedIds : [rawAutorId];
+          }
+          const masterAdminIds = await getInstitutionalMasterAdminIds();
+          const targetUserIds = Array.from(new Set([...baseTargets, ...masterAdminIds])).filter(Boolean);
           
           try {
             for (const uid of targetUserIds) {

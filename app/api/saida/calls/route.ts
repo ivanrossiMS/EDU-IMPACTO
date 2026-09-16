@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const toDate = url.searchParams.get('to')
     const studentId = url.searchParams.get('studentId')
     const limitParam = url.searchParams.get('limit')
-    const limit = limitParam ? parseInt(limitParam, 10) : 1000
+    const limit = limitParam ? parseInt(limitParam, 10) : 500
     let query = supabase.from('saida_calls').select('id, dados, created_at').order('created_at', { ascending: false }).limit(limit)
     
     if (studentId) {
@@ -39,18 +39,25 @@ export async function GET(request: Request) {
       query = query.lte('created_at', toDate + 'T23:59:59')
     }
     
-    const { data, error } = await query
-      
-    if (error) throw new Error(error.message)
-    
-    let rawResult = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
-
-    // Buscar saídas registradas na tabela de frequências para garantir histórico completo
     const targetDate = fromDate || todayStr
-    const { data: freqRecords } = await supabase
+    let freqQuery = supabase
       .from('frequencias')
       .select('id, aluno_id, turma_id, data, dados, created_at')
       .gte('data', targetDate)
+
+    if (toDate) {
+      freqQuery = freqQuery.lte('data', toDate)
+    } else {
+      freqQuery = freqQuery.lte('data', targetDate)
+    }
+
+    // Executa as consultas ao Supabase em paralelo para reduzir tempo de resposta
+    const [callsRes, freqRes] = await Promise.all([query, freqQuery])
+    if (callsRes.error) throw new Error(callsRes.error.message)
+    
+    const data = callsRes.data
+    const freqRecords = freqRes.data || []
+    let rawResult = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
 
     const existingStudentIds = new Set(rawResult.map(c => String(c.studentId || '').trim()))
 
@@ -204,8 +211,8 @@ export async function POST(request: Request) {
       const { error } = await supabaseService.from('saida_calls').upsert(rows, { onConflict: 'id' })
       if (error) throw new Error(error.message)
       
-      // Processar Notificações de Saída e Chamada de Portaria
-      for (const row of rows) {
+      // Processar Notificações de Saída e Chamada de Portaria em paralelo
+      const pushTasks = rows.map(async (row: any) => {
         const existing = existingStatusMap.get(row.id)
         const isConfirmed = row.dados?.status === 'confirmed'
         const studentId = row.dados?.studentId ? String(row.dados.studentId) : null
@@ -234,7 +241,8 @@ export async function POST(request: Request) {
             })
           }
         }
-      }
+      })
+      await Promise.allSettled(pushTasks)
 
       return NextResponse.json({ ok: true, count: rows.length })
     }
@@ -246,23 +254,38 @@ export async function POST(request: Request) {
     const todayStr = formatter.format(new Date())
 
     const studentId = row.dados?.studentId ? String(row.dados.studentId) : null
-    if (studentId && !row.dados?.studentPhoto) {
-      const { data: sPhoto } = await supabaseService.from('alunos').select('foto, foto_url').eq('id', studentId).maybeSingle()
-      if (sPhoto?.foto || sPhoto?.foto_url) {
-        row.dados.studentPhoto = sPhoto.foto || sPhoto.foto_url
-      }
-    }
     const incomingStatus = row.dados?.status
     const isRevert = !!row.dados?.isRevert
 
-    if (studentId && (incomingStatus === 'waiting' || incomingStatus === 'called') && !isRevert) {
-      const { data: studentCallsToday } = await supabaseService
-        .from('saida_calls')
-        .select('id, dados')
-        .eq('dados->>studentId', studentId)
-        .gte('created_at', `${todayStr}T00:00:00-04:00`)
+    // Consultas preliminares em paralelo: foto faltante, chamadas do aluno hoje, e registro existente
+    const photoPromise = (studentId && !row.dados?.studentPhoto)
+      ? supabaseService.from('alunos').select('foto, foto_url').eq('id', studentId).maybeSingle()
+      : Promise.resolve({ data: null })
 
-      const confirmedEntry = (studentCallsToday || []).find(r => {
+    const studentCallsPromise = (studentId && (incomingStatus === 'waiting' || incomingStatus === 'called') && !isRevert)
+      ? supabaseService
+          .from('saida_calls')
+          .select('id, dados')
+          .eq('dados->>studentId', studentId)
+          .gte('created_at', `${todayStr}T00:00:00-04:00`)
+      : Promise.resolve({ data: null })
+
+    const existingRowPromise = supabaseService.from('saida_calls').select('dados').eq('id', row.id).maybeSingle()
+
+    const [photoRes, studentCallsRes, existingRowRes] = await Promise.all([
+      photoPromise,
+      studentCallsPromise,
+      existingRowPromise,
+    ])
+
+    const sPhoto = photoRes?.data as any
+    if (sPhoto?.foto || sPhoto?.foto_url) {
+      row.dados.studentPhoto = sPhoto.foto || sPhoto.foto_url
+    }
+
+    if (studentCallsRes?.data) {
+      const studentCallsToday = studentCallsRes.data as any[]
+      const confirmedEntry = studentCallsToday.find(r => {
         let d = r.dados
         if (typeof d === 'string') { try { d = JSON.parse(d) } catch(e){} }
         return d?.status === 'confirmed'
@@ -276,7 +299,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const { data: existingRow } = await supabaseService.from('saida_calls').select('dados').eq('id', row.id).maybeSingle()
+    const existingRow = existingRowRes?.data as any
     
     let wasConfirmed = false
     let previousStatus: string | null = null
@@ -316,8 +339,8 @@ export async function POST(request: Request) {
           .eq('dados->>studentId', studentId)
           .gte('created_at', `${todayStr}T00:00:00-04:00`)
 
-        for (const sRow of (siblingCalls || [])) {
-          if (sRow.id === data.id) continue
+        const updateSiblingPromises = (siblingCalls || []).map(async sRow => {
+          if (sRow.id === data.id) return
           let sDados = sRow.dados
           if (typeof sDados === 'string') { try { sDados = JSON.parse(sDados) } catch(e){} }
           if (sDados && (sDados.status === 'waiting' || sDados.status === 'called') && !sDados.isRevert) {
@@ -325,7 +348,8 @@ export async function POST(request: Request) {
             sDados.confirmedAt = data.dados?.confirmedAt || new Date().toISOString()
             await supabaseService.from('saida_calls').update({ dados: sDados }).eq('id', sRow.id)
           }
-        }
+        })
+        await Promise.all(updateSiblingPromises)
       } catch (errSibling) {
         console.error('Error updating sibling calls in DB:', errSibling)
       }

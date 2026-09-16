@@ -3,7 +3,7 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets } from '@/lib/server/notificationHelper'
+import { getResponsavelIdsForTargets, getInstitutionalMasterAdminIds } from '@/lib/server/notificationHelper'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -106,8 +106,10 @@ export async function POST(request: Request) {
       // Disparar push em background para não bloquear o response (batch)
       after(async () => {
         const allPushPromises: Promise<any>[] = []
+        const masterAdminIds = await getInstitutionalMasterAdminIds()
         for (const row of rows) {
-          const targetIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
+          const parentIds = await getResponsavelIdsForTargets({ targetStudents: [row.aluno_id] })
+          const targetIds = Array.from(new Set([...parentIds, ...masterAdminIds])).filter(Boolean)
           if (targetIds.length > 0) {
             const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', row.aluno_id).single()
             const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
@@ -134,7 +136,9 @@ export async function POST(request: Request) {
 
     // Disparar push em background para não bloquear o response (single)
     after(async () => {
-      const targetIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
+      const parentIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
+      const masterAdminIds = await getInstitutionalMasterAdminIds()
+      const targetIds = Array.from(new Set([...parentIds, ...masterAdminIds])).filter(Boolean)
       if (targetIds.length > 0) {
         const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
         const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'

@@ -557,3 +557,32 @@ test('Cenário 15: isSessionExpiredOrExpiringSoon detecta expiração com limiar
   const session3 = { access_token: 'acc', refresh_token: 'ref', expires_at: now - 10 };
   assert.strictEqual(secureSession.isSessionExpiredOrExpiringSoon(session3, 300), true);
 });
+
+test('Cenário 16: clearSessionSecurely remove chaves de usuário (edu-current-user, etc.) do Keychain e Preferences', async () => {
+  resetAllMocks();
+  isNative = true;
+
+  // Popula chaves de perfil nos tiers
+  storageMap.set('cap_sec_edu-current-user', JSON.stringify({ id: 'user_test', nome: 'João' }));
+  storageMap.set('cap_sec_edu-current-perfil', 'Professor');
+  storageMap.set('CapacitorStorage.edu-current-user', JSON.stringify({ id: 'user_test', nome: 'João' }));
+  storageMap.set('CapacitorStorage.edu_auth_user', JSON.stringify({ id: 'user_test' }));
+  localStorageMock.setItem('edu-current-user', JSON.stringify({ id: 'user_test' }));
+  localStorageMock.setItem('edu-current-perfil', 'Professor');
+
+  await secureSession.clearSessionSecurely('user_test');
+
+  assert.strictEqual(storageMap.has('cap_sec_edu-current-user'), false, 'edu-current-user deve ser removido do Keychain');
+  assert.strictEqual(storageMap.has('cap_sec_edu-current-perfil'), false, 'edu-current-perfil deve ser removido do Keychain');
+  assert.strictEqual(storageMap.has('CapacitorStorage.edu-current-user'), false, 'edu-current-user deve ser removido de Preferences');
+  assert.strictEqual(storageMap.has('CapacitorStorage.edu_auth_user'), false, 'edu_auth_user deve ser removido de Preferences');
+  assert.strictEqual(localStorageMock.getItem('edu-current-user'), null, 'edu-current-user deve ser removido do localStorage');
+});
+
+test('Cenário 17: isPermanentTokenRevocation reconhece mensagens de sessão vazia e logout', () => {
+  assert.strictEqual(secureSession.isPermanentTokenRevocation({ message: 'No valid session stored to refresh' }), true);
+  assert.strictEqual(secureSession.isPermanentTokenRevocation({ message: 'User logged out' }), true);
+  assert.strictEqual(secureSession.isPermanentTokenRevocation({ message: 'Logout barrier active' }), true);
+  assert.strictEqual(secureSession.isPermanentTokenRevocation({ message: 'Network connection failed' }), false);
+});
+

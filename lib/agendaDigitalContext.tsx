@@ -5,6 +5,7 @@ import { useLocalStorage } from './useLocalStorage'
 import { useSupabaseArray } from './useSupabaseCollection'
 import { useQueryComunicados, useQueryMomentos } from '@/lib/hooks/useAgendaQueries'
 import { useQueryClient } from '@tanstack/react-query'
+import { usePathname } from 'next/navigation'
 
 export interface ADComunicado {
   id: string
@@ -167,8 +168,11 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const familyOptions = isFamily ? { fetcher: async () => [], refreshIntervalMs: 0 } : undefined;
 
   const queryClient = useQueryClient()
+  const pathname = usePathname() || ''
+  const isComunicadosRoute = pathname.includes('comunicados') || pathname === '/agenda-digital/admin'
+  const isMomentosRoute = pathname.includes('momentos') || pathname === '/agenda-digital/admin'
 
-  const comunicadosQuery = useQueryComunicados('/api/comunicados', 5, { enabled: !isFamilyFetch })
+  const comunicadosQuery = useQueryComunicados('/api/comunicados', 5, { enabled: !isFamilyFetch && isComunicadosRoute })
   const comunicados = comunicadosQuery.data?.pages?.flat() || []
   const comunicadosLoading = comunicadosQuery.isLoading || comunicadosQuery.isFetching
 
@@ -216,7 +220,7 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   const chatsLoading = false;
   const messagesLoading = false;
   
-  const momentosQuery = useQueryMomentos('/api/agenda/momentos', 20, { enabled: !isFamilyFetch })
+  const momentosQuery = useQueryMomentos('/api/agenda/momentos', 20, { enabled: !isFamilyFetch && isMomentosRoute })
   const momentosFeed = useMemo(() => {
     return momentosQuery.data?.pages?.flat() || []
   }, [momentosQuery.data?.pages])

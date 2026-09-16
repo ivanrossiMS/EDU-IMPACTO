@@ -38,11 +38,10 @@ import {
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
-import { useApp } from '@/lib/context'
+import { useApp, saveSetting } from '@/lib/context'
 import { UserAvatar } from '@/components/UserAvatar'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
-import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useQuery } from '@tanstack/react-query'
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/agenda-digital/admin' },
@@ -83,7 +82,6 @@ export function ADSidebar() {
   const { currentUser, setCurrentUser, theme, setTheme, loadingPath, setLoadingPath } = useApp()
   const { adConfig } = useAgendaDigital()
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [equipes] = useSupabaseArray<any>('agenda/equipes')
 
   const getMirrorParams = () => {
     if (!isMirroring) return ''
@@ -108,20 +106,21 @@ export function ADSidebar() {
   const respId = espelharRespId || baseRespId
   const isAlunoLogado = espelharAluno || currentUser?.cargo === 'Aluno'
 
-  // Extrair ID do aluno da rota (ex: /agenda-digital/4697/...)
+  // Extrair ID do aluno ou rota de colaborador (ex: /agenda-digital/4697/... ou /agenda-digital/colaborador/...)
   const segments = pathname.split('/')
-  const isSlugPath = segments[1] === 'agenda-digital' && segments[2] && segments[2] !== 'admin' && segments[2] !== 'selecionar-aluno'
+  const nonSlugSegments = ['admin', 'selecionar-aluno', 'selecionar-perfil-admin']
+  const isSlugPath = segments[1] === 'agenda-digital' && segments[2] && !nonSlugSegments.includes(segments[2])
   const alunoId = isSlugPath ? segments[2] : ''
 
   const { data: profileData } = useQuery({
     queryKey: ['agenda', 'perfil-acesso', alunoId, respId, isAlunoLogado],
     queryFn: async () => {
-       if (!alunoId || !respId) return null;
+       if (!alunoId || !respId || alunoId === 'colaborador') return null;
        const res = await fetch(`/api/agenda/perfil-acesso?slug=${alunoId}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`);
        if (!res.ok) throw new Error('Falha ao carregar perfil');
        return res.json();
     },
-    enabled: !!(alunoId && respId),
+    enabled: !!(alunoId && alunoId !== 'colaborador' && respId),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -172,7 +171,10 @@ export function ADSidebar() {
         throw new Error(updateErr.error || 'Erro ao salvar a foto de perfil.')
       }
 
-      localStorage.setItem(`edu-user-photo-${currentUser.id}`, fotoUrl)
+      saveSetting(`edu-user-photo-${currentUser.id}`, fotoUrl)
+      if (currentUser.system_user_id && currentUser.system_user_id !== currentUser.id) {
+        saveSetting(`edu-user-photo-${currentUser.system_user_id}`, fotoUrl)
+      }
       setCurrentUser({ ...currentUser, foto: fotoUrl })
       
     } catch (err: any) {

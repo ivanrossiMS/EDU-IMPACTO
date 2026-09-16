@@ -910,7 +910,7 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
       <div className="card-avatar-container student-avatar">
         <div className="card-avatar-inner">
           {student.foto ? (
-            <img src={student.foto} alt={student.nome} className="card-avatar-img" />
+            <img src={student.foto} alt={student.nome} loading="lazy" decoding="async" className="card-avatar-img" />
           ) : (
             getInitials(student.nome)
           )}
@@ -1213,7 +1213,7 @@ function SelecionarAlunoContent() {
                 <div className="card-avatar-container collaborator-avatar">
                   <div className="card-avatar-inner">
                     {currentUser.foto ? (
-                      <img src={currentUser.foto} alt={currentUser.nome} className="card-avatar-img" />
+                      <img src={currentUser.foto} alt={currentUser.nome} loading="lazy" decoding="async" className="card-avatar-img" />
                     ) : (
                       getInitials(currentUser.nome || 'Colaborador')
                     )}

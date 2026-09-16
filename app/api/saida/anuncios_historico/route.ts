@@ -47,11 +47,13 @@ export async function POST(request: Request) {
 
     const listToSave = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : [body]
 
+    const slicedList = listToSave.slice(0, 5)
+
     const { data, error } = await supabase
       .from('configuracoes')
       .upsert({
         chave: 'saida_anuncios_historico',
-        valor: listToSave.slice(0, 5), // Manter apenas os 5 mais recentes
+        valor: slicedList, // Manter apenas os 5 mais recentes
         updated_at: new Date().toISOString()
       })
       .select()
@@ -62,7 +64,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json(listToSave, { status: 200 })
+    return NextResponse.json(data?.valor || slicedList, { status: 200 })
   } catch (err: any) {
     console.error('[saida_anuncios_historico POST] Exceção:', err)
     return NextResponse.json({ error: err.message }, { status: 400 })

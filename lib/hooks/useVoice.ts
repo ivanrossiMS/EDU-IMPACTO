@@ -23,11 +23,15 @@ interface QueueItem {
   opts: VoiceOptions
 }
 
+const MAX_VOICE_QUEUE_SIZE = 12
+
 export function useVoice(defaultOpts: VoiceOptions = {}): UseVoiceReturn {
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
   const queue = useRef<QueueItem[]>([])
   const processing = useRef(false)
+  const defaultOptsRef = useRef(defaultOpts)
+  defaultOptsRef.current = defaultOpts
 
   const isSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
 
@@ -37,14 +41,19 @@ export function useVoice(defaultOpts: VoiceOptions = {}): UseVoiceReturn {
     const load = () => setVoices(window.speechSynthesis.getVoices())
     load()
     window.speechSynthesis.addEventListener('voiceschanged', load)
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', load)
+    return () => {
+      window.speechSynthesis.removeEventListener('voiceschanged', load)
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
   }, [isSupported])
 
   const processQueue = useCallback(() => {
     if (!isSupported || processing.current || queue.current.length === 0) return
     processing.current = true
     const item = queue.current.shift()!
-    const merged = { ...defaultOpts, ...item.opts }
+    const merged = { ...defaultOptsRef.current, ...item.opts }
 
     const utterance = new SpeechSynthesisUtterance(item.text)
     utterance.rate   = merged.rate   ?? 1.0
@@ -85,10 +94,13 @@ export function useVoice(defaultOpts: VoiceOptions = {}): UseVoiceReturn {
       processing.current = false
       setIsSpeaking(false)
     }
-  }, [isSupported, defaultOpts])
+  }, [isSupported])
 
   const speak = useCallback((text: string, opts: VoiceOptions = {}) => {
     if (!isSupported) return
+    if (queue.current.length >= MAX_VOICE_QUEUE_SIZE) {
+      queue.current.shift() // descarta mais antigo para evitar retenção de memória descontrolada
+    }
     queue.current.push({ text, opts })
     processQueue()
   }, [isSupported, processQueue])

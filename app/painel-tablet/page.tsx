@@ -4,7 +4,7 @@ import { useSupabaseArray } from '@/lib/useSupabaseCollection';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image';
 
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { SaidaProvider, useSaida } from '@/lib/saidaContext'
 import { useData } from '@/lib/dataContext'
 import { useIsMobile } from '@/lib/hooks/useIsMobile'
@@ -96,6 +96,37 @@ const STANDALONE_STYLES = `
   @keyframes shimmerSweep {
     100% { transform: translateX(100%); }
   }
+  #test-rfid-input, .rfid-discrete-input {
+    background: rgba(15, 23, 42, 0.45) !important;
+    color: rgba(241, 245, 249, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 6px !important;
+    outline: none !important;
+    text-align: center !important;
+    font-size: 10px !important;
+    width: 65px !important;
+    padding: 3px 6px !important;
+    backdrop-filter: blur(4px) !important;
+    transition: all 0.25s ease !important;
+    letter-spacing: 0.02em !important;
+  }
+  #test-rfid-input::placeholder, .rfid-discrete-input::placeholder {
+    color: rgba(241, 245, 249, 0.22) !important;
+    font-size: 10px !important;
+    letter-spacing: 0.04em !important;
+  }
+  #test-rfid-input:hover, .rfid-discrete-input:hover {
+    background: rgba(15, 23, 42, 0.75) !important;
+    border-color: rgba(6, 182, 212, 0.3) !important;
+    color: rgba(241, 245, 249, 0.6) !important;
+  }
+  #test-rfid-input:focus, .rfid-discrete-input:focus {
+    background: rgba(15, 23, 42, 0.95) !important;
+    border-color: rgba(6, 182, 212, 0.55) !important;
+    color: #f1f5f9 !important;
+    width: 110px !important;
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.25) !important;
+  }
 `
 
 // ─── Helper: verifica se hoje é dia permitido ─────────────────────────────────
@@ -120,7 +151,7 @@ function isDiaPermitido(diasSemana: string[]): boolean {
 }
 
 // ─── StudentCard: card grande clicável ────────────────────────────────────────
-function StudentCard({
+const StudentCard = React.memo(function StudentCard({
   aluno, aut, guardianName, rfidCode, onCall, onRecall, index,
 }: {
   aluno: any; aut: any; guardianName: string
@@ -376,7 +407,7 @@ function StudentCard({
       </div>
     </div>
   )
-}
+})
 
 // ─── Inner component ──────────────────────────────────────────────────────────
 function TabletCardSkeleton() {
@@ -423,17 +454,24 @@ function SiblingCallModal({
 }) {
   const [countdown, setCountdown] = useState(14)
   const isMobile = useIsMobile()
+  const onFinishRef = useRef(onFinish)
+  useEffect(() => {
+    onFinishRef.current = onFinish
+  }, [onFinish])
 
   useEffect(() => {
-    if (countdown <= 0) {
-      onFinish()
-      return
-    }
     const timer = setInterval(() => {
-      setCountdown(prev => prev - 1)
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          onFinishRef.current()
+          return 0
+        }
+        return prev - 1
+      })
     }, 1000)
     return () => clearInterval(timer)
-  }, [countdown, onFinish])
+  }, [])
 
   return (
     <motion.div
@@ -704,10 +742,28 @@ function PainelTabletContent() {
 
   // Ref to RFIDInput so we can clear the buffer after each scan
   const rfidRef = useRef<RFIDInputHandle>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const blockResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const activeCallsRef = useRef(activeCalls)
+  useEffect(() => {
+    activeCallsRef.current = activeCalls
+  }, [activeCalls])
+
+  const turmaNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const t of (turmas || [])) {
+      if (t.id) map.set(String(t.id), t.nome)
+      if (t.codigo) map.set(String(t.codigo), t.nome)
+      if (t.nome) map.set(String(t.nome), t.nome)
+    }
+    return map
+  }, [turmas])
 
   const showToast = useCallback((msg: string, ok = true) => {
     setToast({ msg, ok })
-    setTimeout(() => setToast(null), 3200)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 3200)
   }, [])
 
   // ── Fallback Polling 30s se o Supabase Realtime falhar ou desconectar ──────────
@@ -721,7 +777,7 @@ function PainelTabletContent() {
     }
   }, [realtimeStatus, refreshCalls])
 
-  // ── Busca Manual via API com Debounce (300ms) ──────────────────────────────
+  // ── Busca Manual via API com Debounce (300ms) + AbortController ──────────────
   useEffect(() => {
     const q = search.trim()
     if (q.length < 3) {
@@ -733,27 +789,36 @@ function PainelTabletContent() {
 
     setIsSearching(true)
     setHasSearched(true)
+    const controller = new AbortController()
 
     const delayDebounce = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&status=ativo&limit=25`)
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&status=ativo&limit=25`, {
+          signal: controller.signal
+        })
         if (res.ok) {
           const payload = await res.json()
           setManualStudents(payload.data || [])
         }
-      } catch (err) {
-        console.error('Erro na busca manual de alunos:', err)
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Erro na busca manual de alunos:', err)
+        }
       } finally {
         setIsSearching(false)
       }
     }, 300)
 
-    return () => clearTimeout(delayDebounce)
+    return () => {
+      clearTimeout(delayDebounce)
+      controller.abort()
+    }
   }, [search])
 
   const doBlockReset = useCallback(() => {
     rfidRef.current?.clear()
-    setTimeout(() => {
+    if (blockResetTimerRef.current) clearTimeout(blockResetTimerRef.current)
+    blockResetTimerRef.current = setTimeout(() => {
       setBlockInfo(null); setMode('idle'); setRfidCode(undefined)
       setRfidStudents([]); setMatchedGuardianName(''); setMatchedGuardianRole('')
     }, 4000)
@@ -939,17 +1004,17 @@ function PainelTabletContent() {
 
     const gId  = `rfid-${rfidCode}`
     const foto = a.foto && typeof a.foto === 'string' && a.foto.length > 10 ? a.foto : null
-    const tObj = (turmas || []).find((t: any) => String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma)
-    const turmaNome = tObj?.nome || a.turma
+    const turmaNome = turmaNameMap.get(String(a.turma)) || a.turma
     const call = callStudent(a.id, a.nome, turmaNome, gId, matchedGuardianName, 'rfid', rfidCode, foto)
     if (!call) { showToast(`${a.nome} já está em chamada ativa!`, false); return }
     showToast(`📣 ${a.nome} foi chamado(a)!`)
     rfidRef.current?.clear()
 
     // Verificar se existem outros alunos vinculados a esta leitura de RFID que ainda não foram chamados (apenas ativos)
+    const currentActiveCalls = activeCallsRef.current || []
     const remaining = rfidStudents.filter(s => {
       if (s.id === a.id) return false
-      const alreadyActive = activeCalls.some(c => c.studentId === s.id && (c.status === 'waiting' || c.status === 'called'))
+      const alreadyActive = currentActiveCalls.some(c => c.studentId === s.id && (c.status === 'waiting' || c.status === 'called'))
       const isProibido = s._aut?.proibido === true
       const sInativo = s.inativo === true || s._aut?.inativo === true || String(s.status || s.dados?.status || '').trim().toLowerCase() === 'inativo'
       const diaOk = isDiaPermitido(s._aut?.diasSemana || [])
@@ -967,13 +1032,12 @@ function PainelTabletContent() {
         handleReset()
       }, 1000)
     }
-  }, [rfidCode, matchedGuardianName, callStudent, showToast, turmas, rfidStudents, activeCalls, handleReset])
+  }, [rfidCode, matchedGuardianName, callStudent, showToast, turmaNameMap, rfidStudents, handleReset])
 
   const handleCallAnotherInModal = useCallback((sibling: any) => {
     const gId  = `rfid-${rfidCode}`
     const foto = sibling.foto && typeof sibling.foto === 'string' && sibling.foto.length > 10 ? sibling.foto : null
-    const tObj = (turmas || []).find((t: any) => String(t.id) === String(sibling.turma) || t.codigo === sibling.turma || t.nome === sibling.turma)
-    const turmaNome = tObj?.nome || sibling.turma
+    const turmaNome = turmaNameMap.get(String(sibling.turma)) || sibling.turma
     const call = callStudent(sibling.id, sibling.nome, turmaNome, gId, matchedGuardianName, 'rfid', rfidCode, foto)
     if (call) {
       showToast(`📣 ${sibling.nome} foi chamado(a)!`)
@@ -986,27 +1050,22 @@ function PainelTabletContent() {
         setTimeout(() => handleReset(), 800)
         return null
       }
-      return {
-        ...prev,
-        calledStudent: sibling,
-        remainingStudents: nextRemaining
-      }
+      return { ...prev, remainingStudents: nextRemaining }
     })
-  }, [rfidCode, turmas, callStudent, matchedGuardianName, showToast, handleReset])
+  }, [rfidCode, matchedGuardianName, callStudent, showToast, turmaNameMap, handleReset])
 
   const handleCallAllRemainingInModal = useCallback(() => {
     if (!siblingModal) return
     const gId  = `rfid-${rfidCode}`
     siblingModal.remainingStudents.forEach(sibling => {
       const foto = sibling.foto && typeof sibling.foto === 'string' && sibling.foto.length > 10 ? sibling.foto : null
-      const tObj = (turmas || []).find((t: any) => String(t.id) === String(sibling.turma) || t.codigo === sibling.turma || t.nome === sibling.turma)
-      const turmaNome = tObj?.nome || sibling.turma
+      const turmaNome = turmaNameMap.get(String(sibling.turma)) || sibling.turma
       callStudent(sibling.id, sibling.nome, turmaNome, gId, matchedGuardianName, 'rfid', rfidCode, foto)
     })
     showToast(`📣 Todos os outros alunos foram chamados!`)
     setSiblingModal(null)
     setTimeout(() => handleReset(), 800)
-  }, [siblingModal, rfidCode, turmas, callStudent, matchedGuardianName, showToast, handleReset])
+  }, [siblingModal, rfidCode, turmaNameMap, callStudent, matchedGuardianName, showToast, handleReset])
 
   const handleFinishModal = useCallback(() => {
     setSiblingModal(null)
@@ -1564,27 +1623,11 @@ function PainelTabletContent() {
         <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 60 }}>
           <input
             id="test-rfid-input"
+            className="rfid-discrete-input"
             type="text"
             placeholder="RFID..."
-            style={{ 
-              width: 70, padding: '4px', fontSize: 10, 
-              background: 'rgba(15, 28, 46, 0.2)', color: 'rgba(241, 245, 249, 0.15)', 
-              border: '1px solid rgba(6,182,212,0.05)', borderRadius: 6,
-              outline: 'none', textAlign: 'center',
-              backdropFilter: 'blur(2px)', transition: 'all 0.2s'
-            }}
-            onFocus={(e) => { 
-              e.target.style.color = '#f1f5f9'; 
-              e.target.style.background = 'rgba(15, 28, 46, 0.8)'; 
-              e.target.style.border = '1px solid rgba(6,182,212,0.4)';
-              e.target.style.width = '120px';
-            }}
-            onBlur={(e) => { 
-              e.target.style.color = 'rgba(241, 245, 249, 0.15)'; 
-              e.target.style.background = 'rgba(15, 28, 46, 0.2)'; 
-              e.target.style.border = '1px solid rgba(6,182,212,0.05)';
-              e.target.style.width = '70px';
-            }}
+            autoComplete="off"
+            spellCheck={false}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleRFID(e.currentTarget.value)

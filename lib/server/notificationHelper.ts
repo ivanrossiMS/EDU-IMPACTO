@@ -391,6 +391,55 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
 }
 
 /**
+ * Remove prefixos de entidades (f_, func_, eq_, g_, a_, _ALU) com segurança sem
+ * cortar caracteres hexadecimais (f, e, a) que fazem parte de UUIDs válidos ou e-mails.
+ */
+export function cleanEntityPrefix(val: any): string {
+  if (!val) return ''
+  return String(val).replace(/^(?:f_|func_|eq_|g_|a_|_ALU)/i, '').trim()
+}
+
+/**
+ * Obtém os identificadores (auth_id, id, email) de todos os Administradores Master / Gestores Institucionais ativos.
+ */
+export async function getInstitutionalMasterAdminIds(): Promise<string[]> {
+  try {
+    const supabase = supabaseServer
+    const { data: adminUsers, error } = await supabase
+      .from('system_users')
+      .select('id, auth_id, email, cargo, perfil, status')
+      .or('status.neq.inativo,status.is.null')
+      .limit(100)
+
+    if (error || !adminUsers) return []
+
+    const masterRoles = [
+      'administrador master',
+      'administrador',
+      'admin',
+      'diretor geral',
+      'diretora geral',
+      'master'
+    ]
+
+    const ids = new Set<string>()
+    adminUsers.forEach((u: any) => {
+      const cargo = String(u.cargo || '').toLowerCase().trim()
+      const perfil = String(u.perfil || '').toLowerCase().trim()
+      if (masterRoles.includes(cargo) || masterRoles.includes(perfil)) {
+        if (u.id) ids.add(String(u.id))
+        if (u.auth_id) ids.add(String(u.auth_id))
+        if (u.email) ids.add(String(u.email).toLowerCase().trim())
+      }
+    })
+    return Array.from(ids)
+  } catch (err) {
+    console.warn('[NotifHelper] Erro ao buscar administradores master:', err)
+    return []
+  }
+}
+
+/**
  * Resolve os IDs de colaboradores para push direto.
  * Mapeia tanto system_users.id, auth_id (Auth UUID), email quanto funcionarios.id/user_id para entrega OneSignal.
  */
@@ -402,7 +451,7 @@ export async function getColaboradorIds(colaboradoresIds: string[]): Promise<str
     const val = typeof idAny === 'object' && idAny !== null
       ? (idAny.id || idAny.colaboradorId || idAny.usuarioId || idAny.funcionarioId || idAny.user_id)
       : idAny
-    const clean = String(val || '').replace(/^[feq_]+/, '').trim()
+    const clean = cleanEntityPrefix(val)
     if (clean && clean !== '[object Object]') finalIds.add(clean)
   })
 
@@ -498,7 +547,7 @@ function extractCleanTerms(arr: any): string[] {
   return Array.from(new Set(terms.filter(Boolean)))
 }
 
-function extractCleanIds(arr: any, prefixRegex = /^[feqag_]+/): string[] {
+function extractCleanIds(arr: any, prefixRegex = /^(?:f_|func_|eq_|g_|a_|_ALU)/i): string[] {
   if (!arr) return []
   if (typeof arr === 'string') {
     try { arr = JSON.parse(arr) } catch { return [arr.replace(prefixRegex, '').trim()].filter(Boolean) }
@@ -573,7 +622,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
         const s = typeof id === 'string' ? id : String(id || '')
         return !s.startsWith('f_') && !s.startsWith('func_')
       }),
-      /^(a_|_ALU)/
+      /^(?:a_|_ALU)/i
     )
 
     const colaboradoresIds = extractCleanIds([
@@ -582,7 +631,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       ...(innerDados.colaboradoresIds || []),
       ...(innerDados.funcionariosIds || []),
       ...colabsFromAlunosIds, // fallback: colaboradores que foram mal colocados em alunosIds
-    ], /^[feq_]+/)
+    ], /^(?:f_|func_|eq_|g_)/i)
 
     if (colabsFromAlunosIds.length > 0) {
       console.log(`[NotifHelper] Fallback: ${colabsFromAlunosIds.length} colaboradores detectados em alunosIds e movidos para colaboradoresIds`)
@@ -706,7 +755,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             if (Array.isArray(colabs)) {
               colabs.forEach((c: any) => {
                 const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId || c.user_id) : c;
-                const clean = String(val || '').replace(/^[feq_]+/, '').trim()
+                const clean = cleanEntityPrefix(val)
                 if (clean && clean !== '[object Object]') colaboradoresIds.push(clean)
               });
             }
@@ -737,7 +786,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             if (Array.isArray(membros)) {
               membros.forEach((c: any) => {
                 const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId || c.user_id) : c;
-                const clean = String(val || '').replace(/^[feq_]+/, '').trim()
+                const clean = cleanEntityPrefix(val)
                 if (clean && clean !== '[object Object]') colaboradoresIds.push(clean)
               })
             }
@@ -776,7 +825,7 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
                   if (Array.isArray(colabs)) {
                     colabs.forEach((c: any) => {
                       const val = typeof c === 'object' && c !== null ? (c.id || c.colaboradorId || c.usuarioId || c.funcionarioId || c.user_id) : c;
-                      const clean = String(val || '').replace(/^[feq_]+/, '').trim()
+                      const clean = cleanEntityPrefix(val)
                       if (clean && clean !== '[object Object]') colaboradoresIds.push(clean)
                     });
                   }
@@ -981,9 +1030,19 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
     colaboradoresIds.forEach(id => {
       const idAny = id as any
       const val = typeof idAny === 'object' && idAny !== null ? (idAny.id || idAny.colaboradorId || idAny.usuarioId || idAny.funcionarioId || idAny.user_id) : idAny;
-      const clean = String(val || '').replace(/^[feq_]+/, '').trim()
+      const clean = cleanEntityPrefix(val)
       if (clean && clean !== '[object Object]') finalColabIds.add(clean)
     })
+
+    // Incluir Administradores Master / Acesso Institucional para supervisão contínua da escola
+    try {
+      const masterAdminIds = await getInstitutionalMasterAdminIds()
+      masterAdminIds.forEach(id => {
+        if (id) finalColabIds.add(id)
+      })
+    } catch (adminErr) {
+      console.warn('[NotifHelper] Erro ao incluir administradores master em comunicados:', adminErr)
+    }
 
     if (finalColabIds.size > 0) {
       try {

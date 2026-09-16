@@ -23,13 +23,25 @@ export async function GET(request: Request) {
     const supabase = supabaseServer
 
     // Verificar se é admin
+    const adminPerfis = ['administrador', 'administrador master', 'admin', 'diretor geral', 'diretora geral', 'direção', 'master']
+    let userFilter = `id.eq.${user.id}`
+    if (user.email) {
+      userFilter += `,auth_id.eq.${user.id},email.ilike.${user.email}`
+    } else {
+      userFilter += `,auth_id.eq.${user.id}`
+    }
+
     const { data: dbUser } = await supabase
       .from('system_users')
-      .select('perfil')
-      .eq('id', user.id)
+      .select('id, auth_id, perfil, cargo')
+      .or(userFilter)
       .maybeSingle()
 
-    if (!dbUser || dbUser.perfil !== 'Administrador') {
+    const userPerfil = String(dbUser?.perfil || user.user_metadata?.perfil || '').toLowerCase().trim()
+    const userCargo = String(dbUser?.cargo || user.user_metadata?.cargo || '').toLowerCase().trim()
+    const isMasterOrAdmin = adminPerfis.includes(userPerfil) || adminPerfis.includes(userCargo)
+
+    if (!isMasterOrAdmin) {
       return NextResponse.json({ error: 'Acesso negado. Apenas Administradores.' }, { status: 403 })
     }
 
@@ -106,13 +118,25 @@ export async function POST(request: Request) {
     const supabase = supabaseServer
 
     // Verificar se é admin
+    const adminPerfis = ['administrador', 'administrador master', 'admin', 'diretor geral', 'diretora geral', 'direção', 'master']
+    let userFilter = `id.eq.${user.id}`
+    if (user.email) {
+      userFilter += `,auth_id.eq.${user.id},email.ilike.${user.email}`
+    } else {
+      userFilter += `,auth_id.eq.${user.id}`
+    }
+
     const { data: dbUser } = await supabase
       .from('system_users')
-      .select('perfil')
-      .eq('id', user.id)
+      .select('id, auth_id, perfil, cargo')
+      .or(userFilter)
       .maybeSingle()
 
-    if (!dbUser || dbUser.perfil !== 'Administrador') {
+    const userPerfil = String(dbUser?.perfil || user.user_metadata?.perfil || '').toLowerCase().trim()
+    const userCargo = String(dbUser?.cargo || user.user_metadata?.cargo || '').toLowerCase().trim()
+    const isMasterOrAdmin = adminPerfis.includes(userPerfil) || adminPerfis.includes(userCargo)
+
+    if (!isMasterOrAdmin) {
       return NextResponse.json({ error: 'Acesso negado. Apenas Administradores.' }, { status: 403 })
     }
 

@@ -371,6 +371,8 @@ export async function POST(request: NextRequest) {
         (await cookies()).delete('edu_keep_connected')
         response.cookies.delete('edu_keep_connected')
       }
+      (await cookies()).delete('edu_logout_pending_barrier')
+      response.cookies.delete('edu_logout_pending_barrier')
     } catch(e) {}
 
     return response

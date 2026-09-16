@@ -24,7 +24,6 @@ import {
 } from 'lucide-react'
 import { DeclaracaoIrpfDocument, DeclaracaoIrpfData } from './DeclaracaoIrpfDocument'
 import { generateDeclaracaoHtml } from './declaracaoHtmlGenerator'
-import { generateDeclaracaoPdf } from './declaracaoPdfGenerator'
 import { toast } from 'sonner'
 
 interface StudentOption {
@@ -262,6 +261,7 @@ export function DeclaracaoIrpfModal({
     setSavingPdf(true)
 
     try {
+      const { generateDeclaracaoPdf } = await import('./declaracaoPdfGenerator')
       const pdfBytes = await generateDeclaracaoPdf(docData)
       const blob = new Blob([pdfBytes as any], { type: 'application/pdf' })
       const safeName = (docData.aluno.nome || 'Aluno').replace(/\s+/g, '_')

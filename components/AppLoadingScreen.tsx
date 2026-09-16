@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import { IMPACTO_NEON_LOGO_DATA_URI } from '@/components/ui/impactoNeonLogoBase64'
 
 interface AppLoadingScreenProps {
   statusText?: string
@@ -126,34 +127,35 @@ export function AppLoadingScreen({
       <div
         style={{
           position: 'relative',
-          width: '210px',
-          height: '210px',
+          width: '220px',
+          height: '220px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          marginBottom: '28px',
+          marginBottom: '26px',
         }}
       >
-        {/* Anel orbital externo */}
+        {/* Anel orbital externo estático com brilho cósmico */}
         <div
           style={{
             position: 'absolute',
             inset: 0,
             borderRadius: '50%',
-            border: '1px solid rgba(139, 92, 246, 0.18)',
+            border: '1px solid rgba(139, 92, 246, 0.2)',
+            boxShadow: '0 0 24px rgba(139, 92, 246, 0.08)',
             pointerEvents: 'none',
           }}
         />
 
-        {/* Anel orbital interno dinâmico com rotação suave */}
+        {/* Anel orbital médio dinâmico com rotação horária e satélites neon */}
         <div
           style={{
             position: 'absolute',
-            width: '180px',
-            height: '180px',
+            width: '184px',
+            height: '184px',
             borderRadius: '50%',
-            border: '1px dashed rgba(56, 189, 248, 0.14)',
-            animation: 'orbitSlow 22s linear infinite',
+            border: '1px dashed rgba(56, 189, 248, 0.22)',
+            animation: 'orbitClockwise 20s linear infinite',
             pointerEvents: 'none',
           }}
         >
@@ -161,13 +163,13 @@ export function AppLoadingScreen({
           <div
             style={{
               position: 'absolute',
-              top: '18px',
-              left: '26px',
-              width: '7px',
-              height: '7px',
+              top: '16px',
+              left: '24px',
+              width: '8px',
+              height: '8px',
               borderRadius: '50%',
               backgroundColor: '#c084fc',
-              boxShadow: '0 0 10px #c084fc, 0 0 20px rgba(192, 132, 252, 0.8)',
+              boxShadow: '0 0 10px #c084fc, 0 0 22px rgba(192, 132, 252, 0.85)',
             }}
           />
 
@@ -175,76 +177,133 @@ export function AppLoadingScreen({
           <div
             style={{
               position: 'absolute',
-              bottom: '22px',
-              right: '28px',
-              width: '6px',
-              height: '6px',
+              bottom: '20px',
+              right: '26px',
+              width: '7px',
+              height: '7px',
               borderRadius: '50%',
               backgroundColor: '#38bdf8',
-              boxShadow: '0 0 10px #38bdf8, 0 0 18px rgba(56, 189, 248, 0.8)',
+              boxShadow: '0 0 10px #38bdf8, 0 0 20px rgba(56, 189, 248, 0.85)',
             }}
           />
         </div>
 
-        {/* Squircle Glassmorphic Card do Ícone */}
+        {/* Anel orbital interno giroscópio (sentido anti-horário) */}
+        <div
+          style={{
+            position: 'absolute',
+            width: '146px',
+            height: '146px',
+            borderRadius: '50%',
+            border: '1px dotted rgba(168, 85, 247, 0.28)',
+            animation: 'orbitCounter 14s linear infinite',
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* Halo de iluminação de fundo dual atmosférico (Magenta à esquerda, Ciano à direita) */}
+        <div
+          style={{
+            position: 'absolute',
+            width: '124px',
+            height: '124px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle at 35% 50%, rgba(192, 132, 252, 0.38) 0%, rgba(147, 51, 234, 0.18) 45%, transparent 70%)',
+            filter: 'blur(20px)',
+            pointerEvents: 'none',
+            animation: 'neonPulseMagenta 3.2s ease-in-out infinite alternate',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            width: '124px',
+            height: '124px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle at 65% 50%, rgba(56, 189, 248, 0.42) 0%, rgba(6, 182, 212, 0.2) 45%, transparent 70%)',
+            filter: 'blur(20px)',
+            pointerEvents: 'none',
+            animation: 'neonPulseCyan 3.2s ease-in-out infinite alternate',
+          }}
+        />
+
+        {/* Sombra de chão 3D reflexiva (Stage Floor Contact Glow) */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '42px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '90px',
+            height: '14px',
+            borderRadius: '50%',
+            background: 'radial-gradient(ellipse at center, rgba(56, 189, 248, 0.32) 0%, rgba(192, 132, 252, 0.22) 45%, transparent 75%)',
+            filter: 'blur(6px)',
+            pointerEvents: 'none',
+            animation: 'floorShadowPulse 3.2s ease-in-out infinite',
+            zIndex: 1,
+          }}
+        />
+
+        {/* Logo Central Impacto Neon 3D com Levitação Suave e Shimmer */}
         <div
           style={{
             position: 'relative',
-            width: '100px',
-            height: '100px',
-            borderRadius: '28px',
-            background: 'linear-gradient(145deg, rgba(30, 27, 75, 0.65) 0%, rgba(15, 23, 42, 0.8) 100%)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            border: '1.5px solid rgba(147, 51, 234, 0.4)',
+            width: '112px',
+            height: '112px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(124, 58, 237, 0.3), 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 32px rgba(139, 92, 246, 0.28)',
-            animation: 'badgePulse 3s ease-in-out infinite',
             zIndex: 2,
+            animation: 'emblemLevitate 3.2s ease-in-out infinite',
           }}
         >
-          {/* Capelo SVG com gradiente neon e contorno idêntico à imagem 1 */}
-          <svg
-            width="48"
-            height="48"
-            viewBox="0 0 24 24"
-            fill="none"
-            style={{ filter: 'drop-shadow(0 0 8px rgba(56, 189, 248, 0.5))' }}
+          {/* Card do Ícone com Cantos Arredondados e Máscara de Brilho */}
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              height: '100%',
+              borderRadius: '24px',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            <defs>
-              <linearGradient id="capGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#38bdf8" />
-                <stop offset="45%" stopColor="#818cf8" />
-                <stop offset="100%" stopColor="#c084fc" />
-              </linearGradient>
-            </defs>
-            {/* Chapéu Mortarboard */}
-            <path
-              d="M22 10L12 5L2 10L12 15L22 10Z"
-              stroke="url(#capGrad)"
-              strokeWidth="1.9"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <img
+              src={IMPACTO_NEON_LOGO_DATA_URI}
+              alt="Colégio Impacto"
+              width={112}
+              height={112}
+              decoding="sync"
+              loading="eager"
+              fetchPriority="high"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+              }}
+              draggable={false}
             />
-            {/* Base da cabeça */}
-            <path
-              d="M6 12.5V17C6 17 8.5 19.5 12 19.5C15.5 19.5 18 17 18 17V12.5"
-              stroke="url(#capGrad)"
-              strokeWidth="1.9"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+
+            {/* Raio de luz diagonal metálico moderno (Sheen Pass) */}
+            <div
+              style={{
+                position: 'absolute',
+                top: '-50%',
+                left: '-50%',
+                width: '200%',
+                height: '200%',
+                background: 'linear-gradient(110deg, transparent 38%, rgba(255, 255, 255, 0.22) 46%, rgba(56, 189, 248, 0.3) 50%, rgba(192, 132, 252, 0.25) 54%, transparent 62%)',
+                pointerEvents: 'none',
+                animation: 'lightSheenPass 3.8s cubic-bezier(0.4, 0, 0.2, 1) infinite',
+              }}
             />
-            {/* Cordão do Tassel na lateral */}
-            <path
-              d="M22 10V15.5C22 16.5 21 17 20 17"
-              stroke="url(#capGrad)"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          </div>
         </div>
       </div>
 
@@ -419,18 +478,73 @@ export function AppLoadingScreen({
 
       {/* ── 7. Animações Keyframe fluidas a 60fps ── */}
       <style>{`
-        @keyframes orbitSlow {
+        @keyframes orbitClockwise {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
-        @keyframes badgePulse {
+        @keyframes orbitCounter {
+          from { transform: rotate(360deg); }
+          to { transform: rotate(0deg); }
+        }
+        @keyframes emblemLevitate {
           0%, 100% {
-            transform: scale(1);
-            filter: drop-shadow(0 0 16px rgba(124, 58, 237, 0.3));
+            transform: translateY(0px) scale(1);
+            filter: drop-shadow(-6px 2px 14px rgba(192, 132, 252, 0.45))
+                    drop-shadow(6px 2px 14px rgba(56, 189, 248, 0.45))
+                    drop-shadow(0 10px 22px rgba(0, 0, 0, 0.65));
           }
           50% {
-            transform: scale(1.025);
-            filter: drop-shadow(0 0 28px rgba(56, 189, 248, 0.45));
+            transform: translateY(-6px) scale(1.035);
+            filter: drop-shadow(-10px 5px 24px rgba(192, 132, 252, 0.72))
+                    drop-shadow(10px 5px 24px rgba(56, 189, 248, 0.72))
+                    drop-shadow(0 18px 28px rgba(0, 0, 0, 0.75));
+          }
+        }
+        @keyframes lightSheenPass {
+          0% {
+            transform: translateX(-120%) rotate(25deg);
+            opacity: 0;
+          }
+          15% {
+            opacity: 0.85;
+          }
+          38% {
+            transform: translateX(120%) rotate(25deg);
+            opacity: 0;
+          }
+          100% {
+            transform: translateX(120%) rotate(25deg);
+            opacity: 0;
+          }
+        }
+        @keyframes floorShadowPulse {
+          0%, 100% {
+            transform: translateX(-50%) scale(1);
+            opacity: 0.7;
+          }
+          50% {
+            transform: translateX(-50%) scale(0.8);
+            opacity: 0.38;
+          }
+        }
+        @keyframes neonPulseMagenta {
+          0%, 100% {
+            opacity: 0.5;
+            transform: scale(0.94);
+          }
+          50% {
+            opacity: 0.85;
+            transform: scale(1.08);
+          }
+        }
+        @keyframes neonPulseCyan {
+          0%, 100% {
+            opacity: 0.55;
+            transform: scale(0.94);
+          }
+          50% {
+            opacity: 0.9;
+            transform: scale(1.08);
           }
         }
         @keyframes shimmerTrack {

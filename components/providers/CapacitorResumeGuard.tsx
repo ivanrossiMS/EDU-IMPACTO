@@ -95,7 +95,9 @@ export function CapacitorResumeGuard() {
         const pending = localStorage.getItem(LOGOUT_FLAG)
         if (hasBarrier || pending) {
           localStorage.removeItem(LOGOUT_FLAG)
-          window.location.replace('/login')
+          if (window.location.pathname !== '/login') {
+            window.location.replace('/login')
+          }
           return
         }
         checkAndFreshenSession('retorno ao primeiro plano (visibility)')

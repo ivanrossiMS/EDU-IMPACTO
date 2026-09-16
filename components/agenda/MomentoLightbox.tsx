@@ -574,6 +574,7 @@ export function MomentoLightbox({
               <img
                 src={currentItem.url}
                 alt={description || 'Momento'}
+                decoding="async"
                 draggable={false}
                 onDragStart={handleDragStart}
                 onContextMenu={handleContextMenu}

@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { SaidaProvider, useSaida, PickupCall } from '@/lib/saidaContext'
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useVoice } from '@/lib/hooks/useVoice'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
-import { supabase } from '@/lib/supabase'
+import { fetchSingleStudentPhoto } from '@/lib/studentPhotoCache'
 import Image from 'next/image'
 import { Tv, Clock, User, Nfc, Maximize, Wifi, WifiOff, Loader2 } from 'lucide-react'
 
@@ -28,8 +28,9 @@ function fmtTime(iso?: string) {
   }
 }
 
-function elapsedSec(since: string) {
-  return Math.floor((Date.now() - new Date(since).getTime()) / 1000)
+function elapsedSec(since: string, currentSecs?: number) {
+  const currentNow = currentSecs !== undefined ? currentSecs * 1000 : Date.now()
+  return Math.max(0, Math.floor((currentNow - new Date(since).getTime()) / 1000))
 }
 
 // Intelligent abbreviation for Portuguese student names to stay strictly in 1 line
@@ -59,53 +60,49 @@ function formatName(fullName: string) {
   return assembled
 }
 
-const globalTvPhotoCache = new Map<string, string>()
+// ── Clock Component (Isolates 1-second interval to avoid re-rendering main tree) ──
+const TVLiveClock = React.memo(function TVLiveClock() {
+  const [clock, setClock] = useState(() =>
+    new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  )
+  useEffect(() => {
+    const tick = () =>
+      setClock(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+    const iv = setInterval(tick, 1000)
+    return () => clearInterval(iv)
+  }, [])
 
-async function fetchStudentPhotoFromDb(studentId: string): Promise<string | null> {
-  try {
-    const res: any = await (supabase.from('alunos') as any)
-      .select('foto, foto_url')
-      .eq('id', studentId)
-      .maybeSingle()
-    return res?.data?.foto || res?.data?.foto_url || null
-  } catch {
-    return null
-  }
-}
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      fontFamily: 'monospace', fontSize: 32, fontWeight: 900, color: '#f1f5f9',
+      background: 'rgba(0,0,0,0.3)', padding: '10px 24px', borderRadius: 16,
+      border: '1.5px solid rgba(255,255,255,0.06)'
+    }}>
+      <Clock size={24} color="#06b6d4" />
+      {clock}
+    </div>
+  )
+})
 
 // ── Monitor Card - Full Background Photo ──────────────────────────────────────
-function MonitorStudentCard({ call, index }: { call: PickupCall, index: number }) {
+const MonitorStudentCard = React.memo(function MonitorStudentCard({ call, index, nowSecs }: { call: PickupCall, index: number, nowSecs?: number }) {
   const { config } = useSaida()
-  const [secs, setSecs] = useState(elapsedSec(call.calledAt))
   const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
   const [photoError, setPhotoError] = useState(false)
-
-  useEffect(() => {
-    const iv = setInterval(() => setSecs(elapsedSec(call.calledAt)), 1000)
-    return () => clearInterval(iv)
-  }, [call.calledAt])
 
   useEffect(() => {
     if (call.studentPhoto) {
       setResolvedPhoto(call.studentPhoto)
       setPhotoError(false)
-      if (call.studentId) globalTvPhotoCache.set(String(call.studentId), call.studentPhoto)
       return
     }
     if (!call.studentId) return
 
-    const cached = globalTvPhotoCache.get(String(call.studentId))
-    if (cached) {
-      setResolvedPhoto(cached)
-      setPhotoError(false)
-      return
-    }
-
     let isMounted = true
-    fetchStudentPhotoFromDb(call.studentId).then(p => {
+    fetchSingleStudentPhoto(call.studentId).then(p => {
       if (!isMounted) return
       if (p) {
-        globalTvPhotoCache.set(String(call.studentId), p)
         setResolvedPhoto(p)
         setPhotoError(false)
       }
@@ -113,6 +110,8 @@ function MonitorStudentCard({ call, index }: { call: PickupCall, index: number }
 
     return () => { isMounted = false }
   }, [call.studentPhoto, call.studentId])
+
+  const secs = elapsedSec(call.calledAt, nowSecs)
 
   const mins = Math.floor(secs / 60)
   const urgentLimit = (config?.tvUrgentTime ?? 5) * 60
@@ -189,17 +188,17 @@ function MonitorStudentCard({ call, index }: { call: PickupCall, index: number }
       </div>
     </div>
   )
-}
+})
 
 // Sort helper: most recent calledAt first
 const byTimeDesc = (a: PickupCall, b: PickupCall) =>
   new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime()
 
 // ── Secondary Student Card for Bottom Grid ──────────────────────────────────
-function MonitorSecondaryCard({ call, index }: { call: PickupCall, index: number }) {
+const MonitorSecondaryCard = React.memo(function MonitorSecondaryCard({ call, index, nowSecs }: { call: PickupCall, index: number, nowSecs?: number }) {
   const { config } = useSaida()
   const initials = call.studentName.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
-  const secs = elapsedSec(call.calledAt)
+  const secs = elapsedSec(call.calledAt, nowSecs)
   const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
   const [photoError, setPhotoError] = useState(false)
 
@@ -207,23 +206,14 @@ function MonitorSecondaryCard({ call, index }: { call: PickupCall, index: number
     if (call.studentPhoto) {
       setResolvedPhoto(call.studentPhoto)
       setPhotoError(false)
-      if (call.studentId) globalTvPhotoCache.set(String(call.studentId), call.studentPhoto)
       return
     }
     if (!call.studentId) return
 
-    const cached = globalTvPhotoCache.get(String(call.studentId))
-    if (cached) {
-      setResolvedPhoto(cached)
-      setPhotoError(false)
-      return
-    }
-
     let isMounted = true
-    fetchStudentPhotoFromDb(call.studentId).then(p => {
+    fetchSingleStudentPhoto(call.studentId).then(p => {
       if (!isMounted) return
       if (p) {
-        globalTvPhotoCache.set(String(call.studentId), p)
         setResolvedPhoto(p)
         setPhotoError(false)
       }
@@ -286,7 +276,7 @@ function MonitorSecondaryCard({ call, index }: { call: PickupCall, index: number
       </div>
     </div>
   )
-}
+})
 
 // ── TV Card Skeleton for Instant Rendering ──────────────────────────────────
 function TVCardSkeleton() {
@@ -311,18 +301,37 @@ function MonitorContent() {
   const [turmas] = useSupabaseArray<any>('turmas')
   const { on } = useBroadcastRealtime()
   
-  const voice = useVoice({ 
+  const voiceOpts = useMemo(() => ({ 
     rate: config?.voiceRate ?? 0.9, 
     volume: config?.voiceVolume ?? 1, 
     repeatCount: config?.voiceRepeatCount ?? 0, 
     voiceURI: config?.voiceURI || '' 
-  })
+  }), [config?.voiceRate, config?.voiceVolume, config?.voiceRepeatCount, config?.voiceURI])
+
+  const voice = useVoice(voiceOpts)
 
   const [displayCalls, setDisplayCalls] = useState<PickupCall[]>([])
-  const [clock, setClock] = useState('')
   const [audioUnlocked, setAudioUnlocked] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [nowSecs, setNowSecs] = useState(() => Math.floor(Date.now() / 1000))
   const spokenRef = useRef<Set<string>>(new Set())
+
+  // Atualiza tempo dos cartões a cada 10 segundos ao invés de 1s (reduz 90% dos renders)
+  useEffect(() => {
+    const iv = setInterval(() => setNowSecs(Math.floor(Date.now() / 1000)), 10000)
+    return () => clearInterval(iv)
+  }, [])
+
+  // Mapa de turmas para consulta O(1) instantânea
+  const turmaNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const t of (turmas || [])) {
+      if (t.id) map.set(String(t.id), t.nome)
+      if (t.codigo) map.set(String(t.codigo), t.nome)
+      if (t.nome) map.set(String(t.nome), t.nome)
+    }
+    return map
+  }, [turmas])
 
   // Configurable Scale, Rotation & Mode States
   const [rotation, setRotation] = useState<0 | 90 | 270>(0)
@@ -382,14 +391,16 @@ function MonitorContent() {
     }
   }, [])
 
-  // Fallback Polling 5s para auto-correção contínua e garantir zero perda de chamadas
+  // Fallback Polling apenas se estiver desconectado / offline para não sobrecarregar
   useEffect(() => {
     refreshCalls()
     const iv = setInterval(() => {
-      refreshCalls()
-    }, 5000)
+      if (realtimeStatus !== 'online') {
+        refreshCalls()
+      }
+    }, 15000)
     return () => clearInterval(iv)
-  }, [refreshCalls])
+  }, [refreshCalls, realtimeStatus])
 
   // Chrome/Browser TTS Resume Heartbeat (evita travamento do sintetizador de voz em background)
   useEffect(() => {
@@ -452,17 +463,20 @@ function MonitorContent() {
     setDisplayCalls(waitingCalls.sort(byTimeDesc).slice(0, 25))
   }, [activeCalls])
 
-  // Live clock
-  useEffect(() => {
-    const tick = () => setClock(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
-    tick()
-    const iv = setInterval(tick, 1000)
-    return () => clearInterval(iv)
-  }, [])
-
   // TTS voice feedback
   useEffect(() => {
     if (!audioUnlocked || !config?.voiceEnabled || !voice.isSupported) return
+
+    // Limpar chaves antigas de spokenRef se crescer demais
+    if (spokenRef.current.size > 200) {
+      let count = 0
+      for (const k of spokenRef.current) {
+        spokenRef.current.delete(k)
+        count++
+        if (count >= 100) break
+      }
+    }
+
     displayCalls.forEach(call => {
       if (call.status === 'blocked' || call.status === 'special_auth' || call.isRevert) return
       const ts = call.calledAt ? new Date(call.calledAt).getTime() : Date.now()
@@ -474,8 +488,7 @@ function MonitorContent() {
       if (!spokenRef.current.has(speechKey)) {
         spokenRef.current.add(speechKey)
         setTimeout(() => {
-          const turmaObj = (turmas || []).find((t: any) => String(t.id) === String(call.studentClass) || t.codigo === call.studentClass || t.nome === call.studentClass)
-          const tName = turmaObj?.nome || call.studentClass
+          const tName = turmaNameMap.get(String(call.studentClass)) || call.studentClass
           const cName = config?.voiceTruncateTurma && config?.voiceTruncateChar ? tName.split(config.voiceTruncateChar)[0].trim() : tName
           
           if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis.paused) {
@@ -485,7 +498,7 @@ function MonitorContent() {
         }, 500)
       }
     })
-  }, [displayCalls, config, voice, audioUnlocked, turmas])
+  }, [displayCalls, config, voice, audioUnlocked, turmaNameMap])
 
   const turmasRef = useRef(turmas)
   const configRef = useRef(config)
@@ -785,15 +798,7 @@ function playSchoolChime() {
             </div>
 
             {/* Clock */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              fontFamily: 'monospace', fontSize: 32, fontWeight: 900, color: '#f1f5f9',
-              background: 'rgba(0,0,0,0.3)', padding: '10px 24px', borderRadius: 16,
-              border: '1.5px solid rgba(255,255,255,0.06)'
-            }}>
-              <Clock size={24} color="#06b6d4" />
-              {clock}
-            </div>
+            <TVLiveClock />
           </div>
         </div>
 
@@ -867,9 +872,9 @@ function playSchoolChime() {
                 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 20, width: '100%' }}>
                   {displayCalls.slice(0, 8).map((call, idx) => {
-                    const classroomObj = (turmas || []).find((t: any) => String(t.id) === String(call.studentClass) || t.codigo === call.studentClass || t.nome === call.studentClass)
-                    const mappedCall = { ...call, studentClass: classroomObj?.nome || call.studentClass }
-                    return <MonitorStudentCard key={call.id} call={mappedCall} index={idx} />
+                    const tName = turmaNameMap.get(String(call.studentClass)) || call.studentClass
+                    const mappedCall = { ...call, studentClass: tName }
+                    return <MonitorStudentCard key={call.id} call={mappedCall} index={idx} nowSecs={nowSecs} />
                   })}
                 </div>
               </div>
@@ -907,9 +912,9 @@ function playSchoolChime() {
                     gap: 16
                   }}>
                     {displayCalls.slice(8).map((call, idx) => {
-                      const classroomObj = (turmas || []).find((t: any) => String(t.id) === String(call.studentClass) || t.codigo === call.studentClass || t.nome === call.studentClass)
-                      const mappedCall = { ...call, studentClass: classroomObj?.nome || call.studentClass }
-                      return <MonitorSecondaryCard key={call.id} call={mappedCall} index={idx} />
+                      const tName = turmaNameMap.get(String(call.studentClass)) || call.studentClass
+                      const mappedCall = { ...call, studentClass: tName }
+                      return <MonitorSecondaryCard key={call.id} call={mappedCall} index={idx} nowSecs={nowSecs} />
                     })}
                   </div>
                 </div>

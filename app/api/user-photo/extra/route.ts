@@ -17,9 +17,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Falta userId' }, { status: 400 })
     }
 
-    const loggedUser = user
-    if (loggedUser.id !== userId) {
-      return NextResponse.json({ error: 'Proibido atualizar dados de outro usuário' }, { status: 403 })
+    const loggedUser = user;
+    const isMasterAdmin = ['Diretor Geral', 'Administrador', 'Administrador Master'].includes(
+      loggedUser.user_metadata?.perfil || loggedUser.user_metadata?.cargo || ''
+    );
+    const isSelf = loggedUser.id === userId ||
+      loggedUser.email?.toLowerCase() === userId.toLowerCase() ||
+      loggedUser.user_metadata?.system_user_id === userId ||
+      loggedUser.user_metadata?.colaborador_id === userId;
+
+    if (!isSelf && !isMasterAdmin) {
+      return NextResponse.json({ error: 'Proibido atualizar dados de outro usuário' }, { status: 403 });
     }
 
     const supabaseAdmin = createClient(
@@ -31,33 +39,35 @@ export async function POST(request: Request) {
           persistSession: false
         }
       }
-    )
+    );
 
     const { data: current } = await supabaseAdmin
       .from('system_users')
-      .select('dados')
-      .eq('id', userId)
-      .single()
+      .select('id, dados')
+      .or(`id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`)
+      .maybeSingle();
 
-    const newDados = { 
-      ...(current?.dados || {}), 
-      bio, 
-      telefone, 
-      unidade 
+    if (current) {
+      const newDados = { 
+        ...(current.dados || {}), 
+        bio, 
+        telefone, 
+        unidade 
+      };
+
+      const { error: dbErr } = await supabaseAdmin
+        .from('system_users')
+        .update({ dados: newDados })
+        .eq('id', current.id);
+
+      if (dbErr) {
+        return NextResponse.json({ error: dbErr.message }, { status: 500 });
+      }
     }
 
-    const { error: dbErr } = await supabaseAdmin
-      .from('system_users')
-      .update({ dados: newDados })
-      .eq('id', userId)
-
-    if (dbErr) {
-      return NextResponse.json({ error: dbErr.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true });
   } catch (err: any) {
-    console.error('[API user-photo/extra POST] Error:', err)
-    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 })
+    console.error('[API user-photo/extra POST] Error:', err);
+    return NextResponse.json({ error: err.message || 'Erro interno' }, { status: 500 });
   }
 }

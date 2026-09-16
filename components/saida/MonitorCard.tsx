@@ -1,5 +1,4 @@
-'use client'
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { PickupCall } from '@/lib/saidaContext'
 import { GraduationCap, Megaphone } from 'lucide-react'
 
@@ -7,6 +6,7 @@ interface Props {
   call: PickupCall
   onConfirm?: (id: string) => void
   onRecall?: (id: string) => void
+  nowSecs?: number
 }
 
 function fmtTime(iso?: string) {
@@ -27,19 +27,30 @@ function fmtTime(iso?: string) {
     return String(iso)
   }
 }
-function elapsedSec(since: string) {
-  return Math.floor((Date.now() - new Date(since).getTime()) / 1000)
+
+function elapsedSec(since: string, currentSecs?: number) {
+  const nowMs = currentSecs !== undefined ? currentSecs * 1000 : Date.now()
+  return Math.max(0, Math.floor((nowMs - new Date(since).getTime()) / 1000))
 }
 
-export function MonitorCard({ call, onConfirm, onRecall }: Props) {
-  const [secs, setSecs] = useState(elapsedSec(call.calledAt))
+export const MonitorCard = React.memo(function MonitorCard({ call, onConfirm, onRecall, nowSecs }: Props) {
+  const [localSecs, setLocalSecs] = useState(() => elapsedSec(call.calledAt, nowSecs))
   const [recalling, setRecalling] = useState(false)
+  const recallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const iv = setInterval(() => setSecs(elapsedSec(call.calledAt)), 1000)
-    return () => clearInterval(iv)
-  }, [call.calledAt])
+    return () => {
+      if (recallTimerRef.current) clearTimeout(recallTimerRef.current)
+    }
+  }, [])
 
+  useEffect(() => {
+    if (nowSecs !== undefined) return
+    const iv = setInterval(() => setLocalSecs(elapsedSec(call.calledAt)), 1000)
+    return () => clearInterval(iv)
+  }, [call.calledAt, nowSecs])
+
+  const secs = nowSecs !== undefined ? elapsedSec(call.calledAt, nowSecs) : localSecs
   const mins = Math.floor(secs / 60)
   const isUrgent = secs > 120 // 2+ minutes
 
@@ -50,7 +61,8 @@ export function MonitorCard({ call, onConfirm, onRecall }: Props) {
     if (!onRecall) return
     setRecalling(true)
     onRecall(call.id)
-    setTimeout(() => setRecalling(false), 2000)
+    if (recallTimerRef.current) clearTimeout(recallTimerRef.current)
+    recallTimerRef.current = setTimeout(() => setRecalling(false), 2000)
   }
 
   return (
@@ -169,4 +181,4 @@ export function MonitorCard({ call, onConfirm, onRecall }: Props) {
       )}
     </div>
   )
-}
+})

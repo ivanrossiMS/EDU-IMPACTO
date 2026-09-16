@@ -99,7 +99,9 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     }, 1500)
 
     if (!currentUser) {
-      return () => clearTimeout(emergencyTimer)
+      clearTimeout(emergencyTimer)
+      router.replace('/login')
+      return
     }
 
     // Alunos/familiares só têm acesso a rotas comuns da agenda. Bloqueia se for /colaborador ou /admin.

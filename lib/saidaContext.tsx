@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, us
 import { useBroadcastRealtime } from '@/lib/hooks/useBroadcastRealtime'
 import { useSupabaseArray, useSupabaseCollection, invalidateCache } from '@/lib/useSupabaseCollection'
 import { supabase } from '@/lib/supabase'
+import { fetchSingleStudentPhoto } from '@/lib/studentPhotoCache'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type GuardianType = 'mae' | 'pai' | 'avo' | 'motorista' | 'outro'
@@ -137,15 +138,7 @@ function save(key: string, val: unknown) {
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) }
 function now() { return new Date().toISOString() }
 async function fetchStudentPhotoFromDb(studentId: string): Promise<string | null> {
-  try {
-    const res: any = await (supabase.from('alunos') as any)
-      .select('foto, foto_url')
-      .eq('id', studentId)
-      .maybeSingle()
-    return res?.data?.foto || res?.data?.foto_url || null
-  } catch {
-    return null
-  }
+  return fetchSingleStudentPhoto(studentId)
 }
 
 // ─── Context shape ─────────────────────────────────────────────────────────────
@@ -187,16 +180,34 @@ export function useSaida() {
   return c
 }
 
+function addProcessedBroadcast(set: Set<string>, id: string) {
+  set.add(id)
+  if (set.size > 260) {
+    let count = 0
+    for (const item of set) {
+      set.delete(item)
+      count++
+      if (count >= 100) break
+    }
+  }
+}
+
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function SaidaProvider({ children, enabled = true }: { children: React.ReactNode, enabled?: boolean }) {
   // `enabled` gates heavy data fetching (calls list, config) but Realtime channel
   // is ALWAYS active so all clients (including Família/mobile) receive live updates.
-  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled, mergeLocal: false, refreshIntervalMs: 5000 })
+  // Polling é 0 pois o canal Realtime Supabase entrega as alterações de forma instantânea.
+  const [activeCalls, setActiveCalls, { loading: isLoadingCalls, setLocal: setActiveCallsLocal }] = useSupabaseArray<PickupCall>('saida/calls', [], { enabled, mergeLocal: false, refreshIntervalMs: 0 })
   const [logs, setLogs] = useState<SaidaLog[]>([])
   const [config, setConfig, { loading: isConfigLoading }] = useSupabaseCollection<SaidaConfig>('saida/config', DEFAULT_CONFIG, { enabled })
 
   const { emit, on } = useBroadcastRealtime()
   const [realtimeStatus, setRealtimeStatus] = useState<'online' | 'connecting' | 'offline'>('connecting')
+
+  const setActiveCallsLocalRef = useRef(setActiveCallsLocal)
+  useEffect(() => {
+    setActiveCallsLocalRef.current = setActiveCallsLocal
+  }, [setActiveCallsLocal])
 
   const getTodayStr = useCallback(() => {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande' }).format(new Date())
@@ -233,8 +244,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
   }, [])
 
   const sendBroadcast = useCallback((event: string, data: any) => {
-    const eventId = Math.random().toString(36).substring(2, 15);
-    processedBroadcasts.current.add(eventId);
+    const eventId = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+
+    addProcessedBroadcast(processedBroadcasts.current, eventId)
 
     const doSend = () => {
       if (channelRef.current && channelRef.current.state === 'joined') {
@@ -245,11 +259,16 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         }).catch((e: any) => {
           console.warn('Realtime send ignored:', e)
         })
+        return true
       }
+      return false
     }
 
-    doSend()
-    setTimeout(doSend, 350)
+    const sent = doSend()
+    if (!sent) {
+      // Se canal ainda não estava no estado 'joined', tenta enviar uma vez após 200ms
+      setTimeout(doSend, 200)
+    }
   }, [])
 
   // ── Listen to Supabase Realtime changes and Broadcast Room ──────────────────
@@ -286,7 +305,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
               }
               const call = { id: newRow.id, ...rawDados } as PickupCall
               const callStudentId = call.studentId ? String(call.studentId) : null
-              setActiveCallsLocal?.((prev: PickupCall[]) => {
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => {
                 const arr = prev || []
                 // special_auth entries must ALWAYS stay as special_auth — never auto-confirm them
                 if (call.status === 'special_auth') {
@@ -318,7 +337,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
               }
               const call = { id: newRow.id, ...rawDados } as PickupCall
               const callStudentId = call.studentId ? String(call.studentId) : null
-              setActiveCallsLocal?.((prev: PickupCall[]) => {
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => {
                 const arr = prev || []
                 const isAlreadyConfirmed = callStudentId ? arr.some(c => c.studentId != null && String(c.studentId) === callStudentId && c.status === 'confirmed') : false
                 if (isAlreadyConfirmed && (call.status === 'waiting' || call.status === 'called') && !(call as any).isRevert) {
@@ -331,7 +350,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 return [call, ...arr]
               })
             } else if (eventType === 'DELETE') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).filter(c => c.id !== oldRow.id))
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => (prev || []).filter(c => c.id !== oldRow.id))
             }
           }
         )
@@ -342,12 +361,11 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
             const { event, data, eventId } = payload.payload || {}
             if (eventId) {
               if (processedBroadcasts.current.has(eventId)) return;
-              processedBroadcasts.current.add(eventId);
-              if (processedBroadcasts.current.size > 200) processedBroadcasts.current.clear();
+              addProcessedBroadcast(processedBroadcasts.current, eventId);
             }
             const dataStudentId = data?.studentId ? String(data.studentId) : null
             if (event === 'CALL_STUDENT') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => {
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => {
                 const arr = prev || []
                 // special_auth entries must ALWAYS stay as special_auth — never auto-confirm them
                 if (data.status === 'special_auth') {
@@ -372,13 +390,13 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 return [data, ...arr]
               })
             } else if (event === 'CONFIRM_PICKUP') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => ((c.id === data.callId || (dataStudentId && c.studentId != null && String(c.studentId) === dataStudentId)) && c.status !== 'special_auth') ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => (prev || []).map(c => ((c.id === data.callId || (dataStudentId && c.studentId != null && String(c.studentId) === dataStudentId)) && c.status !== 'special_auth') ? { ...c, status: 'confirmed', confirmedAt: data.confirmedAt } : c))
             } else if (event === 'CANCEL_CALL') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'cancelled' } : c))
             } else if (event === 'RECALL_STUDENT') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => (prev || []).map(c => c.id === data.callId ? { ...c, status: 'waiting', calledAt: data.calledAt } : c))
             } else if (event === 'REVERT_CALL') {
-              setActiveCallsLocal?.((prev: PickupCall[]) => {
+              setActiveCallsLocalRef.current?.((prev: PickupCall[]) => {
                 const arr = prev || []
                 const dataStudentIdStr = dataStudentId
                 const revertedEntry = arr.find(c => c.id === data.callId)
@@ -393,7 +411,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
                 }).filter(Boolean) as PickupCall[]
               })
             } else if (event === 'CLEAR_ALL_CALLS') {
-              setActiveCallsLocal?.([])
+              setActiveCallsLocalRef.current?.([])
             } else if (event === 'ANNOUNCEMENT_VOICE') {
               emit('ANNOUNCEMENT_VOICE', data || {})
             } else if (event === 'CANCEL_ANNOUNCEMENT') {
@@ -420,7 +438,7 @@ export function SaidaProvider({ children, enabled = true }: { children: React.Re
         supabase.removeChannel(channel)
       }
     }
-  }, [setActiveCalls])
+  }, [])
 
   // ── Listen for remote updates (Monitor TV / same-browser tab sync) ─────────────────
   useEffect(() => {

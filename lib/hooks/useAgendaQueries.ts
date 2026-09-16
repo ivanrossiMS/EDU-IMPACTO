@@ -1,7 +1,4 @@
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
-import { toast } from 'sonner'
-import { ADComunicado, ADMomento } from '@/lib/agendaDigitalContext'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { useApp } from '@/lib/context'
 
 // --- COMUNICADOS ---
@@ -13,7 +10,7 @@ export function useQueryComunicados(
   const { currentUser } = useApp()
   const isEnabled = (options?.enabled !== false) && !!currentUser && !!fetchUrl
   const query = useInfiniteQuery({
-    queryKey: ['agenda', 'comunicados', fetchUrl, currentUser?.id || 'anon'],
+    queryKey: ['agenda', 'comunicados', fetchUrl, currentUser?.id || 'anon', pageSize],
     initialPageParam: 0,
     queryFn: async ({ pageParam = 0 }) => {
       if (!currentUser || !fetchUrl) return [] 
@@ -48,7 +45,7 @@ export function useQueryMomentos(
   const { currentUser } = useApp()
   const isEnabled = (options?.enabled !== false) && !!currentUser && !!fetchUrl
   const query = useInfiniteQuery({
-    queryKey: ['agenda', 'momentos', fetchUrl, currentUser?.id || 'anon'],
+    queryKey: ['agenda', 'momentos', fetchUrl, currentUser?.id || 'anon', pageSize],
     initialPageParam: 0,
     queryFn: async ({ pageParam = 0 }) => {
       if (!currentUser || !fetchUrl) return [] 

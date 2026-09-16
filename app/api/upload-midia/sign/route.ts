@@ -17,8 +17,12 @@ export async function POST(request: Request) {
 
     const supabase = createAdminClient()
     
-    const safeBaseName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80)
-    const filePath = `${folder}/${Date.now()}_${safeBaseName}`
+    const ext = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.')) : ''
+    const baseName = fileName.includes('.') ? fileName.slice(0, fileName.lastIndexOf('.')) : fileName
+    const safeBaseName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60)
+    const safeExt = ext.replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
+    const cleanFolder = String(folder || 'uploads').replace(/[^a-zA-Z0-9_-]/g, '') || 'uploads'
+    const filePath = `${cleanFolder}/${Date.now()}_${safeBaseName || 'file'}${safeExt}`
 
     const { data, error } = await supabase.storage
       .from(bucket)

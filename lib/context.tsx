@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useCallback, useEffect } from 'rea
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin'
-import { restoreSessionSecurely } from '@/lib/auth/secureSession'
+import { restoreSessionSecurely, getLogoutBarrier, isUserLoggedOut } from '@/lib/auth/secureSession'
 import { supabase } from '@/lib/supabase'
 
 export type Theme = 'dark' | 'light'
@@ -32,7 +32,9 @@ export async function loadSettingAsync<T>(key: string, fallback: T): Promise<T> 
       if (key === 'edu-current-user' || key === 'edu-current-perfil') {
         try {
           const sec = await SecureStoragePlugin.get({ key })
-          if (sec?.value) return JSON.parse(sec.value) as T
+          if (sec?.value) {
+            try { return JSON.parse(sec.value) as T } catch { return sec.value as unknown as T }
+          }
         } catch {}
       }
 
@@ -41,12 +43,19 @@ export async function loadSettingAsync<T>(key: string, fallback: T): Promise<T> 
         const getPromise = Preferences.get({ key })
         const timeoutPromise = new Promise<{ value: string | null }>(res => setTimeout(() => res({ value: null }), 3500))
         const { value } = await Promise.race([getPromise, timeoutPromise])
-        if (value !== null && value !== undefined) return JSON.parse(value) as T
+        if (value !== null && value !== undefined) {
+          try { return JSON.parse(value) as T } catch { return value as unknown as T }
+        }
       } catch {}
     }
 
     const v = window.localStorage.getItem(key)
-    return v !== null ? (JSON.parse(v) as T) : fallback
+    if (v === null || v === undefined) return fallback
+    try {
+      return JSON.parse(v) as T
+    } catch {
+      return v as unknown as T
+    }
   } catch { return fallback }
 }
 
@@ -167,11 +176,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Isso elimina até 600ms de espera no resume do app.
     try {
       if (typeof window !== 'undefined') {
-        const syncUser = window.localStorage.getItem('edu-current-user')
+        const hasBarrierSync = window.localStorage.getItem('edu_logout_pending_barrier') || window.localStorage.getItem('edu-logout-pending')
+        const syncUser = hasBarrierSync ? null : window.localStorage.getItem('edu-current-user')
         const syncTheme = window.localStorage.getItem('edu-theme')
         const syncSidebarTheme = window.localStorage.getItem('edu-sidebar-theme')
         const syncUnit = window.localStorage.getItem('edu-active-unit')
-        const syncPerfil = window.localStorage.getItem('edu-current-perfil')
+        const syncPerfil = hasBarrierSync ? null : window.localStorage.getItem('edu-current-perfil')
         const syncModules = window.localStorage.getItem('edu-active-modules')
 
         if (syncTheme) setThemeState(JSON.parse(syncTheme))
@@ -181,11 +191,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (syncPerfil) setCurrentUserPerfilState(JSON.parse(syncPerfil))
         if (syncUser) {
           const parsedUser = JSON.parse(syncUser) as CurrentUser
-          // Tenta carregar foto isolada sincronamente
           const syncPhoto = parsedUser.id ? window.localStorage.getItem(`edu-user-photo-${parsedUser.id}`) : null
-          if (syncPhoto) parsedUser.foto = JSON.parse(syncPhoto)
+          if (syncPhoto) {
+            try {
+              parsedUser.foto = JSON.parse(syncPhoto)
+            } catch {
+              parsedUser.foto = syncPhoto
+            }
+          }
           setCurrentUserState(parsedUser)
           // NÃO marca hydrated aqui — aguarda a sessão ser verificada/restaurada em hydrate()
+        } else if (hasBarrierSync) {
+          setCurrentUserState(null)
+          setCurrentUserPerfilState('')
         }
         if (syncTheme) document.documentElement.setAttribute('data-theme', JSON.parse(syncTheme))
       }
@@ -198,6 +216,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrate() {
       try {
+        const barrier = await getLogoutBarrier()
+        const isLoggedOut = isUserLoggedOut() || Boolean(barrier)
+
+        if (isLoggedOut) {
+          console.log('[Context Hydration] Logout barrier ativo. Não restaurando credenciais antigas.')
+          setCurrentUserState(null)
+          setCurrentUserPerfilState('')
+          await removeSettingAsync('edu-current-user').catch(() => {})
+          await removeSettingAsync('edu-current-perfil').catch(() => {})
+
+          let [savedTheme, savedSidebarTheme, savedModules, savedUnit] = await Promise.all([
+            loadSettingAsync<Theme>('edu-theme', 'light'),
+            loadSettingAsync<Theme>('edu-sidebar-theme', 'dark'),
+            loadSettingAsync<Record<string, boolean>>('edu-active-modules', DEFAULT_MODULES),
+            loadSettingAsync<string>('edu-active-unit', 'Unidade Centro'),
+          ])
+
+          if (!isMounted) return
+          setThemeState(savedTheme)
+          setSidebarThemeState(savedSidebarTheme)
+          setActiveModulesState({ ...DEFAULT_MODULES, ...savedModules })
+          setActiveUnitState(savedUnit)
+          document.documentElement.setAttribute('data-theme', savedTheme)
+          return
+        }
+
         await restoreSessionSecurely(supabase).catch(() => {})
 
         let [savedTheme, savedSidebarTheme, savedModules, savedUnit, savedPerfil, savedUser] = await Promise.all([
@@ -253,16 +297,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ])
             if (isolatedPhoto) savedUser.foto = isolatedPhoto
             else if (extraData && extraData.foto) savedUser.foto = extraData.foto
+
+            if (!savedUser.foto && savedUser.system_user_id) {
+              const altPhoto = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.system_user_id}`, null)
+              if (altPhoto) savedUser.foto = altPhoto
+            }
+            if (!savedUser.foto && savedUser.colaborador_id) {
+              const altPhoto2 = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.colaborador_id}`, null)
+              if (altPhoto2) savedUser.foto = altPhoto2
+            }
           } catch (e) {}
           setCurrentUserState(savedUser)
         } else {
-          // Apenas zera perfil se não houver nenhum usuário síncrono ativo
-          setCurrentUserState(prev => {
-            if (!prev) {
-              setCurrentUserPerfilState('')
-            }
-            return prev
-          })
+          setCurrentUserState(null)
+          setCurrentUserPerfilState('')
         }
         document.documentElement.setAttribute('data-theme', savedTheme)
       } catch (err) {
@@ -323,6 +371,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Garante que a foto fique isolada para persistência extrema
         if (merged.foto) {
           saveSetting(`edu-user-photo-${merged.id}`, merged.foto)
+          if (merged.system_user_id && merged.system_user_id !== merged.id) {
+            saveSetting(`edu-user-photo-${merged.system_user_id}`, merged.foto)
+          }
+          if (merged.colaborador_id && merged.colaborador_id !== merged.id) {
+            saveSetting(`edu-user-photo-${merged.colaborador_id}`, merged.foto)
+          }
         }
         
         return merged

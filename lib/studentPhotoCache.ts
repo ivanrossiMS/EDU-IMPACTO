@@ -1,8 +1,21 @@
 'use client';
 
-// Cache global em memória durante a sessão da aplicação
+// Cache global em memória durante a sessão da aplicação com limite LRU
+const MAX_CACHE_SIZE = 400;
 const photoCache = new Map<string, string | null>();
 const inFlightRequests = new Map<string, Promise<Record<string, string | null>>>();
+
+function enforceCacheLimit(): void {
+  if (photoCache.size > MAX_CACHE_SIZE) {
+    // Remove os primeiros 80 itens inseridos (FIFO/LRU simples)
+    let count = 0;
+    for (const key of photoCache.keys()) {
+      photoCache.delete(key);
+      count++;
+      if (count >= 80) break;
+    }
+  }
+}
 
 export function getCachedStudentPhoto(id: string | number | undefined | null): string | null | undefined {
   if (!id) return undefined;
@@ -16,6 +29,7 @@ export function setCachedStudentPhoto(id: string | number | undefined | null, ph
   const key = String(id).trim().replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
   if (!key) return;
   photoCache.set(key, photo);
+  enforceCacheLimit();
 }
 
 export async function fetchStudentPhotos(ids: (string | number)[]): Promise<Record<string, string | null>> {
@@ -45,9 +59,10 @@ export async function fetchStudentPhotos(ids: (string | number)[]): Promise<Reco
   }
 
   // Chave do lote para deduplicação de requisições simultâneas
-  const batchKey = missingIds.sort().join(',');
-  if (inFlightRequests.has(batchKey)) {
-    const fetched = await inFlightRequests.get(batchKey)!;
+  const batchKey = missingIds.slice().sort().join(',');
+  const existingPromise = inFlightRequests.get(batchKey);
+  if (existingPromise) {
+    const fetched = await existingPromise;
     return { ...result, ...fetched };
   }
 
@@ -72,6 +87,7 @@ export async function fetchStudentPhotos(ids: (string | number)[]): Promise<Reco
         photoCache.set(id, photo);
         result[id] = photo;
       });
+      enforceCacheLimit();
 
       return photos;
     } catch (e) {
@@ -87,3 +103,17 @@ export async function fetchStudentPhotos(ids: (string | number)[]): Promise<Reco
 
   return result;
 }
+
+export async function fetchSingleStudentPhoto(id: string | number | undefined | null): Promise<string | null> {
+  if (!id) return null;
+  const cleanId = String(id).trim().replace(/^a_?/, '').replace(/^_*(ALU)?/, '');
+  if (!cleanId) return null;
+
+  if (photoCache.has(cleanId)) {
+    return photoCache.get(cleanId) ?? null;
+  }
+
+  const batchResult = await fetchStudentPhotos([cleanId]);
+  return batchResult[cleanId] ?? null;
+}
+

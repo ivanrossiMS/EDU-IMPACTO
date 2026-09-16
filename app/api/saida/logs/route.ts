@@ -15,7 +15,8 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const limit = parseInt(searchParams.get('limit') || '10000', 10)
+    const requestedLimit = parseInt(searchParams.get('limit') || '500', 10)
+    const limit = Math.min(Math.max(isNaN(requestedLimit) ? 500 : requestedLimit, 1), 2000)
 
     const supabase = await createProtectedClient()
 

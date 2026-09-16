@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   try {
     const supabase = await createProtectedClient()
-    const { data, error } = await supabase.from('saida_student_guardians').select('*')
+    const { data, error } = await supabase.from('saida_student_guardians').select('id, dados').limit(500)
     if (error) throw new Error(error.message)
     const result = (data || []).map(row => ({ id: row.id, ...(row.dados || {}) }))
     return NextResponse.json(result)

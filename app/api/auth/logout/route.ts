@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
     }
   })
   response.cookies.set('edu_keep_connected', '', { maxAge: 0, expires: new Date(0), path: '/' })
+  response.cookies.set('edu_logout_pending_barrier', '1', { maxAge: 86400, path: '/', sameSite: 'lax' })
 
   return response
 }
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
     }
   })
   response.cookies.set('edu_keep_connected', '', { maxAge: 0, expires: new Date(0), path: '/' })
+  response.cookies.set('edu_logout_pending_barrier', '1', { maxAge: 86400, path: '/', sameSite: 'lax' })
 
   return response
 }

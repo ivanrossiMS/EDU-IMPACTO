@@ -221,6 +221,48 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     return results
   }, [agendaCtx?.chatGroups, myCandidateStaffIds])
 
+  const currentUserRef = useRef(currentUser)
+  useEffect(() => { currentUserRef.current = currentUser }, [currentUser])
+
+  const meusAlunosRef = useRef(meusAlunos)
+  useEffect(() => { meusAlunosRef.current = meusAlunos }, [meusAlunos])
+
+  const turmasArrayRef = useRef(turmasArray)
+  useEffect(() => { turmasArrayRef.current = turmasArray }, [turmasArray])
+
+  const myCandidateStaffIdsRef = useRef(myCandidateStaffIds)
+  useEffect(() => { myCandidateStaffIdsRef.current = myCandidateStaffIds }, [myCandidateStaffIds])
+
+  const myStaffGroupNamesAndIdsRef = useRef(myStaffGroupNamesAndIds)
+  useEffect(() => { myStaffGroupNamesAndIdsRef.current = myStaffGroupNamesAndIds }, [myStaffGroupNamesAndIds])
+
+  const isStaffUserRef = useRef(isStaffUser)
+  useEffect(() => { isStaffUserRef.current = isStaffUser }, [isStaffUser])
+
+  const isMasterAdminRef = useRef(isMasterAdmin)
+  useEffect(() => { isMasterAdminRef.current = isMasterAdmin }, [isMasterAdmin])
+
+  const isColaboradorAccessRef = useRef(isColaboradorAccess)
+  useEffect(() => { isColaboradorAccessRef.current = isColaboradorAccess }, [isColaboradorAccess])
+
+  const hasDualAccessRef = useRef(hasDualAccess)
+  useEffect(() => { hasDualAccessRef.current = hasDualAccess }, [hasDualAccess])
+
+  const isFamilyRef = useRef(isFamily)
+  useEffect(() => { isFamilyRef.current = isFamily }, [isFamily])
+
+  const alunoObjRef = useRef(alunoObj)
+  useEffect(() => { alunoObjRef.current = alunoObj }, [alunoObj])
+
+  const turmaNomeRef = useRef(turmaNome)
+  useEffect(() => { turmaNomeRef.current = turmaNome }, [turmaNome])
+
+  const rawTurmaRef = useRef(rawTurma)
+  useEffect(() => { rawTurmaRef.current = rawTurma }, [rawTurma])
+
+  const agendaCtxRef = useRef(agendaCtx)
+  useEffect(() => { agendaCtxRef.current = agendaCtx }, [agendaCtx])
+
   // Escuta eventos globais de foreground emitidos pelo GlobalNotificationProvider
   useEffect(() => {
     const handleRefresh = () => {
@@ -363,10 +405,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               return;
             }
             if (!window.__OS_INIT__) {
-              if (window.location.hostname === 'localhost') {
-                console.log('Push notifications Web desativadas no localhost (evita erro do OneSignal).')
-                return
-              }
               window.__OS_INIT__ = true
               try {
                 await OneSignal.init({
@@ -524,7 +562,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 // Add aliases for responsavel_id, aluno_id, colaborador_id and system_user_id to allow backend to target them
                 if (OS.User && typeof OS.User.addAlias === 'function') {
                   try {
-                    const rId = currentUser.responsavel_id || currentUser.user_metadata?.responsavel_id || (currentUser as any)?.responsavelId || currentUser.id;
+                    const rId = currentUser.responsavel_id || currentUser.user_metadata?.responsavel_id || (currentUser as any)?.responsavelId;
                     if (rId) {
                       const p = OS.User.addAlias('responsavel_id', String(rId));
                       if (p && p.catch) p.catch(() => {});
@@ -570,9 +608,16 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
           
           // ── Tags de segmentação (Aplicado no Web e Nativo) ──────────────────
           try {
+            const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master']
+            const cargoLower = String(currentUser.cargo || '').toLowerCase().trim()
+            const perfilLower = String(currentUser.perfil || '').toLowerCase().trim()
+            const isMaster = masterRoles.includes(cargoLower) || masterRoles.includes(perfilLower)
+
             const tags: Record<string, string> = {
               perfil: currentUser.perfil || '',
               cargo: currentUser.cargo || '',
+              isMasterAdmin: isMaster ? 'true' : 'false',
+              acesso: isMaster ? 'institucional' : (currentUser.perfil || 'padrao'),
             }
             if (alunoId) tags['aluno_id'] = alunoId
             if (turmaNome) tags['turma'] = String(turmaNome)
@@ -687,8 +732,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
   useEffect(() => {
     if (!currentUser?.id) return
 
-    const identifier = alunoId || String(currentUser.id)
-    console.log('🎧 [Realtime] Iniciando escuta de eventos para:', identifier)
+    const identifier = String(currentUser.id)
+    console.log('🎧 [Realtime] Iniciando escuta de eventos para usuário:', identifier)
 
     const addNotification = useAgendaNotifications.getState().addNotification
     
@@ -703,6 +748,19 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     const evaluateEventTarget = (dados: any): EventMatchResult => {
       if (!dados) return { isTarget: false, profileTarget: null }
 
+      const currentCandidateStaffIds = myCandidateStaffIdsRef.current
+      const currentStaffGroupNamesAndIds = myStaffGroupNamesAndIdsRef.current
+      const currentTurmasArray = turmasArrayRef.current
+      const currentAgendaCtx = agendaCtxRef.current
+      const currentIsStaffUser = isStaffUserRef.current
+      const currentCurrentUser = currentUserRef.current
+      const currentMeusAlunos = meusAlunosRef.current
+      const currentAlunoObj = alunoObjRef.current
+      const currentAlunoId = alunoIdRef.current
+      const currentTurmaNome = turmaNomeRef.current
+      const currentRawTurma = rawTurmaRef.current
+      const currentIsFamily = isFamilyRef.current
+
       const alvoTurmas = ensureStringArray(dados.turmas || dados.targetClasses)
       const alvoTurmasIds = ensureStringArray(dados.turmasIds || dados.targetClassesIds)
       const alvoAlunos = ensureStringArray(dados.alunosIds || dados.targetStudents || dados.targetAlunos)
@@ -716,22 +774,22 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
       // 1. Staff match
       let matchesStaff = false
-      if (isStaffUser) {
-        if (currentUser?.perfil === 'Administrador' || currentUser?.cargo === 'Administrador Master') {
+      if (currentIsStaffUser) {
+        if (currentCurrentUser?.perfil === 'Administrador' || currentCurrentUser?.cargo === 'Administrador Master') {
           matchesStaff = true
         } else if (alvoFuncs.some(fid => {
           const clean = String(fid).replace(/^f_?/, '').trim().toLowerCase()
-          return myCandidateStaffIds.includes(clean)
+          return currentCandidateStaffIds.includes(clean)
         })) {
           matchesStaff = true
         } else if (alvoGrupos.some(g => {
           const cleanG = String(g).trim().toLowerCase()
-          return myStaffGroupNamesAndIds.some(mg => mg === cleanG || mg.includes(cleanG) || cleanG.includes(mg))
+          return currentStaffGroupNamesAndIds.some(mg => mg === cleanG || mg.includes(cleanG) || cleanG.includes(mg))
         })) {
           matchesStaff = true
         } else if (alvoTurmas.length > 0 || alvoTurmasIds.length > 0) {
-          const userGroups = agendaCtx?.chatGroups || []
-          const isTeacherTurma = turmasArray.some(t => {
+          const userGroups = currentAgendaCtx?.chatGroups || []
+          const isTeacherTurma = currentTurmasArray.some(t => {
             const tNome = String(t.nome || '').toLowerCase().trim()
             const tId = String(t.id).toLowerCase().trim()
             const tCod = String(t.codigo || '').toLowerCase().trim()
@@ -742,7 +800,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
                 try { colabs = JSON.parse(colabs) } catch { colabs = [] }
               }
               if (!Array.isArray(colabs)) colabs = []
-              return colabs.some((cid: any) => myCandidateStaffIds.includes(String(cid).replace(/^f_?/, '').trim().toLowerCase())) &&
+              return colabs.some((cid: any) => currentCandidateStaffIds.includes(String(cid).replace(/^f_?/, '').trim().toLowerCase())) &&
                 (String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === tNome || norm(g.nome) === tNomeNorm)
             })
             if (!belongs) return false
@@ -764,12 +822,12 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
       // 2. Family match (verifica TODOS os alunos vinculados ao responsável logado)
       let matchingStudent: any = null
-      const studentsToCheck: any[] = [...meusAlunos]
-      if (alunoObj && !studentsToCheck.some(s => String(s.id) === String(alunoObj.id))) {
-        studentsToCheck.push(alunoObj)
+      const studentsToCheck: any[] = [...currentMeusAlunos]
+      if (currentAlunoObj && !studentsToCheck.some(s => String(s.id) === String(currentAlunoObj.id))) {
+        studentsToCheck.push(currentAlunoObj)
       }
-      if (alunoId && !studentsToCheck.some(s => String(s.id) === String(alunoId))) {
-        studentsToCheck.push({ id: alunoId, nome: 'Aluno', turma: rawTurma, turmaNome })
+      if (currentAlunoId && !studentsToCheck.some(s => String(s.id) === String(currentAlunoId))) {
+        studentsToCheck.push({ id: currentAlunoId, nome: 'Aluno', turma: currentRawTurma, turmaNome: currentTurmaNome })
       }
 
       for (const s of studentsToCheck) {
@@ -810,8 +868,8 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         }
 
         // 2c. Match através de isAlunoCursandoTurma com turmasArray (suporte a histórico e duplo vínculo Integral)
-        if (turmasArray && turmasArray.length > 0) {
-          const matchingTurmaInList = turmasArray.find(t => {
+        if (currentTurmasArray && currentTurmasArray.length > 0) {
+          const matchingTurmaInList = currentTurmasArray.find(t => {
             const tNomeNorm = norm(t.nome)
             const tIdNorm = norm(t.id)
             const tCodNorm = norm(t.codigo)
@@ -824,7 +882,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
             }) || alvoTurmasIds.some(atId => norm(atId) === tIdNorm || norm(atId) === tCodNorm)
           })
 
-          if (matchingTurmaInList && isAlunoCursandoTurma(s, matchingTurmaInList, undefined, turmasArray)) {
+          if (matchingTurmaInList && isAlunoCursandoTurma(s, matchingTurmaInList, undefined, currentTurmasArray)) {
             matchingStudent = s
             break
           }
@@ -832,7 +890,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
         // 2d. Match por grupos da agenda em que o aluno é membro
         if (alvoGrupos.length > 0) {
-          const userGroups = agendaCtx?.chatGroups || []
+          const userGroups = currentAgendaCtx?.chatGroups || []
           const inGroup = userGroups.some((g: any) => {
             const gNomeNorm = norm(g.nome || g.dados?.nome)
             const gIdNorm = norm(g.id)
@@ -866,15 +924,15 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
         profileTarget = 'familia'
       } else if (matchesStaff && matchingStudent) {
         // Se o evento foi direcionado expressamente a grupos da equipe escolar ou a colaboradores, preferir 'colaborador'
-        const hasSpecificStaffTarget = alvoGrupos.some(g => myStaffGroupNamesAndIds.includes(String(g).trim().toLowerCase())) ||
-          alvoFuncs.some(f => myCandidateStaffIds.includes(String(f).replace(/^f_?/, '').trim().toLowerCase()))
+        const hasSpecificStaffTarget = alvoGrupos.some(g => currentStaffGroupNamesAndIds.includes(String(g).trim().toLowerCase())) ||
+          alvoFuncs.some(f => currentCandidateStaffIds.includes(String(f).replace(/^f_?/, '').trim().toLowerCase()))
 
         if (hasSpecificStaffTarget) {
           profileTarget = 'colaborador'
         } else if (typeof window !== 'undefined' && window.location.pathname.includes('/colaborador/')) {
           profileTarget = 'colaborador'
         } else {
-          profileTarget = isStaffUser && !isFamily ? 'colaborador' : 'familia'
+          profileTarget = currentIsStaffUser && !currentIsFamily ? 'colaborador' : 'familia'
         }
       }
 
@@ -923,28 +981,32 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       
       const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
 
-      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamily) {
+      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamilyRef.current) {
         window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
       }
 
       if (eventType === 'INSERT' && (merged.status === 'enviado' || merged.dados?.status === 'enviado')) {
+        const currentCandidateStaffIds = myCandidateStaffIdsRef.current
+        const currentCurrentUser = currentUserRef.current
         const isMe =
-          (merged.autorId && (myCandidateStaffIds.includes(String(merged.autorId).toLowerCase()) || String(merged.autorId) === String(currentUser?.id))) ||
-          (merged.autor && currentUser?.nome &&
-            String(merged.autor).trim().toLowerCase() === String(currentUser.nome).trim().toLowerCase())
+          (merged.autorId && (currentCandidateStaffIds.includes(String(merged.autorId).toLowerCase()) || String(merged.autorId) === String(currentCurrentUser?.id))) ||
+          (merged.autor && currentCurrentUser?.nome &&
+            String(merged.autor).trim().toLowerCase() === String(currentCurrentUser.nome).trim().toLowerCase())
 
         if (!isMe && match.isTarget) {
           window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
           
+          const currentAlunoId = alunoIdRef.current
+          const currentMeusAlunos = meusAlunosRef.current
           const drawerLink = match.profileTarget === 'colaborador'
             ? `/agenda-digital/colaborador/comunicados?id=${merged.id}`
-            : `/agenda-digital/${match.targetAlunoId || alunoId || (meusAlunos[0]?.id)}/comunicados?id=${merged.id}`
+            : `/agenda-digital/${match.targetAlunoId || currentAlunoId || (currentMeusAlunos[0]?.id)}/comunicados?id=${merged.id}`
 
           addNotification({
             id: merged.id,
             type: 'comunicado',
-            title: (hasDualAccess && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (merged.titulo || 'Novo Comunicado'),
+            title: (hasDualAccessRef.current && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (merged.titulo || 'Novo Comunicado'),
             createdAt: merged.created_at || new Date().toISOString(),
             read: false,
             link: drawerLink,
@@ -979,7 +1041,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       
       const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
 
-      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamily) {
+      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamilyRef.current) {
         window.dispatchEvent(new CustomEvent(`ad:eventos_agenda-${eventType.toLowerCase()}`, { detail: payload }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'calendario'] })
       }
@@ -987,14 +1049,16 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (eventType === 'INSERT' && match.isTarget) {
         window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
         
+        const currentAlunoId = alunoIdRef.current
+        const currentMeusAlunos = meusAlunosRef.current
         const drawerLink = match.profileTarget === 'colaborador'
           ? `/agenda-digital/colaborador/calendario`
-          : `/agenda-digital/${match.targetAlunoId || alunoId || (meusAlunos[0]?.id)}/calendario`
+          : `/agenda-digital/${match.targetAlunoId || currentAlunoId || (currentMeusAlunos[0]?.id)}/calendario`
 
         addNotification({
           id: row.id,
           type: 'evento',
-          title: (hasDualAccess && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (row.titulo || 'Novo Evento'),
+          title: (hasDualAccessRef.current && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (row.titulo || 'Novo Evento'),
           createdAt: row.created_at || new Date().toISOString(),
           read: false,
           link: drawerLink,
@@ -1027,7 +1091,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       
       const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
 
-      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamily) {
+      if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamilyRef.current) {
         window.dispatchEvent(new CustomEvent(`ad:momentos-${eventType.toLowerCase()}`, { detail: { ...payload, new: merged } }))
         queryClient.invalidateQueries({ queryKey: ['agenda', 'momentos'] })
       }
@@ -1035,14 +1099,16 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       if (eventType === 'INSERT' && match.isTarget) {
         window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
         
+        const currentAlunoId = alunoIdRef.current
+        const currentMeusAlunos = meusAlunosRef.current
         const drawerLink = match.profileTarget === 'colaborador'
           ? `/agenda-digital/colaborador/momentos`
-          : `/agenda-digital/${match.targetAlunoId || alunoId || (meusAlunos[0]?.id)}/momentos`
+          : `/agenda-digital/${match.targetAlunoId || currentAlunoId || (currentMeusAlunos[0]?.id)}/momentos`
 
         addNotification({
           id: merged.id,
           type: 'momento',
-          title: (hasDualAccess && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (merged.titulo || 'Novo Momento'),
+          title: (hasDualAccessRef.current && match.profileTarget === 'colaborador' ? '[Institucional] ' : '') + (merged.titulo || 'Novo Momento'),
           createdAt: merged.created_at || new Date().toISOString(),
           read: false,
           link: drawerLink,
@@ -1064,8 +1130,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const row = eventType === 'DELETE' ? old : newRow
       const rowAlunoId = String(row.aluno_id || row.dados?.aluno_id || row.dados?.alunoId || '')
 
-      const matchingStudent = meusAlunos.find(s => String(s.id) === rowAlunoId) || (alunoId === rowAlunoId ? alunoObj : null)
-      const isForAluno = eventType === 'DELETE' || !!matchingStudent || rowAlunoId === String(alunoId) || !isFamily
+      const currentMeusAlunos = meusAlunosRef.current
+      const currentAlunoId = alunoIdRef.current
+      const currentAlunoObj = alunoObjRef.current
+      const currentIsFamily = isFamilyRef.current
+
+      const matchingStudent = currentMeusAlunos.find(s => String(s.id) === rowAlunoId) || (currentAlunoId === rowAlunoId ? currentAlunoObj : null)
+      const isForAluno = eventType === 'DELETE' || !!matchingStudent || rowAlunoId === String(currentAlunoId) || !currentIsFamily
 
       if (isForAluno) {
         window.dispatchEvent(new CustomEvent(`ad:ocorrencias-${eventType.toLowerCase()}`, { detail: payload }))
@@ -1073,7 +1144,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
         if (eventType === 'INSERT') {
           window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          const targetSlug = matchingStudent?.id || alunoId || (meusAlunos[0]?.id)
+          const targetSlug = matchingStudent?.id || currentAlunoId || (currentMeusAlunos[0]?.id)
           const match: EventMatchResult = {
             isTarget: true,
             profileTarget: 'familia',
@@ -1108,8 +1179,13 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const rowAlunoId = String(row.aluno_id || '')
       const rowAlunoSemZero = rowAlunoId.replace(/^0+/, '')
 
-      const matchingStudent = meusAlunos.find(s => String(s.id) === rowAlunoId || String(s.id).replace(/^0+/, '') === rowAlunoSemZero) || (alunoId === rowAlunoId ? alunoObj : null)
-      const isForAluno = eventType === 'DELETE' || !!matchingStudent || rowAlunoId === String(alunoId) || !isFamily
+      const currentMeusAlunos = meusAlunosRef.current
+      const currentAlunoId = alunoIdRef.current
+      const currentAlunoObj = alunoObjRef.current
+      const currentIsFamily = isFamilyRef.current
+
+      const matchingStudent = currentMeusAlunos.find(s => String(s.id) === rowAlunoId || String(s.id).replace(/^0+/, '') === rowAlunoSemZero) || (currentAlunoId === rowAlunoId ? currentAlunoObj : null)
+      const isForAluno = eventType === 'DELETE' || !!matchingStudent || rowAlunoId === String(currentAlunoId) || !currentIsFamily
 
       if (isForAluno) {
         window.dispatchEvent(new CustomEvent(`ad:boletins-${eventType.toLowerCase()}`, { detail: payload }))
@@ -1117,7 +1193,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
         if (eventType === 'INSERT') {
           window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-          const targetSlug = matchingStudent?.id || alunoId || (meusAlunos[0]?.id)
+          const targetSlug = matchingStudent?.id || currentAlunoId || (currentMeusAlunos[0]?.id)
           const match: EventMatchResult = {
             isTarget: true,
             profileTarget: 'familia',
@@ -1151,7 +1227,14 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const row = eventType === 'DELETE' ? old : newRow
       const rowAlunoId = String(row.aluno_id || row.dados?.aluno_id || '')
 
-      const matchingStudent = meusAlunos.find(s => String(s.id) === rowAlunoId) || (alunoId === rowAlunoId ? alunoObj : null)
+      const currentMeusAlunos = meusAlunosRef.current
+      const currentAlunoId = alunoIdRef.current
+      const currentAlunoObj = alunoObjRef.current
+      const currentIsFamily = isFamilyRef.current
+      const currentIsColaboradorAccess = isColaboradorAccessRef.current
+      const currentIsMasterAdmin = isMasterAdminRef.current
+
+      const matchingStudent = currentMeusAlunos.find(s => String(s.id) === rowAlunoId) || (currentAlunoId === rowAlunoId ? currentAlunoObj : null)
 
       // Invalidação silenciosa para manter tabelas e gráficos sincronizados em background
       window.dispatchEvent(new CustomEvent(`ad:frequencias-${eventType.toLowerCase()}`, { detail: payload }))
@@ -1159,23 +1242,23 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
       // Banners e notificações de presença NÃO devem aparecer para perfil acesso colaboradores,
       // apenas para o Administrador Master (ou família para seus próprios dependentes).
-      if (isColaboradorAccess) {
+      if (currentIsColaboradorAccess) {
         return
       }
 
       // Se não for Administrador Master, só exibe se for perfil família e para seu próprio aluno
-      if (!isMasterAdmin) {
-        if (!isFamily || !matchingStudent) {
+      if (!currentIsMasterAdmin) {
+        if (!currentIsFamily || !matchingStudent) {
           return
         }
       }
 
       if (eventType === 'INSERT') {
         window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-        const targetSlug = matchingStudent?.id || rowAlunoId || alunoId || (meusAlunos[0]?.id)
+        const targetSlug = matchingStudent?.id || rowAlunoId || currentAlunoId || (currentMeusAlunos[0]?.id)
         const match: EventMatchResult = {
           isTarget: true,
-          profileTarget: isMasterAdmin ? 'colaborador' : 'familia',
+          profileTarget: currentIsMasterAdmin ? 'colaborador' : 'familia',
           targetAlunoId: targetSlug,
           targetAlunoNome: matchingStudent?.nome
         }
@@ -1223,22 +1306,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       channels.forEach(c => supabase.removeChannel(c))
       console.log(`🔌 [Realtime] Canais desconectados.`)
     }
-  }, [
-    alunoId,
-    currentUser?.id,
-    currentUser?.perfil,
-    turmaNome,
-    typeof rawTurma === 'object' ? JSON.stringify(rawTurma) : String(rawTurma),
-    meusAlunos,
-    myCandidateStaffIds,
-    myStaffGroupNamesAndIds,
-    isStaffUser,
-    isMasterAdmin,
-    isColaboradorAccess,
-    hasDualAccess,
-    handleOpenItem,
-    showInAppToast
-  ])
+  }, [currentUser?.id])
 
   return (
     <>

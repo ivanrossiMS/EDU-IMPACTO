@@ -23,6 +23,18 @@ type Handler = (payload: RealtimePayload) => void
 
 const CHANNEL = 'edu-pickup-realtime'
 
+function addProcessedId(set: Set<string>, id: string) {
+  set.add(id)
+  if (set.size > 160) {
+    let count = 0
+    for (const item of set) {
+      set.delete(item)
+      count++
+      if (count >= 60) break
+    }
+  }
+}
+
 export function useBroadcastRealtime() {
   const channelRef = useRef<BroadcastChannel | null>(null)
   const handlers = useRef<Map<RealtimeEvent | '*', Set<Handler>>>(new Map())
@@ -34,9 +46,9 @@ export function useBroadcastRealtime() {
     channelRef.current = bc
 
     bc.onmessage = (ev: MessageEvent<RealtimePayload>) => {
-      if (processedIds.current.has(ev.data.id)) return;
-      processedIds.current.add(ev.data.id);
-      if (processedIds.current.size > 100) processedIds.current.clear(); // prevent memory leak
+      if (!ev.data?.id) return
+      if (processedIds.current.has(ev.data.id)) return
+      addProcessedId(processedIds.current, ev.data.id)
       const { event } = ev.data
       // notify exact handlers
       handlers.current.get(event)?.forEach(h => h(ev.data))
@@ -49,9 +61,8 @@ export function useBroadcastRealtime() {
       if (e.key !== `__bc_${CHANNEL}` || !e.newValue) return
       try {
         const payload = JSON.parse(e.newValue) as RealtimePayload
-        if (processedIds.current.has(payload.id)) return;
-        processedIds.current.add(payload.id);
-        if (processedIds.current.size > 100) processedIds.current.clear();
+        if (!payload?.id || processedIds.current.has(payload.id)) return
+        addProcessedId(processedIds.current, payload.id)
         handlers.current.get(payload.event)?.forEach(h => h(payload))
         handlers.current.get('*')?.forEach(h => h(payload))
       } catch {}
@@ -65,8 +76,12 @@ export function useBroadcastRealtime() {
   }, [])
 
   const emit = useCallback((event: RealtimeEvent, data: Record<string, unknown>) => {
-    const payload: RealtimePayload = { event, data, ts: Date.now(), id: Math.random().toString(36).substring(2, 11) }
-    processedIds.current.add(payload.id); // don't process our own emission via storage
+    const uniqueId = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+
+    const payload: RealtimePayload = { event, data, ts: Date.now(), id: uniqueId }
+    addProcessedId(processedIds.current, payload.id) // don't process our own emission via storage
     channelRef.current?.postMessage(payload)
     // fallback: trigger storage event so same-tab listeners also fire via a different mechanism
     try {

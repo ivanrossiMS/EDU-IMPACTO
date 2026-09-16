@@ -123,12 +123,40 @@ export async function GET(request: Request) {
     }
   }
 
+  // Resolve user photo: prioritize user_metadata, then system_users dados.foto
+  const resolvedPhoto = user.user_metadata?.foto || user.user_metadata?.fotoUrl || dbUser?.dados?.foto || dbUser?.foto || null;
+
+  // Auto-sync between user_metadata and system_users
+  if (dbUser && resolvedPhoto) {
+    if (dbUser.dados?.foto !== resolvedPhoto) {
+      const updatedDados = { ...(dbUser.dados || {}), foto: resolvedPhoto };
+      void (async () => {
+        try {
+          await supabaseAdmin
+            .from('system_users')
+            .update({ 
+              dados: updatedDados,
+              ...(dbUser.auth_id ? {} : { auth_id: user.id })
+            })
+            .eq('id', dbUser.id);
+        } catch (err: any) {
+          console.warn('[Auth /me auto-sync photo to db]', err?.message);
+        }
+      })();
+    }
+    if (!user.user_metadata?.foto && dbUser.dados?.foto) {
+      void supabaseAdmin.auth.admin
+        .updateUserById(user.id, { user_metadata: { foto: dbUser.dados.foto } })
+        .catch(() => {});
+    }
+  }
+
   // Combine top-level auth data (id, email) with user_metadata and database fields
   const userData = {
     ...user.user_metadata,
     id: user.id,
     email: user.email,
-    foto: dbUser?.foto || dbUser?.dados?.foto || user.user_metadata?.foto || null,
+    foto: resolvedPhoto,
     perfil: dbUser?.perfil || user.user_metadata?.perfil,
     cargo: dbUser?.cargo || user.user_metadata?.cargo,
     status: dbUser?.status || 'ativo',

@@ -100,6 +100,10 @@ export function isPermanentTokenRevocation(error: any): boolean {
     errMsg.includes('token is expired by') ||
     errMsg.includes('user not found') ||
     errMsg.includes('user is banned') ||
+    errMsg.includes('no valid session stored') ||
+    errMsg.includes('user logged out') ||
+    errMsg.includes('user is logged out') ||
+    errMsg.includes('logout barrier active') ||
     (status === 400 && (errCode === 'invalid_grant' || errMsg.includes('grant')))
   );
 }
@@ -250,6 +254,10 @@ export function setLogoutBarrier(userId?: string): void {
       window.localStorage.setItem(LOGOUT_BARRIER_KEY, barrierStr);
       window.sessionStorage?.setItem(LOGOUT_BARRIER_KEY, barrierStr);
       window.localStorage.setItem('edu_last_logout_at', String(lastLogoutTimestamp));
+      if (typeof document !== 'undefined') {
+        const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+        document.cookie = `${LOGOUT_BARRIER_KEY}=1; path=/; max-age=86400; SameSite=Lax${isHttps ? '; Secure' : ''}`;
+      }
     } catch {}
   }
 
@@ -281,6 +289,10 @@ export async function clearLogoutBarrier(): Promise<void> {
       window.sessionStorage?.removeItem(LOGOUT_BARRIER_KEY);
       window.localStorage.removeItem('edu-logout-pending');
       window.localStorage.removeItem('edu_last_logout_at');
+      if (typeof document !== 'undefined') {
+        const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+        document.cookie = `${LOGOUT_BARRIER_KEY}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isHttps ? '; Secure' : ''}`;
+      }
     } catch {}
   }
   if (Capacitor.isNativePlatform()) {
@@ -828,11 +840,23 @@ export async function clearSessionSecurely(userId?: string) {
 
   if (Capacitor.isNativePlatform()) {
     try {
-      await SecureStoragePlugin.remove({ key: SESSION_KEY });
-      await SecureStoragePlugin.remove({ key: projectStorageKey });
-      await Preferences.remove({ key: SESSION_KEY });
-      await Preferences.remove({ key: projectStorageKey });
-      await Preferences.remove({ key: `${SESSION_KEY}_meta` });
+      await SecureStoragePlugin.remove({ key: SESSION_KEY }).catch(() => {});
+      await SecureStoragePlugin.remove({ key: projectStorageKey }).catch(() => {});
+      await SecureStoragePlugin.remove({ key: 'edu-current-user' }).catch(() => {});
+      await SecureStoragePlugin.remove({ key: 'edu-current-perfil' }).catch(() => {});
+      await Preferences.remove({ key: SESSION_KEY }).catch(() => {});
+      await Preferences.remove({ key: projectStorageKey }).catch(() => {});
+      await Preferences.remove({ key: `${SESSION_KEY}_meta` }).catch(() => {});
+      await Preferences.remove({ key: 'edu-current-user' }).catch(() => {});
+      await Preferences.remove({ key: 'edu-current-perfil' }).catch(() => {});
+      await Preferences.remove({ key: 'edu_auth_user' }).catch(() => {});
+      await Preferences.remove({ key: 'edu-active-modules' }).catch(() => {});
+      if (userId) {
+        await Preferences.remove({ key: `edu-user-photo-${userId}` }).catch(() => {});
+        await Preferences.remove({ key: `edu-profile-extra-${userId}` }).catch(() => {});
+        await Preferences.remove({ key: `edu-active-modules-${userId}` }).catch(() => {});
+        await Preferences.remove({ key: `edu-active-unit-${userId}` }).catch(() => {});
+      }
     } catch {}
   }
 }

@@ -19,12 +19,17 @@ export default function AgendaDigitalIndex() {
 
 function AgendaDigitalIndexContent() {
   const router = useRouter()
-  const { currentUserPerfil, currentUser } = useApp()
+  const { currentUserPerfil, currentUser, hydrated } = useApp()
   const searchParams = useSearchParams()
 
   useEffect(() => {
-    // Prevent execution if user is not loaded
-    if (!currentUser) return;
+    if (!hydrated) return;
+
+    // Se o usuário não estiver autenticado, redireciona de forma limpa para /login
+    if (!currentUser) {
+      router.replace('/login');
+      return;
+    }
 
     const perfil = currentUserPerfil || currentUser.perfil || ''
     const cargo = currentUser.cargo || ''

@@ -5,7 +5,7 @@ import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { getLoggedUserAccessStartDate } from '@/lib/server/visibility'
 import { requireAuth } from '@/lib/server/authGuard'
 import { sendAgendaPushNotification } from '@/lib/server/agendaNotifications'
-import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship } from '@/lib/server/notificationHelper'
+import { getResponsavelIdsForTargets, getStudentTargetsForComunicados, checkResponsavelRelationship, cleanEntityPrefix } from '@/lib/server/notificationHelper'
 import { deleteStorageFilesByUrls } from '@/lib/upload/storageServer'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
@@ -120,7 +120,7 @@ export async function GET(request: Request) {
     // Batch 1: busca dados do aluno, todas as turmas e todos os grupos ao mesmo tempo
     const [alunoRes, turmasRes, gruposRes] = await Promise.all([
       supabase.from('alunos').select('id, turma, created_at, dados').eq('id', alunoId).maybeSingle(),
-      supabase.from('turmas').select('*'),
+      supabase.from('turmas').select('id, nome, codigo, ano, turno, modalidade, dados'),
       supabase.from('agenda_grupos').select('id, dados, nome, alunosIds'),
     ]);
 
@@ -853,7 +853,7 @@ async function enrichGruposRecipients(row: any) {
         }
         if (Array.isArray(cIds)) {
           cIds.forEach((id: any) => {
-            const clean = String(id).replace(/^[feq_]+/, '').trim();
+            const clean = cleanEntityPrefix(id);
             if (clean) extraColabs.add(clean);
           });
         }
@@ -864,7 +864,7 @@ async function enrichGruposRecipients(row: any) {
         }
         if (Array.isArray(aIds)) {
           aIds.forEach((id: any) => {
-            const clean = String(id).replace(/^(a_|_ALU)/, '').trim();
+            const clean = cleanEntityPrefix(id);
             if (clean) extraAlunos.add(clean);
           });
         }
@@ -882,7 +882,7 @@ async function enrichGruposRecipients(row: any) {
         }
         if (Array.isArray(mIds)) {
           mIds.forEach((id: any) => {
-            const clean = String(id).replace(/^[feq_]+/, '').trim();
+            const clean = cleanEntityPrefix(id);
             if (clean) extraColabs.add(clean);
           });
         }

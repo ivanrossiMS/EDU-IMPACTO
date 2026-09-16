@@ -74,19 +74,39 @@ async function attemptSend(
       const notificationId = typeof parsedBody.id === 'string' ? parsedBody.id.trim() : ''
       const hasValidId = notificationId.length > 0
 
-      // Checar se a API retornou erro explícito de ausência total de inscritos
+      // Checar se a API retornou erro explícito de ausência total de inscritos ou invalid_aliases
       let allUnsubscribed = false
       if (parsedBody.errors) {
-        const errorList = Array.isArray(parsedBody.errors)
-          ? parsedBody.errors
-          : (typeof parsedBody.errors === 'string' ? [parsedBody.errors] : [])
-        allUnsubscribed = errorList.some((e: any) =>
-          typeof e === 'string' && e.toLowerCase().includes('not subscribed')
-        )
+        if (Array.isArray(parsedBody.errors)) {
+          allUnsubscribed = parsedBody.errors.some((e: any) =>
+            typeof e === 'string' && e.toLowerCase().includes('not subscribed')
+          )
+        } else if (typeof parsedBody.errors === 'string') {
+          allUnsubscribed = parsedBody.errors.toLowerCase().includes('not subscribed')
+        } else if (typeof parsedBody.errors === 'object' && parsedBody.errors !== null) {
+          // Tratar OneSignal v1 quando errors é objeto: { invalid_aliases: { external_id: [...], ... } }
+          const invalidAliases = parsedBody.errors.invalid_aliases
+          if (invalidAliases && typeof invalidAliases === 'object' && payload.include_aliases) {
+            const requestedKeys = Object.keys(payload.include_aliases)
+            const allKeysInvalid = requestedKeys.length > 0 && requestedKeys.every(k => {
+              const reqList = payload.include_aliases[k] || []
+              const invList = invalidAliases[k] || []
+              return reqList.length > 0 && invList.length >= reqList.length
+            })
+            if (allKeysInvalid) {
+              allUnsubscribed = true
+            }
+          }
+          if (parsedBody.errors.invalid_external_user_ids && payload.include_external_user_ids) {
+            if (parsedBody.errors.invalid_external_user_ids.length >= payload.include_external_user_ids.length) {
+              allUnsubscribed = true
+            }
+          }
+        }
       }
 
       // No OneSignal v1 API com include_aliases, a contagem de destinatários é assíncrona
-      // e o campo 'recipients' não vem na resposta HTTP síncrona.
+      // e o campo 'recipients' pode não vir na resposta HTTP síncrona.
       // Se 'id' for um UUID válido e não houver erro de falta de inscritos,
       // a notificação foi aceita e enfileirada com sucesso pelo OneSignal.
       let recipientCount = parsedBody.recipients ?? parsedBody.num_recipients
@@ -94,11 +114,11 @@ async function attemptSend(
         recipientCount = (hasValidId && !allUnsubscribed) ? 1 : 0
       }
 
-      if (recipientCount === 0 || !hasValidId) {
+      if (recipientCount === 0 || !hasValidId || allUnsubscribed) {
         const errorDetail = allUnsubscribed
           ? 'All included players are not subscribed'
           : (parsedBody.errors ? JSON.stringify(parsedBody.errors) : 'No subscribed recipients found')
-        console.warn(`⚠️ [PushService] OneSignal aceitou a requisição (200 OK), porém 0 destinatários inscritos (Recipients: 0).`, {
+        console.warn(`⚠️ [PushService] OneSignal retornou 0 destinatários inscritos (Recipients: 0).`, {
           id: notificationId || 'N/A',
           targetCount: payload.include_aliases?.external_id?.length || payload.include_aliases?.colaborador_id?.length || payload.include_aliases?.responsavel_id?.length || payload.include_external_user_ids?.length || 0,
           errors: parsedBody.errors || null,
@@ -176,7 +196,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     return { success: true, mock: true }
   }
 
-  const uniqueTargetUserIds = Array.from(
+  const rawTargetUserIds = Array.from(
     new Set(
       (params.targetUserIds || [])
         .filter(id => id && typeof id === 'string' && id.trim().length > 0)
@@ -184,10 +204,20 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     )
   )
 
-  if (uniqueTargetUserIds.length === 0) {
+  if (rawTargetUserIds.length === 0) {
     console.log('[PushService] Nenhum destinatário válido informado. Push ignorado.')
     return { success: true, skipped: true }
   }
+
+  // Expandir com IDs sem prefixos (ex: remove 'f_', 'a_', 'func_') para garantir matching com UUIDs canônicos e aliases
+  const uniqueTargetUserIds = Array.from(
+    new Set(
+      rawTargetUserIds.flatMap(id => {
+        const cleaned = id.replace(/^(?:f_|func_|eq_|g_|a_|_ALU)/i, '')
+        return cleaned && cleaned !== id ? [id, cleaned] : [id]
+      })
+    )
+  )
 
   // Limitar a 2000 destinatários por chamada (limite do OneSignal)
   const maxChunkSize = 2000
@@ -252,16 +282,21 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ttl: 86400,
   }
 
-  // ── Tentativa 1: OneSignal User Model (external_id + responsavel_id + aluno_id) ──
+  // ── Tentativa 1: OneSignal User Model (external_id + colaborador_id + system_user_id + responsavel_id + aluno_id + email) ──
   // Usuários autenticados no app via OneSignal.login(userId) possuem external_id = userId.
-  // Responsáveis e alunos também possuem aliases responsavel_id e aluno_id associados ao usuário.
-  console.log(`🔔 [PushService] Tentativa 1 (User Model multi-aliases) para ${uniqueTargetUserIds.length} usuário(s)...`)
+  // Colaboradores e Administradores possuem aliases colaborador_id e system_user_id associados.
+  // Responsáveis e alunos possuem aliases responsavel_id e aluno_id associados ao usuário.
+  console.log(`🔔 [PushService] Tentativa 1 (User Model multi-aliases completo) para ${uniqueTargetUserIds.length} destinatários (expandidos)...`)
+  const emailAliases = uniqueTargetUserIds.filter(id => id.includes('@')).map(e => e.toLowerCase())
   const externalIdPayload: Record<string, any> = {
     ...commonFields,
     include_aliases: {
       external_id: uniqueTargetUserIds,
+      colaborador_id: uniqueTargetUserIds,
+      system_user_id: uniqueTargetUserIds,
       responsavel_id: uniqueTargetUserIds,
       aluno_id: uniqueTargetUserIds,
+      ...(emailAliases.length > 0 ? { email: emailAliases } : {}),
     },
     target_channel: 'push',
   }

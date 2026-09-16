@@ -3,8 +3,6 @@
  * Projetado para otimizar imagens, avatars, PDFs e vídeos antes do upload.
  */
 
-import { PDFDocument, PDFRawStream, PDFName, PDFNumber, PDFArray, decodePDFRawStream } from 'pdf-lib';
-
 interface ImageCompressOptions {
   quality?: number;
   maxWidth?: number;
@@ -360,16 +358,18 @@ function resizeCanvas(
 }
 
 async function compressFlateImage(
-  obj: PDFRawStream,
+  obj: any,
   width: number,
   height: number,
   colorSpace: string,
   maxDimension = 1200,
-  quality = 0.65
+  quality = 0.65,
+  decodePDFRawStreamFn?: any
 ): Promise<{ bytes: Uint8Array; width: number; height: number } | null> {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     try {
-      const rawBytes = decodePDFRawStream(obj).decode();
+      const decoder = decodePDFRawStreamFn || (await import('pdf-lib')).decodePDFRawStream;
+      const rawBytes = decoder(obj).decode();
       const sourceCanvas = drawRawPixelsToCanvas(rawBytes, width, height, colorSpace);
       if (!sourceCanvas) {
         resolve(null);
@@ -424,6 +424,8 @@ export async function compressPDF(
 
     const arrayBuffer = await file.arrayBuffer();
     if (onProgress) onProgress(15);
+
+    const { PDFDocument, PDFRawStream, PDFName, PDFNumber, PDFArray, decodePDFRawStream } = await import('pdf-lib');
 
     const pdfDoc = await PDFDocument.load(arrayBuffer);
     if (onProgress) onProgress(35);
@@ -509,7 +511,7 @@ export async function compressPDF(
         let result: { bytes: Uint8Array; width: number; height: number } | null = null;
         
         if (isFlate) {
-          result = await compressFlateImage(obj, width, height, colorSpace, 1200, 0.65);
+          result = await compressFlateImage(obj, width, height, colorSpace, 1200, 0.65, decodePDFRawStream);
         } else {
           const originalBytes = decodePDFRawStream(obj).decode();
           result = await compressJpegBytes(originalBytes, width, height, 1200, 0.65);

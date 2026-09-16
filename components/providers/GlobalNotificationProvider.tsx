@@ -290,9 +290,6 @@ export function GlobalNotificationProvider() {
     } else {
       // ── Web Push ────────────────────────────────────────────────────────
       if (!window.__OS_GLOBAL_INIT__) {
-        if (window.location.hostname === 'localhost') {
-          return
-        }
         window.__OS_GLOBAL_INIT__ = true
 
         window.OneSignalDeferred = window.OneSignalDeferred || []
@@ -305,6 +302,13 @@ export function GlobalNotificationProvider() {
               serviceWorkerParam: { scope: '/' },
             })
             ;(window as any).__OS_INIT__ = true
+
+            // Garantir optIn na push subscription se suportado
+            try {
+              if (OneSignal.User?.pushSubscription?.optIn) {
+                await OneSignal.User.pushSubscription.optIn().catch(() => {})
+              }
+            } catch {}
 
             // Listener de clique nas notificações Web
             if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
@@ -364,6 +368,7 @@ export function GlobalNotificationProvider() {
               if (typeof OS.login === 'function') {
                 await OS.login(userId)
                 window.__OS_GLOBAL_USER_ID__ = userId
+                ;(window as any).__OS_USER_ID__ = userId
                 console.log(`✅ [GlobalPush] Usuário autenticado no OneSignal: ${userId}`)
 
                 // Garantir optIn na push subscription
@@ -404,9 +409,16 @@ export function GlobalNotificationProvider() {
 
           // Atribuição de tags de segmentação
           try {
+            const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master']
+            const cargoLower = String(currentUser.cargo || '').toLowerCase().trim()
+            const perfilLower = String(currentUser.perfil || '').toLowerCase().trim()
+            const isMaster = masterRoles.includes(cargoLower) || masterRoles.includes(perfilLower)
+
             const tags: Record<string, string> = {
               perfil: currentUser.perfil || '',
               cargo: currentUser.cargo || '',
+              isMasterAdmin: isMaster ? 'true' : 'false',
+              acesso: isMaster ? 'institucional' : (currentUser.perfil || 'padrao'),
             }
             if (currentUser.aluno_id) tags['aluno_id'] = String(currentUser.aluno_id)
             if (currentUser.responsavel_id) tags['responsavel_id'] = String(currentUser.responsavel_id)

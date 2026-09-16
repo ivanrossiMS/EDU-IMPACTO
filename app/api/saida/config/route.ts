@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
-import { createClient } from '@supabase/supabase-js'
+import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     const supabase = await createProtectedClient()
 
-    const { data, error } = await supabase.from('saida_config').select('*')
+    const { data, error } = await supabase.from('saida_config').select('id, dados')
     if (error) {
       console.error('[saida_config GET] Fetch error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -58,13 +58,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const supabase = await createProtectedClient()
-
-    // Use service role for upsert to bypass RLS for configuration
-    const adminSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const adminSupabase = getAdminClient()
 
     if (Array.isArray(body)) {
       if (body.length === 0) return NextResponse.json({ ok: true, count: 0 })

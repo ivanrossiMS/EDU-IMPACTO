@@ -77,63 +77,43 @@ function fmtTime(iso?: string) {
   }
 }
 
-// ── Global photo cache for students ──────────────────────────────────────────
-const globalStudentPhotoCache = new Map<string, string>()
-
-async function fetchStudentPhotoFromDb(studentId: string): Promise<string | null> {
-  try {
-    const res: any = await (supabase.from('alunos') as any)
-      .select('foto, foto_url')
-      .eq('id', studentId)
-      .maybeSingle()
-    return res?.data?.foto || res?.data?.foto_url || null
-  } catch {
-    return null
-  }
-}
+import { fetchSingleStudentPhoto, getCachedStudentPhoto, setCachedStudentPhoto } from '@/lib/studentPhotoCache'
 
 // ── Unified call card (Ultra Modern TV-Monitor style) ─────────────────────────
-const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert, onOpenIrmaos }: {
+const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRecall, onRevert, onOpenIrmaos, nowTime }: {
   call:         PickupCall
   onConfirm:    (id: string) => void
   onCancel:     (id: string) => void
   onRecall:     (id: string) => void
   onRevert:     (id: string) => void
   onOpenIrmaos: (call: PickupCall) => void
+  nowTime?:     number
 }) {
   const { config } = useSaida()
   const [recalling, setRecalling] = useState(false)
-  const [nowTime, setNowTime] = useState(Date.now())
+  const [localNowTime, setLocalNowTime] = useState(Date.now())
   const [resolvedPhoto, setResolvedPhoto] = useState<string | null>(call.studentPhoto || null)
   const [photoError, setPhotoError] = useState(false)
   
   useEffect(() => {
-    const iv = setInterval(() => setNowTime(Date.now()), 10000)
+    if (nowTime !== undefined) return
+    const iv = setInterval(() => setLocalNowTime(Date.now()), 10000)
     return () => clearInterval(iv)
-  }, [])
+  }, [nowTime])
 
   // Auto-resolve photo if call was created without photo but student has photo in database
   useEffect(() => {
     if (call.studentPhoto) {
       setResolvedPhoto(call.studentPhoto)
       setPhotoError(false)
-      if (call.studentId) globalStudentPhotoCache.set(String(call.studentId), call.studentPhoto)
       return
     }
     if (!call.studentId) return
 
-    const cached = globalStudentPhotoCache.get(String(call.studentId))
-    if (cached) {
-      setResolvedPhoto(cached)
-      setPhotoError(false)
-      return
-    }
-
     let isMounted = true
-    fetchStudentPhotoFromDb(call.studentId).then(p => {
+    fetchSingleStudentPhoto(call.studentId).then(p => {
       if (!isMounted) return
       if (p) {
-        globalStudentPhotoCache.set(String(call.studentId), p)
         setResolvedPhoto(p)
         setPhotoError(false)
       }
@@ -142,7 +122,8 @@ const CallCard = React.memo(function CallCard({ call, onConfirm, onCancel, onRec
     return () => { isMounted = false }
   }, [call.studentPhoto, call.studentId])
   
-  const secs = elapsedSec(call.calledAt, nowTime)
+  const effectiveNowTime = nowTime !== undefined ? nowTime : localNowTime
+  const secs = elapsedSec(call.calledAt, effectiveNowTime)
 
   const isActive   = call.status === 'waiting' || call.status === 'called'
   const isFinished = call.status === 'confirmed' || call.status === 'cancelled'
@@ -1270,7 +1251,7 @@ const StudentSearchRow = React.memo(function StudentSearchRow({ student, activeC
 
   const studentPhoto = useMemo(() => {
     const p = student.foto || student.foto_url || student.fotoUrl || student.avatarUrl || student.imagem1 || student.dados?.foto || student.dados?.foto_url || student.dados?.fotoUrl || student.dados?.avatarUrl || null
-    if (p && student.id) globalStudentPhotoCache.set(String(student.id), p)
+    if (p && student.id) setCachedStudentPhoto(student.id, p)
     return p
   }, [student])
   const [imgError, setImgError] = useState(false)
@@ -2544,6 +2525,22 @@ function ChamadasContent() {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
+  const turmaNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const t of (turmas || [])) {
+      if (t.id) map.set(String(t.id), t.nome)
+      if (t.codigo) map.set(String(t.codigo), t.nome)
+      if (t.nome) map.set(String(t.nome), t.nome)
+    }
+    return map
+  }, [turmas])
+
+  const [sharedNowTime, setSharedNowTime] = useState(() => Date.now())
+  useEffect(() => {
+    const iv = setInterval(() => setSharedNowTime(Date.now()), 10000)
+    return () => clearInterval(iv)
+  }, [])
+
   const isAdmin = useMemo(() => {
     const perfil = (currentUserPerfil || currentUser?.perfil || '').toLowerCase().trim()
     const cargo = (currentUser?.cargo || '').toLowerCase().trim()
@@ -2629,10 +2626,13 @@ function ChamadasContent() {
     }
 
     setIsSearching(true)
+    const controller = new AbortController()
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=10&page=1&withPhoto=true`)
+        const res = await fetch(`/api/alunos?search=${encodeURIComponent(q)}&limit=10&page=1&withPhoto=true`, {
+          signal: controller.signal
+        })
         if (!res.ok) throw new Error('Falha ao buscar alunos')
         const json = await res.json()
         const data = json.data || []
@@ -2643,25 +2643,27 @@ function ChamadasContent() {
         )
 
         const mapped = filtered.map((a: any) => {
-          const turmaObj = (turmas || []).find((t: any) => 
-            String(t.id) === String(a.turma) || t.codigo === a.turma || t.nome === a.turma
-          )
+          const tName = turmaNameMap.get(String(a.turma)) || a.turma
           const p = a.foto || a.foto_url || a.fotoUrl || a.avatarUrl || a.imagem1 || a.dados?.foto || a.dados?.avatarUrl || null
-          if (p && a.id) globalStudentPhotoCache.set(String(a.id), p)
-          return { ...a, foto: p, turmaNome: turmaObj?.nome || a.turma }
+          return { ...a, foto: p, turmaNome: tName }
         })
 
         setSchoolResults(mapped)
-      } catch (err) {
-        console.error('Erro ao buscar alunos:', err)
-        setSchoolResults([])
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Erro ao buscar alunos:', err)
+          setSchoolResults([])
+        }
       } finally {
         setIsSearching(false)
       }
     }, 300)
 
-    return () => clearTimeout(timer)
-  }, [studentSearch, turmas])
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [studentSearch, turmaNameMap])
 
   const handleCall = (
     studentId: string, studentName: string, studentClass: string,
@@ -2677,7 +2679,7 @@ function ChamadasContent() {
       c.studentId === studentId && (c.status === 'waiting' || c.status === 'called')
     )
     if (hasActive) { showToast(`${studentName} já está em chamada ativa.`, false); return }
-    const effectivePhoto = studentPhoto || (studentId ? globalStudentPhotoCache.get(String(studentId)) : null) || null
+    const effectivePhoto = studentPhoto || (studentId ? getCachedStudentPhoto(studentId) : null) || null
     callStudent(studentId, studentName, studentClass, guardianId, guardianName, 'manual', undefined, effectivePhoto)
     showToast(`${studentName} chamado(a)!`)
     setStudentSearch('')
@@ -2719,9 +2721,18 @@ function ChamadasContent() {
     return dedup
   }, [activeCalls])
 
-  const waiting   = activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId)))
-  const cancelled = activeCalls.filter(c => c.status === 'cancelled')
-  const blocked   = activeCalls.filter(c => c.status === 'blocked')
+  const waiting = useMemo(() => 
+    activeCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && c.studentId != null && !confirmedStudentIds.has(String(c.studentId))),
+    [activeCalls, confirmedStudentIds]
+  )
+  const cancelled = useMemo(() => 
+    activeCalls.filter(c => c.status === 'cancelled'),
+    [activeCalls]
+  )
+  const blocked = useMemo(() => 
+    activeCalls.filter(c => c.status === 'blocked'),
+    [activeCalls]
+  )
 
   const filtered = useMemo(() => {
     // PRECALCULATE TIMESTAMPS AND SEARCH STRINGS FOR FAST SORTING/FILTERING
@@ -3069,16 +3080,13 @@ function ChamadasContent() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(195px, 1fr))', gap: isMobile ? 10 : 14 }}>
           {filtered.map(rawCall => {
-            const turmaNome = (turmas || []).find((t: any) => String(t.id) === String(rawCall.studentClass))?.nome || rawCall.studentClass
-            // Mutações ou clonagens seguras devem ser feitas antes, mas como `filtered` já mudou, o ideal é passar propriedades flat ou garantir que o objeto em si seja estável.
-            // Para não quebrar a tipagem de call, vamos injetar a string como propriedade separada se necessário, mas o mais seguro aqui é apenas o `Object.assign` no map caso seja inevitável.
-            // Para evitar re-render, CallCard deve usar deep comparison ou o React.memo deve ter um custom comparator function.
-            // Como não posso alterar CallCard facilmente agora, criarei a prop estática:
-            rawCall.studentClass = turmaNome; 
+            const turmaNome = turmaNameMap.get(String(rawCall.studentClass)) || rawCall.studentClass
+            const mappedCall = rawCall.studentClass === turmaNome ? rawCall : { ...rawCall, studentClass: turmaNome }
             return (
               <CallCard
-                key={rawCall.id}
-                call={rawCall}
+                key={mappedCall.id}
+                call={mappedCall}
+                nowTime={sharedNowTime}
                 onConfirm={confirmPickup}
                 onCancel={cancelCall}
                 onRecall={handleRecall}

@@ -1,6 +1,5 @@
-'use client'
-import { useState, useEffect } from 'react'
-import { Volume2, CheckCircle2, AlertTriangle, Megaphone } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { CheckCircle2, Megaphone } from 'lucide-react'
 import { PickupCall } from '@/lib/saidaContext'
 
 interface Props {
@@ -8,22 +7,26 @@ interface Props {
   onConfirm: (id: string) => void
   onCancel: (id: string) => void
   onRecall: (id: string) => void
+  nowMs?: number
 }
 
-function elapsed(since: string) {
-  const s = Math.floor((Date.now() - new Date(since).getTime()) / 1000)
+function elapsed(since: string, currentNow = Date.now()) {
+  const s = Math.max(0, Math.floor((currentNow - new Date(since).getTime()) / 1000))
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   return `${m}m ${s % 60}s`
 }
 
-export function ActiveCallCard({ call, onConfirm, onCancel, onRecall }: Props) {
-  const [time, setTime] = useState(elapsed(call.calledAt))
+export const ActiveCallCard = React.memo(function ActiveCallCard({ call, onConfirm, onCancel, onRecall, nowMs }: Props) {
+  const [localTime, setLocalTime] = useState(() => elapsed(call.calledAt, nowMs))
 
   useEffect(() => {
-    const iv = setInterval(() => setTime(elapsed(call.calledAt)), 1000)
+    if (nowMs !== undefined) return
+    const iv = setInterval(() => setLocalTime(elapsed(call.calledAt)), 1000)
     return () => clearInterval(iv)
-  }, [call.calledAt])
+  }, [call.calledAt, nowMs])
+
+  const time = nowMs !== undefined ? elapsed(call.calledAt, nowMs) : localTime
 
   const isWaiting  = call.status === 'waiting'
   const isCalled   = call.status === 'called'
@@ -109,4 +112,4 @@ export function ActiveCallCard({ call, onConfirm, onCancel, onRecall }: Props) {
       </div>
     </div>
   )
-}
+})

@@ -146,8 +146,8 @@
   color: hsl(var(--text-muted));
 }
 
-[data-theme='light'] .form-input:not(.login-wrapper *):not(.login-card *):not(.auth-card *),
-[data-theme='light'] input:not([type="checkbox"]):not([type="radio"]):not(.login-wrapper *):not(.login-card *):not(.auth-card *),
+[data-theme='light'] .form-input:not(.login-wrapper *):not(.login-card *):not(.auth-card *):not(.rfid-discrete-input):not(#test-rfid-input),
+[data-theme='light'] input:not([type="checkbox"]):not([type="radio"]):not(.login-wrapper *):not(.login-card *):not(.auth-card *):not(.rfid-discrete-input):not(#test-rfid-input),
 [data-theme='light'] select:not(.login-wrapper *):not(.login-card *):not(.auth-card *),
 [data-theme='light'] textarea:not(.login-wrapper *):not(.login-card *):not(.auth-card *) {
   background: white !important;

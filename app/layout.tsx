@@ -43,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         {/* Pré-carregamento imediato do asset estático da logo para o spinner e loaders */}
         <link rel="preload" href="/logo-impacto-spinner.png" as="image" type="image/png" fetchPriority="high" />
+        <link rel="preload" href="/logo-impacto-neon.webp" as="image" type="image/webp" fetchPriority="high" />
       </head>
       <body style={{ backgroundColor: '#0A0F24', color: '#ffffff', minHeight: '100vh', margin: 0 }}>
         <Suspense fallback={null}>

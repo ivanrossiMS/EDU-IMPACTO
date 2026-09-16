@@ -27,9 +27,21 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
       },
     }))
 
+    const onReadRef = useRef(onRead)
+    useEffect(() => {
+      onReadRef.current = onRead
+    }, [onRead])
+
+    useEffect(() => {
+      return () => {
+        if (timerRef.current) clearTimeout(timerRef.current)
+      }
+    }, [])
+
     // Keep focus on input
     useEffect(() => {
       if (!enabled) return
+      const inputEl = inputRef.current
       const refocus = (e: MouseEvent) => {
         if ((e.target as HTMLElement)?.id === 'test-rfid-input') return
         if (document.activeElement !== inputRef.current && document.activeElement?.id !== 'test-rfid-input') {
@@ -43,12 +55,12 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
           if (enabled && document.activeElement?.id !== 'test-rfid-input') inputRef.current?.focus()
         }, 10)
       }
-      inputRef.current?.addEventListener('blur', handleBlur)
+      inputEl?.addEventListener('blur', handleBlur)
 
       inputRef.current?.focus()
       return () => {
         document.removeEventListener('click', refocus)
-        inputRef.current?.removeEventListener('blur', handleBlur)
+        inputEl?.removeEventListener('blur', handleBlur)
       }
     }, [enabled])
 
@@ -68,9 +80,9 @@ export const RFIDInput = forwardRef<RFIDInputHandle, RFIDInputProps>(
       if (code.length >= 4) {
         setPulse(true)
         setTimeout(() => setPulse(false), 600)
-        onRead(code)
+        onReadRef.current(code)
       }
-    }, [onRead])
+    }, [])
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
