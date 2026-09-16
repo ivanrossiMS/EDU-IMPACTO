@@ -502,7 +502,9 @@ export default function LoginPage() {
     setLoginLoading(true); setLoginError('')
     
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 15000)
+    const timeoutId = setTimeout(() => controller.abort(), 45000)
+
+    let authData: any = null
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -517,16 +519,30 @@ export default function LoginPage() {
         })
       })
 
+      clearTimeout(timeoutId)
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
         throw new Error(errData.error || 'Credenciais inválidas.')
       }
 
-      const authData = await res.json()
+      authData = await res.json()
       if (authData.error) {
         throw new Error(authData.error)
       }
-      
+    } catch (fetchErr: any) {
+      clearTimeout(timeoutId)
+      setLoginLoading(false)
+      if (fetchErr.name === 'AbortError') {
+        setLoginError('Tempo limite de conexão excedido. Verifique sua internet e tente novamente.')
+      } else {
+        setLoginError(fetchErr.message || 'Credenciais inválidas.')
+      }
+      console.log('Login falhou:', fetchErr.message)
+      return
+    }
+
+    try {
       // Update local context with enriched profile from system_users
       const meta = authData.user?.user_metadata || {}
       const nomeReal = meta.nome || cleanEmail.split('@')[0]
@@ -680,14 +696,8 @@ export default function LoginPage() {
       return
     } catch (err: any) {
       setLoginLoading(false)
-      if (err.name === 'AbortError') {
-        setLoginError('Tempo limite de conexão excedido. Verifique sua internet e tente novamente.')
-      } else {
-        setLoginError(err.message || 'Credenciais inválidas.')
-      }
-      console.log('Login falhou:', err.message)
-    } finally {
-      clearTimeout(timeoutId)
+      setLoginError(err?.message || 'Erro ao inicializar sessão do usuário.')
+      console.error('Pós-login falhou:', err)
     }
   }
 

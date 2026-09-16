@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const isEmailFormat = loginInput.includes('@') && !loginInput.endsWith('@impactoedu.local')
 
     if (!isEmailFormat) {
-      // ── Busca filtrada no banco com Promise.all (Paralelo) ─────────────────────
+      // ── Entrada é Matrícula ou CPF: busca filtrada no banco com Promise.all (Paralelo) ──
       const loginDigits = loginInput.replace(/\D/g, '')
 
       let alunoQuery = `matricula.eq.${loginInput}`
@@ -75,42 +75,8 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      // Email format — check se é aluno, responsavel ou system_user (Paralelo)
-      const alunoPromise = supabaseAdmin
-        .from('alunos')
-        .select('id, nome, email, matricula, dados, status')
-        .ilike('email', loginInput)
-        .maybeSingle()
-        .then(r => r.data || null)
-        
-      const respPromise = supabaseAdmin
-        .from('responsaveis')
-        .select('id, nome, email')
-        .ilike('email', loginInput)
-        .maybeSingle()
-        .then(r => r.data || null)
-        
-      const sysUserPromise = supabaseAdmin
-        .from('system_users')
-        .select('id, nome, email')
-        .ilike('email', loginInput)
-        .limit(1)
-        .then(r => r.data?.[0] || null)
-        
-      const [alunoByEmail, respByEmail, sysUserByEmail] = await Promise.all([alunoPromise, respPromise, sysUserPromise])
-      
-      if (alunoByEmail) {
-        alunoRecord   = alunoByEmail
-        userType      = 'aluno'
-        resolvedEmail = loginInput
-      } else if (sysUserByEmail) {
-        userType      = 'system_user'
-        resolvedEmail = loginInput
-      } else if (respByEmail) {
-        responsavelRecord = respByEmail
-        userType          = 'responsavel'
-        resolvedEmail     = loginInput
-      }
+      // ── Entrada já é um e-mail válido: autentica diretamente sem table scans prévios ──
+      resolvedEmail = loginInput
     }
 
     if (userType === 'responsavel' && responsavelRecord) {
@@ -227,25 +193,18 @@ export async function POST(request: NextRequest) {
     let responsavel_id = ''
     let aluno_id = ''
 
-    // 1. Check system_users
+    // 1. Tenta identificar na tabela system_users (Colaboradores / Administradores)
     let hasDualRole = false
     let dbSystemUser: any = null
+
     if (userType === 'system_user') {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
         .select('id, nome, email, cargo, perfil, status')
-        .or(`email.ilike.${resolvedEmail},auth_id.eq.${user?.id || ''}`)
+        .or(`auth_id.eq.${user?.id || ''},email.ilike.${resolvedEmail}`)
         .limit(1)
 
-      dbSystemUser = dbSystemUserRows?.[0]
-      if (!dbSystemUser && resolvedEmail) {
-        const { data: fallbackUser } = await supabaseAdmin
-          .from('system_users')
-          .select('id, nome, email, cargo, perfil, status')
-          .ilike('email', resolvedEmail)
-          .maybeSingle()
-        if (fallbackUser) dbSystemUser = fallbackUser
-      }
+      dbSystemUser = dbSystemUserRows?.[0] || null
 
       if (dbSystemUser) {
         dbRecordExists = true
@@ -282,19 +241,74 @@ export async function POST(request: NextRequest) {
           if (!responsavel_id) responsavel_id = respFound[0].id
         }
       }
-    } else if (userType === 'responsavel' && responsavelRecord) {
-      dbRecordExists = true
-      responsavel_id = responsavelRecord.id
-      nome   = responsavelRecord.nome || nome
-      cargo  = 'Responsável'
-      perfil = 'Família'
-      // As permissões financeiro/pedagógico já foram checadas na linha 129
-    } else if (userType === 'aluno' && alunoRecord) {
-      dbRecordExists = true
-      aluno_id = alunoRecord.id
-      nome   = alunoRecord.nome || nome
-      cargo  = 'Aluno'
-      perfil = 'Família'
+    }
+
+    if (!dbRecordExists) {
+      if (userType === 'responsavel' && responsavelRecord) {
+        dbRecordExists = true
+        responsavel_id = responsavelRecord.id
+        nome   = responsavelRecord.nome || nome
+        cargo  = 'Responsável'
+        perfil = 'Família'
+      } else if (userType === 'aluno' && alunoRecord) {
+        dbRecordExists = true
+        aluno_id = alunoRecord.id
+        nome   = alunoRecord.nome || nome
+        cargo  = 'Aluno'
+        perfil = 'Família'
+      } else {
+        // Usuário logou com e-mail direto mas não é system_user: verifica se é Responsável ou Aluno
+        const [respLookup, alunoLookup] = await Promise.all([
+          supabaseAdmin.from('responsaveis').select('id, nome, email').ilike('email', resolvedEmail).limit(1).then(r => r.data?.[0] || null),
+          supabaseAdmin.from('alunos').select('id, nome, email, status').ilike('email', resolvedEmail).limit(1).then(r => r.data?.[0] || null)
+        ])
+
+        if (respLookup) {
+          const { data: links } = await supabaseAdmin
+            .from('aluno_responsavel')
+            .select('resp_financeiro, resp_pedagogico')
+            .eq('responsavel_id', respLookup.id)
+
+          const isAllowed = (links || []).some(
+            (l: any) => l.resp_financeiro === true || l.resp_pedagogico === true
+          )
+
+          if (!isAllowed) {
+            const supabaseSignOut = createServerClient(
+              process.env.NEXT_PUBLIC_SUPABASE_URL!,
+              process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+              {
+                cookies: {
+                  getAll() { return cookieStore.getAll() },
+                  setAll(cookiesToSet) {
+                    cookiesToSet.forEach(({ name, value, options }) => {
+                      cookieStore.set({ name, value, ...options, maxAge: 0 })
+                    })
+                  },
+                },
+              }
+            )
+            await supabaseSignOut.auth.signOut()
+            return NextResponse.json({ 
+              error: 'Acesso não autorizado. Apenas responsáveis Financeiro ou Pedagógico possuem login no sistema.' 
+            }, { status: 200 })
+          }
+
+          dbRecordExists = true
+          userType = 'responsavel'
+          responsavel_id = respLookup.id
+          nome   = respLookup.nome || nome
+          cargo  = 'Responsável'
+          perfil = 'Família'
+        } else if (alunoLookup) {
+          dbRecordExists = true
+          userType = 'aluno'
+          aluno_id = alunoLookup.id
+          nome   = alunoLookup.nome || nome
+          cargo  = 'Aluno'
+          perfil = 'Família'
+        }
+      }
     }
 
     if (!dbRecordExists) {

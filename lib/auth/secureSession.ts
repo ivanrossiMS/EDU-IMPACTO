@@ -204,6 +204,8 @@ let authGenerationId = 1;
 let monotonicWriteSeq = 0;
 let lastLogoutTimestamp = 0;
 let isExplicitlyLoggedOut = false;
+let lastSavedAccessToken: string | null = null;
+let lastSavedAtTimestamp = 0;
 
 export function getAuthGenerationId(): number {
   return authGenerationId;
@@ -453,6 +455,16 @@ export interface SaveSessionOptions {
 export async function saveSessionSecurely(session: any, options?: SaveSessionOptions): Promise<boolean> {
   if (!isValidSessionObject(session)) return false;
 
+  // Deduplicação: se a mesma sessão (access_token) foi gravada com sucesso nos últimos 3s,
+  // evita disparar outra rodada de 5 chamadas de I/O no Keychain/Keystore do hardware móvel.
+  if (
+    !options?.isExplicitLogin &&
+    lastSavedAccessToken === session.access_token &&
+    Date.now() - lastSavedAtTimestamp < 3000
+  ) {
+    return true;
+  }
+
   const opStartedAt = options?.startedAt || Date.now();
   const opGenerationId = options?.generationId !== undefined ? options.generationId : authGenerationId;
 
@@ -562,6 +574,9 @@ export async function saveSessionSecurely(session: any, options?: SaveSessionOpt
       }).catch(() => {});
     }
   }
+
+  lastSavedAccessToken = session.access_token;
+  lastSavedAtTimestamp = Date.now();
 
   return true;
 }
@@ -811,6 +826,8 @@ export async function restoreSessionSecurely(supabase: SupabaseClient): Promise<
  * Limpa com precisão atômica todos os artefatos de sessão do projeto atual.
  */
 export async function clearSessionSecurely(userId?: string) {
+  lastSavedAccessToken = null;
+  lastSavedAtTimestamp = 0;
   setLogoutBarrier(userId);
   inFlightRefreshPromise = null;
   inFlightRestorePromise = null;
