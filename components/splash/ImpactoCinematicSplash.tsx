@@ -5,17 +5,17 @@ import styles from './ImpactoCinematicSplash.module.css'
 
 export interface ImpactoCinematicSplashProps {
   /**
-   * 'demo' roda a sequência determinística de 9.5s.
+   * 'demo' roda a sequência acelerada de exibição de teste.
    * 'app' coordena a prontidão real da aplicação.
-   * 'manual' mantém a tela em exibição contínua sem disparar convergência nem saída automáticas.
+   * 'manual' mantém a tela em exibição contínua sem disparar saída automática.
    */
   mode?: 'demo' | 'app' | 'manual'
   /**
-   * No modo 'app', sinaliza que a sessão e a rota de destino estão prontas.
+   * No modo 'app', sinaliza que os dados/autenticação/rota estão prontos.
    */
   isReady?: boolean
   /**
-   * Impede o desaparecimento (opacity: 0) e redirecionamento, mantendo a tela visível indefinidamente para inspeção.
+   * Impede o desaparecimento (opacity: 0) e redirecionamento, mantendo a tela visível na composição final.
    */
   preventExit?: boolean
   /**
@@ -27,7 +27,7 @@ export interface ImpactoCinematicSplashProps {
    */
   onReadyComplete?: () => void
   /**
-   * Disparado ao final dos 9.5s no modo 'demo'.
+   * Disparado ao final da animação no modo 'demo'.
    */
   onDemoFinish?: () => void
   /**
@@ -67,11 +67,17 @@ export function ImpactoCinematicSplash({
   const [isConverging, setIsConverging] = useState(false)
   const [isPulseActive, setIsPulseActive] = useState(false)
   const [dotsFadeOut, setDotsFadeOut] = useState(false)
+  const [isAnimationFinished, setIsAnimationFinished] = useState(false)
   const [isExiting, setIsExiting] = useState(false)
 
-  const mountTimeRef = useRef<number>(Date.now())
-  const hasTriggeredConvergenceRef = useRef(false)
   const timersRef = useRef<NodeJS.Timeout[]>([])
+  const isDataReadyRef = useRef(isReady)
+  const isExitingTriggeredRef = useRef(false)
+
+  // Mantém referência atualizada da prontidão dos dados
+  useEffect(() => {
+    isDataReadyRef.current = isReady
+  }, [isReady])
 
   const addTimer = useCallback((fn: () => void, ms: number) => {
     const t = setTimeout(fn, ms)
@@ -84,18 +90,29 @@ export function ImpactoCinematicSplash({
     timersRef.current = []
   }, [])
 
-  // ── REAÇÃO A TRIGGER DE CONVERGÊNCIA MANUAL ──
+  // Função interna para efetuar a saída graciosa da tela
+  const triggerExitTransition = useCallback(() => {
+    if (isExitingTriggeredRef.current || preventExit) return
+    isExitingTriggeredRef.current = true
+    setIsExiting(true)
+
+    addTimer(() => {
+      onReadyComplete?.()
+    }, 350)
+  }, [preventExit, onReadyComplete, addTimer])
+
+  // ── REAÇÃO A TRIGGER MANUAL DE CONVERGÊNCIA ──
   useEffect(() => {
     if (triggerConvergence && !isConverging) {
       setIsConverging(true)
       addTimer(() => {
         setIsPulseActive(true)
         setDotsFadeOut(true)
-      }, 1800)
+      }, 1200)
     }
   }, [triggerConvergence, isConverging, addTimer])
 
-  // ── MODO DEMONSTRAÇÃO (9.5s determinístico) ──
+  // ── MODO DEMONSTRAÇÃO (Sequência única acelerada ~3.5s) ──
   useEffect(() => {
     if (mode !== 'demo') return
 
@@ -103,86 +120,93 @@ export function ImpactoCinematicSplash({
     setIsConverging(false)
     setIsPulseActive(false)
     setDotsFadeOut(false)
+    setIsAnimationFinished(false)
     setIsExiting(false)
+    isExitingTriggeredRef.current = false
 
-    // 4.4s: Início da convergência dos ícones para a logo
+    // 1.8s: Início da convergência fluida dos ícones para a logo
     addTimer(() => {
       setIsConverging(true)
-    }, 4400)
+    }, 1800)
 
-    // 6.35s: Pulso luminoso delicado na logo
+    // 3.0s: Pulso luminoso delicado na logo e desaparição dos pontos
     addTimer(() => {
       setIsPulseActive(true)
-    }, 6350)
-
-    // 6.5s - 7.0s: Desaparecimento dos 3 pontos de status
-    addTimer(() => {
       setDotsFadeOut(true)
-    }, 6600)
+    }, 3000)
 
-    // 9.5s: Finalização do modo demo
+    // 3.5s: Animação finalizada (composição estática estável)
     addTimer(() => {
+      setIsAnimationFinished(true)
       onDemoFinish?.()
       if (!preventExit) {
-        setIsExiting(true)
+        triggerExitTransition()
       }
-    }, 9500)
+    }, 3500)
 
     return () => {
       clearAllTimers()
     }
-  }, [mode, onDemoFinish, preventExit, addTimer, clearAllTimers])
+  }, [mode, preventExit, onDemoFinish, triggerExitTransition, addTimer, clearAllTimers])
 
-  // ── MODO REAL (Sinal de prontidão do app) ──
+  // ── MODO REAL / APLICATIVO (Garantia de Animação Completa Sem Reiniciar) ──
   useEffect(() => {
     if (mode !== 'app') return
-    if (!isReady || hasTriggeredConvergenceRef.current) return
 
-    hasTriggeredConvergenceRef.current = true
+    clearAllTimers()
+    setIsConverging(false)
+    setIsPulseActive(false)
+    setDotsFadeOut(false)
+    setIsAnimationFinished(false)
+    setIsExiting(false)
+    isExitingTriggeredRef.current = false
 
-    // Verifica se usuário tem preferência por movimento reduzido
+    // 1. Verifica preferência de movimento reduzido
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     if (prefersReducedMotion) {
-      if (!preventExit) {
-        onReadyComplete?.()
+      setIsAnimationFinished(true)
+      if (isReady && !preventExit) {
+        triggerExitTransition()
       }
       return
     }
 
-    const elapsed = Date.now() - mountTimeRef.current
-    // Garante que a abertura inicial teve pelo menos 1.2s de exibição para estética sem solavancos
-    const delayBeforeConvergence = Math.max(0, 1200 - elapsed)
-
+    // Abertura inicial acelerada
+    // 1.8s: Inicia obrigatoriamente a convergência dos ícones
     addTimer(() => {
-      // Inicia a convergência fluida
       setIsConverging(true)
+    }, 1800)
 
-      // Pulso sutil no término da convergência (~1.8s depois)
-      addTimer(() => {
-        setIsPulseActive(true)
-        setDotsFadeOut(true)
-      }, 1800)
+    // 3.0s: Pulso de chegada e ocultação dos pontos de status
+    addTimer(() => {
+      setIsPulseActive(true)
+      setDotsFadeOut(true)
+    }, 3000)
 
-      // Conclusão com saída suave do splash (apenas se preventExit for falso)
-      addTimer(() => {
-        if (!preventExit) {
-          setIsExiting(true)
-          addTimer(() => {
-            onReadyComplete?.()
-          }, 350)
-        }
-      }, 2300)
-    }, delayBeforeConvergence)
+    // 3.5s: A animação concluiu sua única passagem completa!
+    addTimer(() => {
+      setIsAnimationFinished(true)
+    }, 3500)
 
     return () => {
       clearAllTimers()
     }
-  }, [mode, isReady, preventExit, onReadyComplete, addTimer, clearAllTimers])
+  }, [mode, addTimer, clearAllTimers, isReady, preventExit, triggerExitTransition])
 
-  // Pausa/retomada caso a janela mude de foco
+  // Monitora se tanto a animação quanto o carregamento de dados estão concluídos
+  useEffect(() => {
+    if (mode !== 'app') return
+
+    // Se a animação já completou sua execução única E os dados estão prontos:
+    if (isAnimationFinished && isReady) {
+      triggerExitTransition()
+    }
+  }, [mode, isAnimationFinished, isReady, triggerExitTransition])
+
+  // Pausa/retomada em segundo plano
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
