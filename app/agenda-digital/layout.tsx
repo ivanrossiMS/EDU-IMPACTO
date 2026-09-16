@@ -337,13 +337,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         <FloatingWhatsApp />
         <AgendaRealtimeProvider />
         
-        {loadingPath === 'logout' ? (
-          <AppLoadingScreen
-            statusText="Encerrando sessão com segurança..."
-            subtitle="Conectando escola e família"
-            style={{ zIndex: 99999999 }}
-          />
-        ) : loadingPath ? (
+        {loadingPath && loadingPath !== 'logout' ? (
           <ImpactoLoader isLoading={true} />
         ) : null}
       </div>

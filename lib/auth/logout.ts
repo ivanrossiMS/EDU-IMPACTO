@@ -127,12 +127,18 @@ async function executeLogout(userId?: string): Promise<void> {
     console.warn('[Auth Logout] Erro ao desassociar OneSignal:', error);
   }
 
-  // 8. Redireciona com segurança para /login
+  // 8. Notifica o overlay que as operações de limpeza assíncrona foram concluídas
   if (typeof window !== 'undefined') {
-    if (window.location.pathname !== '/login') {
-      window.location.replace('/login');
-    } else {
-      window.location.reload();
-    }
+    try {
+      window.dispatchEvent(new CustomEvent('edu:logout-ready'));
+    } catch (_) {}
+
+    // Fallback de segurança: caso o overlay não esteja ativo ou ocorra anomalia,
+    // garante a navegação após 5.5 segundos sem travar o usuário
+    setTimeout(() => {
+      if (window.location.pathname !== '/login') {
+        window.location.replace('/login');
+      }
+    }, 5500);
   }
 }

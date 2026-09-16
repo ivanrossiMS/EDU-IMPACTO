@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, memo } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useApp, loadSettingAsync, saveSetting, removeSettingAsync } from '@/lib/context'
@@ -73,6 +73,57 @@ export default function LoginPage() {
   const [isCheckingSavedUser, setIsCheckingSavedUser] = useState(true)
   const [pendingAuth, setPendingAuth] = useState<any>(null)
   
+  // Controle de exibição da animação cinematográfica na inicialização do app:
+  // Se o usuário acabou de efetuar logout nesta sessão ou a splash já foi concluída na raiz,
+  // não repetimos a animação no carregamento inicial de /login.
+  const [shouldShowSplash, setShouldShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      const justLoggedOut =
+        sessionStorage.getItem('edu_just_logged_out') === '1' ||
+        Boolean((window as any).__EDU_JUST_LOGGED_OUT__)
+      const alreadyShown =
+        sessionStorage.getItem('edu_splash_shown') === '1' ||
+        Boolean((window as any).__EDU_SPLASH_SHOWN__)
+
+      if (justLoggedOut) {
+        sessionStorage.removeItem('edu_just_logged_out')
+        delete (window as any).__EDU_JUST_LOGGED_OUT__
+        return false
+      }
+      if (alreadyShown) {
+        return false
+      }
+    } catch (_) {}
+    return true
+  })
+
+  const shouldShowSplashRef = useRef(shouldShowSplash)
+  useEffect(() => {
+    shouldShowSplashRef.current = shouldShowSplash
+  }, [shouldShowSplash])
+
+  const [isSessionCheckFinished, setIsSessionCheckFinished] = useState(false)
+  const pendingRedirectUrlRef = useRef<string | null>(null)
+
+  const handleSplashFinished = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('edu_splash_shown', '1')
+        ;(window as any).__EDU_SPLASH_SHOWN__ = true
+      } catch (_) {}
+    }
+
+    if (pendingRedirectUrlRef.current) {
+      hideSplashScreen(300)
+      router.replace(pendingRedirectUrlRef.current)
+    } else {
+      setShouldShowSplash(false)
+      setIsCheckingSavedUser(false)
+      hideSplashScreen(300)
+    }
+  }, [router])
+
   const [showCheckinModal, setShowCheckinModal] = useState(false)
 
   useEffect(() => {
@@ -214,12 +265,31 @@ export default function LoginPage() {
       }
       
       const checkStoredUser = async () => {
+        const finishSessionCheck = (destination?: string, nextStep?: Step) => {
+          clearTimeout(timeoutId)
+          if (nextStep) {
+            setStep(nextStep)
+          }
+          if (destination) {
+            pendingRedirectUrlRef.current = destination
+          }
+          setIsSessionCheckFinished(true)
+
+          if (!shouldShowSplashRef.current) {
+            if (destination) {
+              hideSplashScreen(300)
+              router.replace(destination)
+            } else {
+              setIsCheckingSavedUser(false)
+              hideSplashScreen(300)
+            }
+          }
+        }
+
         // Timeout de proteção: limite de segurança generoso para cold boot / reboot
         const timeoutId = setTimeout(() => {
           console.warn('[Login] Timeout de segurança de checagem de usuário expirou (6s). Liberando tela de login.')
-          setIsCheckingSavedUser(false)
-          setStep('login')
-          hideSplashScreen(300)
+          finishSessionCheck(undefined, 'login')
         }, 6000)
 
         try {
@@ -235,10 +305,7 @@ export default function LoginPage() {
               window.localStorage.removeItem('edu-current-perfil')
             }
             setCurrentUser(null)
-            clearTimeout(timeoutId)
-            setIsCheckingSavedUser(false)
-            setStep('login')
-            hideSplashScreen(300)
+            finishSessionCheck(undefined, 'login')
             return
           }
 
@@ -273,10 +340,7 @@ export default function LoginPage() {
           }
 
           if (!storedUser) {
-            clearTimeout(timeoutId)
-            setIsCheckingSavedUser(false)
-            setStep('login')
-            hideSplashScreen(300)
+            finishSessionCheck(undefined, 'login')
             return
           }
 
@@ -310,10 +374,7 @@ export default function LoginPage() {
                 await clearSessionSecurely().catch(() => {})
                 await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
                 setCurrentUser(null)
-                clearTimeout(timeoutId)
-                setIsCheckingSavedUser(false)
-                setStep('login')
-                hideSplashScreen(300)
+                finishSessionCheck(undefined, 'login')
                 return
               }
             }
@@ -327,7 +388,6 @@ export default function LoginPage() {
 
           // Se a URL solicitar explicitamente troca de módulo ou perfil de agenda:
           if (stepParam === 'choose_system' || stepParam === 'choose_agenda_role') {
-            clearTimeout(timeoutId)
             try {
               localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
               if (typeof window !== 'undefined') delete (window as any).__EDU_PENDING_PUSH_ROUTE__
@@ -347,9 +407,7 @@ export default function LoginPage() {
               hasDualRole: storedUser.hasDualRole
             })
             setHasDualRole(isAlsoFamily)
-            setIsCheckingSavedUser(false)
-            setStep(stepParam)
-            hideSplashScreen(300)
+            finishSessionCheck(undefined, stepParam)
             return
           }
 
@@ -367,21 +425,18 @@ export default function LoginPage() {
           }
 
           if (pendingRoute) {
-            clearTimeout(timeoutId)
             console.log('[Login] Usuário já logado e rota pendente detectada:', pendingRoute)
             if (isFamilyOrStudent(storedUser) && !pendingRoute.startsWith('/agenda-digital')) {
               pendingRoute = getAgendaDigitalDestination(storedUser)
             }
-            router.replace(pendingRoute)
+            finishSessionCheck(pendingRoute)
             return
           }
 
           // 1. Família / Responsável / Aluno têm exclusivamente o módulo Agenda Digital
           if (isFamilyOrStudent(storedUser)) {
-            clearTimeout(timeoutId)
-            hideSplashScreen(300)
             const dest = getAgendaDigitalDestination(storedUser)
-            router.replace(dest)
+            finishSessionCheck(dest)
             return
           }
 
@@ -397,23 +452,18 @@ export default function LoginPage() {
 
           // Só deve entrar direto na Agenda Digital se o perfil tiver EXCLUSIVAMENTE o módulo Agenda Digital
           if (access.onlyAgendaDigital) {
-            clearTimeout(timeoutId)
-            hideSplashScreen(300)
             const dest = getAgendaDigitalDestination(storedUser)
-            router.replace(dest)
+            finishSessionCheck(dest)
             return
           }
 
           // Se tiver apenas 1 outro módulo liberado (ex: ERP), vai direto para esse módulo
           if (access.totalModules === 1) {
-            clearTimeout(timeoutId)
-            hideSplashScreen(300)
-            router.replace(getInitialRouteForUser(storedUser, userPerfilObj))
+            finishSessionCheck(getInitialRouteForUser(storedUser, userPerfilObj))
             return
           }
 
           // 3. Múltiplos módulos liberados: habilita tela de escolha de sistema (web e mobile nativo)
-          clearTimeout(timeoutId)
           const isAlsoFamily = !!storedUser.responsavel_id || !!storedUser.hasDualRole
           setPendingAuth({
             id: storedUser.id,
@@ -428,14 +478,10 @@ export default function LoginPage() {
             setProfileData(userPerfilObj)
           }
           setHasDualRole(isAlsoFamily)
-          setIsCheckingSavedUser(false)
-          hideSplashScreen(300)
-          setStep('choose_system')
+          finishSessionCheck(undefined, 'choose_system')
         } catch (e) {
           console.error('[Login] checkStoredUser error:', e)
-          setIsCheckingSavedUser(false)
-          setStep('login')
-          hideSplashScreen(300)
+          finishSessionCheck(undefined, 'login')
         } finally {
           clearTimeout(timeoutId)
         }
@@ -1442,6 +1488,18 @@ export default function LoginPage() {
     </div>
   )
 
+  if (shouldShowSplash) {
+    return (
+      <AppLoadingScreen
+        mode="app"
+        isReady={isSessionCheckFinished}
+        onReadyComplete={handleSplashFinished}
+        statusText="Validando sessão segura..."
+        subtitle="Conectando escola e família"
+      />
+    )
+  }
+
   return (
     <div className="login-wrapper" style={{ display:'flex', minHeight:'100vh', fontFamily:"'Inter',sans-serif", overflow:'hidden' }}>
       
@@ -1463,9 +1521,7 @@ export default function LoginPage() {
 
         {/* Enterprise SaaS Background Overlay */}
         <BackgroundEffects />
-        {step === 'login' && (isCheckingSavedUser ? (
-          <AppLoadingScreen statusText="Validando sessão segura..." />
-        ) : LoginContent)}
+        {step === 'login' && LoginContent}
         {(step === 'first_access_verify' || step === 'forgot_password') && FirstAccessVerify}
         {(step === 'first_access_create' || step === 'forgot_password_create') && FirstAccessCreate}
         {step === 'setup_master' && SetupMasterContent}

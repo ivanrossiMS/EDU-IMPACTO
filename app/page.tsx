@@ -137,6 +137,12 @@ function RootInner() {
   const handleTransitionComplete = useCallback(() => {
     if (isRedirectingRef.current || !targetRoute) return
     isRedirectingRef.current = true
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('edu_splash_shown', '1')
+        ;(window as any).__EDU_SPLASH_SHOWN__ = true
+      } catch (_) {}
+    }
     router.replace(targetRoute)
   }, [targetRoute, router])
 

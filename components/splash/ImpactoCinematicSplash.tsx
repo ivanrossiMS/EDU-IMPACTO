@@ -149,9 +149,13 @@ export function ImpactoCinematicSplash({
     }
   }, [mode, preventExit, onDemoFinish, triggerExitTransition, addTimer, clearAllTimers])
 
+  const isTimelineStartedRef = useRef(false)
+
   // ── MODO REAL / APLICATIVO (Garantia de Animação Completa Sem Reiniciar) ──
   useEffect(() => {
     if (mode !== 'app') return
+    if (isTimelineStartedRef.current) return
+    isTimelineStartedRef.current = true
 
     clearAllTimers()
     setIsConverging(false)
@@ -168,14 +172,11 @@ export function ImpactoCinematicSplash({
 
     if (prefersReducedMotion) {
       setIsAnimationFinished(true)
-      if (isReady && !preventExit) {
-        triggerExitTransition()
-      }
       return
     }
 
     // Abertura inicial acelerada
-    // 1.8s: Inicia obrigatoriamente a convergência dos ícones
+    // 1.8s: Inicia obrigatoriamente a convergência dos ícones para a logo
     addTimer(() => {
       setIsConverging(true)
     }, 1800)
@@ -187,6 +188,7 @@ export function ImpactoCinematicSplash({
     }, 3000)
 
     // 3.5s: A animação concluiu sua única passagem completa!
+    // A partir deste ponto, fica TOTALMENTE ESTÁTICA no frame final até isReady ser true.
     addTimer(() => {
       setIsAnimationFinished(true)
     }, 3500)
@@ -194,13 +196,13 @@ export function ImpactoCinematicSplash({
     return () => {
       clearAllTimers()
     }
-  }, [mode, addTimer, clearAllTimers, isReady, preventExit, triggerExitTransition])
+  }, [mode, addTimer, clearAllTimers])
 
   // Monitora se tanto a animação quanto o carregamento de dados estão concluídos
+  // Permanece estática enquanto isReady for false; assim que isReady for true, transiciona para a página
   useEffect(() => {
     if (mode !== 'app') return
 
-    // Se a animação já completou sua execução única E os dados estão prontos:
     if (isAnimationFinished && isReady) {
       triggerExitTransition()
     }

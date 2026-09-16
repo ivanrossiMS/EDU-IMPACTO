@@ -1152,15 +1152,6 @@ function SelecionarAlunoContent() {
 
   return (
     <>
-      {/* Overlay de logout em tela cheia via Portal — exibe imediatamente a tela escura com Impacto Edu animado sem embaçar o fundo */}
-      {isLoggingOut && mounted && typeof document !== 'undefined' && createPortal(
-        <AppLoadingScreen
-          statusText="Encerrando sessão com segurança..."
-          subtitle="Conectando escola e família"
-          style={{ zIndex: 99999999 }}
-        />,
-        document.body
-      )}
       <div className="premium-selector-container">
         {/* Dynamic styles block for modern theme design */}
       <style dangerouslySetInnerHTML={{__html: SELECTOR_STYLES}} />
