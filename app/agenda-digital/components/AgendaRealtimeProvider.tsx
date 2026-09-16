@@ -19,7 +19,6 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import Script from 'next/script'
 import { useRouter, useParams, usePathname } from 'next/navigation'
 import { Calendar, FileText, Image as ImageIcon, ShieldAlert, Megaphone, BarChart2, X } from 'lucide-react'
 import { useApp } from '@/lib/context'
@@ -943,11 +942,6 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
   return (
     <>
-      {/* SDK do OneSignal v16 — carregado após interação do usuário */}
-      <Script
-        src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
-        strategy="afterInteractive"
-      />
       <PushPermissionBanner />
       <Toaster position="top-right" richColors />
       {children}

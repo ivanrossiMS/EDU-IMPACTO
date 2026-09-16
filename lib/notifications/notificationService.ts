@@ -134,6 +134,20 @@ class NotificationService {
               serviceWorkerParam: { scope: '/' },
             })
             ;(window as any).__OS_INIT__ = true
+
+            // Listeners para mudanças de permissão e subscrição na Web
+            if (OneSignal.Notifications?.addEventListener) {
+              OneSignal.Notifications.addEventListener('permissionChange', () => {
+                this.refresh().catch(() => {})
+              })
+            }
+            const pushSub = OneSignal.User?.PushSubscription || OneSignal.User?.pushSubscription
+            if (pushSub?.addEventListener) {
+              pushSub.addEventListener('change', () => {
+                this.refresh().catch(() => {})
+              })
+            }
+
             await this.refresh()
             console.log('🔔 [NotificationService] OneSignal Web inicializado!')
           } catch (webErr: any) {
@@ -298,8 +312,9 @@ class NotificationService {
     else if (webPerm === 'denied') permStatus = 'denied'
 
     const OS = (window as any).OneSignal
-    const subId = OS?.User?.PushSubscription?.id || null
-    const optedIn = OS?.User?.PushSubscription?.optedIn ?? (webPerm === 'granted')
+    const pushSub = OS?.User?.PushSubscription || OS?.User?.pushSubscription
+    const subId = pushSub?.id || null
+    const optedIn = pushSub?.optedIn ?? (webPerm === 'granted')
     const extId = OS?.User?.externalId || (window as any).__OS_USER_ID__ || null
 
     this.state = {
@@ -310,7 +325,7 @@ class NotificationService {
       subscription: {
         isSubscribed: Boolean(optedIn && webPerm === 'granted'),
         subscriptionId: subId,
-        pushToken: null,
+        pushToken: pushSub?.token || null,
         optedIn: Boolean(optedIn),
         userId: extId,
       },
@@ -361,8 +376,9 @@ class NotificationService {
         const OS = (window as any).OneSignal
         if (OS?.Notifications?.requestPermission) {
           await OS.Notifications.requestPermission()
-          if (OS.User?.pushSubscription?.optIn) {
-            await OS.User.pushSubscription.optIn().catch(() => {})
+          const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
+          if (typeof optInFn === 'function') {
+            await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
           }
         } else {
           await Notification.requestPermission()
@@ -406,102 +422,131 @@ class NotificationService {
     const isNative = Capacitor.isNativePlatform()
 
     try {
+      // Tags de segmentação
+      const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master']
+      const cargoLower = String(user.cargo || '').toLowerCase().trim()
+      const perfilLower = String(user.perfil || '').toLowerCase().trim()
+      const isMaster = masterRoles.includes(cargoLower) || masterRoles.includes(perfilLower)
+
+      const tags: Record<string, string> = {
+        perfil: user.perfil || '',
+        cargo: user.cargo || '',
+        isMasterAdmin: isMaster ? 'true' : 'false',
+        acesso: isMaster ? 'institucional' : (user.perfil || 'padrao'),
+      }
+      if (user.aluno_id) tags['aluno_id'] = String(user.aluno_id)
+      if (extraData?.alunoId) tags['aluno_id'] = String(extraData.alunoId)
+      if (extraData?.turmaNome) tags['turma'] = String(extraData.turmaNome)
+      if (extraData?.alunoObj?.id) tags['aluno_db_id'] = String(extraData.alunoObj.id)
+      if (user.responsavel_id) tags['responsavel_id'] = String(user.responsavel_id)
+      if (extraData?.hasDualAccess) tags['has_dual_role'] = 'true'
+
+      if (Array.isArray(extraData?.meusAlunos)) {
+        extraData.meusAlunos.forEach(s => {
+          if (s?.id) tags[`aluno_${s.id}`] = 'true'
+          if (s?.turmaNome || s?.turma) tags[`turma_${s.id}`] = String(s.turmaNome || s.turma)
+        })
+      }
+
+      // Aliases para permitir envio flexível pelo backend (por ID de responsável, aluno, email, etc.)
+      const aliasesToRegister: Array<{ label: string; id: string }> = []
+      const rId = user.responsavel_id || user.user_metadata?.responsavel_id || user.responsavelId
+      if (rId) {
+        aliasesToRegister.push({ label: 'responsavel_id', id: String(rId) })
+      }
+      if (user.aluno_id) {
+        aliasesToRegister.push({ label: 'aluno_id', id: String(user.aluno_id) })
+      }
+      if (extraData?.alunoId && String(extraData.alunoId) !== String(user.aluno_id)) {
+        aliasesToRegister.push({ label: 'aluno_id', id: String(extraData.alunoId) })
+      }
+      if (Array.isArray(extraData?.meusAlunos)) {
+        extraData.meusAlunos.forEach(s => {
+          if (s?.id) {
+            aliasesToRegister.push({ label: 'aluno_id', id: String(s.id) })
+            const cleanId = String(s.id).replace(/^(a_|_ALU)/, '')
+            if (cleanId !== String(s.id)) {
+              aliasesToRegister.push({ label: 'aluno_id', id: cleanId })
+            }
+          }
+        })
+      }
+      const staffIds = extraData?.extraStaffIds || []
+      const colabId =
+        user.colaborador_id ||
+        user.system_user_id ||
+        user.user_metadata?.colaborador_id ||
+        user.user_metadata?.system_user_id ||
+        staffIds[0]
+      if (colabId) {
+        aliasesToRegister.push({ label: 'colaborador_id', id: String(colabId) })
+        aliasesToRegister.push({ label: 'system_user_id', id: String(colabId) })
+      }
+      const cod = user.codigo || user.user_metadata?.codigo
+      if (cod) {
+        aliasesToRegister.push({ label: 'codigo', id: String(cod) })
+      }
+      if (user.email) {
+        aliasesToRegister.push({ label: 'email', id: String(user.email).toLowerCase().trim() })
+      }
+
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
         if (this.currentUserId !== userId) {
           await OneSignalNative.login(userId)
           this.currentUserId = userId
-          console.log(`✅ [NotificationService] Usuário associado ao OneSignal (External ID: ${userId})`)
+          console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo (External ID: ${userId})`)
         }
 
         if (OneSignalNative.User?.pushSubscription?.optIn) {
           await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
         }
 
-        // Aliases para permitir envio flexível pelo backend
         if (OneSignalNative.User?.addAlias) {
-          const rId = user.responsavel_id || user.user_metadata?.responsavel_id || user.responsavelId
-          if (rId) {
-            OneSignalNative.User.addAlias('responsavel_id', String(rId)).catch(() => {})
-          }
-          if (user.aluno_id) {
-            OneSignalNative.User.addAlias('aluno_id', String(user.aluno_id)).catch(() => {})
-          }
-
-          // Aliases para todos os alunos vinculados ao responsável
-          if (Array.isArray(extraData?.meusAlunos)) {
-            extraData.meusAlunos.forEach(s => {
-              if (s?.id) {
-                OneSignalNative.User.addAlias('aluno_id', String(s.id)).catch(() => {})
-                const cleanId = String(s.id).replace(/^(a_|_ALU)/, '')
-                if (cleanId !== String(s.id)) {
-                  OneSignalNative.User.addAlias('aluno_id', cleanId).catch(() => {})
-                }
-              }
-            })
-          }
-
-          const staffIds = extraData?.extraStaffIds || []
-          const colabId =
-            user.colaborador_id ||
-            user.system_user_id ||
-            user.user_metadata?.colaborador_id ||
-            user.user_metadata?.system_user_id ||
-            staffIds[0]
-          if (colabId) {
-            OneSignalNative.User.addAlias('colaborador_id', String(colabId)).catch(() => {})
-            OneSignalNative.User.addAlias('system_user_id', String(colabId)).catch(() => {})
-          }
-          const cod = user.codigo || user.user_metadata?.codigo
-          if (cod) {
-            OneSignalNative.User.addAlias('codigo', String(cod)).catch(() => {})
-          }
-          if (user.email) {
-            OneSignalNative.User.addAlias('email', String(user.email).toLowerCase().trim()).catch(() => {})
+          for (const alias of aliasesToRegister) {
+            OneSignalNative.User.addAlias(alias.label, alias.id).catch(() => {})
           }
         }
 
-        // Tags de segmentação
         if (OneSignalNative.User?.addTags) {
-          const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master']
-          const cargoLower = String(user.cargo || '').toLowerCase().trim()
-          const perfilLower = String(user.perfil || '').toLowerCase().trim()
-          const isMaster = masterRoles.includes(cargoLower) || masterRoles.includes(perfilLower)
-
-          const tags: Record<string, string> = {
-            perfil: user.perfil || '',
-            cargo: user.cargo || '',
-            isMasterAdmin: isMaster ? 'true' : 'false',
-            acesso: isMaster ? 'institucional' : (user.perfil || 'padrao'),
-          }
-          if (user.aluno_id) tags['aluno_id'] = String(user.aluno_id)
-          if (extraData?.alunoId) tags['aluno_id'] = String(extraData.alunoId)
-          if (extraData?.turmaNome) tags['turma'] = String(extraData.turmaNome)
-          if (extraData?.alunoObj?.id) tags['aluno_db_id'] = String(extraData.alunoObj.id)
-          if (user.responsavel_id) tags['responsavel_id'] = String(user.responsavel_id)
-          if (extraData?.hasDualAccess) tags['has_dual_role'] = 'true'
-
-          if (Array.isArray(extraData?.meusAlunos)) {
-            extraData.meusAlunos.forEach(s => {
-              if (s?.id) tags[`aluno_${s.id}`] = 'true'
-              if (s?.turmaNome || s?.turma) tags[`turma_${s.id}`] = String(s.turmaNome || s.turma)
-            })
-          }
-
           await OneSignalNative.User.addTags(tags).catch(() => {})
         }
       } else {
         // Web User Sync
-        const OS = (window as any).OneSignal
-        if (OS && typeof OS.login === 'function') {
+        const performWebSync = async (OS: any) => {
+          if (!OS || typeof OS.login !== 'function') return
+
           if (this.currentUserId !== userId) {
             await OS.login(userId).catch(() => {})
             this.currentUserId = userId
+            console.log(`✅ [NotificationService] Usuário associado ao OneSignal Web (External ID: ${userId})`)
           }
-          if (OS.User?.PushSubscription?.optIn) {
-            await OS.User.PushSubscription.optIn().catch(() => {})
+
+          const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
+          if (typeof optInFn === 'function') {
+            await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
           }
+
+          if (OS.User?.addAlias) {
+            for (const alias of aliasesToRegister) {
+              await OS.User.addAlias(alias.label, alias.id).catch(() => {})
+            }
+          }
+
+          if (OS.User?.addTags) {
+            await OS.User.addTags(tags).catch(() => {})
+          }
+        }
+
+        const OS = (window as any).OneSignal
+        if (OS && typeof OS.login === 'function') {
+          await performWebSync(OS)
+        } else if (typeof window !== 'undefined') {
+          window.OneSignalDeferred = window.OneSignalDeferred || []
+          window.OneSignalDeferred.push(async (OneSignal: any) => {
+            await performWebSync(OneSignal)
+          })
         }
       }
 

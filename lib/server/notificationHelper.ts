@@ -300,10 +300,9 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
 
     if (rawIds.length > 0) {
       try {
-        const respRecords = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email, user_id, dados', 'id', rawIds)
+        const respRecords = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email, dados, telefone, celular', 'id', rawIds)
         if (respRecords && respRecords.length > 0) {
           respRecords.forEach((r: any) => {
-            if (r.user_id) allResponsavelIds.add(String(r.user_id))
             if (r.dados?.auth_id) allResponsavelIds.add(String(r.dados.auth_id))
             if (r.dados?.user_id) allResponsavelIds.add(String(r.dados.user_id))
             if (r.email) {
@@ -355,18 +354,24 @@ export async function getResponsavelIdsForTargets(dados: TargetParams | null | u
         console.warn('[NotifHelper] Aviso ao expandir IDs via system_users:', sysErr)
       }
 
-      // Buscar Auth UUIDs de responsáveis via admin.listUsers para os emails encontrados
-      if (respEmails.size > 0 && supabase.auth?.admin) {
+      // Buscar Auth UUIDs de responsáveis via admin.listUsers para os emails e IDs encontrados
+      if ((respEmails.size > 0 || expandedRawIds.length > 0) && supabase.auth?.admin) {
         try {
           let page = 1
           let foundCount = 0
-          while (page <= 5 && foundCount < respEmails.size) {
+          while (page <= 5) {
             const { data: list } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
             if (!list?.users || list.users.length === 0) break
             list.users.forEach((u: any) => {
               const mail = (u.email || '').toLowerCase().trim()
               const metaRespId = String(u.user_metadata?.responsavel_id || '').trim()
-              if (respEmails.has(mail) || (metaRespId && expandedRawIds.includes(metaRespId))) {
+              const metaAlunoId = String(u.user_metadata?.aluno_id || '').trim()
+              const isMatch = 
+                (mail && respEmails.has(mail)) ||
+                (metaRespId && expandedRawIds.includes(metaRespId)) ||
+                (metaAlunoId && finalAlunosIds.includes(metaAlunoId))
+
+              if (isMatch) {
                 foundCount++
                 allResponsavelIds.add(String(u.id))
               }
@@ -953,18 +958,16 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       if (rawIdsArray.length > 0) {
         try {
           const respEmails = new Set<string>()
-          const respRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email, user_id, dados', 'id', rawIdsArray)
+          const respRows = await fetchInChunks<any>(supabase, 'responsaveis', 'id, email, dados, telefone, celular', 'id', rawIdsArray)
           if (respRows && respRows.length > 0) {
             respRows.forEach((r: any) => {
               const rIdStr = String(r.id)
-              const uId = r.user_id ? String(r.user_id) : ''
               const authId = r.dados?.auth_id ? String(r.dados.auth_id) : (r.dados?.user_id ? String(r.dados.user_id) : '')
               const rEmail = (r.email || '').toLowerCase().trim()
               if (rEmail) respEmails.add(rEmail)
 
               mapResponsaveis.forEach((set) => {
                 if (set.has(rIdStr)) {
-                  if (uId) set.add(uId)
                   if (authId) set.add(authId)
                   if (rEmail) set.add(rEmail)
                 }
@@ -997,25 +1000,28 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
             })
           }
 
-          // Se houver emails de responsáveis, buscar no Supabase Auth para obter o Auth UUID do OneSignal
-          if (respEmails.size > 0 && supabase.auth?.admin) {
+          // Se houver emails ou IDs de responsáveis, buscar no Supabase Auth para obter o Auth UUID do OneSignal
+          if ((respEmails.size > 0 || rawIdsArray.length > 0) && supabase.auth?.admin) {
             try {
               let page = 1
-              let foundCount = 0
-              while (page <= 5 && foundCount < respEmails.size) {
+              while (page <= 5) {
                 const { data: list } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
                 if (!list?.users || list.users.length === 0) break
                 list.users.forEach((u: any) => {
                   const mail = (u.email || '').toLowerCase().trim()
                   const metaRespId = String(u.user_metadata?.responsavel_id || '').trim()
-                  if (respEmails.has(mail) || (metaRespId && rawIdsArray.includes(metaRespId))) {
-                    foundCount++
-                    mapResponsaveis.forEach((set) => {
-                      if (set.has(mail) || (metaRespId && set.has(metaRespId))) {
-                        set.add(String(u.id))
-                      }
-                    })
-                  }
+                  const metaAlunoId = String(u.user_metadata?.aluno_id || '').trim()
+                  
+                  mapResponsaveis.forEach((set, alunoIdKey) => {
+                    const isDirectMatch = 
+                      (mail && set.has(mail)) ||
+                      (metaRespId && set.has(metaRespId)) ||
+                      (metaAlunoId && (alunoIdKey === metaAlunoId || alunoIdKey.replace(/^0+/, '') === metaAlunoId.replace(/^0+/, '')))
+
+                    if (isDirectMatch) {
+                      set.add(String(u.id))
+                    }
+                  })
                 })
                 if (list.users.length < 1000) break
                 page++

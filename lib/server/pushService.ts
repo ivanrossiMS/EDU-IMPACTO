@@ -74,7 +74,7 @@ async function attemptSend(
       const notificationId = typeof parsedBody.id === 'string' ? parsedBody.id.trim() : ''
       const hasValidId = notificationId.length > 0
 
-      // Checar se a API retornou erro explícito de ausência total de inscritos ou invalid_aliases
+      // Checar se a API retornou erro explícito de ausência total de inscritos
       let allUnsubscribed = false
       if (parsedBody.errors) {
         if (Array.isArray(parsedBody.errors)) {
@@ -83,38 +83,19 @@ async function attemptSend(
           )
         } else if (typeof parsedBody.errors === 'string') {
           allUnsubscribed = parsedBody.errors.toLowerCase().includes('not subscribed')
-        } else if (typeof parsedBody.errors === 'object' && parsedBody.errors !== null) {
-          // Tratar OneSignal v1 quando errors é objeto: { invalid_aliases: { external_id: [...], ... } }
-          const invalidAliases = parsedBody.errors.invalid_aliases
-          if (invalidAliases && typeof invalidAliases === 'object' && payload.include_aliases) {
-            const requestedKeys = Object.keys(payload.include_aliases)
-            const allKeysInvalid = requestedKeys.length > 0 && requestedKeys.every(k => {
-              const reqList = payload.include_aliases[k] || []
-              const invList = invalidAliases[k] || []
-              return reqList.length > 0 && invList.length >= reqList.length
-            })
-            if (allKeysInvalid) {
-              allUnsubscribed = true
-            }
-          }
-          if (parsedBody.errors.invalid_external_user_ids && payload.include_external_user_ids) {
-            if (parsedBody.errors.invalid_external_user_ids.length >= payload.include_external_user_ids.length) {
-              allUnsubscribed = true
-            }
-          }
         }
       }
 
       // No OneSignal v1 API com include_aliases, a contagem de destinatários é assíncrona
       // e o campo 'recipients' pode não vir na resposta HTTP síncrona.
-      // Se 'id' for um UUID válido e não houver erro de falta de inscritos,
+      // Se 'id' for um UUID válido e não houver erro explícito de ausência total de inscritos,
       // a notificação foi aceita e enfileirada com sucesso pelo OneSignal.
       let recipientCount = parsedBody.recipients ?? parsedBody.num_recipients
       if (recipientCount === undefined) {
         recipientCount = (hasValidId && !allUnsubscribed) ? 1 : 0
       }
 
-      if (recipientCount === 0 || !hasValidId || allUnsubscribed) {
+      if (!hasValidId || (recipientCount === 0 && allUnsubscribed)) {
         const errorDetail = allUnsubscribed
           ? 'All included players are not subscribed'
           : (parsedBody.errors ? JSON.stringify(parsedBody.errors) : 'No subscribed recipients found')
@@ -134,7 +115,7 @@ async function attemptSend(
         console.log(`✅ [PushService] Push aceito pelo OneSignal com sucesso! ID: ${notificationId} | Destinatários ativos: ${recipientCount}`)
       }
       return {
-        success: hasValidId && recipientCount > 0,
+        success: true,
         data: parsedBody,
         statusCode: response.status,
         recipients: recipientCount,

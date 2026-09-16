@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import './globals.css'
 import 'katex/dist/katex.min.css'
 import { AppProvider } from '@/lib/context'
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://impacto-edu.net'),
   title: 'IMPACTO EDU — Sistema de Gestão Escolar',
   description: 'Plataforma enterprise de gestão escolar completa — acadêmico, financeiro, RH, CRM, comunicação, BI e IA.',
+  manifest: '/manifest.webmanifest',
 }
 
 export const viewport = {
@@ -61,6 +63,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </KeyboardProvider>
           </AppProvider>
         </ReactQueryProvider>
+        <Script
+          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+          strategy="afterInteractive"
+        />
         <div id="global-overlay-root"></div>
       </body>
     </html>
