@@ -17,7 +17,11 @@ public class MainActivity extends BridgeActivity {
             }
         });
 
-        registerPlugin(NativeSettingsPlugin.class);
+        try {
+            registerPlugin(NativeSettingsPlugin.class);
+        } catch (Throwable t) {
+            Log.e(TAG, "Falha ao registrar NativeSettingsPlugin: " + t.getMessage(), t);
+        }
         super.onCreate(savedInstanceState);
     }
 }
