@@ -88,7 +88,7 @@ class NotificationService {
   }
 
   private async _doInitialize(customAppId?: string): Promise<void> {
-    const appId = customAppId || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
+    const appId = customAppId || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || '1d652b2a-7b06-4b07-984f-f47e0a4b37fc'
     if (!appId) {
       console.warn('⚠️ [NotificationService] App ID do OneSignal não configurado.')
       this.state.permissionStatus = 'unsupported'
@@ -214,14 +214,45 @@ class NotificationService {
     const isNative = Capacitor.isNativePlatform()
 
     if (isNative) {
+      // Garante que o SDK nativo foi inicializado antes de interrogar métodos de permissão
+      if (!this.initialized) {
+        if (this.initializingPromise) {
+          try {
+            await this.initializingPromise
+          } catch {}
+        } else {
+          try {
+            await this.initialize()
+          } catch {}
+        }
+      }
+
+      // Se mesmo após a tentativa de inicialização o SDK nativo não estiver pronto,
+      // não chama métodos nativos do OneSignal para evitar IllegalStateException
+      if (!this.initialized) {
+        console.warn('⚠️ [NotificationService] OneSignal nativo ainda não pronto, adiando refresh nativo.')
+        return this.state
+      }
+
       try {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
-        // 1. Consulta estrita de permissão nativa do sistema
-        const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
-        const canRequest = await OneSignalNative.Notifications.canRequestPermission().catch(() => false)
-        let nativeCode: number | null = null
+        // 1. Consulta estrita de permissão nativa do sistema com proteção individual
+        let hasPerm = false
+        try {
+          hasPerm = await OneSignalNative.Notifications.hasPermission()
+        } catch (e) {
+          console.warn('[NotificationService] hasPermission fallback:', e)
+        }
 
+        let canRequest = false
+        try {
+          canRequest = await OneSignalNative.Notifications.canRequestPermission()
+        } catch (e) {
+          console.warn('[NotificationService] canRequestPermission fallback:', e)
+        }
+
+        let nativeCode: number | null = null
         try {
           const resCode = await OneSignalNative.Notifications.permissionNative()
           nativeCode = typeof resCode === 'number' ? resCode : null

@@ -1,40 +1,50 @@
 package br.com.impactoedu.agenda;
 
 import android.app.Application;
-import com.onesignal.OneSignal;
+import android.content.Context;
+import android.util.Log;
+import java.lang.reflect.Method;
 
 /**
  * Application class do Impacto EDU.
  *
  * Responsabilidades:
- *  1. Instalar o CrashHandler global antes de qualquer outro código.
- *  2. Pré-inicializar o contexto do OneSignal (initWithContext) ANTES do
- *     Capacitor Bridge carregar os plugins. Isso garante que qualquer chamada
- *     de plugin (ex.: getPermission, canRequestPermission, hasPermission)
- *     disparada pelo lado JS nunca encontre OneSignal sem contexto registrado,
- *     evitando o IllegalStateException: "Must call 'initWithContext' before use".
- *
- *  Nota: initWithContext apenas registra o Context e o AppId no SDK.
- *  A inicialização completa (listeners, login de usuário, etc.) ainda ocorre
- *  via JS quando notificationService.initialize() chama OneSignalNative.initialize().
+ *  1. Instalar o CrashHandler global antes de qualquer outro código da aplicação.
+ *  2. Pré-inicializar o contexto do OneSignal (initWithContext) via Reflection ANTES
+ *     do Capacitor Bridge carregar os plugins.
+ *     - Por que Reflection? O módulo ':app' não possui dependência de compilação direta
+ *       do SDK nativo do OneSignal (ela é empacotada no APK pelo plugin Capacitor).
+ *       A Reflection permite registrar o contexto na JVM em runtime sem causar
+ *       erros de 'cannot find symbol' no javac.
+ *     - Isso previne em definitivo o IllegalStateException: "Must call 'initWithContext' before use"
+ *       caso qualquer chamada de permissão ocorra precocemente.
  */
 public class EduApp extends Application {
 
-    // App ID do OneSignal — deve ser o mesmo valor de NEXT_PUBLIC_ONESIGNAL_APP_ID
+    private static final String TAG = "EduApp";
     private static final String ONESIGNAL_APP_ID = "1d652b2a-7b06-4b07-984f-f47e0a4b37fc";
 
     @Override
     public void onCreate() {
         super.onCreate();
 
-        // 1. Handler global de crashes (mostra CrashActivity em vez de fechar silenciosamente)
+        // 1. Instalar handler global de crashes
         CrashHandler.init(this);
 
-        // 2. Pré-inicializar contexto do OneSignal para evitar crash em chamadas precoces de plugin
+        // 2. Pré-inicializar o contexto do OneSignal nativamente via Reflection
+        initOneSignalSafely();
+    }
+
+    private void initOneSignalSafely() {
         try {
-            OneSignal.initWithContext(this, ONESIGNAL_APP_ID);
+            Class<?> oneSignalClass = Class.forName("com.onesignal.OneSignal");
+            Method initMethod = oneSignalClass.getMethod("initWithContext", Context.class, String.class);
+            initMethod.invoke(null, this, ONESIGNAL_APP_ID);
+            Log.i(TAG, "OneSignal pre-inicializado com sucesso via Reflection.");
+        } catch (ClassNotFoundException e) {
+            Log.w(TAG, "Classe OneSignal nao localizada no classpath de runtime: " + e.getMessage());
         } catch (Throwable t) {
-            // Silencioso: se falhar aqui, o lado JS tentará novamente via initialize()
+            Log.w(TAG, "Aviso ao inicializar OneSignal via Reflection: " + t.getMessage());
         }
     }
 }
