@@ -475,10 +475,13 @@ class NotificationService {
         const OS = (window as any).OneSignal
         if (OS?.Notifications?.requestPermission) {
           await OS.Notifications.requestPermission()
-          const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
-          if (typeof optInFn === 'function') {
-            await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
-          }
+          try {
+            const pushSub = OS.User?.PushSubscription || OS.User?.pushSubscription
+            const optInFn = pushSub?.optIn
+            if (typeof optInFn === 'function') {
+              await optInFn.call(pushSub)
+            }
+          } catch {}
         } else {
           await Notification.requestPermission()
         }
@@ -718,29 +721,53 @@ class NotificationService {
       } else {
         // Web User Sync
         const performWebSync = async (OS: any) => {
-          if (!OS || typeof OS.login !== 'function') return
+          if (!OS) return
 
-          if (this.currentUserId !== userId) {
-            await OS.login(userId).catch(() => {})
-            this.currentUserId = userId
-            console.log(`✅ [NotificationService] Usuário associado ao OneSignal Web (External ID: ${userId})`)
+          // No ambiente de desenvolvimento em localhost, o OneSignal Web está restrito ao domínio oficial de produção
+          if (
+            typeof window !== 'undefined' &&
+            (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+            !(window as any).__OS_INIT__
+          ) {
+            return
           }
 
-          const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
-          if (typeof optInFn === 'function' && Notification.permission === 'granted') {
-            await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
-          }
-
-          if (OS.User?.addAliases && Object.keys(aliasesRecord).length > 0) {
-            await OS.User.addAliases(aliasesRecord).catch(() => {})
-          } else if (OS.User?.addAlias) {
-            for (const [label, id] of Object.entries(aliasesRecord)) {
-              await OS.User.addAlias(label, id).catch(() => {})
+          try {
+            if (typeof OS.login === 'function' && this.currentUserId !== userId) {
+              await OS.login(userId)
+              this.currentUserId = userId
+              console.log(`✅ [NotificationService] Usuário associado ao OneSignal Web (External ID: ${userId})`)
             }
+          } catch (e) {
+            console.warn('[NotificationService] Erro ao logar no OneSignal Web:', e)
           }
 
-          if (OS.User?.addTags) {
-            await OS.User.addTags(tags).catch(() => {})
+          try {
+            const pushSub = OS.User?.PushSubscription || OS.User?.pushSubscription
+            const optInFn = pushSub?.optIn
+            if (typeof optInFn === 'function' && Notification.permission === 'granted') {
+              await optInFn.call(pushSub)
+            }
+          } catch (e) {}
+
+          try {
+            if (typeof OS.User?.addAliases === 'function' && Object.keys(aliasesRecord).length > 0) {
+              await OS.User.addAliases(aliasesRecord)
+            } else if (typeof OS.User?.addAlias === 'function') {
+              for (const [label, id] of Object.entries(aliasesRecord)) {
+                await OS.User.addAlias(label, id)
+              }
+            }
+          } catch (e) {
+            console.warn('[NotificationService] Erro ao adicionar aliases no OneSignal Web:', e)
+          }
+
+          try {
+            if (typeof OS.User?.addTags === 'function' && Object.keys(tags).length > 0) {
+              await OS.User.addTags(tags)
+            }
+          } catch (e) {
+            console.warn('[NotificationService] Erro ao adicionar tags no OneSignal Web:', e)
           }
         }
 
@@ -787,7 +814,9 @@ class NotificationService {
       } else {
         const OS = (window as any).OneSignal
         if (OS && typeof OS.logout === 'function') {
-          await OS.logout().catch(() => {})
+          try {
+            await OS.logout()
+          } catch {}
         }
       }
     } catch (err) {
