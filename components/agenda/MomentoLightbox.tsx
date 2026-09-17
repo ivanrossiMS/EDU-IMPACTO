@@ -326,26 +326,57 @@ export function MomentoLightbox({
           }
         }}
       >
+        <style>{`
+          .ad-lightbox-top-bar {
+            padding-top: max(58px, calc(env(safe-area-inset-top, 0px) + 20px)) !important;
+            padding-bottom: 24px !important;
+            padding-left: 18px !important;
+            padding-right: 18px !important;
+          }
+          .ad-lightbox-btn-protect {
+            padding: 0 16px;
+          }
+          @media (max-width: 639px) {
+            .ad-lightbox-btn-protect {
+              width: 44px !important;
+              height: 44px !important;
+              padding: 0 !important;
+              border-radius: 50% !important;
+            }
+          }
+          @media (min-width: 769px) {
+            .ad-lightbox-top-bar {
+              padding-top: 32px !important;
+              padding-left: 28px !important;
+              padding-right: 28px !important;
+            }
+          }
+        `}</style>
+
         {/* TOP BAR */}
         <div
+          className="ad-lightbox-top-bar"
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            padding: '20px 24px',
+            paddingTop: 'max(58px, calc(env(safe-area-inset-top, 0px) + 20px))',
+            paddingBottom: '24px',
+            paddingLeft: '18px',
+            paddingRight: '18px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            zIndex: 10,
-            background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)',
+            zIndex: 20,
+            background: 'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 60%, transparent 100%)',
             pointerEvents: 'none'
           }}
         >
           {/* Details / Author */}
-          <div style={{ display: 'flex', flexDirection: 'column', pointerEvents: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', pointerEvents: 'auto', minWidth: 0, marginRight: 12 }}>
             {author && (
-              <div style={{ color: '#fff', fontSize: 15, fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+              <div style={{ color: '#fff', fontSize: 15, fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {author}
               </div>
             )}
@@ -357,7 +388,7 @@ export function MomentoLightbox({
           </div>
 
           {/* Action buttons on top right */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, pointerEvents: 'auto', flexShrink: 0 }}>
             {/* SELO / BOTÃO DE AMBIENTE PROTEGIDO */}
             <button
               onClick={(e) => {
@@ -365,13 +396,14 @@ export function MomentoLightbox({
                 triggerPrivacyModal()
               }}
               title="Informações de Privacidade e Proteção contra Prints"
+              className="ad-lightbox-btn-protect"
               style={{
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: 6,
-                height: 40,
-                padding: '0 14px',
-                borderRadius: 20,
+                height: 44,
+                borderRadius: 22,
                 background: 'rgba(99, 102, 241, 0.22)',
                 border: '1px solid rgba(165, 180, 252, 0.35)',
                 color: '#e0e7ff',
@@ -379,8 +411,10 @@ export function MomentoLightbox({
                 fontWeight: 700,
                 cursor: 'pointer',
                 backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
                 boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
                 transition: 'all 0.2s ease',
+                flexShrink: 0
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.background = 'rgba(99, 102, 241, 0.38)'
@@ -391,7 +425,7 @@ export function MomentoLightbox({
                 e.currentTarget.style.transform = 'scale(1)'
               }}
             >
-              <ShieldAlert size={16} color="#a5b4fc" />
+              <ShieldAlert size={18} color="#a5b4fc" />
               <span className="hidden sm:inline">Ambiente Protegido</span>
             </button>
 
@@ -401,6 +435,7 @@ export function MomentoLightbox({
                 onClose()
               }}
               title="Fechar (Esc)"
+              className="ad-lightbox-btn-close"
               style={{
                 width: 44,
                 height: 44,
@@ -413,7 +448,10 @@ export function MomentoLightbox({
                 justifyContent: 'center',
                 cursor: 'pointer',
                 backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
                 transition: 'all 0.2s ease',
+                flexShrink: 0
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.background = 'rgba(239, 68, 68, 0.4)'

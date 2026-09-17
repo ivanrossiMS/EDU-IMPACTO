@@ -46,15 +46,23 @@ export default function ColaboradorOcorrenciasPage() {
     setMounted(true)
   }, [])
 
-  // Lock body scroll when modal is open
+  // Lock body scroll and handle escape when modal is open
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedStudentForModal(null)
+      }
+    }
+
     if (selectedStudentForModal) {
       document.body.style.overflow = 'hidden'
+      window.addEventListener('keydown', handleKeyDown)
     } else {
       document.body.style.overflow = ''
     }
     return () => {
       document.body.style.overflow = ''
+      window.removeEventListener('keydown', handleKeyDown)
     }
   }, [selectedStudentForModal])
 
@@ -364,6 +372,16 @@ export default function ColaboradorOcorrenciasPage() {
       new Date(b.created_at || b.data || 0).getTime() - new Date(a.created_at || a.data || 0).getTime()
     )
   }, [selectedStudentForModal, modalStudentOcorrencias, modalAno])
+
+  const modalStats = useMemo(() => {
+    const total = modalFilteredOcorrencias.length
+    const graves = modalFilteredOcorrencias.filter(o => o.gravidadeNorm === 'grave').length
+    const medias = modalFilteredOcorrencias.filter(o => o.gravidadeNorm === 'media').length
+    const leves = modalFilteredOcorrencias.filter(o => o.gravidadeNorm === 'leve').length
+    const pendentes = modalFilteredOcorrencias.filter(o => !o.ciencia_responsavel).length
+    const cientes = modalFilteredOcorrencias.filter(o => o.ciencia_responsavel).length
+    return { total, graves, medias, leves, pendentes, cientes }
+  }, [modalFilteredOcorrencias])
 
   const formatDateSeparator = (dateStr: string) => {
     try {
@@ -963,18 +981,25 @@ export default function ColaboradorOcorrenciasPage() {
       {/* 5. MODAL: DETALHES DAS OCORRÊNCIAS DO ALUNO SELECIONADO */}
       {mounted && selectedStudentForModal && createPortal(
         <AnimatePresence>
-          <div className="ocorrencias-modal-container" style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 99999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px',
-            backgroundColor: 'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)'
-          }}>
+          <div 
+            className="ocorrencias-modal-container" 
+            style={{
+              position: 'fixed',
+              inset: 0,
+              width: '100vw',
+              height: '100%',
+              minHeight: '100dvh',
+              zIndex: 9999999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '16px',
+              backgroundColor: 'rgba(15, 23, 42, 0.72)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              boxSizing: 'border-box'
+            }}
+          >
             {/* Backdrop click */}
             <div 
               style={{ position: 'absolute', inset: 0 }} 
@@ -984,18 +1009,18 @@ export default function ColaboradorOcorrenciasPage() {
             {/* Modal Box */}
             <motion.div
               className="ocorrencias-modal-card"
-              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              initial={{ scale: 0.94, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              exit={{ scale: 0.94, opacity: 0, y: 15 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
               style={{
                 position: 'relative',
                 width: '100%',
-                maxWidth: 780,
-                maxHeight: '90vh',
+                maxWidth: 680,
+                maxHeight: 'min(88vh, 760px)',
                 backgroundColor: '#ffffff',
-                borderRadius: 28,
-                boxShadow: '0 25px 60px -15px rgba(0,0,0,0.25)',
+                borderRadius: 24,
+                boxShadow: '0 25px 60px -15px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.06)',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
@@ -1003,31 +1028,47 @@ export default function ColaboradorOcorrenciasPage() {
               }}
             >
               {/* Modal Header */}
-              <div style={{
-                padding: '20px 24px',
-                borderBottom: '1px solid #f1f5f9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: '#ffffff'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div 
+                className="ocorrencias-modal-header"
+                style={{
+                  padding: '18px 22px',
+                  borderBottom: '1px solid #f1f5f9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: '#ffffff',
+                  gap: 12
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
                   <UserAvatar
                     userId={selectedStudentForModal.id}
                     name={selectedStudentForModal.nome || 'Aluno'}
                     fotoUrl={selectedStudentForModal.foto || selectedStudentForModal.avatar_url || selectedStudentForModal.avatar}
-                    size={48}
+                    size={46}
                   />
-                  <div>
-                    <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <h2 
+                      style={{ 
+                        fontSize: 17, 
+                        fontWeight: 800, 
+                        color: '#0f172a', 
+                        margin: 0, 
+                        letterSpacing: '-0.02em',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title={selectedStudentForModal.nome}
+                    >
                       {selectedStudentForModal.nome}
                     </h2>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#2563eb', background: '#eff6ff', border: '1px solid #dbeafe', padding: '2px 8px', borderRadius: 6 }}>
                         {selectedStudentForModal.turmaDisplay}
                       </span>
                       {selectedStudentForModal.matricula && (
-                        <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
+                        <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, background: '#f8fafc', border: '1px solid #e2e8f0', padding: '2px 8px', borderRadius: 6 }}>
                           Matrícula: {selectedStudentForModal.matricula}
                         </span>
                       )}
@@ -1036,10 +1077,12 @@ export default function ColaboradorOcorrenciasPage() {
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => setSelectedStudentForModal(null)}
+                  aria-label="Fechar modal"
                   style={{
-                    width: 38,
-                    height: 38,
+                    width: 36,
+                    height: 36,
                     borderRadius: '50%',
                     background: '#f8fafc',
                     border: '1px solid #e2e8f0',
@@ -1047,86 +1090,144 @@ export default function ColaboradorOcorrenciasPage() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    color: '#64748b'
+                    color: '#64748b',
+                    flexShrink: 0,
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#f1f5f9'
+                    e.currentTarget.style.color = '#0f172a'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#f8fafc'
+                    e.currentTarget.style.color = '#64748b'
                   }}
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              {/* Subheader: Ano Selector */}
-              <div style={{
-                padding: '12px 24px',
-                background: '#f8fafc',
-                borderBottom: '1px solid #f1f5f9',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#475569' }}>
-                  Histórico de Registros Disciplinares
+              {/* Subheader: Ano Selector & Resumo Rápido */}
+              <div 
+                className="ocorrencias-modal-subheader"
+                style={{
+                  padding: '12px 22px',
+                  background: '#f8fafc',
+                  borderBottom: '1px solid #f1f5f9',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: '#334155' }}>
+                    <FileText size={16} color="#3b82f6" />
+                    <span>Histórico de Registros Disciplinares</span>
+                  </div>
+
+                  {modalAnosDisponiveis.length > 1 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>Ano:</span>
+                      <select
+                        value={modalAno}
+                        onChange={(e) => setModalAno(e.target.value)}
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: 8,
+                          border: '1px solid #cbd5e1',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: '#0f172a',
+                          background: '#ffffff',
+                          outline: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {modalAnosDisponiveis.map(ano => (
+                          <option key={ano} value={ano}>{ano}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
+                      Ano: <strong style={{ color: '#0f172a' }}>{modalAno || selectedAno}</strong>
+                    </span>
+                  )}
                 </div>
-                {modalAnosDisponiveis.length > 1 ? (
-                  <select
-                    value={modalAno}
-                    onChange={(e) => setModalAno(e.target.value)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 10,
-                      border: '1px solid #cbd5e1',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: '#0f172a',
-                      background: '#ffffff',
-                      outline: 'none'
-                    }}
-                  >
-                    {modalAnosDisponiveis.map(ano => (
-                      <option key={ano} value={ano}>{ano}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
-                    Ano: <strong style={{ color: '#0f172a' }}>{modalAno || selectedAno}</strong>
-                  </span>
+
+                {/* Resumo de contadores no ano */}
+                {modalFilteredOcorrencias.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', paddingTop: 2 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#e2e8f0', color: '#334155' }}>
+                      {modalStats.total} {modalStats.total === 1 ? 'registro' : 'registros'}
+                    </span>
+                    {modalStats.graves > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#fee2e2', color: '#dc2626' }}>
+                        {modalStats.graves} {modalStats.graves === 1 ? 'grave' : 'graves'}
+                      </span>
+                    )}
+                    {modalStats.medias > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#ffedd5', color: '#ea580c' }}>
+                        {modalStats.medias} {modalStats.medias === 1 ? 'média' : 'médias'}
+                      </span>
+                    )}
+                    {modalStats.leves > 0 && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#fef3c7', color: '#d97706' }}>
+                        {modalStats.leves} {modalStats.leves === 1 ? 'leve' : 'leves'}
+                      </span>
+                    )}
+                    {modalStats.pendentes > 0 ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}>
+                        {modalStats.pendentes} sem ciência
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: '#ecfdf5', color: '#059669' }}>
+                        Todos cientes
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
 
               {/* Modal Body */}
-              <div style={{
-                padding: '24px',
-                overflowY: 'auto',
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 16
-              }}>
+              <div 
+                className="ocorrencias-modal-body"
+                style={{
+                  padding: '20px 22px',
+                  overflowY: 'auto',
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 16
+                }}
+              >
                 {modalFilteredOcorrencias.length === 0 ? (
-                  /* HISTÓRICO EXEMPLAR (Igual família) */
+                  /* HISTÓRICO EXEMPLAR */
                   <div style={{
-                    padding: '50px 20px',
+                    padding: '40px 20px',
                     textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
                     background: 'linear-gradient(145deg, #ffffff 0%, #f0fdf4 100%)',
-                    borderRadius: 24,
-                    border: '1px solid #dcfce7'
+                    borderRadius: 20,
+                    border: '1px solid #dcfce7',
+                    margin: 'auto 0'
                   }}>
                     <div style={{
-                      width: 72,
-                      height: 72,
+                      width: 68,
+                      height: 68,
                       borderRadius: '50%',
                       background: '#ecfdf5',
                       border: '2px solid #a7f3d0',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      marginBottom: 16,
+                      marginBottom: 14,
                       position: 'relative'
                     }}>
-                      <ShieldCheck size={36} color="#059669" />
+                      <ShieldCheck size={34} color="#059669" />
                       <div style={{
                         position: 'absolute',
                         top: -4,
@@ -1140,17 +1241,17 @@ export default function ColaboradorOcorrenciasPage() {
                       </div>
                     </div>
 
-                    <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: '0 0 8px 0' }}>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>
                       Histórico Exemplar
                     </h3>
-                    <p style={{ fontSize: 14, color: '#64748b', margin: 0, maxWidth: 380, lineHeight: 1.5 }}>
+                    <p style={{ fontSize: 13.5, color: '#64748b', margin: 0, maxWidth: 360, lineHeight: 1.5 }}>
                       Tudo certo por aqui! Não existem ocorrências registradas para este aluno no período {modalAno || selectedAno}.
                     </p>
                   </div>
                 ) : (
                   /* Timeline do Aluno */
                   <div style={{ position: 'relative' }}>
-                    <div style={{ position: 'absolute', top: 20, bottom: 0, left: 14, width: 2, background: '#e2e8f0', zIndex: 0 }} />
+                    <div style={{ position: 'absolute', top: 20, bottom: 20, left: 14, width: 2, background: '#e2e8f0', zIndex: 0 }} />
 
                     {modalFilteredOcorrencias.map((o) => {
                       const isGrave = o.gravidadeNorm === 'grave'
@@ -1163,19 +1264,19 @@ export default function ColaboradorOcorrenciasPage() {
                       const shouldTruncate = descText.length > 140 && !isExpanded
 
                       return (
-                        <div key={o.id} style={{ position: 'relative', paddingLeft: 40, marginBottom: 20 }}>
+                        <div key={o.id} style={{ position: 'relative', paddingLeft: 38, marginBottom: 18 }}>
                           {/* Dot */}
                           <div style={{
                             position: 'absolute',
                             left: 14,
-                            top: 24,
+                            top: 22,
                             transform: 'translate(-50%, -50%)',
                             zIndex: 2,
                             width: 20,
                             height: 20,
                             borderRadius: '50%',
                             background: '#ffffff',
-                            border: `2px solid ${dotColor}`,
+                            border: `2.5px solid ${dotColor}`,
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -1188,36 +1289,39 @@ export default function ColaboradorOcorrenciasPage() {
                           <div style={{
                             background: '#ffffff',
                             borderRadius: 18,
-                            border: '1px solid #f1f5f9',
-                            padding: '18px',
-                            boxShadow: '0 4px 16px rgba(0,0,0,0.03)'
+                            border: '1px solid #e2e8f0',
+                            padding: '16px',
+                            boxShadow: '0 3px 12px rgba(0,0,0,0.03)'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            {/* Card Top: Title, Date, Badges */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                                 <div style={{ 
-                                  width: 32, 
-                                  height: 32, 
+                                  width: 34, 
+                                  height: 34, 
                                   borderRadius: 10, 
-                                  background: isGrave ? '#fee2e2' : '#ffedd5', 
+                                  background: isGrave ? '#fee2e2' : isMedia ? '#ffedd5' : '#fef3c7', 
                                   display: 'flex', 
                                   alignItems: 'center', 
-                                  justifyContent: 'center' 
+                                  justifyContent: 'center',
+                                  flexShrink: 0
                                 }}>
-                                  <AlertTriangle size={16} color={dotColor} />
+                                  <AlertTriangle size={17} color={dotColor} />
                                 </div>
-                                <div>
-                                  <h4 style={{ fontSize: 15, fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                                <div style={{ minWidth: 0 }}>
+                                  <h4 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0, lineHeight: 1.3 }}>
                                     {o.tipo || 'Ocorrência'}
                                   </h4>
-                                  <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                                  <span style={{ fontSize: 11.5, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                    <Calendar size={11} />
                                     {o.data ? formatDateSeparator(o.data) : ''}
                                   </span>
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                                 <span style={{
-                                  fontSize: 10,
+                                  fontSize: 10.5,
                                   fontWeight: 800,
                                   textTransform: 'uppercase',
                                   padding: '3px 8px',
@@ -1230,12 +1334,13 @@ export default function ColaboradorOcorrenciasPage() {
 
                                 {o.ciencia_responsavel ? (
                                   <span style={{
-                                    fontSize: 10,
+                                    fontSize: 10.5,
                                     fontWeight: 700,
-                                    padding: '3px 6px',
+                                    padding: '3px 8px',
                                     borderRadius: 6,
                                     background: '#ecfdf5',
                                     color: '#059669',
+                                    border: '1px solid #a7f3d0',
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: 3
@@ -1245,12 +1350,13 @@ export default function ColaboradorOcorrenciasPage() {
                                   </span>
                                 ) : (
                                   <span style={{
-                                    fontSize: 10,
+                                    fontSize: 10.5,
                                     fontWeight: 700,
-                                    padding: '3px 6px',
+                                    padding: '3px 8px',
                                     borderRadius: 6,
-                                    background: '#fee2e2',
-                                    color: '#dc2626'
+                                    background: '#fef2f2',
+                                    color: '#dc2626',
+                                    border: '1px solid #fecaca'
                                   }}>
                                     Sem ciência
                                   </span>
@@ -1259,36 +1365,139 @@ export default function ColaboradorOcorrenciasPage() {
                             </div>
 
                             {/* Lançado por */}
-                            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10, background: '#f8fafc', padding: '6px 12px', borderRadius: 8 }}>
-                              Lançado por: <strong style={{ color: '#334155' }}>{o.lancadoPor}</strong>
+                            <div style={{ 
+                              fontSize: 12, 
+                              color: '#64748b', 
+                              margin: '10px 0', 
+                              background: '#f8fafc', 
+                              border: '1px solid #f1f5f9',
+                              padding: '6px 12px', 
+                              borderRadius: 8,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              flexWrap: 'wrap'
+                            }}>
+                              <UserCheck size={13} color="#64748b" style={{ flexShrink: 0 }} />
+                              <span>Lançado por: <strong style={{ color: '#1e293b' }}>{o.lancadoPor}</strong></span>
                             </div>
 
                             {/* Descrição */}
-                            <p style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, margin: 0 }}>
-                              {shouldTruncate ? descText.slice(0, 140).trim() + '...' : descText}
-                              {descText.length > 140 && (
-                                <button
-                                  onClick={() => setExpandedDescIds(prev => ({ ...prev, [o.id]: !prev[o.id] }))}
-                                  style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#2563eb',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    padding: 0,
-                                    marginLeft: 6
-                                  }}
-                                >
-                                  {isExpanded ? 'Ver menos' : 'Ver mais'}
-                                </button>
+                            <div style={{
+                              background: '#fafafa',
+                              border: '1px solid #f1f5f9',
+                              borderRadius: 10,
+                              padding: '10px 12px'
+                            }}>
+                              <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#94a3b8', marginBottom: 4 }}>
+                                Relato / Motivo:
+                              </div>
+                              <p style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                {shouldTruncate ? descText.slice(0, 140).trim() + '...' : descText}
+                                {descText.length > 140 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedDescIds(prev => ({ ...prev, [o.id]: !prev[o.id] }))}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      color: '#2563eb',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      padding: '2px 4px',
+                                      marginLeft: 6,
+                                      fontSize: 12
+                                    }}
+                                  >
+                                    {isExpanded ? 'Ver menos' : 'Ver mais'}
+                                  </button>
+                                )}
+                              </p>
+                            </div>
+
+                            {/* Status de ciência do responsável */}
+                            <div style={{
+                              marginTop: 10,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              color: o.ciencia_responsavel ? '#059669' : '#b45309',
+                              background: o.ciencia_responsavel ? '#ecfdf5' : '#fffbeb',
+                              border: `1px solid ${o.ciencia_responsavel ? '#a7f3d0' : '#fef3c7'}`,
+                              padding: '6px 10px',
+                              borderRadius: 8
+                            }}>
+                              {o.ciencia_responsavel ? (
+                                <>
+                                  <CheckCircle2 size={13} strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                                  <span>Responsável ciente deste registro</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock size={13} style={{ flexShrink: 0 }} />
+                                  <span>Aguardando confirmação de ciência da família</span>
+                                </>
                               )}
-                            </p>
+                            </div>
                           </div>
                         </div>
                       )
                     })}
                   </div>
                 )}
+              </div>
+
+              {/* Modal Footer */}
+              <div 
+                className="ocorrencias-modal-footer"
+                style={{
+                  padding: '12px 22px',
+                  borderTop: '1px solid #f1f5f9',
+                  background: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  flexWrap: 'wrap'
+                }}
+              >
+                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+                  {modalFilteredOcorrencias.length > 0 ? (
+                    <span>Total: <strong>{modalFilteredOcorrencias.length}</strong> {modalFilteredOcorrencias.length === 1 ? 'registro' : 'registros'} em <strong>{modalAno || selectedAno}</strong></span>
+                  ) : (
+                    <span>Nenhum registro para {modalAno || selectedAno}</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentForModal(null)}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: 10,
+                    background: '#f1f5f9',
+                    color: '#334155',
+                    fontWeight: 700,
+                    fontSize: 12.5,
+                    border: '1px solid #e2e8f0',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#e2e8f0'
+                    e.currentTarget.style.color = '#0f172a'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#f1f5f9'
+                    e.currentTarget.style.color = '#334155'
+                  }}
+                >
+                  Fechar
+                </button>
               </div>
             </motion.div>
           </div>
@@ -1353,15 +1562,49 @@ export default function ColaboradorOcorrenciasPage() {
             border-radius: 9px !important;
           }
 
-          /* Modal bottom sheet on mobile */
+          /* Modal centered and organized on mobile and desktop */
           .ocorrencias-modal-container {
-            padding: 0 !important;
-            align-items: flex-end !important;
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100% !important;
+            height: 100dvh !important;
+            z-index: 9999999 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 16px !important;
+            box-sizing: border-box !important;
           }
           .ocorrencias-modal-card {
-            max-height: 92vh !important;
-            border-bottom-left-radius: 0 !important;
-            border-bottom-right-radius: 0 !important;
+            width: 100% !important;
+            max-width: 680px !important;
+            max-height: 88vh !important;
+            max-height: 88dvh !important;
+            border-radius: 24px !important;
+            margin: auto !important;
+          }
+
+          @media (max-width: 480px) {
+            .ocorrencias-modal-container {
+              padding: 12px !important;
+            }
+            .ocorrencias-modal-card {
+              max-height: 90dvh !important;
+              border-radius: 20px !important;
+            }
+            .ocorrencias-modal-header {
+              padding: 14px 16px !important;
+            }
+            .ocorrencias-modal-subheader {
+              padding: 10px 16px !important;
+            }
+            .ocorrencias-modal-body {
+              padding: 16px 12px !important;
+            }
+            .ocorrencias-modal-footer {
+              padding: 10px 16px !important;
+            }
           }
         }
       `}} />

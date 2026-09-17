@@ -158,12 +158,6 @@ export default function AgendaDigitalColaboradorLayout({
           border-color: rgba(59, 130, 246, 0.2);
         }
 
-        @keyframes neonSlide {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-
         .ad-premium-card::before {
           content: '';
           position: absolute;
@@ -172,8 +166,8 @@ export default function AgendaDigitalColaboradorLayout({
           right: 0;
           height: 6px;
           background: linear-gradient(90deg, #3b82f6, #6366f1, #2dd4bf, #3b82f6);
-          background-size: 200% 100%;
-          animation: neonSlide 3s linear infinite;
+          border-top-left-radius: inherit;
+          border-top-right-radius: inherit;
           box-shadow: 0 0 12px rgba(59, 130, 246, 0.6), inset 0 0 8px rgba(99, 102, 241, 0.4);
         }
 

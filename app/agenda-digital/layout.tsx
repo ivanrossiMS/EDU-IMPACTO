@@ -16,6 +16,8 @@ import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
 import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
 import { Loader2 } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
+import { useIsFetching } from '@tanstack/react-query'
 
 
 
@@ -23,7 +25,9 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
   const { currentUser, hydrated } = useApp()
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  if (!hydrated) return <div className="ad-mesh-bg" style={{ minHeight: '100vh' }} />
+  if (!hydrated) {
+    return <AgendaLuxuryLoader isLoading={true} statusText="Iniciando Agenda Digital..." />
+  }
 
   // Família não precisa carregar os dados massivos globais do ERP
   if (isFamily) {
@@ -58,22 +62,29 @@ export default function AgendaDigitalLayout({ children }: { children: React.Reac
 }
 
 function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
-  const { bannerUrl, adLoading, isLoaded } = useAgendaDigital()
+  const { bannerUrl, adLoading, isLoaded, pageLoading, pageLoadingLabel } = useAgendaDigital()
+  const isFetchingQueries = useIsFetching({ queryKey: ['agenda'] })
   const { currentUser, hydrated, loadingPath, setLoadingPath } = useApp()
   const { perfis, perfisLoading } = useData()
   const router = useRouter()
   const pathname = usePathname()
   const [mounted, setMounted] = React.useState(false)
 
-  // 'checking' = aguardando dados reais do Supabase (mostra tela em branco)
+  // 'checking' = aguardando dados reais do Supabase
   // 'allowed'  = usuário tem acesso
   // 'denied'   = usuário não tem acesso
   const [accessState, setAccessState] = React.useState<'checking' | 'allowed' | 'denied'>('checking')
-  
+
+  const [routeNavigating, setRouteNavigating] = React.useState(false)
+  const [navTargetLabel, setNavTargetLabel] = React.useState('Carregando página e dados...')
+  const targetPathRef = React.useRef<string | null>(null)
+  const currentPathRef = React.useRef(pathname)
+  const [initialReady, setInitialReady] = React.useState(false)
+
   const isSelectStudent = pathname?.includes('/agenda-digital/selecionar-aluno') || pathname?.includes('/agenda-digital/selecionar-perfil-admin')
   const isIndexPage = pathname === '/agenda-digital'
   const isRouterPage = isSelectStudent || isIndexPage
-  
+
   React.useEffect(() => {
     setMounted(true)
   }, [])
@@ -81,6 +92,114 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     setLoadingPath(null)
   }, [pathname, setLoadingPath])
+
+  // 1. Interceptar cliques em links da Agenda Digital para saltar o loader na tela imediatamente (0ms de latência)
+  React.useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement)?.closest('a')
+      if (!anchor) return
+
+      const href = anchor.getAttribute('href')
+      if (!href) return
+
+      if (
+        anchor.target === '_blank' ||
+        href.startsWith('http') ||
+        href.startsWith('#') ||
+        href.startsWith('mailto:') ||
+        href.startsWith('tel:')
+      ) {
+        return
+      }
+
+      if (href.startsWith('/agenda-digital')) {
+        const currentPath = window.location.pathname
+        let url: URL
+        try {
+          url = new URL(href, window.location.origin)
+        } catch {
+          return
+        }
+
+        if (url.pathname !== currentPath) {
+          targetPathRef.current = url.pathname
+          setRouteNavigating(true)
+
+          if (href.includes('comunicados')) setNavTargetLabel('Carregando comunicados...')
+          else if (href.includes('momentos')) setNavTargetLabel('Carregando galeria e mídia...')
+          else if (href.includes('calendario')) setNavTargetLabel('Carregando calendário escolar...')
+          else if (href.includes('financeiro')) setNavTargetLabel('Carregando dados financeiros...')
+          else if (href.includes('frequencia')) setNavTargetLabel('Carregando frequência...')
+          else if (href.includes('notas')) setNavTargetLabel('Carregando boletim escolar...')
+          else if (href.includes('ocorrencias')) setNavTargetLabel('Carregando ocorrências...')
+          else if (href.includes('turmas')) setNavTargetLabel('Carregando turmas e alunos...')
+          else if (href.includes('pessoas')) setNavTargetLabel('Carregando usuários...')
+          else if (href.includes('cobrancas')) setNavTargetLabel('Carregando cobranças...')
+          else if (href.includes('relatorios')) setNavTargetLabel('Carregando relatórios...')
+          else if (href.includes('ajustes')) setNavTargetLabel('Carregando configurações...')
+          else setNavTargetLabel('Carregando página e dados...')
+        }
+      }
+    }
+
+    const handlePopState = () => {
+      setRouteNavigating(true)
+      setNavTargetLabel('Carregando página e dados...')
+    }
+
+    document.addEventListener('click', handleGlobalClick, true)
+    window.addEventListener('popstate', handlePopState)
+
+    return () => {
+      document.removeEventListener('click', handleGlobalClick, true)
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [])
+
+  // 2. Transição ao trocar pathname
+  React.useEffect(() => {
+    if (currentPathRef.current !== pathname) {
+      currentPathRef.current = pathname
+      setRouteNavigating(true)
+      targetPathRef.current = null
+
+      const timer = setTimeout(() => {
+        setRouteNavigating(false)
+      }, 650)
+      return () => clearTimeout(timer)
+    }
+  }, [pathname])
+
+  // 3. Monitor de prontidão inicial
+  React.useEffect(() => {
+    if (accessState === 'allowed' && hydrated && mounted) {
+      const timer = setTimeout(() => {
+        setInitialReady(true)
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [accessState, hydrated, mounted])
+
+  // 4. Resolver routeNavigating quando estabilizar
+  React.useEffect(() => {
+    if (routeNavigating && !targetPathRef.current && isFetchingQueries === 0) {
+      const settleTimer = setTimeout(() => {
+        setRouteNavigating(false)
+      }, 450)
+      return () => clearTimeout(settleTimer)
+    }
+  }, [routeNavigating, isFetchingQueries])
+
+  // 5. Failsafe de segurança: nunca trava a tela por mais de 6.5s
+  React.useEffect(() => {
+    if (routeNavigating) {
+      const emergencyDismiss = setTimeout(() => {
+        setRouteNavigating(false)
+        targetPathRef.current = null
+      }, 6500)
+      return () => clearTimeout(emergencyDismiss)
+    }
+  }, [routeNavigating])
 
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
@@ -139,23 +258,6 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     }
   }, [accessState])
 
-  // Enquanto verificando: spinner minimalista elegante
-  if (accessState === 'checking') {
-    return (
-      <div className="ad-mesh-bg" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{
-          width: 32,
-          height: 32,
-          borderRadius: '50%',
-          border: '3px solid rgba(0,0,0,0.1)',
-          borderTopColor: '#8b5cf6',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
-      </div>
-    )
-  }
-
   // Acesso negado — somente após verificação completa com dados reais
   if (accessState === 'denied') {
     return (
@@ -178,7 +280,21 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
     )
   }
 
-  if (!mounted) return <div className="ad-mesh-bg" style={{ minHeight: '100vh' }} />
+  const isMasterLoading =
+    !mounted ||
+    !hydrated ||
+    accessState === 'checking' ||
+    !initialReady ||
+    routeNavigating ||
+    Boolean(pageLoading) ||
+    Boolean(adLoading)
+
+  const currentStatusText =
+    !hydrated || !mounted ? 'Iniciando Agenda Digital...' :
+    accessState === 'checking' ? 'Verificando permissões e dados...' :
+    pageLoading && pageLoadingLabel ? pageLoadingLabel :
+    routeNavigating ? navTargetLabel :
+    'Carregando página e dados...'
 
   return (
     <>
@@ -334,6 +450,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         
         <FloatingWhatsApp />
         <AgendaRealtimeProvider />
+        <AgendaLuxuryLoader isLoading={isMasterLoading} statusText={currentStatusText} />
       </div>
     </>
   )

@@ -1,8 +1,7 @@
 'use client'
 
-import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
+import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
 
-export function LoadingGlass() {
-  return <ImpactoLoader isLoading={true} />
+export function LoadingGlass({ statusText }: { statusText?: string } = {}) {
+  return <AgendaLuxuryLoader isLoading={true} statusText={statusText || 'Carregando página e dados...'} />
 }
-

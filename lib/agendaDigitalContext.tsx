@@ -107,6 +107,9 @@ interface ADContextState {
   adConfirm: (message: string, title?: string, onConfirm?: () => void) => void
   adLoading: boolean
   setAdLoading: React.Dispatch<React.SetStateAction<boolean>>
+  pageLoading?: boolean
+  setPageLoading?: (loading: boolean, label?: string) => void
+  pageLoadingLabel?: string
   isDataLoading: boolean
   isLoaded?: boolean
   comunicadosLoading?: boolean
@@ -144,6 +147,9 @@ const AgendaDigitalContext = createContext<ADContextState>({
   adConfirm: () => {},
   adLoading: false,
   setAdLoading: () => {},
+  pageLoading: false,
+  setPageLoading: () => {},
+  pageLoadingLabel: 'Carregando página e dados...',
   isDataLoading: false,
   isLoaded: false,
   comunicadosLoading: false,
@@ -307,6 +313,14 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
   }
 
   const [adLoading, setAdLoading] = useState(false)
+  const [pageLoading, setPageLoadingState] = useState(false)
+  const [pageLoadingLabel, setPageLoadingLabel] = useState('Carregando página e dados...')
+
+  const setPageLoading = useCallback((loading: boolean, label?: string) => {
+    if (label) setPageLoadingLabel(label)
+    setPageLoadingState(loading)
+  }, [])
+
   const [isLoaded, setIsLoaded] = useState(false)
   const isDataLoading = comunicadosLoading || comunicadosQuery.isFetching || chatsLoading || chatGroupsLoading || messagesLoading || momentosLoading;
   
@@ -504,6 +518,9 @@ export function AgendaDigitalProvider({ children, isFamily = false }: { children
       adConfirm,
       adLoading,
       setAdLoading,
+      pageLoading,
+      setPageLoading,
+      pageLoadingLabel,
       isDataLoading,
       comunicadosLoading,
       chatGroupsLoading,
