@@ -68,6 +68,10 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
   const [visibleCount, setVisibleCount] = useState(5)
 
+  const queryItemId = searchParams?.get('id') || searchParams?.get('item_id') || searchParams?.get('momentoId');
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const hasScrolledToItem = React.useRef(false);
+
   // Estado para o Lightbox/Galeria
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxMedia, setLightboxMedia] = useState<{ url: string, type: string }[]>([])
@@ -328,6 +332,50 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
       .catch(err => console.error('Failed to mark momentos as read:', err));
     }
   }, [meusMomentos, aluno?.id]);
+
+  // Auto-scroll e destaque visual imediato para o item da notificação push (?id=...)
+  useEffect(() => {
+    if (!queryItemId || hasScrolledToItem.current || meusMomentos.length === 0) return;
+
+    const rawTarget = String(queryItemId).trim();
+    const cleanTarget = rawTarget.replace(/^momento_/, '');
+
+    const index = meusMomentos.findIndex((m: any) => {
+      const mId = String(m.id).trim();
+      const cleanMId = mId.replace(/^momento_/, '');
+      return (
+        mId === rawTarget ||
+        cleanMId === cleanTarget ||
+        mId.includes(cleanTarget) ||
+        cleanTarget.includes(cleanMId)
+      );
+    });
+
+    if (index !== -1) {
+      const targetItem = meusMomentos[index];
+      if (index >= visibleCount) {
+        setVisibleCount(index + 5);
+      }
+      setHighlightedId(String(targetItem.id));
+      hasScrolledToItem.current = true;
+
+      const tryScroll = (attempts = 0) => {
+        const el = document.getElementById(`momento-${targetItem.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (attempts < 5) {
+          setTimeout(() => tryScroll(attempts + 1), 150);
+        }
+      };
+
+      setTimeout(() => tryScroll(0), 120);
+
+      const timer = setTimeout(() => {
+        setHighlightedId(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [queryItemId, meusMomentos, visibleCount]);
 
   return (
     <div style={{
@@ -696,14 +744,41 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
                 }
                 return m.time || 'Agora';
               })()
+              const isHighlighted = highlightedId === String(m.id);
               return (
                 <div 
                   key={m.id} 
+                  id={`momento-${m.id}`}
                   className="polaroid-card"
                   style={{ 
-                    transform: `rotate(${initialRotation}deg)`
+                    transform: isHighlighted ? 'scale(1.02)' : `rotate(${initialRotation}deg)`,
+                    ...(isHighlighted ? {
+                      boxShadow: '0 0 0 4px #8b5cf6, 0 20px 40px rgba(139, 92, 246, 0.4)',
+                      transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+                    } : {})
                   }}
                 >
+                  {isHighlighted && (
+                    <div style={{
+                      position: 'absolute',
+                      top: -12,
+                      right: 20,
+                      background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                      color: '#ffffff',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: '4px 12px',
+                      borderRadius: 999,
+                      boxShadow: '0 4px 12px rgba(124, 58, 237, 0.4)',
+                      zIndex: 20,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 5
+                    }}>
+                      <Sparkles size={12} />
+                      Notificação
+                    </div>
+                  )}
                   {/* Header Simplificado para caber no formato polaroid */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                     <div className="avatar" style={{ width: 36, height: 36, borderRadius: '50%', background: 'linear-gradient(135deg, #7928CA, #FF0080)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 13, boxShadow: '0 4px 10px rgba(121,40,202,0.2)' }}>

@@ -102,7 +102,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized', ip }, { status: 401, headers: NO_CACHE_HEADERS });
   }
 
-  // Fetch the latest profile data from system_users to ensure it is always up to date
+  // Fetch latest profile data: check system_users, responsaveis, and alunos
   const supabaseAdmin = getAdminClient();
   let dbUser = null;
   try {
@@ -123,10 +123,59 @@ export async function GET(request: Request) {
     }
   }
 
-  // Resolve user photo: prioritize user_metadata, then system_users dados.foto
-  const resolvedPhoto = user.user_metadata?.foto || user.user_metadata?.fotoUrl || dbUser?.dados?.foto || dbUser?.foto || null;
+  let dbResp: any = null;
+  const targetRespId = user.user_metadata?.responsavel_id || dbUser?.dados?.responsavel_id;
+  try {
+    const respConds: string[] = [];
+    if (targetRespId) respConds.push(`id.eq.${targetRespId}`);
+    if (user.email) respConds.push(`email.ilike.${user.email.trim()}`);
+    if (respConds.length > 0) {
+      const { data } = await supabaseAdmin
+        .from('responsaveis')
+        .select('*')
+        .or(respConds.join(','))
+        .limit(1)
+        .maybeSingle();
+      dbResp = data;
+    }
+  } catch (e) {}
 
-  // Auto-sync between user_metadata and system_users
+  let dbAluno: any = null;
+  const targetAlunoId = user.user_metadata?.aluno_id || dbUser?.dados?.aluno_id;
+  try {
+    const alunoConds: string[] = [];
+    if (targetAlunoId) alunoConds.push(`id.eq.${targetAlunoId}`);
+    if (user.email) alunoConds.push(`email.ilike.${user.email.trim()}`);
+    if (alunoConds.length > 0) {
+      const { data } = await supabaseAdmin
+        .from('alunos')
+        .select('*')
+        .or(alunoConds.join(','))
+        .limit(1)
+        .maybeSingle();
+      dbAluno = data;
+    }
+  } catch (e) {}
+
+  // Resolve user photo: prioritize user_metadata, then responsaveis, alunos, or system_users
+  const resolvedPhoto = 
+    user.user_metadata?.foto || 
+    user.user_metadata?.fotoUrl || 
+    dbResp?.foto || 
+    dbResp?.dados?.foto || 
+    dbAluno?.foto || 
+    dbAluno?.dados?.foto || 
+    dbUser?.dados?.foto || 
+    dbUser?.foto || 
+    null;
+
+  // Auto-sync between user_metadata and database tables
+  if (resolvedPhoto && !user.user_metadata?.foto) {
+    void supabaseAdmin.auth.admin
+      .updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), foto: resolvedPhoto } })
+      .catch(() => {});
+  }
+
   if (dbUser && resolvedPhoto) {
     if (dbUser.dados?.foto !== resolvedPhoto) {
       const updatedDados = { ...(dbUser.dados || {}), foto: resolvedPhoto };
@@ -144,11 +193,6 @@ export async function GET(request: Request) {
         }
       })();
     }
-    if (!user.user_metadata?.foto && dbUser.dados?.foto) {
-      void supabaseAdmin.auth.admin
-        .updateUserById(user.id, { user_metadata: { foto: dbUser.dados.foto } })
-        .catch(() => {});
-    }
   }
 
   // Combine top-level auth data (id, email) with user_metadata and database fields
@@ -156,15 +200,16 @@ export async function GET(request: Request) {
     ...user.user_metadata,
     id: user.id,
     email: user.email,
+    nome: dbResp?.nome || dbAluno?.nome || dbUser?.nome || user.user_metadata?.nome || user.email?.split('@')[0],
     foto: resolvedPhoto,
-    perfil: dbUser?.perfil || user.user_metadata?.perfil,
-    cargo: dbUser?.cargo || user.user_metadata?.cargo,
-    status: dbUser?.status || 'ativo',
+    perfil: dbUser?.perfil || (dbResp ? 'Família' : (dbAluno ? 'Família' : user.user_metadata?.perfil)),
+    cargo: dbUser?.cargo || (dbResp ? 'Responsável' : (dbAluno ? 'Aluno' : user.user_metadata?.cargo)),
+    status: dbUser?.status || (dbAluno?.status ? dbAluno.status : 'ativo'),
     colaborador_id: dbUser?.id || user.user_metadata?.colaborador_id || '',
     system_user_id: dbUser?.id || user.user_metadata?.system_user_id || '',
-    hasDualRole: Boolean(user.user_metadata?.hasDualRole || dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id),
-    responsavel_id: dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '',
-    aluno_id: dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
+    hasDualRole: Boolean(user.user_metadata?.hasDualRole || dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || (dbUser && dbResp)),
+    responsavel_id: dbResp?.id || dbUser?.dados?.responsavel_id || user.user_metadata?.responsavel_id || '',
+    aluno_id: dbAluno?.id || dbUser?.dados?.aluno_id || user.user_metadata?.aluno_id || '',
   };
 
   return NextResponse.json({ user: userData, ip }, {

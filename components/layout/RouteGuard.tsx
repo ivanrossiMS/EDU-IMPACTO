@@ -234,7 +234,6 @@ function AccessDeniedPage({ pathname, isFamilyOrStudent }: { pathname: string, i
           <button
             onClick={async () => {
               try {
-                setCurrentUser?.(null)
                 await performLogout()
               } catch (err) {
                 window.location.replace('/login')

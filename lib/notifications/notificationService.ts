@@ -153,7 +153,16 @@ class NotificationService {
           } catch (webErr: any) {
             const msg = webErr?.message || ''
             if (!msg.includes('already initialized')) {
-              console.warn('[NotificationService] Erro inicialização web:', webErr)
+              const isLocalhostDomain =
+                typeof window !== 'undefined' &&
+                (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+                msg.includes('Can only be used on')
+
+              if (isLocalhostDomain) {
+                console.info('ℹ️ [NotificationService] OneSignal Web Push inativo em localhost (configurado no dashboard para impacto-edu.net).')
+              } else {
+                console.warn('[NotificationService] Erro inicialização web:', webErr)
+              }
               this.state.error = msg
               this.notifyListeners()
             }

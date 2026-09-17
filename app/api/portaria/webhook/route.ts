@@ -393,7 +393,11 @@ export async function POST(req: Request) {
                     title: '✅ Presença Confirmada',
                     message: `A presença de ${alunoNome} foi confirmada na escola (Entrada às ${localTimeStr}).`,
                     targetUserIds: targetIds,
-                    targetUrl: '/agenda-digital/frequencia'
+                    targetUrl: `/agenda-digital/${alunoId}/frequencia`,
+                    metadata: {
+                      aluno_id: String(alunoId),
+                      data: String(localDate)
+                    }
                   })
                 }
               } catch (e) {

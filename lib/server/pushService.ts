@@ -249,6 +249,7 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
       ...(params.data || {}),
       ...(params.url && {
         targetUrl: params.url,
+        target_url: params.url,
         url: params.url,
         route: relativeRoute,
       }),
@@ -259,7 +260,15 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ...(params.smallIcon && { small_icon: params.smallIcon }),
     ...(params.largeIcon && { large_icon: params.largeIcon }),
     ...(params.imageUrl && { big_picture: params.imageUrl, ios_attachments: { id1: params.imageUrl } }),
+    // Configurações para entrega prioritária com app fechado (iOS e Android)
     priority: 10,
+    content_available: true,
+    ios_sound: 'default',
+    ios_badgeType: 'Increase',
+    ios_badgeCount: 1,
+    android_sound: 'default',
+    android_channel_id: 'impacto_edu_default',
+    android_visibility: 1,
     ttl: 86400,
   }
 

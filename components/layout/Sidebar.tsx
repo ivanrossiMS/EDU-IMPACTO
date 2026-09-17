@@ -622,7 +622,6 @@ export function Sidebar() {
                   onClick={async (e) => {
                     e.stopPropagation();
                     setShowTopMenu(false);
-                    setCurrentUser(null);
                     try {
                       await performLogout();
                     } catch (err) {

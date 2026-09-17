@@ -222,7 +222,7 @@ export async function POST(request: Request) {
             title: pushTitle,
             message: pushMsg,
             targetUserIds: studentInfo.responsaveis_ids,
-            targetUrl: `/agenda-digital/frequencia`,
+            targetUrl: `/agenda-digital/${row.aluno_id}/frequencia`,
             metadata: {
               aluno_id: String(row.aluno_id),
               turma_id: String(row.turma_id),
@@ -275,7 +275,7 @@ export async function POST(request: Request) {
           title: pushTitle,
           message: pushMsg,
           targetUserIds: targetIds,
-          targetUrl: `/agenda-digital/frequencia`,
+          targetUrl: `/agenda-digital/${data.aluno_id}/frequencia`,
           metadata: {
             aluno_id: String(data.aluno_id),
             turma_id: String(data.turma_id),

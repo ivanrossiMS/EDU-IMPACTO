@@ -44,7 +44,6 @@ export default function AgendaDigitalAdminLayout({
   const { setLoadingPath } = useApp()
   const handleLogout = async () => {
     setLoadingPath('logout')
-    setCurrentUser(null)
     await performLogout()
   }
 

@@ -61,13 +61,39 @@ function mapTypeToRoute(type?: string): string {
 }
 
 /**
- * Extrai e normaliza a rota interna a partir do payload da notificação.
+ * Extrai e normaliza a rota interna a partir do payload da notificação,
+ * garantindo que rotas genéricas de alunos sejam reescritas com o ID do aluno.
  */
 export function resolveDestinationFromPayload(data: any, currentUser?: any): string {
   if (!data) return ''
 
+  const rawPerfil = (currentUser?.perfil || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const rawCargo = (currentUser?.cargo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const isFamilyUser = rawPerfil === 'familia' || rawPerfil === 'responsavel' || rawPerfil === 'aluno' || rawCargo === 'responsavel' || rawCargo === 'aluno'
+
+  const isColab =
+    data.perfil_destino === 'colaborador' ||
+    data.isColab === true ||
+    (!isFamilyUser && Boolean(currentUser?.perfil || currentUser?.cargo))
+
+  const candidateAlunoId =
+    data.aluno_id ||
+    data.metadata?.aluno_id ||
+    data.student_id ||
+    data.targetAlunoId ||
+    (!isColab ? currentUser?.aluno_id : '')
+
+  const rawItemId =
+    data.item_id ||
+    data.metadata?.item_id ||
+    data.id ||
+    data.comunicado_id ||
+    data.momento_id ||
+    data.ocorrencia_id ||
+    data.nota_id
+
   // 1. Se veio route, targetUrl ou url direta
-  const directUrl = data.route || data.targetUrl || data.url || data.launchURL
+  const directUrl = data.route || data.targetUrl || data.target_url || data.url || data.launchURL
   if (directUrl && typeof directUrl === 'string') {
     let cleanUrl = directUrl.trim()
     try {
@@ -84,8 +110,21 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
       cleanUrl = '/' + cleanUrl
     }
 
-    if (data.item_id && !cleanUrl.includes('id=')) {
-      cleanUrl += (cleanUrl.includes('?') ? '&' : '?') + `id=${encodeURIComponent(data.item_id)}`
+    // Se a URL direta for genérica sem aluno_id (ex: /agenda-digital/frequencia, /agenda-digital/comunicados)
+    // e tivermos candidateAlunoId (e não for colaborador), REESCREVE diretamente para a rota do aluno!
+    const genericMatch = cleanUrl.match(/^\/agenda-digital\/(comunicados|momentos|calendario|frequencia|ocorrencias|notas|financeiro|portaria)(\?.*)?$/)
+    if (genericMatch && candidateAlunoId && !isColab) {
+      const moduleName = genericMatch[1]
+      const existingQuery = genericMatch[2] || ''
+      cleanUrl = `/agenda-digital/${candidateAlunoId}/${moduleName}${existingQuery}`
+    } else if (genericMatch && isColab) {
+      const moduleName = genericMatch[1]
+      const existingQuery = genericMatch[2] || ''
+      cleanUrl = `/agenda-digital/colaborador/${moduleName}${existingQuery}`
+    }
+
+    if (rawItemId && !cleanUrl.includes('id=')) {
+      cleanUrl += (cleanUrl.includes('?') ? '&' : '?') + `id=${encodeURIComponent(String(rawItemId))}`
     }
     return cleanUrl
   }
@@ -94,18 +133,11 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
   const rota = mapTypeToRoute(data.rota || data.type)
   if (!rota) return ''
 
-  const isColab =
-    data.perfil_destino === 'colaborador' ||
-    data.isColab === true ||
-    (currentUser?.perfil &&
-      !['Família', 'Responsável', 'Aluno'].includes(currentUser.perfil) &&
-      !['Responsável', 'Aluno'].includes(currentUser?.cargo || ''))
-
   let destination = ''
   if (isColab) {
     destination = `/agenda-digital/colaborador/${rota}`
   } else {
-    const slug = data.aluno_id || currentUser?.aluno_id
+    const slug = candidateAlunoId
     if (slug) {
       destination = `/agenda-digital/${slug}/${rota}`
     } else {
@@ -113,8 +145,8 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
     }
   }
 
-  if (data.item_id && !destination.includes('id=')) {
-    destination += (destination.includes('?') ? '&' : '?') + `id=${encodeURIComponent(data.item_id)}`
+  if (rawItemId && !destination.includes('id=')) {
+    destination += (destination.includes('?') ? '&' : '?') + `id=${encodeURIComponent(String(rawItemId))}`
   }
 
   return destination
@@ -135,14 +167,26 @@ export function GlobalNotificationProvider() {
     hydratedRef.current = hydrated
   }, [hydrated])
 
-  // Limpa rota pendente apenas quando o usuário entra na tela de destino
+  // Limpa rota pendente APENAS quando o usuário efetivamente entra no módulo final de destino.
+  // NUNCA limpa na tela intermediária de seleção de aluno (/agenda-digital/selecionar-aluno) ou na raiz (/agenda-digital).
   useEffect(() => {
+    if (!pathname) return
     if (
-      pathname &&
-      (pathname.startsWith('/agenda-digital/') ||
-        pathname.includes('/comunicados') ||
-        pathname.includes('/momentos') ||
-        pathname.includes('/calendario'))
+      pathname === '/agenda-digital' ||
+      pathname.includes('/selecionar-aluno') ||
+      pathname.includes('/selecionar-perfil-admin')
+    ) {
+      return
+    }
+
+    if (
+      pathname.includes('/comunicados') ||
+      pathname.includes('/momentos') ||
+      pathname.includes('/calendario') ||
+      pathname.includes('/frequencia') ||
+      pathname.includes('/ocorrencias') ||
+      pathname.includes('/notas') ||
+      pathname.includes('/financeiro')
     ) {
       if (typeof window !== 'undefined') {
         delete (window as any).__EDU_PENDING_PUSH_ROUTE__
@@ -155,6 +199,72 @@ export function GlobalNotificationProvider() {
       } catch {}
     }
   }, [pathname])
+
+  // ── Executar navegação para rota pendente assim que a sessão hidratar ──
+  useEffect(() => {
+    if (!hydrated || !currentUser) return
+
+    const checkAndNavigatePendingRoute = async () => {
+      let pendingRoute =
+        (typeof window !== 'undefined' ? (window as any).__EDU_PENDING_PUSH_ROUTE__ : null) ||
+        localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
+
+      if (!pendingRoute && Capacitor.isNativePlatform()) {
+        try {
+          const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
+          if (value) pendingRoute = value
+        } catch {}
+      }
+
+      if (pendingRoute && typeof pendingRoute === 'string') {
+        let dest = pendingRoute.trim()
+        try {
+          if (dest.startsWith('http://') || dest.startsWith('https://')) {
+            const parsed = new URL(dest)
+            dest = parsed.pathname + parsed.search
+          } else if (dest.includes('://')) {
+            dest = '/' + dest.replace(/^[a-zA-Z0-9._-]+:\/*/, '')
+          }
+        } catch {}
+        if (!dest.startsWith('/')) dest = '/' + dest
+
+        if (
+          pathname === dest ||
+          (pathname && dest.startsWith(pathname) && pathname !== '/agenda-digital/selecionar-aluno')
+        ) {
+          return
+        }
+
+        console.log(`🚀 [GlobalPush] Sessão hidratada! Navegando diretamente para rota pendente: ${dest}`)
+
+        if (dest.includes('id=')) {
+          const comId = dest.split('id=')[1]?.split('&')[0]
+          if (comId) {
+            setTimeout(() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent('ad:open-comunicado', { detail: { id: decodeURIComponent(comId) } })
+                )
+              } catch {}
+            }, 300)
+          }
+        }
+
+        if (typeof window !== 'undefined') {
+          const curPath = window.location.pathname
+          if (curPath === '/' || curPath.includes('/selecionar-aluno') || curPath === '/agenda-digital') {
+            console.log(`🚀 [GlobalPush] Forçando navegação imediata via window.location: ${dest}`)
+            window.location.href = dest
+            return
+          }
+        }
+
+        router.replace(dest)
+      }
+    }
+
+    checkAndNavigatePendingRoute()
+  }, [hydrated, currentUser?.id, pathname, router])
 
   // Função central para executar ou salvar a navegação de push
   const handlePushClick = (data: any) => {
@@ -203,29 +313,38 @@ export function GlobalNotificationProvider() {
 
     if (user) {
       console.log(`[GlobalPush] Usuário autenticado. Navegando para ${destination}`)
+      if (typeof window !== 'undefined') {
+        const curPath = window.location.pathname
+        if (curPath === '/' || curPath.includes('/selecionar-aluno') || curPath === '/agenda-digital') {
+          console.log(`[GlobalPush] Tela de seleção ou splash detectada. Forçando carregamento imediato: ${destination}`)
+          window.location.href = destination
+          return
+        }
+      }
       router.replace(destination)
     } else if (isHydrated) {
       console.log(`[GlobalPush] Usuário não logado. Redirecionando para login com redirect pendente.`)
+      if (typeof window !== 'undefined') {
+        window.location.href = `/login?redirect=${encodeURIComponent(destination)}`
+        return
+      }
       router.replace(`/login?redirect=${encodeURIComponent(destination)}`)
     } else {
       console.log(`[GlobalPush] App hidratando sessão no cold start. Rota salva: ${destination}`)
     }
   }
 
-  // 1. Inicialização segura via NotificationService e listeners de clique
+  // 1. Inicialização segura via NotificationService e listeners de clique IMEDIATOS
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const init = async () => {
-      await notificationService.initialize()
+    const isNative = Capacitor.isNativePlatform()
 
-      const isNative = Capacitor.isNativePlatform()
-
-      if (isNative) {
-        try {
-          const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-
-          // Listener de clique nas notificações
+    if (isNative) {
+      // REGISTRO IMEDIATO: não espera o initialize assíncrono para plugar o listener de clique!
+      // Isso garante que cold-start taps enfileirados pelo OneSignal nativo sejam recebidos instantaneamente.
+      import('@onesignal/capacitor-plugin')
+        .then(({ default: OneSignalNative }) => {
           OneSignalNative.Notifications.addEventListener('click', (event: any) => {
             const notif = event?.notification || {}
             const addData = notif.additionalData || {}
@@ -239,56 +358,53 @@ export function GlobalNotificationProvider() {
             handlePushClick(data)
           })
 
-          // Foreground notification listener
-          OneSignalNative.Notifications.addEventListener(
-            'foregroundWillDisplay',
-            (event: any) => {
-              console.log('📱 [GlobalPush] Notificação recebida em foreground:', event)
-              try {
-                window.dispatchEvent(new CustomEvent('ad:push-foreground', { detail: event }))
-              } catch {}
-            }
-          )
-        } catch (err) {
-          console.error('[GlobalPush] Erro ao registrar listeners de clique:', err)
-        }
-
-        // Listener para Deep Links via Capacitor App (esquemas customizados)
-        import('@capacitor/app')
-          .then(({ App }) => {
-            App.addListener('appUrlOpen', (event: any) => {
-              console.log('📱 [GlobalPush] appUrlOpen recebido:', event?.url)
-              if (event?.url) {
-                try {
-                  const parsed = new URL(event.url)
-                  const path = parsed.pathname + parsed.search
-                  if (path && path !== '/') {
-                    handlePushClick({ targetUrl: path })
-                  }
-                } catch {}
-              }
-            }).catch(() => {})
+          OneSignalNative.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
+            console.log('📱 [GlobalPush] Notificação recebida em foreground:', event)
+            try {
+              window.dispatchEvent(new CustomEvent('ad:push-foreground', { detail: event }))
+            } catch {}
           })
-          .catch(() => {})
-      } else {
-        // Web Push Click Listener
-        window.OneSignalDeferred = window.OneSignalDeferred || []
-        window.OneSignalDeferred.push((OneSignal: any) => {
-          if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
-            OneSignal.Notifications.addEventListener('click', (event: any) => {
-              const data = {
-                ...(event?.notification?.additionalData || {}),
-                launchURL: event?.notification?.launchURL,
-              }
-              handlePushClick(data)
-            })
-          }
         })
-      }
+        .catch(err => {
+          console.error('[GlobalPush] Erro ao registrar listeners de clique:', err)
+        })
+
+      // Listener para Deep Links via Capacitor App (esquemas customizados)
+      import('@capacitor/app')
+        .then(({ App }) => {
+          App.addListener('appUrlOpen', (event: any) => {
+            console.log('📱 [GlobalPush] appUrlOpen recebido:', event?.url)
+            if (event?.url) {
+              const raw = String(event.url).trim()
+              const cleanPath = '/' + raw.replace(/^[a-zA-Z0-9._-]+:\/*/, '')
+              if (cleanPath && cleanPath !== '/') {
+                handlePushClick({ targetUrl: cleanPath })
+              }
+            }
+          }).catch(() => {})
+        })
+        .catch(() => {})
+    } else {
+      // Web Push Click Listener
+      window.OneSignalDeferred = window.OneSignalDeferred || []
+      window.OneSignalDeferred.push((OneSignal: any) => {
+        if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
+          OneSignal.Notifications.addEventListener('click', (event: any) => {
+            const data = {
+              ...(event?.notification?.additionalData || {}),
+              launchURL: event?.notification?.launchURL,
+            }
+            handlePushClick(data)
+          })
+        }
+      })
     }
 
-    init()
-  }, []) // Montagem única
+    // Inicialização do serviço em paralelo
+    notificationService.initialize().catch(err => {
+      console.warn('[GlobalPush] Aviso na inicialização do serviço:', err)
+    })
+  }, [])
 
   // 2. Gerenciamento Global de Usuário no OneSignal via NotificationService
   useEffect(() => {

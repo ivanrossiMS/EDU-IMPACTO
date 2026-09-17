@@ -28,14 +28,17 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
   }
 
   const { currentUser } = useApp()
-  const searchParams = new URLSearchParams(window.location.search);
-  const espelharRespId = searchParams.get('espelhar_responsavel');
-  const espelharAluno = searchParams.get('espelhar_aluno') === 'true';
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const espelharRespId = searchParams?.get('espelhar_responsavel');
+  const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+  const queryItemId = searchParams?.get('id') || searchParams?.get('ocorrencia_id') || searchParams?.get('item_id');
   const isMirroring = !!(espelharRespId || espelharAluno);
   const [signingIds, setSigningIds] = useState<Record<string, boolean>>({})
   const [selectedYear, setSelectedYear] = useState<string>('')
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({})
   const [collapsedIds, setCollapsedIds] = useState<Record<string, boolean>>({})
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  const hasAutoOpenedRef = React.useRef(false)
 
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
@@ -106,6 +109,40 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
       setSelectedYear(anosDisponiveis[0])
     }
   }, [anosDisponiveis, selectedYear])
+
+  // Auto-expand e scroll suave direto para a ocorrência da notificação push (?id=...)
+  useEffect(() => {
+    if (!queryItemId || hasAutoOpenedRef.current || ocorrenciasDoAluno.length === 0) return;
+
+    const rawTarget = String(queryItemId).trim();
+    const target = ocorrenciasDoAluno.find(o => String(o.id) === rawTarget);
+
+    if (target) {
+      hasAutoOpenedRef.current = true;
+      const targetAno = target.ano || (target.data ? target.data.substring(0, 4) : '');
+      if (targetAno && targetAno !== selectedYear) {
+        setSelectedYear(targetAno);
+      }
+      setExpandedIds(prev => ({ ...prev, [target.id]: true }));
+      setHighlightedId(String(target.id));
+
+      const tryScroll = (attempts = 0) => {
+        const el = document.getElementById(`ocorrencia-${target.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else if (attempts < 6) {
+          setTimeout(() => tryScroll(attempts + 1), 150);
+        }
+      };
+
+      setTimeout(() => tryScroll(0), 150);
+
+      const timer = setTimeout(() => {
+        setHighlightedId(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [queryItemId, ocorrenciasDoAluno, selectedYear]);
 
   const ocorrenciasFiltradas = useMemo(() => {
     if (!selectedYear) return []
@@ -373,6 +410,7 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                   return (
                     <motion.div 
                       key={o.id} 
+                      id={`ocorrencia-${o.id}`}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
@@ -409,12 +447,36 @@ export default function ADOcorrenciasPage({ params }: { params: any }) {
                       <div style={{
                         position: 'relative',
                         background: '#ffffff',
-                        border: '1px solid rgba(216, 180, 254, 0.45)',
+                        border: highlightedId === String(o.id) ? '2px solid #8b5cf6' : '1px solid rgba(216, 180, 254, 0.45)',
                         borderRadius: 24,
                         padding: '18px 20px',
-                        boxShadow: '0 16px 36px -6px rgba(168, 85, 247, 0.08), 0 4px 12px rgba(0, 0, 0, 0.02)',
-                        overflow: 'hidden'
+                        boxShadow: highlightedId === String(o.id)
+                          ? '0 0 0 4px rgba(139, 92, 246, 0.25), 0 20px 40px rgba(139, 92, 246, 0.2)'
+                          : '0 16px 36px -6px rgba(168, 85, 247, 0.08), 0 4px 12px rgba(0, 0, 0, 0.02)',
+                        overflow: 'hidden',
+                        transition: 'all 0.4s ease'
                       }}>
+                        {highlightedId === String(o.id) && (
+                          <div style={{
+                            position: 'absolute',
+                            top: 10,
+                            right: 14,
+                            background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                            color: '#ffffff',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 10px',
+                            borderRadius: 999,
+                            boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)',
+                            zIndex: 10,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}>
+                            <Sparkles size={11} />
+                            Notificação
+                          </div>
+                        )}
                         {/* Aurora Glowing Accent Top Bar */}
                         <div style={{
                           position: 'absolute', top: 0, left: 16, right: 16, height: 4,

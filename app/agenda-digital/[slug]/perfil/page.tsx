@@ -70,9 +70,22 @@ export default function ADPerfilPage() {
 
       refetch() 
       
-      if (currentUser && targetResp?.email && currentUser.email?.toLowerCase() === targetResp.email.toLowerCase()) {
+      const isCurrentLoggedInUser = currentUser && (
+        (targetResp?.email && currentUser.email && targetResp.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
+        (currentUser.responsavel_id && String(currentUser.responsavel_id) === String(selectedRespId)) ||
+        (targetResp?.nome && currentUser.nome && targetResp.nome.toLowerCase().trim() === currentUser.nome.toLowerCase().trim())
+      );
+
+      if (isCurrentLoggedInUser) {
         const updatedUser = { ...currentUser, foto: uploadRes.url }
         setCurrentUser(updatedUser)
+      }
+      
+      if (typeof window !== 'undefined') {
+        try {
+          if (selectedRespId) localStorage.setItem(`edu-user-photo-${selectedRespId}`, uploadRes.url)
+          if (currentUser?.id && isCurrentLoggedInUser) localStorage.setItem(`edu-user-photo-${currentUser.id}`, uploadRes.url)
+        } catch (_) {}
       }
 
     } catch (err: any) {

@@ -1,7 +1,10 @@
 package br.com.impactoedu.agenda;
 
 import android.app.Application;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.Context;
+import android.os.Build;
 import android.util.Log;
 import java.lang.reflect.Method;
 
@@ -31,8 +34,34 @@ public class EduApp extends Application {
         // 1. Instalar handler global de crashes
         CrashHandler.init(this);
 
-        // 2. Pré-inicializar o contexto do OneSignal nativamente via Reflection
+        // 2. Criar canal de alta prioridade para garantir entrega com app fechado no Android 8+
+        createNotificationChannel();
+
+        // 3. Pré-inicializar o contexto do OneSignal nativamente via Reflection
         initOneSignalSafely();
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (manager != null) {
+                    NotificationChannel channel = new NotificationChannel(
+                        "impacto_edu_default",
+                        "Avisos e Comunicados Importantes",
+                        NotificationManager.IMPORTANCE_HIGH
+                    );
+                    channel.setDescription("Notificações em tempo real da Agenda Digital");
+                    channel.enableLights(true);
+                    channel.enableVibration(true);
+                    channel.setShowBadge(true);
+                    manager.createNotificationChannel(channel);
+                    Log.i(TAG, "NotificationChannel 'impacto_edu_default' criado com alta prioridade.");
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Falha ao criar canal de notificação: " + t.getMessage());
+            }
+        }
     }
 
     private void initOneSignalSafely() {

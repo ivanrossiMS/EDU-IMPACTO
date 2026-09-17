@@ -120,7 +120,8 @@ export async function POST(request: Request) {
                 title: '⚠️ Aviso de Ocorrência',
                 message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
                 targetUserIds: targetIds,
-                targetUrl: `/agenda-digital/ocorrencias`
+                targetUrl: `/agenda-digital/${row.aluno_id}/ocorrencias?id=${row.id}`,
+                metadata: { aluno_id: String(row.aluno_id), item_id: String(row.id), rota: 'ocorrencias' }
               }).catch(err => console.error('Ocorrencia Push Error:', err))
             )
           }
@@ -148,7 +149,8 @@ export async function POST(request: Request) {
           title: '⚠️ Aviso de Ocorrência',
           message: `Uma nova ocorrência foi registrada para ${nomeAluno}. Acesse para ver os detalhes.`,
           targetUserIds: targetIds,
-          targetUrl: `/agenda-digital/ocorrencias`
+          targetUrl: `/agenda-digital/${data.aluno_id}/ocorrencias?id=${data.id}`,
+          metadata: { aluno_id: String(data.aluno_id), item_id: String(data.id), rota: 'ocorrencias' }
         }).catch(err => console.error('Ocorrencia Push Error:', err))
       }
     })

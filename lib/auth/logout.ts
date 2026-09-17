@@ -77,21 +77,26 @@ async function executeLogout(userId?: string): Promise<void> {
     }
   }
 
-  // 4. Limpa Keychain / Keystore e Preferences de forma seletiva
-  try {
-    await clearSessionSecurely(userId);
-    await removeSettingAsync('edu-current-user');
-    await removeSettingAsync('edu-current-perfil');
-    await removeSettingAsync('edu_auth_user');
-    await removeSettingAsync('edu-active-modules');
-    console.log('[Auth Logout] Sessão segura removida do hardware de criptografia.');
-  } catch (error) {
-    console.error('[Auth Logout] Erro ao limpar sessão segura:', error);
-  }
+  // 4. Executa tarefas de limpeza assíncronas em paralelo com tempos limite curtos
+  const cleanupTasks: Promise<any>[] = [
+    // a) Hardware / Keychain / Keystore / Preferences
+    (async () => {
+      try {
+        await clearSessionSecurely(userId);
+        await Promise.allSettled([
+          removeSettingAsync('edu-current-user'),
+          removeSettingAsync('edu-current-perfil'),
+          removeSettingAsync('edu_auth_user'),
+          removeSettingAsync('edu-active-modules'),
+        ]);
+        console.log('[Auth Logout] Sessão segura removida do hardware e storage.');
+      } catch (error) {
+        console.error('[Auth Logout] Erro ao limpar sessão segura:', error);
+      }
+    })(),
 
-  // 5. Notifica o servidor via POST /api/auth/logout para revogar cookies no Edge/SSR
-  try {
-    await fetch('/api/auth/logout', {
+    // b) Notifica o servidor via POST /api/auth/logout com timeout de 1.8s
+    fetch('/api/auth/logout', {
       method: 'POST',
       cache: 'no-store',
       credentials: 'include',
@@ -99,46 +104,44 @@ async function executeLogout(userId?: string): Promise<void> {
         'Cache-Control': 'no-store, no-cache, must-revalidate',
         'Pragma': 'no-cache',
       },
-    });
-    console.log('[Auth Logout] Cookies de sessão do servidor revogados via POST.');
-  } catch (error) {
-    // Se estiver offline, os cookies de cliente já foram zerados no passo 2
-    console.warn('[Auth Logout] Aviso ao notificar servidor (provavelmente offline):', error);
-  }
+      signal: AbortSignal.timeout(1800),
+    })
+      .then(() => console.log('[Auth Logout] Cookies de sessão revogados via POST.'))
+      .catch((error) => console.warn('[Auth Logout] Aviso ao notificar servidor:', error)),
 
-  // 6. Finaliza sessão no GoTrueClient do Supabase localmente
-  try {
-    const supabase = createClient();
-    const signOutPromise = supabase.auth.signOut({ scope: 'local' })
-      .catch((error) => {
-        console.warn('[Auth Logout] Aviso no signOut local do Supabase:', error?.message || error);
-      });
-    const timeoutPromise = new Promise(resolve => setTimeout(resolve, 800));
-    await Promise.race([signOutPromise, timeoutPromise]);
-  } catch (error) {
-    console.warn('[Auth Logout] Erro no timeout do signOut:', error);
-  }
+    // c) SignOut local no GoTrueClient do Supabase (com timeout de 500ms)
+    (async () => {
+      try {
+        const supabase = createClient();
+        const signOutPromise = supabase.auth.signOut({ scope: 'local' })
+          .catch((error) => console.warn('[Auth Logout] Aviso no signOut Supabase:', error?.message || error));
+        await Promise.race([signOutPromise, new Promise((resolve) => setTimeout(resolve, 500))]);
+      } catch (error) {
+        console.warn('[Auth Logout] Erro no timeout do signOut:', error);
+      }
+    })(),
 
-  // 7. Desassocia o usuário no OneSignal mantendo a inscrição do aparelho
-  try {
-    await notificationService.clearUser();
-    console.log('[Auth Logout] Usuário desassociado do OneSignal.');
-  } catch (error) {
-    console.warn('[Auth Logout] Erro ao desassociar OneSignal:', error);
-  }
+    // d) Desassociação no OneSignal
+    notificationService.clearUser()
+      .then(() => console.log('[Auth Logout] Usuário desassociado do OneSignal.'))
+      .catch((error) => console.warn('[Auth Logout] Erro ao desassociar OneSignal:', error)),
+  ];
 
-  // 8. Notifica o overlay que as operações de limpeza assíncrona foram concluídas
+  await Promise.allSettled(cleanupTasks);
+  console.log('[Auth Logout] Operações de limpeza concluídas.');
+
+  // 5. Notifica o overlay que as operações de limpeza assíncrona foram concluídas
   if (typeof window !== 'undefined') {
     try {
       window.dispatchEvent(new CustomEvent('edu:logout-ready'));
     } catch (_) {}
 
     // Fallback de segurança: caso o overlay não esteja ativo ou ocorra anomalia,
-    // garante a navegação após 5.5 segundos sem travar o usuário
+    // garante a navegação após 1.5 segundos (sem travar o usuário)
     setTimeout(() => {
       if (window.location.pathname !== '/login') {
         window.location.replace('/login');
       }
-    }, 5500);
+    }, 1500);
   }
 }

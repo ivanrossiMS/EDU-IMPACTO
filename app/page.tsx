@@ -9,6 +9,7 @@ import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificatio
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { AppLoadingScreen } from '@/components/AppLoadingScreen'
+import { useIsMobileVersion } from '@/lib/utils/isMobileVersion'
 import {
   isFamilyOrStudent,
   getAgendaDigitalDestination,
@@ -21,6 +22,7 @@ function RootInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { currentUser, hydrated } = useApp()
+  const isMobile = useIsMobileVersion()
 
   const [targetRoute, setTargetRoute] = useState<string | null>(null)
   const isRedirectingRef = useRef(false)
@@ -41,7 +43,11 @@ function RootInner() {
       const dest = e?.detail?.destination
       if (dest) {
         console.log('[Root] Evento edu:navigate-push recebido em cold start:', dest)
+        isRedirectingRef.current = false
         setTargetRoute(dest)
+        if (typeof window !== 'undefined') {
+          window.location.href = dest
+        }
       }
     }
     window.addEventListener('edu:navigate-push', handlePushEvent)
@@ -56,14 +62,14 @@ function RootInner() {
     let isSubscribed = true
 
     const resolveDestination = async () => {
-      // Se estiver em ambiente nativo, concede pequena janela de espera ativa (até 500ms)
+      // Se estiver em ambiente nativo, concede janela de espera ativa (até 1500ms)
       // para o OneSignal descarregar o clique de notificação em cold start
       let pendingPushRoute = typeof window !== 'undefined'
         ? ((window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY))
         : null
 
       if (!pendingPushRoute && Capacitor.isNativePlatform()) {
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 15; i++) {
           if (!isSubscribed) return
           await new Promise(r => setTimeout(r, 100))
           pendingPushRoute = (window as any).__EDU_PENDING_PUSH_ROUTE__ || localStorage.getItem(PENDING_PUSH_ROUTE_KEY)
@@ -83,11 +89,21 @@ function RootInner() {
       // Se houver notificação pendente que o usuário clicou:
       if (pendingPushRoute) {
         console.log('[Root] Notificação pendente detectada:', pendingPushRoute)
+        let cleanDest = pendingPushRoute.trim()
+        if (cleanDest.startsWith('http://') || cleanDest.startsWith('https://')) {
+          try {
+            const p = new URL(cleanDest)
+            cleanDest = p.pathname + p.search
+          } catch {}
+        }
         if (currentUser) {
-          setTargetRoute(pendingPushRoute)
+          setTargetRoute(cleanDest)
+          if (typeof window !== 'undefined') {
+            window.location.href = cleanDest
+          }
           return
         } else {
-          setTargetRoute(`/login?redirect=${encodeURIComponent(pendingPushRoute)}`)
+          setTargetRoute(`/login?redirect=${encodeURIComponent(cleanDest)}`)
           return
         }
       }
@@ -146,6 +162,13 @@ function RootInner() {
     router.replace(targetRoute)
   }, [targetRoute, router])
 
+  // No desktop (fora do modo demo), executa redirecionamento imediato sem aguardar animação da splash
+  useEffect(() => {
+    if (!isMobile && !isDemoMode && targetRoute) {
+      handleTransitionComplete()
+    }
+  }, [isMobile, isDemoMode, targetRoute, handleTransitionComplete])
+
   // Fallback de segurança: se a rota foi calculada mas por qualquer motivo a animação
   // demorar mais de 3.8s para chamar o callback, executa o redirecionamento forçado
   useEffect(() => {
@@ -164,6 +187,11 @@ function RootInner() {
     return () => clearTimeout(timer)
   }, [])
 
+  // A tela de carregamento só deve aparecer na versão mobile (ou em modo demo para testes)
+  if (!isMobile && !isDemoMode) {
+    return null
+  }
+
   return (
     <AppLoadingScreen
       mode={isDemoMode ? 'demo' : 'app'}
@@ -177,7 +205,7 @@ function RootInner() {
 // Necessário porque useSearchParams() causa CSR bailout sem Suspense boundary.
 export default function Root() {
   return (
-    <Suspense fallback={<AppLoadingScreen mode="app" isReady={false} />}>
+    <Suspense fallback={null}>
       <RootInner />
     </Suspense>
   )

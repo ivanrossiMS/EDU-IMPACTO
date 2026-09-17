@@ -206,7 +206,11 @@ export async function POST(request: Request) {
             title: '❌ Falta Registrada',
             message: `Foi registrada uma falta para ${aluno.nome || 'o aluno'} no dia ${data}.`,
             targetUserIds: targetIds,
-            targetUrl: '/agenda-digital/frequencia',
+            targetUrl: `/agenda-digital/${aluno.id}/frequencia`,
+            metadata: {
+              aluno_id: String(aluno.id),
+              data: String(data),
+            },
           })
         })
         .catch(err => console.error('[Totem Push Error]', err))

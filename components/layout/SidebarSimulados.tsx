@@ -40,8 +40,6 @@ export function SidebarSimulados() {
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
-    setCurrentUserPerfil('');
-    setCurrentUser(null);
     try {
       await performLogout()
     } catch (e) {

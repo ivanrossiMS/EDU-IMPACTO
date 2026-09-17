@@ -16,8 +16,6 @@ import { FloatingWhatsApp } from '@/components/FloatingWhatsApp'
 import { AgendaRealtimeProvider } from './components/AgendaRealtimeProvider'
 import { Loader2 } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
-import { AppLoadingScreen } from '@/components/AppLoadingScreen'
-import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 
 
 
@@ -336,10 +334,6 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
         
         <FloatingWhatsApp />
         <AgendaRealtimeProvider />
-        
-        {loadingPath && loadingPath !== 'logout' ? (
-          <ImpactoLoader isLoading={true} />
-        ) : null}
       </div>
     </>
   )

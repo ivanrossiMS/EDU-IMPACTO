@@ -9,7 +9,6 @@ import { createPortal } from 'react-dom'
 import { ChevronRight, Briefcase, Sparkles, Shield, LayoutDashboard, Loader2, Target, Settings, Building, Bell, LogOut, ArrowLeft } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
-import { AppLoadingScreen } from '@/components/AppLoadingScreen'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {

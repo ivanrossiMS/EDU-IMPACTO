@@ -53,7 +53,7 @@ function temSenha(uid: string): boolean { return !!getSenhas()[uid] }
 
 import { BackgroundEffects } from '@/components/ui/LoginBackground'
 import { BemEstarCheckinModal } from '@/components/login/BemEstarCheckinModal'
-import { AppLoadingScreen } from '@/components/AppLoadingScreen'
+import { useIsMobileVersion } from '@/lib/utils/isMobileVersion'
 
 const ModernLoadingSpinner = () => (
   <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -73,56 +73,9 @@ export default function LoginPage() {
   const [isCheckingSavedUser, setIsCheckingSavedUser] = useState(true)
   const [pendingAuth, setPendingAuth] = useState<any>(null)
   
-  // Controle de exibição da animação cinematográfica na inicialização do app:
-  // Se o usuário acabou de efetuar logout nesta sessão ou a splash já foi concluída na raiz,
-  // não repetimos a animação no carregamento inicial de /login.
-  const [shouldShowSplash, setShouldShowSplash] = useState(() => {
-    if (typeof window === 'undefined') return true
-    try {
-      const justLoggedOut =
-        sessionStorage.getItem('edu_just_logged_out') === '1' ||
-        Boolean((window as any).__EDU_JUST_LOGGED_OUT__)
-      const alreadyShown =
-        sessionStorage.getItem('edu_splash_shown') === '1' ||
-        Boolean((window as any).__EDU_SPLASH_SHOWN__)
-
-      if (justLoggedOut) {
-        sessionStorage.removeItem('edu_just_logged_out')
-        delete (window as any).__EDU_JUST_LOGGED_OUT__
-        return false
-      }
-      if (alreadyShown) {
-        return false
-      }
-    } catch (_) {}
-    return true
-  })
-
-  const shouldShowSplashRef = useRef(shouldShowSplash)
-  useEffect(() => {
-    shouldShowSplashRef.current = shouldShowSplash
-  }, [shouldShowSplash])
-
+  const isMobile = useIsMobileVersion()
   const [isSessionCheckFinished, setIsSessionCheckFinished] = useState(false)
   const pendingRedirectUrlRef = useRef<string | null>(null)
-
-  const handleSplashFinished = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.setItem('edu_splash_shown', '1')
-        ;(window as any).__EDU_SPLASH_SHOWN__ = true
-      } catch (_) {}
-    }
-
-    if (pendingRedirectUrlRef.current) {
-      hideSplashScreen(300)
-      router.replace(pendingRedirectUrlRef.current)
-    } else {
-      setShouldShowSplash(false)
-      setIsCheckingSavedUser(false)
-      hideSplashScreen(300)
-    }
-  }, [router])
 
   const [showCheckinModal, setShowCheckinModal] = useState(false)
 
@@ -270,19 +223,14 @@ export default function LoginPage() {
           if (nextStep) {
             setStep(nextStep)
           }
-          if (destination) {
-            pendingRedirectUrlRef.current = destination
-          }
           setIsSessionCheckFinished(true)
 
-          if (!shouldShowSplashRef.current) {
-            if (destination) {
-              hideSplashScreen(300)
-              router.replace(destination)
-            } else {
-              setIsCheckingSavedUser(false)
-              hideSplashScreen(300)
-            }
+          if (destination) {
+            hideSplashScreen(300)
+            router.replace(destination)
+          } else {
+            setIsCheckingSavedUser(false)
+            hideSplashScreen(300)
           }
         }
 
@@ -376,6 +324,12 @@ export default function LoginPage() {
                 setCurrentUser(null)
                 finishSessionCheck(undefined, 'login')
                 return
+              }
+            }
+            if (meRes.ok) {
+              const meData = await meRes.json().catch(() => null)
+              if (meData?.user?.foto && (!storedUser.foto || storedUser.foto !== meData.user.foto)) {
+                storedUser.foto = meData.user.foto
               }
             }
           } catch (netErr: any) {
@@ -595,13 +549,14 @@ export default function LoginPage() {
       const cargoReal = meta.cargo || 'Colaborador'
       const perfilReal = meta.perfil || 'Usuário'
 
+      const userFoto = authData.user?.foto || meta.foto || undefined
       const userObj = { 
         id: authData.user.id, 
         nome: nomeReal, 
         email: cleanEmail, 
         cargo: cargoReal, 
         perfil: perfilReal,
-        foto: meta.foto || undefined,
+        foto: userFoto,
         aluno_id: meta.aluno_id || '',
         responsavel_id: meta.responsavel_id || '',
         colaborador_id: meta.colaborador_id || meta.system_user_id || '',
@@ -630,6 +585,12 @@ export default function LoginPage() {
       try {
         saveSetting('edu-current-user', userObj)
         saveSetting('edu-current-perfil', perfilReal)
+        if (userFoto) {
+          saveSetting(`edu-user-photo-${authData.user.id}`, userFoto)
+          if (userObj.responsavel_id) {
+            saveSetting(`edu-user-photo-${userObj.responsavel_id}`, userFoto)
+          }
+        }
       } catch (e) {}
 
       // Função de navegação segura que garante que os cookies sejam consolidados
@@ -1488,17 +1449,6 @@ export default function LoginPage() {
     </div>
   )
 
-  if (shouldShowSplash) {
-    return (
-      <AppLoadingScreen
-        mode="app"
-        isReady={isSessionCheckFinished}
-        onReadyComplete={handleSplashFinished}
-        statusText="Validando sessão segura..."
-        subtitle="Conectando escola e família"
-      />
-    )
-  }
 
   return (
     <div className="login-wrapper" style={{ display:'flex', minHeight:'100vh', fontFamily:"'Inter',sans-serif", overflow:'hidden' }}>

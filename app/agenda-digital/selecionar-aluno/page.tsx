@@ -11,10 +11,11 @@ import { createPortal } from 'react-dom'
 import { Bell, AlertTriangle, Calendar, ChevronRight, Users, Briefcase, ShieldAlert, Sparkles, Loader2, LogOut, ArrowLeft, ShieldCheck, GraduationCap } from 'lucide-react'
 import { LoadingGlass } from '@/components/LoadingGlass'
 import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
-import { AppLoadingScreen } from '@/components/AppLoadingScreen'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 import { apiFetch } from '@/lib/api/apiClient'
+import { PushPermissionBanner } from '@/components/agenda/PushPermissionBanner'
+import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
 function formatShortName(name: string): string {
@@ -996,7 +997,7 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
 
 function SelecionarAlunoContent() {
   const { turmas = [] } = useData();
-  const { currentUser, hydrated } = useApp()
+  const { currentUser, setCurrentUser, hydrated } = useApp()
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTarget = searchParams.get('redirect') || 'comunicados'
@@ -1023,10 +1024,52 @@ function SelecionarAlunoContent() {
     setMounted(true)
   }, [])
 
-  // 1. Obter metadados do responsável autenticado
+  // 1. Sincronizar dados mais recentes do perfil e foto/avatar via /api/auth/me
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.user?.foto && data.user.foto !== currentUser?.foto) {
+          setCurrentUser({ ...currentUser, ...data.user, foto: data.user.foto } as any)
+          if (typeof window !== 'undefined') {
+            try {
+              if (currentUser?.id) localStorage.setItem(`edu-user-photo-${currentUser.id}`, data.user.foto)
+              if (data.user.responsavel_id) localStorage.setItem(`edu-user-photo-${data.user.responsavel_id}`, data.user.foto)
+            } catch (_) {}
+          }
+        }
+      })
+      .catch(() => {})
+  }, [currentUser?.id])
+
+  // 2. Obter metadados do responsável autenticado
   const respId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
   const emailBusca = (currentUser?.email || '').toLowerCase().trim();
   const nomeBusca = (currentUser?.nome || '').toLowerCase().trim();
+
+  // 3. Fallback de foto: se o perfil atual estiver sem foto, busca na lista de alunos vinculados
+  useEffect(() => {
+    if (!currentUser || currentUser.foto || meusAlunos.length === 0) return;
+    for (const student of meusAlunos) {
+      const respList = Array.isArray(student.dados?.responsaveis) ? student.dados.responsaveis : [];
+      const match = respList.find((r: any) => 
+        (r.id && respId && String(r.id) === String(respId)) ||
+        (r.email && emailBusca && String(r.email).toLowerCase().trim() === emailBusca) ||
+        (r.nome && nomeBusca && String(r.nome).toLowerCase().trim() === nomeBusca)
+      );
+      const photoFound = match?.foto || match?.dados?.foto;
+      if (photoFound) {
+        setCurrentUser({ ...currentUser, foto: photoFound });
+        if (typeof window !== 'undefined') {
+          try {
+            if (currentUser.id) localStorage.setItem(`edu-user-photo-${currentUser.id}`, photoFound);
+            if (respId) localStorage.setItem(`edu-user-photo-${respId}`, photoFound);
+          } catch (_) {}
+        }
+        break;
+      }
+    }
+  }, [meusAlunos, currentUser?.foto, respId, emailBusca, nomeBusca]);
 
   const { recentNotifications } = useAgendaNotifications();
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
@@ -1148,10 +1191,122 @@ function SelecionarAlunoContent() {
     }
   }, [isStillLoading, currentUser, redirectTarget])
 
+  // Redirecionamento automático caso haja uma notificação pendente para um dependente específico
+  useEffect(() => {
+    if (!hydrated || !currentUser || meusAlunos.length === 0) return
+
+    const checkAndRedirect = async () => {
+      let pendingRoute =
+        (typeof window !== 'undefined' ? (window as any).__EDU_PENDING_PUSH_ROUTE__ : null) ||
+        (typeof window !== 'undefined' ? localStorage.getItem(PENDING_PUSH_ROUTE_KEY) : null)
+
+      if (!pendingRoute) {
+        try {
+          const { Preferences } = await import('@capacitor/preferences')
+          const { value } = await Preferences.get({ key: PENDING_PUSH_ROUTE_KEY })
+          if (value) pendingRoute = value
+        } catch {}
+      }
+
+      if (pendingRoute && typeof pendingRoute === 'string') {
+        let dest = pendingRoute.trim()
+        try {
+          if (dest.startsWith('http://') || dest.startsWith('https://')) {
+            const u = new URL(dest)
+            dest = u.pathname + u.search + u.hash
+          } else {
+            dest = dest.replace(/^[a-zA-Z0-9._-]+:\/*/, '/')
+          }
+        } catch (_) {}
+
+        if (!dest.startsWith('/')) dest = '/' + dest
+
+        const match = dest.match(/^\/agenda-digital\/([^\/?#]+)/)
+        if (match) {
+          const targetSlug = match[1]
+          if (targetSlug !== 'selecionar-aluno') {
+            // Se for colaborador e o perfil for institucional
+            const isColabUser = currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno'
+            if (targetSlug === 'colaborador' && isColabUser) {
+              if (typeof window !== 'undefined') {
+                (window as any).__EDU_PENDING_PUSH_ROUTE__ = null
+                localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+              }
+              try {
+                const { Preferences } = await import('@capacitor/preferences')
+                await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
+              } catch {}
+              window.location.replace(dest)
+              return
+            }
+
+            // Procurar aluno correspondente
+            const found = meusAlunos.find(
+              s => String(s.id) === targetSlug || 
+                   String(s.id).replace(/^0+/, '') === targetSlug.replace(/^0+/, '') ||
+                   (s.matricula && String(s.matricula) === targetSlug)
+            )
+            if (found) {
+              console.log(`[SelecionarAluno] Rota pendente identificada para ${found.nome} (${dest}). Redirecionando imediatamente...`)
+              if (typeof window !== 'undefined') {
+                (window as any).__EDU_PENDING_PUSH_ROUTE__ = null
+                localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+              }
+              try {
+                const { Preferences } = await import('@capacitor/preferences')
+                await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
+              } catch {}
+              window.location.replace(dest)
+              return
+            }
+
+            // Se for um módulo direto sem aluno (ex: /agenda-digital/comunicados?id=123 ou /agenda-digital/momentos?id=456)
+            const knownModules = ['comunicados', 'momentos', 'ocorrencias', 'notas', 'frequencia', 'cardapio', 'calendario', 'financeiro', 'carteirinha', 'horarios', 'mensagens']
+            if (knownModules.includes(targetSlug) && meusAlunos.length > 0) {
+              const targetStudent = meusAlunos[0]
+              const fixedDest = dest.replace(`/agenda-digital/${targetSlug}`, `/agenda-digital/${targetStudent.id}/${targetSlug}`)
+              console.log(`[SelecionarAluno] Rota sem aluno reescrita para ${targetStudent.nome} (${fixedDest}). Redirecionando...`)
+              if (typeof window !== 'undefined') {
+                (window as any).__EDU_PENDING_PUSH_ROUTE__ = null
+                localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
+              }
+              try {
+                const { Preferences } = await import('@capacitor/preferences')
+                await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
+              } catch {}
+              window.location.replace(fixedDest)
+              return
+            }
+          }
+        }
+      }
+
+      // Se o usuário é Família e tem APENAS UM aluno e não veio com intenção explícita de trocar
+      const isManual = searchParams.get('manual') === 'true' || searchParams.get('trocar') === 'true'
+      const isColab = currentUser && currentUser.perfil !== 'Família' && currentUser.perfil !== 'Responsável' && currentUser.cargo !== 'Aluno'
+      if (!isManual && !isColab && meusAlunos.length === 1) {
+        const singleStudent = meusAlunos[0]
+        const singleDest = `/agenda-digital/${singleStudent.id}/${redirectTarget}${getForwardParams()}`
+        console.log(`[SelecionarAluno] Família com 1 aluno único (${singleStudent.nome}). Redirecionando direto para ${singleDest}...`)
+        window.location.replace(singleDest)
+        return
+      }
+    }
+
+    checkAndRedirect()
+  }, [hydrated, currentUser, meusAlunos, router, redirectTarget, getForwardParams, searchParams])
+
   const firstName = currentUser?.nome ? currentUser.nome.split(' ')[0] : 'Responsável';
+
+  const userPhoto = currentUser?.foto || (mounted && typeof window !== 'undefined' ? (
+    (currentUser?.id && localStorage.getItem(`edu-user-photo-${currentUser.id}`)) ||
+    (respId && localStorage.getItem(`edu-user-photo-${respId}`)) ||
+    null
+  ) : null);
 
   return (
     <>
+      <PushPermissionBanner />
       <div className="premium-selector-container">
         {/* Dynamic styles block for modern theme design */}
       <style dangerouslySetInnerHTML={{__html: SELECTOR_STYLES}} />
@@ -1162,8 +1317,8 @@ function SelecionarAlunoContent() {
         <Sparkles className="welcome-sparkle" size={24} />
         <div className="welcome-avatar-wrapper">
           <div className="welcome-avatar-glow" />
-          {currentUser?.foto ? (
-            <img src={currentUser.foto} alt="Mascot Avatar" className="welcome-avatar-img" />
+          {userPhoto ? (
+            <img src={userPhoto} alt={currentUser?.nome || 'Avatar'} className="welcome-avatar-img" />
           ) : (
             <div className="welcome-initials">
               {getInitials(currentUser?.nome || 'User')}

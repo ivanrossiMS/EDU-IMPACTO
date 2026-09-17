@@ -90,6 +90,10 @@ export default function ADCalendarioPage({ params }: { params: any }) {
   const searchParams = useSearchParams()
   const espelharRespId = searchParams?.get('espelhar_responsavel');
   const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+  const queryItemId = searchParams?.get('id') || searchParams?.get('evento_id') || searchParams?.get('item_id');
+  const queryData = searchParams?.get('data');
+  const hasAutoSelectedRef = useRef(false);
+  const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const isMirroring = !!(espelharRespId || espelharAluno);
   const showBirthdays = adConfig?.permissoes?.visualizarAniversariantes !== false;
 
@@ -154,6 +158,45 @@ export default function ADCalendarioPage({ params }: { params: any }) {
       return targets.some((t: any) => isTurmaOrGroupMatch(t, aluno, turmas, chatGroups))
     })
   }, [eventosAgenda, filtroTipo, aluno, turmas, chatGroups, currentUser])
+
+  // Auto-selecionar data e evento a partir da notificação push (?id=... ou ?data=...)
+  useEffect(() => {
+    if (hasAutoSelectedRef.current) return;
+
+    if (queryItemId && eventosAgenda && eventosAgenda.length > 0) {
+      const rawTarget = String(queryItemId).trim();
+      const target = eventosAgenda.find((e: any) => String(e.id) === rawTarget);
+      if (target && target.data) {
+        hasAutoSelectedRef.current = true;
+        const [y, m] = target.data.split('-').map(Number);
+        if (y && m) {
+          setViewDate(new Date(y, m - 1, 1));
+        }
+        setSelectedDay(target.data);
+        setHighlightedEventId(String(target.id));
+
+        const tryScroll = (attempts = 0) => {
+          const el = document.getElementById(`evento-${target.id}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else if (attempts < 6) {
+            setTimeout(() => tryScroll(attempts + 1), 150);
+          }
+        };
+        setTimeout(() => tryScroll(0), 200);
+
+        const timer = setTimeout(() => setHighlightedEventId(null), 6000);
+        return () => clearTimeout(timer);
+      }
+    } else if (queryData) {
+      hasAutoSelectedRef.current = true;
+      const [y, m] = queryData.split('-').map(Number);
+      if (y && m) {
+        setViewDate(new Date(y, m - 1, 1));
+      }
+      setSelectedDay(queryData);
+    }
+  }, [queryItemId, queryData, eventosAgenda]);
 
   const eventosPorDia = (dateStr: string) => eventosFiltrados.filter(e => e.data === dateStr)
 
@@ -732,6 +775,7 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                         return (
                           <div
                             key={ev.id}
+                            id={`evento-${ev.id}`}
                             style={{
                               display: 'flex',
                               flexDirection: 'column',
@@ -739,9 +783,34 @@ export default function ADCalendarioPage({ params }: { params: any }) {
                               paddingBottom: idx < eventsList.length - 1 ? 14 : 0,
                               borderBottom: idx < eventsList.length - 1 ? '1px solid #f1f5f9' : 'none',
                               position: 'relative',
-                              zIndex: 2
+                              zIndex: 2,
+                              ...(highlightedEventId === String(ev.id) ? {
+                                boxShadow: '0 0 0 3px #6366f1, 0 8px 24px rgba(99, 102, 241, 0.25)',
+                                borderRadius: 14,
+                                padding: 12,
+                                background: 'rgba(99, 102, 241, 0.06)',
+                                transition: 'all 0.4s ease'
+                              } : {})
                             }}
                           >
+                            {highlightedEventId === String(ev.id) && (
+                              <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                                color: '#ffffff',
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: 999,
+                                width: 'fit-content',
+                                marginBottom: 4
+                              }}>
+                                <Sparkles size={11} />
+                                Evento Notificado
+                              </div>
+                            )}
                             {/* Top Row: Time Badge */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>

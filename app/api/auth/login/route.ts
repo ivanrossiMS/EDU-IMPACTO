@@ -197,10 +197,14 @@ export async function POST(request: NextRequest) {
     let hasDualRole = false
     let dbSystemUser: any = null
 
+    let resolvedFoto: string | undefined = user?.user_metadata?.foto || user?.user_metadata?.fotoUrl || undefined
+    let respFoundRecord: any = null
+    let alunoFoundRecord: any = null
+
     if (userType === 'system_user') {
       const { data: dbSystemUserRows } = await supabaseAdmin
         .from('system_users')
-        .select('id, nome, email, cargo, perfil, status')
+        .select('id, nome, email, cargo, perfil, status, dados')
         .or(`auth_id.eq.${user?.id || ''},email.ilike.${resolvedEmail}`)
         .limit(1)
 
@@ -229,16 +233,20 @@ export async function POST(request: NextRequest) {
         nome   = dbSystemUser.nome   || nome
         cargo  = dbSystemUser.cargo  || cargo
         perfil = dbSystemUser.perfil || perfil
+        const sysFoto = dbSystemUser.dados?.foto
+        if (sysFoto) resolvedFoto = sysFoto
         
         // Verifica papel duplo para colaboradores rapidamente
         const { data: respFound } = await supabaseAdmin
           .from('responsaveis')
-          .select('id')
+          .select('id, dados')
           .ilike('email', resolvedEmail)
           .limit(1)
         if (respFound && respFound.length > 0) {
           hasDualRole = true
           if (!responsavel_id) responsavel_id = respFound[0].id
+          const dualRespFoto = respFound[0].dados?.foto
+          if (!resolvedFoto && dualRespFoto) resolvedFoto = dualRespFoto
         }
       }
     }
@@ -246,21 +254,27 @@ export async function POST(request: NextRequest) {
     if (!dbRecordExists) {
       if (userType === 'responsavel' && responsavelRecord) {
         dbRecordExists = true
+        respFoundRecord = responsavelRecord
         responsavel_id = responsavelRecord.id
         nome   = responsavelRecord.nome || nome
         cargo  = 'Responsável'
         perfil = 'Família'
+        const rFoto = responsavelRecord.dados?.foto
+        if (rFoto) resolvedFoto = rFoto
       } else if (userType === 'aluno' && alunoRecord) {
         dbRecordExists = true
+        alunoFoundRecord = alunoRecord
         aluno_id = alunoRecord.id
         nome   = alunoRecord.nome || nome
         cargo  = 'Aluno'
         perfil = 'Família'
+        const aFoto = alunoRecord.foto || alunoRecord.dados?.foto
+        if (aFoto) resolvedFoto = aFoto
       } else {
         // Usuário logou com e-mail direto mas não é system_user: verifica se é Responsável ou Aluno
         const [respLookup, alunoLookup] = await Promise.all([
-          supabaseAdmin.from('responsaveis').select('id, nome, email').ilike('email', resolvedEmail).limit(1).then(r => r.data?.[0] || null),
-          supabaseAdmin.from('alunos').select('id, nome, email, status').ilike('email', resolvedEmail).limit(1).then(r => r.data?.[0] || null)
+          supabaseAdmin.from('responsaveis').select('id, nome, email, dados').ilike('email', resolvedEmail).limit(1).then(r => r.data?.[0] || null),
+          supabaseAdmin.from('alunos').select('id, nome, email, status, foto, dados').ilike('email', resolvedEmail).limit(1).then(r => r.data?.[0] || null)
         ])
 
         if (respLookup) {
@@ -295,18 +309,24 @@ export async function POST(request: NextRequest) {
           }
 
           dbRecordExists = true
+          respFoundRecord = respLookup
           userType = 'responsavel'
           responsavel_id = respLookup.id
           nome   = respLookup.nome || nome
           cargo  = 'Responsável'
           perfil = 'Família'
+          const rFoto = respLookup.dados?.foto
+          if (rFoto) resolvedFoto = rFoto
         } else if (alunoLookup) {
           dbRecordExists = true
+          alunoFoundRecord = alunoLookup
           userType = 'aluno'
           aluno_id = alunoLookup.id
           nome   = alunoLookup.nome || nome
           cargo  = 'Aluno'
           perfil = 'Família'
+          const aFoto = alunoLookup.foto || alunoLookup.dados?.foto
+          if (aFoto) resolvedFoto = aFoto
         }
       }
     }
@@ -340,6 +360,7 @@ export async function POST(request: NextRequest) {
       userMetadataUpdate.system_user_id = dbSystemUser.id
     }
     if (hasDualRole) userMetadataUpdate.hasDualRole = true
+    if (resolvedFoto) userMetadataUpdate.foto = resolvedFoto
 
     if (user) {
       const currentMeta = user.user_metadata || {}
@@ -356,6 +377,7 @@ export async function POST(request: NextRequest) {
 
     const enrichedUser = {
       ...user,
+      foto: resolvedFoto,
       hasDualRole,
       user_metadata: { ...user?.user_metadata, ...userMetadataUpdate }
     }

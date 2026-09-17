@@ -2726,7 +2726,6 @@ export default function ADInnerLayout({
                   <button 
                     onClick={async () => {
                         setLoadingPath('logout')
-                        setCurrentUser(null);
                         await performLogout();
                       }}
                       title="Sair da Conta"
@@ -2867,7 +2866,6 @@ export default function ADInnerLayout({
                 <button 
                   onClick={async () => {
                     setLoadingPath('logout')
-                    setCurrentUser(null);
                     await performLogout();
                   }}
                   title="Sair da Conta"

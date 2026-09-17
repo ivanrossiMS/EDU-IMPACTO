@@ -493,7 +493,6 @@ export default function AgendaDigitalColaboradorLayout({
               <button 
                 onClick={async () => { 
                   setLoadingPath('logout')
-                  setCurrentUser(null); 
                   await performLogout(); 
                 }} 
                 className="ad-btn-side logout" style={{ width: '100%', height: 36, fontSize: 12, borderRadius: 12 }}

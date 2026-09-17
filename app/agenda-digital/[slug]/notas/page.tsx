@@ -2,7 +2,7 @@
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { useData } from '@/lib/dataContext'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { useParams, useSearchParams } from 'next/navigation'
 import { GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, AlertCircle, FileText, BarChart2, Sparkles } from 'lucide-react'
@@ -30,6 +30,9 @@ export default function ADNotasPage({ params }: { params: any }) {
   const { aluno } = useSelectedStudent()
   const { currentUser } = useApp()
   const { turmas = [] } = useData()
+  const searchParams = useSearchParams()
+  const queryItemId = searchParams?.get('id') || searchParams?.get('boletim_id') || searchParams?.get('item_id')
+  const hasAutoSelectedRef = useRef(false)
 
   // Fetch real data
   const { data: responseData, isLoading } = useApiQuery<any>(
@@ -114,6 +117,25 @@ export default function ADNotasPage({ params }: { params: any }) {
       setSelectedTurma(turmasDisponiveis[0] as string);
     }
   }, [turmasDisponiveis, selectedTurma]);
+
+  // Auto-selecionar ano, turma e bimestre a partir da notificação push (?id=...)
+  useEffect(() => {
+    if (!queryItemId || hasAutoSelectedRef.current || todosBoletins.length === 0) return;
+
+    const rawTarget = String(queryItemId).trim();
+    const target = todosBoletins.find((b: any) => String(b.id) === rawTarget);
+
+    if (target) {
+      hasAutoSelectedRef.current = true;
+      if (target.anoStr && target.anoStr !== selectedYear) {
+        setSelectedYear(target.anoStr);
+      }
+      if (target.nomeTurma && target.nomeTurma !== selectedTurma) {
+        setSelectedTurma(target.nomeTurma);
+      }
+      setSelectedBimestreId(target.id);
+    }
+  }, [queryItemId, todosBoletins, selectedYear, selectedTurma]);
 
   // Extract periods (bimestres) available for selected Turma
   const bimestresDisponiveis = useMemo(() => {

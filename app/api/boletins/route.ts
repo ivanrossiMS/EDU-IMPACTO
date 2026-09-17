@@ -125,7 +125,8 @@ export async function POST(request: Request) {
             title: '🏆 Novas Notas Lançadas!',
             message: `O boletim de ${nomeAluno} acabou de ser atualizado.`,
             targetUserIds: targetIds,
-            targetUrl: `/agenda-digital/notas`
+            targetUrl: `/agenda-digital/${data[0].aluno_id}/notas?id=${data[0].id}`,
+            metadata: { aluno_id: String(data[0].aluno_id), item_id: String(data[0].id), rota: 'notas' }
           }).catch(err => console.error('Boletins Push Error:', err))
         }
       })

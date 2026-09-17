@@ -243,18 +243,22 @@ export async function POST(request: Request) {
         if (targetUserId) {
           const { data: comData } = await supabase
             .from('comunicados')
-            .select('titulo')
+            .select('titulo, dados')
             .eq('id', body.comunicado_id)
             .single();
             
           const tituloCom = comData ? comData.titulo : 'Comunicado';
+          const targetAlunoId = body.aluno_id || comData?.dados?.aluno_id || (Array.isArray(comData?.dados?.targetStudents) && comData.dados.targetStudents.length === 1 ? comData.dados.targetStudents[0] : null);
+          const studentUrl = targetAlunoId 
+            ? `/agenda-digital/${targetAlunoId}/comunicados?id=${body.comunicado_id}`
+            : `/agenda-digital/comunicados?id=${body.comunicado_id}`;
 
           try {
             await supabase.from('notificacoes').insert({
               user_id: targetUserId,
               titulo: `Nova resposta de ${remetenteNome}`,
               mensagem: `Resposta no comunicado "${tituloCom}": "${msgTexto}"`,
-              link: `/agenda-digital/comunicados?id=${body.comunicado_id}`,
+              link: studentUrl,
               lida: false,
               tipo: 'comunicado',
               created_at: new Date().toISOString()
@@ -270,8 +274,14 @@ export async function POST(request: Request) {
               title: `🏫 Nova mensagem de ${remetenteNome}`,
               message: `Sobre "${tituloCom}": ${msgTexto}`,
               targetUserIds: [targetUserId],
-              targetUrl: `/agenda-digital/comunicados?id=${body.comunicado_id}`,
-              metadata: { perfil_destino: 'familia', item_id: String(body.comunicado_id), rota: 'comunicados', targetUrl: `/agenda-digital/comunicados?id=${body.comunicado_id}` }
+              targetUrl: studentUrl,
+              metadata: { 
+                perfil_destino: 'familia', 
+                item_id: String(body.comunicado_id), 
+                rota: 'comunicados', 
+                targetUrl: studentUrl,
+                ...(targetAlunoId ? { aluno_id: String(targetAlunoId) } : {})
+              }
             });
           } catch (err) {
             console.error("Push erro:", err);

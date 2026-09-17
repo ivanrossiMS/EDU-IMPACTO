@@ -192,11 +192,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (syncUser) {
           const parsedUser = JSON.parse(syncUser) as CurrentUser
           const syncPhoto = parsedUser.id ? window.localStorage.getItem(`edu-user-photo-${parsedUser.id}`) : null
-          if (syncPhoto) {
+          const syncPhotoResp = (!syncPhoto && parsedUser.responsavel_id) ? window.localStorage.getItem(`edu-user-photo-${parsedUser.responsavel_id}`) : null
+          const chosenPhoto = syncPhoto || syncPhotoResp
+          if (chosenPhoto) {
             try {
-              parsedUser.foto = JSON.parse(syncPhoto)
+              parsedUser.foto = JSON.parse(chosenPhoto)
             } catch {
-              parsedUser.foto = syncPhoto
+              parsedUser.foto = chosenPhoto
             }
           }
           setCurrentUserState(parsedUser)
@@ -298,6 +300,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (isolatedPhoto) savedUser.foto = isolatedPhoto
             else if (extraData && extraData.foto) savedUser.foto = extraData.foto
 
+            if (!savedUser.foto && savedUser.responsavel_id) {
+              const altPhotoResp = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.responsavel_id}`, null)
+              if (altPhotoResp) savedUser.foto = altPhotoResp
+            }
             if (!savedUser.foto && savedUser.system_user_id) {
               const altPhoto = await loadSettingAsync<string | null>(`edu-user-photo-${savedUser.system_user_id}`, null)
               if (altPhoto) savedUser.foto = altPhoto
@@ -371,6 +377,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Garante que a foto fique isolada para persistência extrema
         if (merged.foto) {
           saveSetting(`edu-user-photo-${merged.id}`, merged.foto)
+          if (merged.responsavel_id && merged.responsavel_id !== merged.id) {
+            saveSetting(`edu-user-photo-${merged.responsavel_id}`, merged.foto)
+          }
           if (merged.system_user_id && merged.system_user_id !== merged.id) {
             saveSetting(`edu-user-photo-${merged.system_user_id}`, merged.foto)
           }

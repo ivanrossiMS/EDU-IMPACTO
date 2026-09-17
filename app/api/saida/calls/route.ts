@@ -579,7 +579,7 @@ async function dispatchSaidaConfirmadaPush({
         title: '🎓 Saída Confirmada',
         message: `A saída de ${nomeAmigavel} foi confirmada na portaria às ${horaSaida}.`,
         targetUserIds: targetIds,
-        targetUrl: `/agenda-digital/frequencia`,
+        targetUrl: `/agenda-digital/${rawStudentId}/frequencia`,
         metadata: {
           aluno_id: rawStudentId,
           saida_id: String(callId)

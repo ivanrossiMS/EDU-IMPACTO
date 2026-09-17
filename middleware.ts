@@ -38,6 +38,8 @@ const PUBLIC_PATHS = [
   '/recibo',            // recibos públicos
   '/_next',             // assets Next.js
   '/favicon.ico',
+  '/manifest.webmanifest',
+  '/manifest.json',
   '/api/webhooks',      // webhooks externos (Asaas, etc)
   '/ajuda',             // Central de ajuda pública
   '/pesquisa',          // Formulários de pesquisa de clima (público)
@@ -330,6 +332,6 @@ export const config = {
      * - favicon.ico
      * - Arquivos com extensão (ex: .png, .svg, .jpg)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff|woff2|ttf|webmanifest)$).*)',
   ],
 }

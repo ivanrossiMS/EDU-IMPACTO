@@ -93,7 +93,9 @@ export async function POST(request: Request) {
       
       const resolvedIds = await getColaboradorIds([rawAuthorId])
       const targetUserIds = resolvedIds.length > 0 ? resolvedIds : [rawAuthorId]
-      const targetUrl = isColab ? '/agenda-digital/colaborador/momentos' : '/agenda-digital/momentos'
+      const targetUrl = isColab 
+        ? `/agenda-digital/colaborador/momentos?id=${momentId}` 
+        : `/agenda-digital/momentos?id=${momentId}`
 
       sendAgendaPushNotification({
         type: 'momentos',

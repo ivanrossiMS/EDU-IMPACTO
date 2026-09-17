@@ -724,7 +724,6 @@ export function ADSidebar() {
                   <button 
                     onClick={async () => { 
                       setLoadingPath('logout')
-                      setCurrentUser(null);
                       await performLogout(); 
                     }}
                     style={{
@@ -798,7 +797,6 @@ export function ADSidebar() {
                 <button 
                   onClick={async () => { 
                     setLoadingPath('logout')
-                    setCurrentUser(null);
                     await performLogout(); 
                   }}
                   style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', cursor: 'pointer' }}
