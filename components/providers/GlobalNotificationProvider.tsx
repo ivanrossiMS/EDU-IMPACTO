@@ -410,16 +410,36 @@ export function GlobalNotificationProvider() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
+    // CRÍTICO: NUNCA deslogar ou sincronizar antes de a sessão estar completamente hidratada do armazenamento local!
+    // Sem essa verificação, no startup currentUser é temporariamente null e disparava OneSignal.logout(),
+    // desconectando o aparelho do usuário no OneSignal em todo início ou reinício do app.
+    if (!hydrated) return
+
     if (currentUser?.id) {
-      notificationService.syncUser(currentUser).catch(err => {
-        console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
-      })
+      // Debounce de 300ms: garante que o clearUser() do logout anterior (assíncrono) tenha
+      // tempo de completar antes de chamarmos syncUser(), evitando corrida entre as duas operações.
+      const debounceTimer = setTimeout(() => {
+        notificationService.syncUser(currentUser).catch(err => {
+          console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
+        })
+
+        // Retry de segurança: 4 segundos após o login, sincroniza novamente para capturar
+        // casos onde o SDK OneSignal precisou de mais tempo para se recuperar do logout anterior.
+        const retryTimer = setTimeout(() => {
+          notificationService.syncUser(currentUser).catch(() => {})
+        }, 4000)
+
+        return () => clearTimeout(retryTimer)
+      }, 300)
+
+      return () => clearTimeout(debounceTimer)
     } else {
       notificationService.clearUser().catch(err => {
         console.warn('[GlobalPush] Aviso no logout do usuário:', err)
       })
     }
-  }, [currentUser?.id, currentUser?.perfil, currentUser?.cargo])
+  }, [hydrated, currentUser?.id, currentUser?.perfil, currentUser?.cargo])
 
   return <NotificationPermissionModal />
 }
+

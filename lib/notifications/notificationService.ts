@@ -27,6 +27,15 @@ class NotificationService {
   private initializingPromise: Promise<void> | null = null
   private nativeListenersConfigured = false
   private currentUserId: string | null = null
+  private cachedUser: any = null
+  private cachedExtraData: any = null
+  /** Tracks whether a OneSignal.login() was successfully called in this session */
+  private loggedInToOneSignal = false
+  /** Prevents overlapping syncUser calls */
+  private syncUserPromise: Promise<void> | null = null
+  /** Timestamp of the last clearUser() call, used to reject stale syncs */
+  private lastClearAt = 0
+
 
   private state: NotificationDiagnosticState = {
     platform: 'web',
@@ -193,6 +202,9 @@ class NotificationService {
         OneSignalNative.User.pushSubscription.addEventListener('change', (event: any) => {
           console.log('📱 [NotificationService] Mudança na subscrição push:', event)
           this.refresh().catch(() => {})
+          if (this.cachedUser) {
+            this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+          }
         })
       }
 
@@ -201,12 +213,18 @@ class NotificationService {
         if (isActive) {
           console.log('📱 [NotificationService] App voltou para FOREGROUND — revalidando permissões nativas...')
           this.refresh().catch(() => {})
+          if (this.cachedUser) {
+            this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+          }
         }
       }).catch(() => {})
 
       App.addListener('resume', () => {
         console.log('📱 [NotificationService] Evento resume disparado — revalidando permissões nativas...')
         this.refresh().catch(() => {})
+        if (this.cachedUser) {
+          this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+        }
       }).catch(() => {})
     } catch (listenerErr) {
       console.warn('[NotificationService] Erro ao registrar listeners nativos:', listenerErr)
@@ -401,6 +419,10 @@ class NotificationService {
           await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
         }
 
+        if (accepted && this.cachedUser) {
+          await this.syncUser(this.cachedUser, this.cachedExtraData).catch(() => {})
+        }
+
         await this.refresh()
         return accepted
       } catch (err: any) {
@@ -443,7 +465,32 @@ class NotificationService {
   }
 
   /**
+   * Envia a subscrição ativa para o backend registrar no OneSignal via REST API (Garantia Dual-Layer).
+   */
+  private async sendSubscriptionToBackend(payload: {
+    subscriptionId: string
+    pushToken?: string | null
+    userId: string
+    responsavelId?: string
+    alunoId?: string
+    email?: string
+    tags?: Record<string, string>
+  }): Promise<void> {
+    try {
+      await fetch('/api/push/sync-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    } catch (e) {
+      console.warn('[NotificationService] Falha silenciosa no sync-subscription backend:', e)
+    }
+  }
+
+  /**
    * Sincroniza o usuário autenticado com o OneSignal (External ID, Aliases e Tags).
+   * As chamadas são serializadas: se uma já estiver em progresso, espera ela concluir
+   * antes de executar a próxima, evitando corridas entre logout/login.
    */
   public async syncUser(
     user: any,
@@ -457,6 +504,52 @@ class NotificationService {
     }
   ): Promise<void> {
     if (!user?.id) return
+
+    // Serializa chamadas: espera a anterior terminar para evitar estado inconsistente
+    if (this.syncUserPromise) {
+      await this.syncUserPromise.catch(() => {})
+    }
+
+    const clearAtSnapshot = this.lastClearAt
+    this.syncUserPromise = this._doSyncUser(user, extraData, clearAtSnapshot)
+    try {
+      await this.syncUserPromise
+    } finally {
+      this.syncUserPromise = null
+    }
+  }
+
+  private async _doSyncUser(
+    user: any,
+    extraData?: {
+      meusAlunos?: any[] | null
+      alunoId?: string | null
+      turmaNome?: string | null
+      alunoObj?: any
+      extraStaffIds?: string[] | null
+      hasDualAccess?: boolean
+    },
+    clearAtSnapshot = 0
+  ): Promise<void> {
+    if (!user?.id) return
+
+    // Garante que o SDK foi inicializado antes de interrogar métodos de login/aliases
+    if (!this.initialized) {
+      if (this.initializingPromise) {
+        try { await this.initializingPromise } catch {}
+      } else {
+        try { await this.initialize() } catch {}
+      }
+    }
+
+    // Aborta se um clearUser() foi chamado enquanto esperávamos a inicialização
+    if (this.lastClearAt > clearAtSnapshot) {
+      console.log('[NotificationService] syncUser abortado: clearUser foi chamado mais recentemente.')
+      return
+    }
+
+    this.cachedUser = user
+    this.cachedExtraData = extraData
 
     const userId = String(user.id)
     const isNative = Capacitor.isNativePlatform()
@@ -533,34 +626,90 @@ class NotificationService {
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
-        if (this.currentUserId !== userId) {
-          await OneSignalNative.login(userId)
-          this.currentUserId = userId
-          console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo (External ID: ${userId})`)
+        // Login resiliente no OneSignal nativo com verificação e retry
+        const performLogin = async (retryCount = 0): Promise<boolean> => {
+          try {
+            await OneSignalNative.login(userId)
+            this.currentUserId = userId
+            this.loggedInToOneSignal = true
+            console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo (External ID: ${userId})`)
+
+            // Verificação pós-login: confirma que o external_id foi realmente vinculado
+            await new Promise(r => setTimeout(r, 300))
+            const verifiedExtId = await OneSignalNative.User.getExternalId().catch(() => null)
+            if (verifiedExtId !== userId) {
+              if (retryCount < 2) {
+                console.warn(`⚠️ [NotificationService] External ID não vinculado após login (tentativa ${retryCount + 1}). Retry...`)
+                await new Promise(r => setTimeout(r, 500 * (retryCount + 1)))
+                return performLogin(retryCount + 1)
+              }
+              console.warn(`⚠️ [NotificationService] External ID não vinculado após ${retryCount + 1} tentativas. Forçando via backend.`)
+              return false
+            }
+            return true
+          } catch (loginErr) {
+            console.warn('[NotificationService] Aviso no OneSignalNative.login:', loginErr)
+            return false
+          }
         }
+
+        // Aborta se clearUser foi chamado enquanto esperávamos o login
+        if (this.lastClearAt > clearAtSnapshot) {
+          console.log('[NotificationService] syncUser abortado antes do login: clearUser chamado.')
+          return
+        }
+
+        const loginOk = await performLogin()
 
         if (OneSignalNative.User?.pushSubscription?.optIn) {
           await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
         }
 
-        if (OneSignalNative.User?.addAlias) {
-          for (const alias of aliasesToRegister) {
-            OneSignalNative.User.addAlias(alias.label, alias.id).catch(() => {})
+        // Aliases atômicos
+        const aliasMap: Record<string, string> = { external_id: userId }
+        for (const a of aliasesToRegister) {
+          if (a.label && a.id) aliasMap[a.label] = String(a.id)
+        }
+
+        if (OneSignalNative.User?.addAliases) {
+          await OneSignalNative.User.addAliases(aliasMap).catch(() => {})
+        } else if (OneSignalNative.User?.addAlias) {
+          for (const [k, v] of Object.entries(aliasMap)) {
+            OneSignalNative.User.addAlias(k, v).catch(() => {})
           }
         }
 
         if (OneSignalNative.User?.addTags) {
           await OneSignalNative.User.addTags(tags).catch(() => {})
         }
+
+        // Garantia dupla (Dual-Layer): envia a subscrição para o backend sincronizar via REST API
+        // Sempre envia, independentemente de loginOk — garante que o backend corrija um estado inconsistente
+        const subId = await OneSignalNative.User?.pushSubscription?.getIdAsync().catch(() => null)
+        const subToken = await OneSignalNative.User?.pushSubscription?.getTokenAsync().catch(() => null)
+        if (subId) {
+          await this.sendSubscriptionToBackend({
+            subscriptionId: subId,
+            pushToken: subToken,
+            userId,
+            responsavelId: rId ? String(rId) : undefined,
+            alunoId: user.aluno_id ? String(user.aluno_id) : (extraData?.alunoId ? String(extraData.alunoId) : undefined),
+            email: user.email ? String(user.email).toLowerCase().trim() : undefined,
+            tags,
+          }).catch(() => {})
+        }
       } else {
         // Web User Sync
         const performWebSync = async (OS: any) => {
           if (!OS || typeof OS.login !== 'function') return
 
-          if (this.currentUserId !== userId) {
-            await OS.login(userId).catch(() => {})
+          try {
+            await OS.login(userId)
             this.currentUserId = userId
+            this.loggedInToOneSignal = true
             console.log(`✅ [NotificationService] Usuário associado ao OneSignal Web (External ID: ${userId})`)
+          } catch (webLoginErr) {
+            console.warn('[NotificationService] Aviso no OS.login web:', webLoginErr)
           }
 
           const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
@@ -568,14 +717,35 @@ class NotificationService {
             await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
           }
 
-          if (OS.User?.addAlias) {
-            for (const alias of aliasesToRegister) {
-              await OS.User.addAlias(alias.label, alias.id).catch(() => {})
+          const aliasMap: Record<string, string> = { external_id: userId }
+          for (const a of aliasesToRegister) {
+            if (a.label && a.id) aliasMap[a.label] = String(a.id)
+          }
+
+          if (OS.User?.addAliases) {
+            await OS.User.addAliases(aliasMap).catch(() => {})
+          } else if (OS.User?.addAlias) {
+            for (const [k, v] of Object.entries(aliasMap)) {
+              OS.User.addAlias(k, v).catch(() => {})
             }
           }
 
           if (OS.User?.addTags) {
             await OS.User.addTags(tags).catch(() => {})
+          }
+
+          const pushSub = OS.User?.PushSubscription || OS.User?.pushSubscription
+          const subId = pushSub?.id
+          if (subId) {
+            await this.sendSubscriptionToBackend({
+              subscriptionId: subId,
+              pushToken: pushSub?.token || null,
+              userId,
+              responsavelId: rId ? String(rId) : undefined,
+              alunoId: user.aluno_id ? String(user.aluno_id) : (extraData?.alunoId ? String(extraData.alunoId) : undefined),
+              email: user.email ? String(user.email).toLowerCase().trim() : undefined,
+              tags,
+            }).catch(() => {})
           }
         }
 
@@ -596,11 +766,30 @@ class NotificationService {
     }
   }
 
+
   /**
    * Desassocia o usuário no logout do app sem destruir o registro nativo do aparelho.
+   *
+   * CRÍTICO: Reseta initialized e nativeListenersConfigured para forçar re-inicialização
+   * limpa do SDK OneSignal na próxima sessão. Sem isso, o state pós-logout fica corrompido
+   * e o login seguinte não consegue vincular o external_id ao player.
    */
   public async clearUser(): Promise<void> {
+    // Marca o timestamp de limpeza ANTES de qualquer operação assíncrona.
+    // Isso permite que chamadas concorrentes de syncUser() se abortem ao detectar
+    // que um clearUser mais recente foi chamado.
+    this.lastClearAt = Date.now()
+
     this.currentUserId = null
+    this.cachedUser = null
+    this.cachedExtraData = null
+    this.loggedInToOneSignal = false
+
+    // Aguarda qualquer syncUser em andamento terminar antes de limpar o SDK
+    if (this.syncUserPromise) {
+      await this.syncUserPromise.catch(() => {})
+    }
+
     const isNative = Capacitor.isNativePlatform()
 
     try {
@@ -619,9 +808,17 @@ class NotificationService {
     } catch (err) {
       console.warn('[NotificationService] Erro no logout do OneSignal:', err)
     } finally {
+      // CRÍTICO: Reseta o estado de inicialização para forçar re-initialize completo
+      // no próximo syncUser(). Sem isso, o SDK fica em estado "logged out anonymous"
+      // e OneSignal.login() pode falhar silenciosamente na próxima sessão.
+      this.initialized = false
+      this.nativeListenersConfigured = false
+      this.state.oneSignalInitialized = false
+
       await this.refresh().catch(() => {})
     }
   }
+
 
   /**
    * Log estruturado de diagnóstico para produção (Sanitizado: sem credenciais/chaves privadas).

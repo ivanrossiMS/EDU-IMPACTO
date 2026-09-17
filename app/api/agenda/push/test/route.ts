@@ -92,16 +92,20 @@ function formatDeviceModel(model: string, type: string): string {
   return m
 }
 
-async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
+async function fetchOneSignalUserDevices(
+  identifier: string,
+  aliasLabel: 'external_id' | 'responsavel_id' | 'aluno_id' | 'email' | 'system_user_id' | 'colaborador_id' = 'external_id'
+) {
   const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
   const apiKey = process.env.ONESIGNAL_REST_API_KEY
   if (!appId || !apiKey || !identifier) return []
 
   try {
     const cleanId = identifier.trim()
-    const url = isEmail
-      ? `https://onesignal.com/api/v1/apps/${appId}/users/by/email/${encodeURIComponent(cleanId.toLowerCase())}`
-      : `https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(cleanId)}`
+    const isEmail = aliasLabel === 'email' || cleanId.includes('@')
+    const label = isEmail ? 'email' : aliasLabel
+    const val = isEmail ? cleanId.toLowerCase() : cleanId
+    const url = `https://onesignal.com/api/v1/apps/${appId}/users/by/${label}/${encodeURIComponent(val)}`
 
     const res = await fetch(url, {
       headers: {
@@ -112,8 +116,8 @@ async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
     })
 
     if (!res.ok) {
-      if (!isEmail && cleanId.includes('@')) {
-        return fetchOneSignalUserDevices(cleanId, true)
+      if (label !== 'email' && cleanId.includes('@')) {
+        return fetchOneSignalUserDevices(cleanId, 'email')
       }
       return []
     }
@@ -172,6 +176,34 @@ async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
   }
 }
 
+async function fetchDevicesForGuardian(r: {
+  authId?: string | null
+  responsavel_id?: string | null
+  email?: string | null
+}): Promise<any[]> {
+  const deviceMap = new Map<string, any>()
+
+  // 1. Tenta por authId (external_id canônico do Supabase Auth)
+  if (r.authId) {
+    const devs = await fetchOneSignalUserDevices(r.authId, 'external_id')
+    devs.forEach((d: any) => deviceMap.set(d.id, d))
+  }
+
+  // 2. Tenta por responsavel_id (alias customizado associado ao responsável no OneSignal)
+  if (r.responsavel_id) {
+    const devs = await fetchOneSignalUserDevices(r.responsavel_id, 'responsavel_id')
+    devs.forEach((d: any) => deviceMap.set(d.id, d))
+  }
+
+  // 3. Tenta por email se ainda não localizou ou para cobrir navegadores web adicionais
+  if (r.email) {
+    const devs = await fetchOneSignalUserDevices(r.email, 'email')
+    devs.forEach((d: any) => deviceMap.set(d.id, d))
+  }
+
+  return Array.from(deviceMap.values())
+}
+
 /**
  * GET /api/agenda/push/test
  *
@@ -225,7 +257,13 @@ export async function GET(request: Request) {
     const userForDevices = searchParams.get('devicesForUser')
     if (userForDevices) {
       const isEmail = userForDevices.includes('@')
-      const devices = await fetchOneSignalUserDevices(userForDevices, isEmail)
+      let devices = await fetchOneSignalUserDevices(userForDevices, isEmail ? 'email' : 'external_id')
+      if (devices.length === 0 && !isEmail) {
+        devices = await fetchOneSignalUserDevices(userForDevices, 'responsavel_id')
+      }
+      if (devices.length === 0 && !isEmail) {
+        devices = await fetchOneSignalUserDevices(userForDevices, 'aluno_id')
+      }
       return NextResponse.json({
         user: userForDevices,
         dispositivos: devices,
@@ -425,15 +463,7 @@ export async function GET(request: Request) {
         responsaveisList.map(async (r: any) => {
           let devices: any[] = []
           try {
-            if (r.authId) {
-              devices = await fetchOneSignalUserDevices(r.authId, false)
-            }
-            if (devices.length === 0 && r.email) {
-              devices = await fetchOneSignalUserDevices(r.email, true)
-            }
-            if (devices.length === 0 && r.responsavel_id) {
-              devices = await fetchOneSignalUserDevices(r.responsavel_id, false)
-            }
+            devices = await fetchDevicesForGuardian(r)
           } catch (devErr: any) {
             console.warn(`[Push Test GET] Erro ao buscar dispositivos para ${r.nome}:`, devErr?.message)
           }

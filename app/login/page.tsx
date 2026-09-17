@@ -20,6 +20,8 @@ import {
   fetchPerfisWithCache,
   setCachedPerfis
 } from '@/lib/auth/moduleRouting'
+import { notificationService } from '@/lib/notifications/notificationService'
+
 type Step = 'login' | 'first_access_verify' | 'first_access_create' | 'setup_master' | 'choose_system' | 'choose_agenda_role' | 'forgot_password' | 'forgot_password_create'
 const FEATURES = [
   { icon: '🎓', label: 'Gestão Acadêmica', desc: 'Turmas, notas, frequência e ocorrências em tempo real' },
@@ -600,6 +602,20 @@ export default function LoginPage() {
           }
         }
       } catch (e) {}
+
+      // ── Sincronização OneSignal após Login ────────────────────────────────
+      // Essencial para o ciclo logout → login: o GlobalNotificationProvider pode
+      // disparar syncUser antes do SDK estar pronto. Aqui forçamos a sincronização
+      // com delay de 500ms para dar tempo ao SDK de se recuperar do estado pós-logout.
+      const userObjForSync = userObj
+      setTimeout(() => {
+        notificationService.syncUser(userObjForSync).catch(() => {})
+      }, 500)
+      // Retry de segurança após 5s — cobre casos onde o SDK ainda estava reinicializando
+      setTimeout(() => {
+        notificationService.syncUser(userObjForSync).catch(() => {})
+      }, 5000)
+      // ─────────────────────────────────────────────────────────────────────
 
       // Função de navegação segura que garante que os cookies sejam consolidados
       const navigateSafely = (targetUrl: string) => {
