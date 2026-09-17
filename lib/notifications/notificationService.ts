@@ -853,6 +853,22 @@ class NotificationService {
     }
   }
 
+  /**
+   * Reinicia completamente as permissões e o estado de registro local do aparelho,
+   * limpando flags de dispensa para que os modais e banners voltem a solicitar permissão.
+   */
+  public async resetPermissionState(): Promise<void> {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('edu_push_dismissed_v2')
+        localStorage.removeItem('edu_push_dismissed')
+        sessionStorage.removeItem('edu_push_blocked_dismissed_session')
+        window.dispatchEvent(new CustomEvent('edu:reset-push-permission'))
+      } catch {}
+    }
+    await this.refresh().catch(() => {})
+  }
+
   private notifyListeners(): void {
     const copy = { ...this.state }
     this.listeners.forEach(listener => {

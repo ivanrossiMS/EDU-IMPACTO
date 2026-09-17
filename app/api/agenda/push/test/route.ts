@@ -853,3 +853,122 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: err.message || 'Erro ao processar envio de teste.' }, { status: 500 })
   }
 }
+
+/**
+ * DELETE /api/agenda/push/test
+ *
+ * Exclusão de sessão / aparelho push no OneSignal (individual e em lote)
+ * para reiniciar o ciclo de solicitação de permissão e registro do aparelho.
+ */
+export async function DELETE(request: Request) {
+  const auth = await verifyAdminAuth()
+  if (!auth.authorized) return auth.errorResponse!
+
+  const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
+  const apiKey = process.env.ONESIGNAL_REST_API_KEY
+  if (!appId || !apiKey) {
+    return NextResponse.json({ error: 'Credenciais OneSignal não configuradas.' }, { status: 500 })
+  }
+
+  try {
+    const { searchParams } = new URL(request.url)
+    let body: any = {}
+    try {
+      body = await request.json()
+    } catch {}
+
+    const subscriptionId = body.subscriptionId || searchParams.get('subscriptionId')
+    const subscriptionIds = Array.isArray(body.subscriptionIds) ? body.subscriptionIds : (subscriptionId ? [subscriptionId] : [])
+    const responsavelId = body.responsavelId || searchParams.get('responsavelId')
+    const authId = body.authId || searchParams.get('authId')
+    const clearAllForUser = body.clearAllForUser || searchParams.get('clearAllForUser') === 'true'
+    const clearAllOrphans = body.clearAllOrphans || searchParams.get('clearAllOrphans') === 'true'
+
+    const targetsToDelete = new Set<string>(subscriptionIds.filter(Boolean))
+
+    // 1. Se solicitado excluir todas as sessões de um responsável
+    if ((responsavelId || authId) && (clearAllForUser || targetsToDelete.size === 0)) {
+      const devs = await fetchDevicesForGuardian({
+        authId: authId || null,
+        responsavel_id: responsavelId || null,
+      })
+      devs.forEach((d: any) => {
+        if (d.id) targetsToDelete.add(d.id)
+      })
+    }
+
+    // 2. Se solicitado limpar sessões órfãs (aparelhos sem external_user_id)
+    if (clearAllOrphans) {
+      try {
+        const rList = await fetch(`https://onesignal.com/api/v1/players?app_id=${appId}&limit=100`, {
+          headers: { Authorization: `Basic ${apiKey}` }
+        })
+        if (rList.ok) {
+          const listData = await rList.json()
+          const orphans = (listData.players || []).filter((p: any) => !p.external_user_id || p.external_user_id.trim() === '')
+          orphans.forEach((p: any) => {
+            if (p.id) targetsToDelete.add(p.id)
+          })
+        }
+      } catch (orphanErr: any) {
+        console.warn('[API Push Test DELETE] Aviso ao listar órfãos:', orphanErr?.message)
+      }
+    }
+
+    if (targetsToDelete.size === 0) {
+      return NextResponse.json({ error: 'Nenhum identificador de aparelho (subscriptionId) informado para exclusão.' }, { status: 400 })
+    }
+
+    const deleteResults: any[] = []
+    const idsList = Array.from(targetsToDelete)
+
+    for (const subId of idsList) {
+      try {
+        // a) DELETE via Player API (Universal)
+        const resPlayer = await fetch(`https://onesignal.com/api/v1/players/${subId}?app_id=${appId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Basic ${apiKey}` },
+        })
+
+        // b) DELETE via Subscription API (OneSignal User Model v5)
+        let resSubStatus = null
+        try {
+          const resSub = await fetch(`https://onesignal.com/api/v1/apps/${appId}/users/by/subscriptions/${subId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Basic ${apiKey}` },
+          })
+          resSubStatus = resSub.status
+        } catch {}
+
+        deleteResults.push({
+          subscriptionId: subId,
+          success: resPlayer.ok,
+          playerStatus: resPlayer.status,
+          subscriptionStatus: resSubStatus,
+        })
+      } catch (delErr: any) {
+        deleteResults.push({
+          subscriptionId: subId,
+          success: false,
+          error: delErr.message,
+        })
+      }
+    }
+
+    const totalSuccess = deleteResults.filter(r => r.success).length
+
+    console.log(`🗑️ [API Push Test DELETE] ${totalSuccess}/${idsList.length} aparelho(s) excluído(s) do OneSignal`, deleteResults)
+
+    return NextResponse.json({
+      success: true,
+      deletedCount: totalSuccess,
+      totalRequested: idsList.length,
+      results: deleteResults,
+      message: `${totalSuccess} sessão(ões) excluída(s) com sucesso do OneSignal. Na próxima abertura do app, o aparelho solicitará novo registro.`,
+    })
+  } catch (err: any) {
+    console.error('[API Push Test DELETE] Erro:', err)
+    return NextResponse.json({ error: err.message || 'Erro ao excluir aparelhos.' }, { status: 500 })
+  }
+}
+

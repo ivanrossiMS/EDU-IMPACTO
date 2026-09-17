@@ -7,7 +7,7 @@ import {
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
   Info, Check, Calendar, Camera, Clock, DollarSign, Award,
   Car, FileText, ChevronRight, ChevronDown, ChevronUp, Search, X, Copy, Terminal,
-  Radio, CheckCheck, Eye, Zap, Shield, Laptop
+  Radio, CheckCheck, Eye, Zap, Shield, Laptop, Trash2, RotateCcw
 } from 'lucide-react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -365,6 +365,11 @@ export default function ADAdminPushTestPage() {
     setExpandedRespDevices(prev => ({ ...prev, [respId]: !prev[respId] }))
   }
 
+  // ── Estados de Exclusão de Sessão ──
+  const [deletingDeviceId, setDeletingDeviceId] = useState<string | null>(null)
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false)
+  const [isPurgingOrphans, setIsPurgingOrphans] = useState(false)
+
   // ── Estados de Conteúdo da Notificação ──
   const [activeCategory, setActiveCategory] = useState<PushCategory>('frequencia')
   const [selectedPresetId, setSelectedPresetId] = useState<string>('freq_presenca')
@@ -463,6 +468,139 @@ export default function ADAdminPushTestPage() {
       console.error('Erro ao buscar responsáveis do aluno:', err)
     } finally {
       setIsLoadingGuardians(false)
+    }
+  }
+
+  // Recarrega responsáveis e status dos aparelhos sem resetar seleção
+  const reloadGuardians = async (alunoIdOverride?: string) => {
+    const targetId = alunoIdOverride || selectedAluno?.id
+    if (!targetId) return
+    setIsLoadingGuardians(true)
+    try {
+      const res = await fetch(`/api/agenda/push/test?aluno_id=${encodeURIComponent(targetId)}`)
+      if (res.ok) {
+        const data = await res.json()
+        const resps = data.responsaveis || []
+        setGuardians(resps)
+      }
+    } catch (err) {
+      console.error('Erro ao recarregar responsáveis:', err)
+    } finally {
+      setIsLoadingGuardians(false)
+    }
+  }
+
+  // Exclusão individual de sessão / aparelho do OneSignal
+  const handleDeleteDevice = async (subscriptionId: string, deviceName: string) => {
+    if (!confirm(`Deseja excluir a sessão do aparelho "${deviceName}" do OneSignal?\n\nIsso removerá esta sessão para permitir que o aparelho reinicie a solicitação de permissão do zero.`)) {
+      return
+    }
+
+    setDeletingDeviceId(subscriptionId)
+    try {
+      const res = await fetch('/api/agenda/push/test', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptionId }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast.success(`Sessão do aparelho "${deviceName}" excluída com sucesso!`)
+        await reloadGuardians()
+        await checkCurrentDevicePush()
+      } else {
+        toast.error(data.error || 'Falha ao excluir sessão do aparelho.')
+      }
+    } catch (err: any) {
+      toast.error('Erro ao conectar com o servidor: ' + err.message)
+    } finally {
+      setDeletingDeviceId(null)
+    }
+  }
+
+  // Exclusão em lote de todas as sessões de um responsável
+  const handleDeleteAllDevices = async (guardian: any) => {
+    const total = guardian.dispositivos?.length || 0
+    if (total === 0) return
+
+    if (!confirm(`Deseja excluir TODAS as ${total} sessão(ões) registradas de "${guardian.nome}" no OneSignal?\n\nIsso limpará os registros antigos do gateway para permitir que o aparelho reinicie as permissões limpas.`)) {
+      return
+    }
+
+    setIsDeletingBatch(true)
+    try {
+      const subIds = (guardian.dispositivos || []).map((d: any) => d.id).filter(Boolean)
+      const res = await fetch('/api/agenda/push/test', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscriptionIds: subIds,
+          responsavelId: guardian.responsavel_id,
+          authId: guardian.authId,
+          clearAllForUser: true,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast.success(`${data.deletedCount} sessão(ões) de "${guardian.nome}" excluída(s) com sucesso!`)
+        await reloadGuardians()
+        await checkCurrentDevicePush()
+      } else {
+        toast.error(data.error || 'Falha ao excluir sessões em lote.')
+      }
+    } catch (err: any) {
+      toast.error('Erro ao excluir sessões em lote: ' + err.message)
+    } finally {
+      setIsDeletingBatch(false)
+    }
+  }
+
+  // Limpeza geral de aparelhos órfãos (sem external_user_id) no OneSignal
+  const handlePurgeOrphans = async () => {
+    if (!confirm('Deseja limpar todos os aparelhos órfãos/anônimos no OneSignal?\n\nIsso remove registros antigos deixados por reinstalações do app, mantendo o OneSignal limpo.')) {
+      return
+    }
+
+    setIsPurgingOrphans(true)
+    try {
+      const res = await fetch('/api/agenda/push/test', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clearAllOrphans: true }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast.success(`${data.deletedCount} aparelho(s) órfão(s) excluído(s) com sucesso!`)
+        await reloadGuardians()
+      } else {
+        toast.error(data.error || 'Falha ao limpar órfãos.')
+      }
+    } catch (err: any) {
+      toast.error('Erro ao limpar órfãos: ' + err.message)
+    } finally {
+      setIsPurgingOrphans(false)
+    }
+  }
+
+  // Reinicia permissões no aparelho atual (limpa flags de dispensa e solicita nativo)
+  const handleResetAndPromptPermission = async () => {
+    setIsResyncingDevice(true)
+    try {
+      await notificationService.resetPermissionState()
+      const granted = await notificationService.requestNotificationPermission().catch(() => false)
+      if (currentUser?.id) {
+        await notificationService.syncUser(currentUser).catch(() => {})
+      }
+      await checkCurrentDevicePush()
+      if (granted) {
+        toast.success('Permissão autorizada com sucesso!')
+      } else {
+        toast.info('Solicitação enviada. Verifique os Ajustes do sistema se as notificações estiverem bloqueadas.')
+      }
+    } catch (err: any) {
+      toast.error('Erro ao reiniciar permissão: ' + err.message)
+    } finally {
+      setIsResyncingDevice(false)
     }
   }
 
@@ -663,20 +801,54 @@ export default function ADAdminPushTestPage() {
             </div>
           </div>
 
-          <button
-            onClick={handleResyncDevice}
-            disabled={isResyncingDevice}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
-              borderRadius: 10, border: '1px solid rgba(99, 102, 241, 0.4)',
-              background: 'rgba(99, 102, 241, 0.18)', color: '#c7d2fe',
-              fontSize: 12, fontWeight: 700, cursor: isResyncingDevice ? 'not-allowed' : 'pointer',
-              transition: 'all 0.15s'
-            }}
-          >
-            <RefreshCw size={13} style={isResyncingDevice ? { animation: 'spin 1s linear infinite' } : {}} />
-            {isResyncingDevice ? 'Re-sincronizando...' : 'Re-sincronizar Este Aparelho'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              onClick={handleResyncDevice}
+              disabled={isResyncingDevice}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                borderRadius: 10, border: '1px solid rgba(99, 102, 241, 0.4)',
+                background: 'rgba(99, 102, 241, 0.18)', color: '#c7d2fe',
+                fontSize: 12, fontWeight: 700, cursor: isResyncingDevice ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s'
+              }}
+            >
+              <RefreshCw size={13} style={isResyncingDevice ? { animation: 'spin 1s linear infinite' } : {}} />
+              {isResyncingDevice ? 'Sincronizando...' : 'Re-sincronizar'}
+            </button>
+
+            <button
+              onClick={handleResetAndPromptPermission}
+              disabled={isResyncingDevice}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                borderRadius: 10, border: '1px solid rgba(16, 185, 129, 0.4)',
+                background: 'rgba(16, 185, 129, 0.15)', color: '#6ee7b7',
+                fontSize: 12, fontWeight: 700, cursor: isResyncingDevice ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s'
+              }}
+              title="Limpa flags locais e solicita novamente a permissão nativa de notificação"
+            >
+              <RotateCcw size={13} />
+              Reiniciar Permissão
+            </button>
+
+            <button
+              onClick={handlePurgeOrphans}
+              disabled={isPurgingOrphans}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                borderRadius: 10, border: '1px solid rgba(239, 68, 68, 0.35)',
+                background: 'rgba(239, 68, 68, 0.12)', color: '#fca5a5',
+                fontSize: 12, fontWeight: 700, cursor: isPurgingOrphans ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s'
+              }}
+              title="Exclui aparelhos antigos e anônimos sem vínculo no OneSignal"
+            >
+              <Trash2 size={13} />
+              {isPurgingOrphans ? 'Limpando...' : 'Limpar Órfãos em Lote'}
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
@@ -1017,17 +1189,38 @@ export default function ADAdminPushTestPage() {
                                 borderTop: '1px solid rgba(99, 102, 241, 0.12)',
                                 display: 'flex', flexDirection: 'column', gap: 8
                               }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontWeight: 700 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, flexWrap: 'wrap', gap: 6 }}>
                                   <span style={{ color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 5 }}>
                                     <Smartphone size={13} color="#6366f1" /> Aparelhos registrados no OneSignal ({totalDevs}):
                                   </span>
-                                  <span style={{
-                                    fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6,
-                                    background: activeDevs > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                                    color: activeDevs > 0 ? '#059669' : '#dc2626'
-                                  }}>
-                                    {activeDevs > 0 ? `✓ ${activeDevs} recebendo notificações` : '✕ Nenhum aparelho ativo'}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {totalDevs > 0 && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleDeleteAllDevices(g)
+                                        }}
+                                        disabled={isDeletingBatch}
+                                        style={{
+                                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                                          padding: '2px 8px', borderRadius: 6,
+                                          background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+                                          border: '1px solid rgba(239, 68, 68, 0.25)',
+                                          fontSize: 10, fontWeight: 700, cursor: isDeletingBatch ? 'not-allowed' : 'pointer',
+                                        }}
+                                        title="Excluir todas as sessões do OneSignal deste responsável para reiniciar as permissões"
+                                      >
+                                        <Trash2 size={10} /> {isDeletingBatch ? 'Excluindo...' : 'Excluir Sessões em Lote'}
+                                      </button>
+                                    )}
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6,
+                                      background: activeDevs > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                      color: activeDevs > 0 ? '#059669' : '#dc2626'
+                                    }}>
+                                      {activeDevs > 0 ? `✓ ${activeDevs} recebendo notificações` : '✕ Nenhum aparelho ativo'}
+                                    </span>
+                                  </div>
                                 </div>
 
                                 {devices.length === 0 ? (
@@ -1074,22 +1267,47 @@ export default function ADAdminPushTestPage() {
                                           </div>
                                         </div>
 
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                                          <span style={{
-                                            fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
-                                            background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)',
-                                            color: dev.isSubscribed ? '#059669' : '#dc2626',
-                                          }}>
-                                            {dev.isSubscribed ? '✓ Push Ativo' : '✕ Desativado'}
-                                          </span>
-                                          <span style={{ fontSize: 9, color: dev.isSubscribed ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                                            {dev.isSubscribed ? 'Recebe Notificações' : (dev.notificationCode === -10 ? 'Token substituído / inativo' : 'Sem permissão push')}
-                                          </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                            <span style={{
+                                              fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+                                              background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)',
+                                              color: dev.isSubscribed ? '#059669' : '#dc2626',
+                                            }}>
+                                              {dev.isSubscribed ? '✓ Push Ativo' : '✕ Desativado'}
+                                            </span>
+                                            <span style={{ fontSize: 9, color: dev.isSubscribed ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                                              {dev.isSubscribed ? 'Recebe Notificações' : (dev.notificationCode === -10 ? 'Token substituído / inativo' : 'Sem permissão push')}
+                                            </span>
+                                          </div>
+
+                                          {/* Botão de Excluir Sessão Individual */}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleDeleteDevice(dev.id, dev.modelo || 'Aparelho')
+                                            }}
+                                            disabled={deletingDeviceId === dev.id}
+                                            style={{
+                                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                                              padding: '5px 8px', borderRadius: 6,
+                                              background: 'rgba(239, 68, 68, 0.08)',
+                                              border: '1px solid rgba(239, 68, 68, 0.25)',
+                                              color: '#ef4444', fontSize: 10, fontWeight: 700,
+                                              cursor: deletingDeviceId === dev.id ? 'not-allowed' : 'pointer',
+                                              transition: 'all 0.15s',
+                                            }}
+                                            title="Excluir esta sessão no OneSignal para reiniciar a solicitação de permissão no aparelho"
+                                          >
+                                            <Trash2 size={11} />
+                                            {deletingDeviceId === dev.id ? '...' : 'Excluir'}
+                                          </button>
                                         </div>
                                       </div>
                                     ))}
                                   </div>
                                 )}
+
                               </div>
                             )}
                           </div>

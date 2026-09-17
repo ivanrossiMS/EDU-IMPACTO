@@ -40,6 +40,13 @@ export function PushPermissionBanner() {
     if (typeof window === 'undefined') return
     const dismissed = localStorage.getItem(DISMISSED_BANNER_KEY) === 'true'
     setUserDismissed(dismissed)
+
+    const handleReset = () => {
+      setUserDismissed(false)
+      try { localStorage.removeItem(DISMISSED_BANNER_KEY) } catch {}
+    }
+    window.addEventListener('edu:reset-push-permission', handleReset)
+    return () => window.removeEventListener('edu:reset-push-permission', handleReset)
   }, [])
 
   useEffect(() => {

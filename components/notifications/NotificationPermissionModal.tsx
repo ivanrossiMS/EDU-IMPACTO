@@ -26,6 +26,13 @@ export function NotificationPermissionModal() {
     if (typeof window === 'undefined') return
     const isDismissedThisSession = sessionStorage.getItem(DISMISS_SESSION_KEY) === 'true'
     setDismissed(isDismissedThisSession)
+
+    const handleReset = () => {
+      setDismissed(false)
+      try { sessionStorage.removeItem(DISMISS_SESSION_KEY) } catch {}
+    }
+    window.addEventListener('edu:reset-push-permission', handleReset)
+    return () => window.removeEventListener('edu:reset-push-permission', handleReset)
   }, [])
 
   // Se o usuário já autorizou, garante que fique fechado
