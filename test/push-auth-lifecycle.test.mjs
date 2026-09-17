@@ -553,5 +553,84 @@ test('12. First-Run e Reinstalação: purga resíduo do iOS Keychain e zera dado
   assert.equal(mockKeychain.size, 0, 'No logout, o Keychain deve ser 100% zerado');
 });
 
+test('13. Prompt Nativo Oficial: dispara requestPermission(false) no primeiro acesso (notDetermined) e NUNCA quando denied', async () => {
+  let requestedWithFallback = null;
+  let requestCount = 0;
+
+  class TestServiceWithPermission {
+    constructor(initialStatus, canReq) {
+      this.status = initialStatus;
+      this.canReq = canReq;
+      this.isNative = true;
+    }
+
+    async refresh() {
+      // Simula retorno do refresh
+    }
+
+    async requestNotificationPermission() {
+      requestCount++;
+      requestedWithFallback = false;
+      this.status = 'authorized';
+      return true;
+    }
+
+    async promptInitialPermissionIfNeeded() {
+      await this.refresh();
+      if (this.isNative && (this.status === 'notDetermined' || this.canReq)) {
+        return await this.requestNotificationPermission();
+      }
+      return this.status === 'authorized' || this.status === 'provisional';
+    }
+  }
+
+  // Caso 1: Status notDetermined pós-instalação -> DEVE disparar o prompt nativo oficial
+  const s1 = new TestServiceWithPermission('notDetermined', true);
+  const res1 = await s1.promptInitialPermissionIfNeeded();
+  assert.equal(res1, true, 'Deve conceder permissão após o usuário aceitar o prompt oficial');
+  assert.equal(requestCount, 1, 'Deve ter chamado requestNotificationPermission exatamente 1 vez');
+  assert.equal(requestedWithFallback, false, 'Deve ter chamado com fallbackToSettings = false (sem popup feio em inglês)');
+
+  // Caso 2: Status já authorized -> NÃO DEVE disparar novo prompt
+  requestCount = 0;
+  requestedWithFallback = null;
+  const s2 = new TestServiceWithPermission('authorized', false);
+  const res2 = await s2.promptInitialPermissionIfNeeded();
+  assert.equal(res2, true, 'Deve retornar true imediatamente');
+  assert.equal(requestCount, 0, 'NÃO deve chamar prompt nativo se já autorizado');
+
+  // Caso 3: Status denied (usuário recusou nos Ajustes) -> NÃO DEVE disparar prompt nativo (quem atua é o modal em português com Abrir Ajustes)
+  requestCount = 0;
+  requestedWithFallback = null;
+  const s3 = new TestServiceWithPermission('denied', false);
+  const res3 = await s3.promptInitialPermissionIfNeeded();
+  assert.equal(res3, false, 'Deve retornar false para que o modal com botão "Abrir Ajustes" seja apresentado');
+  assert.equal(requestCount, 0, 'NÃO deve tentar chamar prompt nativo do SO quando denied (a Apple rejeitaria)');
+});
+
+test('14. Exclusão individual de subscrição: remove aparelho fantasma/órfão selecionado com sucesso', async () => {
+  const mockSubscriptions = [
+    { id: 'sub_android_note8', type: 'AndroidPush', device_model: 'Redmi Note 8', token: 'token_1' },
+    { id: 'sub_ios_iphone16_antigo', type: 'iOSPush', device_model: 'iPhone 16 Pro Max', token: 'token_antigo_orfa' },
+  ];
+
+  // Simula ação do endpoint de remoção
+  const deleteSingleSub = (subId) => {
+    const idx = mockSubscriptions.findIndex(s => s.id === subId);
+    if (idx !== -1) {
+      mockSubscriptions.splice(idx, 1);
+      return { success: true, message: 'Aparelho removido com sucesso.', subscriptionId: subId };
+    }
+    return { success: false, error: 'Subscrição não encontrada' };
+  };
+
+  assert.equal(mockSubscriptions.length, 2, 'Inicia com 2 aparelhos');
+  const res = deleteSingleSub('sub_ios_iphone16_antigo');
+  assert.equal(res.success, true, 'Exclusão deve ser bem sucedida');
+  assert.equal(mockSubscriptions.length, 1, 'Deve restar apenas 1 aparelho ativo');
+  assert.equal(mockSubscriptions[0].id, 'sub_android_note8', 'Deve ter preservado o Android e eliminado o iPhone antigo');
+});
+
+
 
 

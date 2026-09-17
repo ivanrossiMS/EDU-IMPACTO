@@ -121,6 +121,9 @@ async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
     const data = await res.json()
     const subscriptions = data.subscriptions || []
 
+    const lastActiveTimestamp = data.properties?.last_active ? Number(data.properties.last_active) * 1000 : null
+    const isRecentlyActive = lastActiveTimestamp ? (Date.now() - lastActiveTimestamp) < (48 * 60 * 60 * 1000) : false
+
     return subscriptions.map((sub: any) => {
       const typeStr = sub.type || ''
       const isIos = typeStr.toLowerCase().includes('ios')
@@ -145,10 +148,15 @@ async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
         } else {
           statusDescription = '🔴 Notificações Bloqueadas nos Ajustes'
         }
+      } else if (!isRecentlyActive && (sub.session_count || 0) > 0) {
+        // Aparelho com registro histórico na nuvem, mas sem atividade nas últimas 48h
+        statusTone = 'warning'
+        statusDescription = '🟡 Registro em Nuvem (Aparelho pode estar desligado ou foi reinstalado)'
       }
 
       return {
         id: sub.id,
+        subscriptionId: sub.id,
         tipo: isIos ? 'iOS' : isAndroid ? 'Android' : 'Web',
         tipoRaw: typeStr,
         modelo: formatDeviceModel(sub.device_model, typeStr),
@@ -163,7 +171,8 @@ async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
         notificationCode: notifType,
         hasToken: Boolean(sub.token),
         tokenPreview: sub.token ? `${sub.token.slice(0, 8)}...${sub.token.slice(-4)}` : null,
-        lastActive: data.properties?.last_active ? new Date(data.properties.last_active * 1000).toISOString() : null,
+        lastActive: lastActiveTimestamp ? new Date(lastActiveTimestamp).toISOString() : null,
+        isRecentlyActive,
       }
     })
   } catch (err: any) {
@@ -491,6 +500,44 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
+
+    // Ação administrativa: Exclusão individual de uma subscrição específica (aparelho órfão/antigo)
+    if (body.action === 'delete_single_subscription') {
+      const subscriptionId = String(body.subscriptionId || '').trim()
+      if (!subscriptionId) {
+        return NextResponse.json({ error: 'subscriptionId é obrigatório para exclusão.' }, { status: 400 })
+      }
+
+      const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
+      const apiKey = process.env.ONESIGNAL_REST_API_KEY
+      if (!appId || !apiKey) {
+        return NextResponse.json({ error: 'OneSignal não configurado no servidor.' }, { status: 400 })
+      }
+
+      try {
+        const delRes = await fetch(`https://api.onesignal.com/apps/${appId}/subscriptions/${subscriptionId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Basic ${apiKey}` },
+        })
+
+        if (delRes.ok || delRes.status === 202 || delRes.status === 404) {
+          console.log(`🧹 [admin-delete-device] Subscrição ${subscriptionId} excluída manualmente com sucesso.`)
+          return NextResponse.json({
+            success: true,
+            message: 'Aparelho removido com sucesso do OneSignal.',
+            subscriptionId,
+          })
+        }
+
+        const errData = await delRes.json().catch(() => ({}))
+        return NextResponse.json({
+          success: false,
+          error: errData?.errors?.[0] || 'Falha ao remover aparelho no OneSignal.',
+        }, { status: delRes.status })
+      } catch (err: any) {
+        return NextResponse.json({ error: err?.message || 'Erro interno ao remover aparelho.' }, { status: 500 })
+      }
+    }
 
     // Ação administrativa: Limpeza de sessões/dispositivos duplicados ou órfãos de um usuário
     if (body.action === 'cleanup_user_devices') {

@@ -22,14 +22,11 @@ const DISMISS_SESSION_KEY = 'edu_push_modal_dismissed_session_v3'
 export function NotificationPermissionModal() {
   const { currentUser, hydrated } = useApp()
   const { isDenied, isNotDetermined, isAuthorized, isLoading, requestPermission, openSettings } = usePushNotifications()
-  const [dismissed, setDismissed] = useState(true)
+  const [dismissed, setDismissed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return sessionStorage.getItem(DISMISS_SESSION_KEY) === 'true'
+  })
   const [requesting, setRequesting] = useState(false)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const isDismissedThisSession = sessionStorage.getItem(DISMISS_SESSION_KEY) === 'true'
-    setDismissed(isDismissedThisSession)
-  }, [])
 
   // Se o usuário já autorizou, garante que fique fechado
   useEffect(() => {

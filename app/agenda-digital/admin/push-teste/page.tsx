@@ -512,6 +512,44 @@ export default function ADAdminPushTestPage() {
     }
   }
 
+  const [deletingSubId, setDeletingSubId] = useState<string | null>(null)
+
+  const handleDeleteSingleDevice = async (subId: string, devName: string) => {
+    if (!subId || deletingSubId) return
+    if (!window.confirm(`Deseja realmente remover o aparelho "${devName}" do OneSignal? Essa ação excluirá o registro na nuvem caso o app tenha sido desinstalado.`)) {
+      return
+    }
+
+    setDeletingSubId(subId)
+    try {
+      const res = await fetch('/api/agenda/push/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_single_subscription',
+          subscriptionId: subId,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast.success(data.message || 'Aparelho removido com sucesso!')
+        if (selectedAluno) {
+          const reloadRes = await fetch(`/api/agenda/push/test?aluno_id=${encodeURIComponent(selectedAluno.id)}`)
+          if (reloadRes.ok) {
+            const reloadData = await reloadRes.json()
+            setGuardians(reloadData.responsaveis || [])
+          }
+        }
+      } else {
+        toast.error(data.error || data.message || 'Erro ao remover aparelho.')
+      }
+    } catch {
+      toast.error('Erro de conexão ao remover aparelho.')
+    } finally {
+      setDeletingSubId(null)
+    }
+  }
+
   // 5. Troca de Categoria de Notificação
   const handleCategoryChange = (cat: PushCategory) => {
     setActiveCategory(cat)
@@ -1152,17 +1190,41 @@ export default function ADAdminPushTestPage() {
                                           </div>
                                         </div>
 
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                                          <span style={{
-                                            fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
-                                            background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)',
-                                            color: dev.isSubscribed ? '#059669' : '#dc2626',
-                                          }}>
-                                            {dev.isSubscribed ? '✓ Push Ativo' : '✕ Desativado'}
-                                          </span>
-                                          <span style={{ fontSize: 9, color: dev.isSubscribed ? '#10b981' : '#ef4444', fontWeight: 600 }}>
-                                            {dev.isSubscribed ? 'Recebe Notificações' : (dev.notificationCode === -10 ? 'Token substituído / inativo' : 'Sem permissão push')}
-                                          </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                            <span style={{
+                                              fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+                                              background: dev.statusTone === 'danger' ? 'rgba(239, 68, 68, 0.12)' : dev.statusTone === 'warning' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                              color: dev.statusTone === 'danger' ? '#dc2626' : dev.statusTone === 'warning' ? '#d97706' : '#059669',
+                                            }}>
+                                              {dev.statusTone === 'danger' ? '✕ Inativo' : dev.statusTone === 'warning' ? '⚠️ Em Nuvem' : '✓ Push Ativo'}
+                                            </span>
+                                            <span style={{ fontSize: 9, color: dev.statusTone === 'danger' ? '#ef4444' : dev.statusTone === 'warning' ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
+                                              {dev.statusDescription || (dev.isSubscribed ? 'Recebe Notificações' : (dev.notificationCode === -10 ? 'Token substituído / inativo' : 'Sem permissão push'))}
+                                            </span>
+                                          </div>
+
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleDeleteSingleDevice(dev.id || dev.subscriptionId, dev.modelo || 'Aparelho')
+                                            }}
+                                            disabled={deletingSubId === (dev.id || dev.subscriptionId)}
+                                            title="Remover este aparelho do OneSignal (útil para sessões antigas ou desinstaladas)"
+                                            style={{
+                                              width: 28, height: 28, borderRadius: 8,
+                                              background: 'rgba(239, 68, 68, 0.08)',
+                                              border: '1px solid rgba(239, 68, 68, 0.2)',
+                                              color: '#ef4444',
+                                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                              cursor: deletingSubId === (dev.id || dev.subscriptionId) ? 'wait' : 'pointer',
+                                              opacity: deletingSubId === (dev.id || dev.subscriptionId) ? 0.5 : 1,
+                                              transition: 'all 0.15s',
+                                            }}
+                                          >
+                                            <Trash2 size={13} />
+                                          </button>
                                         </div>
                                       </div>
                                     ))}

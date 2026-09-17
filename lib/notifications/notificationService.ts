@@ -245,6 +245,9 @@ class NotificationService {
     if (typeof window === 'undefined') return this.state
 
     const isNative = Capacitor.isNativePlatform()
+    const rawPlat = isNative ? Capacitor.getPlatform() : 'web'
+    this.state.isNative = isNative
+    this.state.platform = rawPlat === 'ios' ? 'ios' : rawPlat === 'android' ? 'android' : 'web'
 
     if (isNative) {
       // Garante que o SDK nativo foi inicializado antes de interrogar métodos de permissão
@@ -458,6 +461,31 @@ class NotificationService {
   }
 
   /**
+   * Dispara a solicitação nativa oficial (Apple APNs / Android 13+) apenas se o status
+   * estiver como 'notDetermined' ou canRequest === true (primeiro acesso pós-instalação ou novo login).
+   *
+   * REGRA DE OURO:
+   * 1. NUNCA tenta invocar o prompt nativo se o usuário já estiver 'denied' (pois o SO ignora silenciosamente).
+   * 2. Usa fallbackToSettings: false para acionar diretamente o diálogo oficial da Apple em Português
+   *    sem o popup feio em inglês do OneSignal v5.
+   * 3. Garante que o menu "Notificações" seja criado nos Ajustes do iPhone (Ajustes > Impacto Edu).
+   */
+  public async promptInitialPermissionIfNeeded(): Promise<boolean> {
+    if (typeof window === 'undefined') return false
+
+    // Garante que o estado mais recente esteja atualizado
+    await this.refresh()
+
+    // Se estiver em ambiente nativo e ainda não determinado, aciona o prompt nativo oficial
+    if (this.state.isNative && (this.state.permissionStatus === 'notDetermined' || this.state.canRequest)) {
+      console.log('📱 [NotificationService] Permissão não determinada detectada em ambiente nativo. Disparando prompt oficial do SO...')
+      return await this.requestNotificationPermission()
+    }
+
+    return this.state.permissionStatus === 'authorized' || this.state.permissionStatus === 'provisional'
+  }
+
+  /**
    * Abre a tela de Ajustes do aplicativo no iPhone ou configurações no Android
    * utilizando a ponte nativa confiável.
    */
@@ -620,10 +648,16 @@ class NotificationService {
           await OneSignalNative.User.addTags(tags).catch(() => {})
         }
 
-        // DUPLA GARANTIA SERVER-TO-SERVER:
-        // Obtém o Subscription ID ativo do aparelho e aciona a rota segura do servidor
-        // para garantir a associação imediata no OneSignal e podar subscrições mortas
-        const subId = await OneSignalNative.User?.pushSubscription?.getIdAsync?.().catch(() => null)
+        // DUPLA GARANTIA SERVER-TO-SERVER COM RETRY RESILIENTE:
+        // Obtém o Subscription ID ativo do aparelho (com retry assíncrono para o handshake do SDK v5)
+        // e aciona a rota segura do servidor para garantir o vínculo e podar subscrições mortas
+        let subId: string | null = null
+        for (let attempt = 0; attempt < 5; attempt++) {
+          subId = await OneSignalNative.User?.pushSubscription?.getIdAsync?.().catch(() => null)
+          if (subId && typeof subId === 'string' && subId.trim()) break
+          await new Promise(r => setTimeout(r, 200))
+        }
+
         if (subId && typeof subId === 'string' && subId.trim()) {
           try {
             fetch('/api/push/sync-subscription', {

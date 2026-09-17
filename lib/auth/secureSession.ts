@@ -934,6 +934,9 @@ export async function clearSessionSecurely(userId?: string) {
     try {
       // 1. Limpa completamente o Keychain do dispositivo
       await SecureStoragePlugin.clear().catch(() => {});
+      await SecureStoragePlugin.remove({ key: 'edu-current-user' }).catch(() => {});
+      await SecureStoragePlugin.remove({ key: 'edu-current-perfil' }).catch(() => {});
+      await SecureStoragePlugin.remove({ key: SESSION_KEY }).catch(() => {});
 
       // 2. Remove artefatos de sessão e dados de usuário no Preferences
       await Preferences.remove({ key: SESSION_KEY }).catch(() => {});

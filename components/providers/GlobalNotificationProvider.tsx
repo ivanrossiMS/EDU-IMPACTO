@@ -427,6 +427,13 @@ export function GlobalNotificationProvider() {
         .then(() => {
           lastSyncedIdentityRef.current = identityKey
           console.log(`✅ [GlobalPush] Identidade confirmada e sincronizada no OneSignal: ${identityKey}`)
+          // Em plataformas móveis nativas (iOS/Android), garante a apresentação do prompt oficial do SO
+          // caso o usuário ainda não tenha sido perguntado (status notDetermined)
+          if (Capacitor.isNativePlatform()) {
+            notificationService.promptInitialPermissionIfNeeded().catch(permErr => {
+              console.warn('[GlobalPush] Aviso ao checar prompt nativo inicial:', permErr)
+            })
+          }
         })
         .catch(err => {
           console.warn('[GlobalPush] Aviso na sincronização do usuário (permitirá retry automático):', err)
