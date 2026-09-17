@@ -477,13 +477,24 @@ class NotificationService {
     tags?: Record<string, string>
   }): Promise<void> {
     try {
-      await fetch('/api/push/sync-subscription', {
+      const baseUrl = (typeof window !== 'undefined' && window.location.origin && !window.location.origin.startsWith('capacitor://') && !window.location.origin.startsWith('ionic://'))
+        ? window.location.origin
+        : (process.env.NEXT_PUBLIC_APP_URL || 'https://impacto-edu.net')
+      const targetUrl = `${baseUrl.replace(/\/+$/, '')}/api/push/sync-subscription`
+
+      const res = await fetch(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        console.warn('⚠️ [NotificationService] Falha no sync-subscription backend:', res.status, errJson)
+      } else {
+        console.log(`✅ [NotificationService] Subscrição ${payload.subscriptionId} sincronizada no backend com sucesso!`)
+      }
     } catch (e) {
-      console.warn('[NotificationService] Falha silenciosa no sync-subscription backend:', e)
+      console.warn('[NotificationService] Falha de conexão no sync-subscription backend:', e)
     }
   }
 
@@ -625,6 +636,18 @@ class NotificationService {
 
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+
+        // Se o aparelho nativo nunca exibiu o prompt de permissão (Never Prompted no OneSignal),
+        // solicita a permissão nativa do sistema operacional para registrar o token APNs no iOS/Android.
+        try {
+          const canRequest = await OneSignalNative.Notifications.canRequestPermission().catch(() => false)
+          if (canRequest) {
+            console.log('📱 [NotificationService] Aparelho nativo nunca solicitado (canRequest: true). Solicitando permissão push...')
+            await OneSignalNative.Notifications.requestPermission(false).catch(() => {})
+          }
+        } catch (promptErr) {
+          console.warn('[NotificationService] Aviso ao verificar canRequestPermission:', promptErr)
+        }
 
         // Login resiliente no OneSignal nativo com verificação e retry
         const performLogin = async (retryCount = 0): Promise<boolean> => {
