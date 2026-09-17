@@ -6,12 +6,13 @@ import { motion } from 'framer-motion'
 import { useApp, loadSettingAsync, saveSetting, removeSettingAsync } from '@/lib/context'
 import { DEFAULT_PERFIS } from '@/lib/dataContext'
 import { performLogout } from '@/lib/auth/logout'
-import { getLogoutBarrier, isUserLoggedOut, clearSessionSecurely } from '@/lib/auth/secureSession'
+import { getLogoutBarrier, isUserLoggedOut, clearSessionSecurely, clearLogoutBarrierSync, markExplicitLogin } from '@/lib/auth/secureSession'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { LogOut } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
+import { notificationService } from '@/lib/notifications/notificationService'
 import {
   isFamilyOrStudent,
   getAgendaDigitalDestination,
@@ -501,6 +502,10 @@ export default function LoginPage() {
     if (!cleanEmail || !cleanPassword) { setLoginError('Preencha e-mail e senha.'); return }
     setLoginLoading(true); setLoginError('')
     
+    // Purga imediata síncrona de qualquer barreira residual antes da requisição
+    clearLogoutBarrierSync()
+    markExplicitLogin()
+
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 45000)
 
@@ -530,6 +535,10 @@ export default function LoginPage() {
       if (authData.error) {
         throw new Error(authData.error)
       }
+
+      // Garante barreira de logout zerada logo após a confirmação da credencial
+      clearLogoutBarrierSync()
+      markExplicitLogin()
     } catch (fetchErr: any) {
       clearTimeout(timeoutId)
       setLoginLoading(false)
@@ -565,6 +574,11 @@ export default function LoginPage() {
         user_metadata: meta
       }
       setCurrentUser(userObj)
+
+      // Sincroniza usuário e push no OneSignal de forma confiável
+      notificationService.syncUser(userObj).catch(err => {
+        console.warn('[Login] Aviso ao sincronizar OneSignal pós-login:', err)
+      })
       
       // Sincroniza sessão no cliente Supabase e Keychain/Keystore
       if (authData.session) {
@@ -1253,6 +1267,8 @@ export default function LoginPage() {
             {(!profileData || !profileData.bloqueadoGestaoEscolar) && (
               <button type="button" 
                 onClick={() => {
+                  clearLogoutBarrierSync();
+                  markExplicitLogin();
                   setLoadingSystem('gestao-escolar');
                   setTimeout(() => {
                     window.location.href = '/dashboard';
@@ -1272,6 +1288,8 @@ export default function LoginPage() {
             {(!profileData || !profileData.bloqueadoAgendaDigital) && (
               <button type="button" 
                 onClick={() => {
+                  clearLogoutBarrierSync();
+                  markExplicitLogin();
                   setLoadingSystem('agenda-digital');
                   setTimeout(() => {
                     const dest = getAgendaDigitalDestination({
@@ -1296,6 +1314,8 @@ export default function LoginPage() {
             {(!profileData || !profileData.bloqueadoGestaoPessoas) && (
               <button type="button" 
                 onClick={() => {
+                  clearLogoutBarrierSync();
+                  markExplicitLogin();
                   setLoadingSystem('gestao-pessoas');
                   setTimeout(() => {
                     window.location.href = '/gestao-pessoas';
@@ -1315,6 +1335,8 @@ export default function LoginPage() {
             {(!profileData || !profileData.bloqueadoSimulados) && (
               <button type="button" 
                 onClick={() => {
+                  clearLogoutBarrierSync();
+                  markExplicitLogin();
                   setLoadingSystem('simulados');
                   setTimeout(() => {
                     window.location.href = '/simulados';
@@ -1416,7 +1438,11 @@ export default function LoginPage() {
 
       <div style={{ display:'flex', gap:20, flexDirection: 'row' }}>
         <button type="button" 
-          onClick={() => { window.location.href = '/agenda-digital/selecionar-aluno'; }}
+          onClick={() => {
+            clearLogoutBarrierSync();
+            markExplicitLogin();
+            window.location.href = '/agenda-digital/selecionar-aluno';
+          }}
           style={{ flex:1, padding:'28px 24px', borderRadius:24, background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(20px)', cursor:'pointer', transition:'all 0.3s', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16 }}
           onMouseEnter={e=>{e.currentTarget.style.background='rgba(16,185,129,0.08)'; e.currentTarget.style.borderColor='rgba(16,185,129,0.3)'; e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.3), 0 0 40px rgba(16,185,129,0.1)'}}
           onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='none'}}>
@@ -1429,6 +1455,8 @@ export default function LoginPage() {
 
         <button type="button" 
           onClick={() => {
+             clearLogoutBarrierSync();
+             markExplicitLogin();
              const p = pendingAuth?.perfil;
              if (p === 'Diretor Geral' || pendingAuth?.cargo === 'Administrador Master') {
                  window.location.href = '/agenda-digital/selecionar-perfil-admin';

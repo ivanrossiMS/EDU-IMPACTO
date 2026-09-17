@@ -268,23 +268,9 @@ export function setLogoutBarrier(userId?: string): void {
   }
 }
 
-export async function getLogoutBarrier(): Promise<LogoutBarrierData | null> {
-  if (typeof window !== 'undefined') {
-    try {
-      const val = window.localStorage.getItem(LOGOUT_BARRIER_KEY);
-      if (val) return JSON.parse(val);
-    } catch {}
-  }
-  if (Capacitor.isNativePlatform()) {
-    try {
-      const { value } = await Preferences.get({ key: LOGOUT_BARRIER_KEY });
-      if (value) return JSON.parse(value);
-    } catch {}
-  }
-  return null;
-}
-
-export async function clearLogoutBarrier(): Promise<void> {
+export function clearLogoutBarrierSync(): void {
+  lastLogoutTimestamp = 0;
+  isExplicitlyLoggedOut = false;
   if (typeof window !== 'undefined') {
     try {
       window.localStorage.removeItem(LOGOUT_BARRIER_KEY);
@@ -292,11 +278,48 @@ export async function clearLogoutBarrier(): Promise<void> {
       window.localStorage.removeItem('edu-logout-pending');
       window.localStorage.removeItem('edu_last_logout_at');
       if (typeof document !== 'undefined') {
-        const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+        const isHttps = window.location.protocol === 'https:';
         document.cookie = `${LOGOUT_BARRIER_KEY}=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax${isHttps ? '; Secure' : ''}`;
       }
     } catch {}
   }
+}
+
+export async function getLogoutBarrier(): Promise<LogoutBarrierData | null> {
+  if (isExplicitlyLoggedOut === false && lastLogoutTimestamp === 0) {
+    return null;
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const val = window.localStorage.getItem(LOGOUT_BARRIER_KEY);
+      if (val) {
+        const parsed = JSON.parse(val);
+        if (lastSavedAtTimestamp > 0 && parsed?.timestamp && parsed.timestamp <= lastSavedAtTimestamp) {
+          clearLogoutBarrierSync();
+          return null;
+        }
+        return parsed;
+      }
+    } catch {}
+  }
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { value } = await Preferences.get({ key: LOGOUT_BARRIER_KEY });
+      if (value) {
+        const parsed = JSON.parse(value);
+        if (lastSavedAtTimestamp > 0 && parsed?.timestamp && parsed.timestamp <= lastSavedAtTimestamp) {
+          clearLogoutBarrier().catch(() => {});
+          return null;
+        }
+        return parsed;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+export async function clearLogoutBarrier(): Promise<void> {
+  clearLogoutBarrierSync();
   if (Capacitor.isNativePlatform()) {
     try {
       await Preferences.remove({ key: LOGOUT_BARRIER_KEY });
@@ -334,6 +357,7 @@ export function markExplicitLogin() {
   lastLogoutTimestamp = 0;
   isExplicitlyLoggedOut = false;
   bumpAuthGeneration();
+  clearLogoutBarrierSync();
   clearLogoutBarrier().catch(() => {});
 }
 

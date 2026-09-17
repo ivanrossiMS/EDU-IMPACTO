@@ -113,6 +113,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               return
             }
 
+            // Tenta resgatar usuário recente do localStorage antes de ejetar
+            const localUser = typeof window !== 'undefined' ? window.localStorage.getItem('edu-current-user') : null;
+            if (localUser) {
+              try {
+                const parsed = JSON.parse(localUser);
+                if (parsed?.id) {
+                  setCurrentUser(parsed);
+                  setAuthState('offline_authorized');
+                  hideSplashScreen(300);
+                  return;
+                }
+              } catch {}
+            }
+
             setAuthState('unauthorized')
             router.replace('/login')
             return
@@ -127,6 +141,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             setAuthState('offline_authorized')
             hideSplashScreen(300)
             return
+          }
+          const localUser5xx = typeof window !== 'undefined' ? window.localStorage.getItem('edu-current-user') : null;
+          if (localUser5xx) {
+            try {
+              const parsed = JSON.parse(localUser5xx);
+              if (parsed?.id) {
+                setCurrentUser(parsed);
+                setAuthState('offline_authorized');
+                hideSplashScreen(300);
+                return;
+              }
+            } catch {}
           }
           setAuthState('unauthorized')
           router.replace('/login')
@@ -146,6 +172,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             hideSplashScreen(300)
             return
           }
+          const localUser200 = typeof window !== 'undefined' ? window.localStorage.getItem('edu-current-user') : null;
+          if (localUser200) {
+            try {
+              const parsed = JSON.parse(localUser200);
+              if (parsed?.id) {
+                setCurrentUser(parsed);
+                setAuthState('offline_authorized');
+                hideSplashScreen(300);
+                return;
+              }
+            } catch {}
+          }
           router.replace('/login')
           return
         }
@@ -163,6 +201,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         // Erro de rede (falta de internet ou timeout)
         console.warn('[Auth] Falha de conexão ao verificar sessão com servidor.');
         
+        const localUserCatch = typeof window !== 'undefined' ? window.localStorage.getItem('edu-current-user') : null;
+        if (localUserCatch) {
+          try {
+            const parsed = JSON.parse(localUserCatch);
+            if (parsed?.id) {
+              setCurrentUser(parsed);
+              setAuthState('offline_authorized');
+              hideSplashScreen(300);
+              return;
+            }
+          } catch {}
+        }
+
         // Verificamos se há sessão válida local (seja do SecureStorage, Cache do Supabase ou currentUser)
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();

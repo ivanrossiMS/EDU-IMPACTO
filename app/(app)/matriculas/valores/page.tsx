@@ -11,7 +11,7 @@ import {
   CheckCheck, GraduationCap, ChevronRight, HelpCircle,
   Clock, ArrowUpRight, Sparkle, Tag, RotateCcw, X, Loader2,
   Users, UserCheck, Settings, Save, Edit3, Plus, Trash2, CheckSquare,
-  Camera, Download, FileText, Utensils
+  Camera, Download, FileText, Utensils, CreditCard
 } from 'lucide-react'
 import { useConfigDb } from '@/lib/useConfigDb'
 import AmpliacaoPeriodoTab from './components/AmpliacaoPeriodoTab'
@@ -661,15 +661,10 @@ function PropostaBadge({
   fontWeight = 800,
   minHeight,
   padding = '3px 8px',
-  borderRadius,
+  borderRadius = 6,
   style,
   className = ''
 }: PropostaBadgeProps) {
-  // Evita o bug de distorção em formato de ovo/elipse do html2canvas limitando o radius à metade da altura real do badge (~10-12px)
-  const resolvedRadius = borderRadius !== undefined
-    ? (typeof borderRadius === 'number' && borderRadius > 30 ? 11 : borderRadius)
-    : 11
-
   return (
     <span
       className={`proposta-badge ${className}`}
@@ -679,22 +674,18 @@ function PropostaBadge({
         justifyContent: 'center',
         textAlign: 'center',
         verticalAlign: 'middle',
-        gap: 5,
-        width: 'fit-content',
-        maxWidth: 'max-content',
-        minWidth: 0,
-        minHeight: minHeight ?? 'auto',
-        padding,
-        borderRadius: resolvedRadius,
-        whiteSpace: 'nowrap',
-        lineHeight: 1.2,
-        flexShrink: 0,
         boxSizing: 'border-box',
+        whiteSpace: 'nowrap',
+        lineHeight: 1,
         background: bg,
         border: border ? `1px solid ${border}` : 'none',
+        borderRadius,
+        padding,
         color,
         fontSize,
         fontWeight,
+        flexShrink: 0,
+        minHeight: minHeight ?? 'auto',
         ...style
       }}
     >
@@ -705,8 +696,8 @@ function PropostaBadge({
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            lineHeight: 1,
-            verticalAlign: 'middle'
+            marginRight: 4,
+            lineHeight: 1
           }}
         >
           {icon}
@@ -714,13 +705,10 @@ function PropostaBadge({
       )}
       <span
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          lineHeight: 1.2,
-          whiteSpace: 'nowrap',
+          display: 'inline-block',
           textAlign: 'center',
-          verticalAlign: 'middle'
+          lineHeight: 1.15,
+          whiteSpace: 'nowrap'
         }}
       >
         {children}
@@ -792,6 +780,8 @@ export default function ValoresPage() {
   const [pdfSavedSuccess, setPdfSavedSuccess] = useState<boolean>(false)
   const [isCopyingProposal, setIsCopyingProposal] = useState<boolean>(false)
   const [proposalCopiedSuccess, setProposalCopiedSuccess] = useState<boolean>(false)
+  const [isDownloadingImage, setIsDownloadingImage] = useState<boolean>(false)
+  const [imageDownloadedSuccess, setImageDownloadedSuccess] = useState<boolean>(false)
 
   // Opcionais
   const [incluirMaterial, setIncluirMaterial] = useState<boolean>(false)
@@ -1541,19 +1531,40 @@ export default function ValoresPage() {
   const generateProposalCanvas = async (): Promise<{ canvas: HTMLCanvasElement; baseFileName: string }> => {
     if (!propostaCardRef.current) throw new Error('Card da proposta não encontrado')
 
+    // 1. Aguarda as fontes carregarem completamente no documento principal
+    if (typeof document !== 'undefined' && (document as any).fonts?.ready) {
+      try {
+        await (document as any).fonts.ready
+      } catch (e) {
+        console.warn('Falha ao aguardar fonts.ready:', e)
+      }
+    }
+
     const html2canvas = (await import('html2canvas')).default
     const cardEl = propostaCardRef.current
     const targetWidth = 860
 
-    // Captura com html2canvas em 2.2x Retina com largura generosa de 860px para acomodar todos os badges e colunas
+    // Captura com html2canvas em 3x Ultra-HD para máxima nitidez de leitura no WhatsApp e no PDF
     const canvas = await html2canvas(cardEl, {
-      scale: 2.2,
+      scale: 3,
       useCORS: true,
       allowTaint: true,
       backgroundColor: '#ffffff',
       logging: false,
+      imageTimeout: 15000,
+      windowWidth: 1400,
       ignoreElements: (el) => el.classList.contains('no-export') || el.classList.contains('no-print'),
       onclone: (clonedDoc) => {
+        // Clona as fontes e stylesheets para o documento clonado
+        try {
+          const fontSheets = document.querySelectorAll('link[rel="stylesheet"], style')
+          fontSheets.forEach((s) => {
+            clonedDoc.head.appendChild(s.cloneNode(true))
+          })
+        } catch (e) {
+          console.warn('Aviso ao clonar stylesheets:', e)
+        }
+
         const el = clonedDoc.getElementById('proposta-card-imprimir')
         if (el) {
           el.style.width = `${targetWidth}px`
@@ -1562,11 +1573,19 @@ export default function ValoresPage() {
           el.style.boxShadow = 'none'
           el.style.margin = '0 auto'
           el.style.padding = '0'
+          el.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+          ;(el.style as any).webkitFontSmoothing = 'antialiased'
+          ;(el.style as any).mozOsxFontSmoothing = 'grayscale'
+          el.style.textRendering = 'optimizeLegibility'
 
           // Remove backdrop-filter e limpa letter-spacing / tabular-nums que causam quebras/espaços em badges e números
           const allNodes = el.querySelectorAll('*')
           allNodes.forEach((node) => {
             if (node instanceof HTMLElement) {
+              node.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+              ;(node.style as any).webkitFontSmoothing = 'antialiased'
+              ;(node.style as any).mozOsxFontSmoothing = 'grayscale'
+              node.style.textRendering = 'optimizeLegibility'
               node.style.backdropFilter = 'none'
               ;(node.style as any).webkitBackdropFilter = 'none'
               node.style.letterSpacing = 'normal'
@@ -1575,38 +1594,32 @@ export default function ValoresPage() {
             }
           })
 
-          // Garante que todos os badges no documento clonado acompanhem o texto sem cortes e com centralização impecável
+          // Garante alinhamento perfeitamente centralizado no html2canvas para todos os badges
           const allBadges = el.querySelectorAll('.proposta-badge, .badge-auto')
           allBadges.forEach((b) => {
             if (b instanceof HTMLElement) {
-              b.style.display = 'inline-flex'
-              b.style.alignItems = 'center'
-              b.style.justifyContent = 'center'
+              b.style.display = 'inline-block'
               b.style.textAlign = 'center'
               b.style.verticalAlign = 'middle'
-              b.style.width = 'fit-content'
-              b.style.maxWidth = 'max-content'
+              b.style.width = 'auto'
+              b.style.maxWidth = 'none'
               b.style.minWidth = '0'
               b.style.whiteSpace = 'nowrap'
               b.style.flexShrink = '0'
               b.style.boxSizing = 'border-box'
-              b.style.lineHeight = '1.2'
+              b.style.lineHeight = 'normal'
 
-              // Calcula o border-radius exato (metade da altura real) para evitar o bug de elipse/ovo do html2canvas
-              const h = b.offsetHeight || 22
-              const cleanRadius = Math.max(6, Math.min(Math.round(h / 2), 14))
-              b.style.borderRadius = `${cleanRadius}px`
-
-              // Garante que o texto e ícone internos fiquem perfeitamente centralizados
-              Array.from(b.children).forEach((child) => {
+              const children = Array.from(b.children)
+              children.forEach((child, idx) => {
                 if (child instanceof HTMLElement) {
-                  child.style.display = 'inline-flex'
-                  child.style.alignItems = 'center'
-                  child.style.justifyContent = 'center'
-                  child.style.textAlign = 'center'
+                  child.style.display = 'inline-block'
                   child.style.verticalAlign = 'middle'
-                  child.style.lineHeight = '1.2'
+                  child.style.textAlign = 'center'
+                  child.style.lineHeight = 'normal'
                   child.style.whiteSpace = 'nowrap'
+                  if (idx === 0 && children.length > 1) {
+                    child.style.marginRight = '4px'
+                  }
                 }
               })
             }
@@ -1627,7 +1640,7 @@ export default function ValoresPage() {
     const { jsPDF } = await import('jspdf')
     const targetWidth = 860
 
-    const imgData = canvas.toDataURL('image/png')
+    const imgData = canvas.toDataURL('image/png', 1.0)
     const pdfWidth = targetWidth
     // Altura proporcional exata da proposta — tamanho dinâmico e automático para não sobrar espaço
     const pdfHeight = Math.round((canvas.height / canvas.width) * pdfWidth)
@@ -1639,7 +1652,7 @@ export default function ValoresPage() {
       hotfixes: ['px_scaling']
     })
 
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST')
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'SLOW')
 
     const blob = pdf.output('blob')
     const fileName = `${baseFileName}.pdf`
@@ -1812,6 +1825,34 @@ export default function ValoresPage() {
     }
   }
 
+  // Baixar imagem PNG oficial da proposta em Ultra-HD (3x resolução)
+  const handleDownloadImage = async () => {
+    if (isDownloadingImage) return
+    setIsDownloadingImage(true)
+    showToast('Gerando imagem em altíssima resolução... 🖼️')
+    try {
+      const { canvas, baseFileName } = await generateProposalCanvas()
+      const b = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+      if (!b) throw new Error('Falha ao gerar imagem')
+      const downloadUrl = URL.createObjectURL(b)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `${baseFileName}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 10000)
+      setImageDownloadedSuccess(true)
+      setTimeout(() => setImageDownloadedSuccess(false), 3500)
+      showToast('🖼️ Imagem Ultra-HD baixada com sucesso!')
+    } catch (err: any) {
+      console.error('Erro ao baixar imagem:', err)
+      showToast('Erro ao baixar imagem da proposta.')
+    } finally {
+      setIsDownloadingImage(false)
+    }
+  }
+
 
   const filteredSeries = useMemo(() => {
     if (!searchQuery.trim()) return seriesList
@@ -1922,30 +1963,24 @@ export default function ValoresPage() {
         /* Padrão Universal de Badges Responsivos e Imutáveis */
         .proposta-badge,
         .badge-auto {
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          text-align: center !important;
-          vertical-align: middle !important;
-          gap: 5px !important;
-          width: fit-content !important;
-          max-width: max-content !important;
-          min-width: 0 !important;
-          white-space: nowrap !important;
-          line-height: 1.2 !important;
-          flex-shrink: 0 !important;
-          box-sizing: border-box !important;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          vertical-align: middle;
+          white-space: nowrap;
+          line-height: 1;
+          flex-shrink: 0;
+          box-sizing: border-box;
         }
 
         .proposta-badge > span,
         .badge-auto > span {
-          white-space: nowrap !important;
-          line-height: 1.2 !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          text-align: center !important;
-          vertical-align: middle !important;
+          white-space: nowrap;
+          display: inline-block;
+          text-align: center;
+          vertical-align: middle;
+          line-height: 1.15;
         }
       `}</style>
 
@@ -3234,7 +3269,7 @@ export default function ValoresPage() {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
 
-                  {/* 2. Salvar Proposta em PDF Oficial (1 página no tamanho exato) */}
+                  {/* 1. Salvar Proposta em PDF Oficial (1 página no tamanho exato) */}
                   <button
                     onClick={handleSavePDF}
                     disabled={isGeneratingPdf}
@@ -3265,6 +3300,39 @@ export default function ValoresPage() {
                       <Download size={15} />
                     )}
                     <span>{isGeneratingPdf ? 'Gerando PDF...' : pdfSavedSuccess ? 'PDF Salvo!' : 'Salvar PDF'}</span>
+                  </button>
+
+                  {/* 2. Baixar Imagem Oficial em Ultra-HD (PNG) */}
+                  <button
+                    onClick={handleDownloadImage}
+                    disabled={isDownloadingImage}
+                    title="Baixar imagem da proposta em altíssima resolução (PNG Ultra-HD)"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      background: imageDownloadedSuccess
+                        ? 'linear-gradient(135deg, #059669 0%, #047857 100%)'
+                        : 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 10,
+                      padding: '7px 14px',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      cursor: isDownloadingImage ? 'not-allowed' : 'pointer',
+                      boxShadow: imageDownloadedSuccess
+                        ? '0 2px 8px rgba(5,150,105,0.3)'
+                        : '0 2px 8px rgba(2,132,199,0.3)',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {isDownloadingImage ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : imageDownloadedSuccess ? (
+                      <CheckCheck size={15} />
+                    ) : (
+                      <Camera size={15} />
+                    )}
+                    <span>{isDownloadingImage ? 'Baixando...' : imageDownloadedSuccess ? 'Imagem Baixada!' : 'Baixar Imagem'}</span>
                   </button>
 
                   {/* 3. Copiar Imagem da Proposta (Colar onde quiser: Ctrl+V / Cmd+V) */}
@@ -3329,7 +3397,11 @@ export default function ValoresPage() {
                   boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)',
                   overflow: 'hidden',
                   display: 'flex',
-                  flexDirection: 'column'
+                  flexDirection: 'column',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                  WebkitFontSmoothing: 'antialiased',
+                  MozOsxFontSmoothing: 'grayscale',
+                  textRendering: 'optimizeLegibility'
                 }}
               >
                 <div style={{
@@ -3346,15 +3418,15 @@ export default function ValoresPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0, flex: 1 }}>
                     {/* Logo do Colégio Impacto */}
                     <div style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: 14,
+                      width: 56,
+                      height: 56,
+                      borderRadius: 16,
                       background: '#ffffff',
-                      padding: 5,
+                      padding: 6,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      boxShadow: '0 4px 14px rgba(0, 0, 0, 0.18)',
+                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.20)',
                       flexShrink: 0
                     }}>
                       <img
@@ -3366,62 +3438,62 @@ export default function ValoresPage() {
 
                     <div style={{ minWidth: 0 }}>
                       <span style={{
-                        fontSize: 10,
+                        fontSize: 11.5,
                         fontWeight: 800,
                         textTransform: 'uppercase',
-                        letterSpacing: '0.06em',
-                        color: '#e0f2fe',
+                        letterSpacing: '0.07em',
+                        color: '#dbeafe',
                         display: 'block'
                       }}>
                         Colégio Impacto • Orçamento Comercial
                       </span>
 
-                      <h3 style={{ fontSize: 19, fontWeight: 900, color: '#ffffff', margin: '2px 0 0 0', lineHeight: 1.2 }}>
+                      <h3 style={{ fontSize: 23, fontWeight: 900, color: '#ffffff', margin: '3px 0 0 0', lineHeight: 1.2 }}>
                         {selectedSeries.length === 1 ? currentSerie.nome : `${selectedSeries.length} Opções de Turno`}
                       </h3>
 
                       {/* Nome do Aluno quando houver */}
                       {nomeAluno.trim() ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 5 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
                           <span style={{
-                            fontSize: 11,
+                            fontSize: 12.5,
                             fontWeight: 800,
                             color: '#ffffff',
                             background: 'rgba(255, 255, 255, 0.25)',
                             border: '1px solid rgba(255, 255, 255, 0.35)',
-                            padding: '2px 10px',
+                            padding: '3px 12px',
                             borderRadius: 20,
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: 5
+                            gap: 6
                           }}>
-                            <GraduationCap size={13} color="#ffffff" />
+                            <GraduationCap size={14} color="#ffffff" />
                             Aluno(a): {nomeAluno.trim()}
                           </span>
 
                           {nomeResponsavel.trim() && (
                             <span style={{
-                              fontSize: 10.5,
+                              fontSize: 12,
                               fontWeight: 700,
                               color: '#eff6ff',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 4
+                              gap: 5
                             }}>
-                              <User size={11} color="#bfdbfe" />
+                              <User size={13} color="#bfdbfe" />
                               Resp: {nomeResponsavel.trim()}
                             </span>
                           )}
 
                           {selectedSeries.length > 1 && (
-                            <span style={{ fontSize: 10.5, color: '#dbeafe', fontWeight: 600 }}>
+                            <span style={{ fontSize: 11.5, color: '#dbeafe', fontWeight: 600 }}>
                               • {selectedSeries.map(s => s.nome).join(' • ')}
                             </span>
                           )}
                         </div>
                       ) : (
                         selectedSeries.length > 1 && (
-                          <span style={{ fontSize: 11, color: '#e0f2fe', display: 'block', marginTop: 3, fontWeight: 600 }}>
+                          <span style={{ fontSize: 12, color: '#e0f2fe', display: 'block', marginTop: 4, fontWeight: 600 }}>
                             {selectedSeries.map(s => s.nome).join(' • ')}
                           </span>
                         )
@@ -3430,28 +3502,30 @@ export default function ValoresPage() {
                   </div>
 
                   {/* Lado Direito: Badges Oficiais da Proposta */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7, flexShrink: 0 }}>
                     <PropostaBadge
-                      icon={<Sparkles size={12} color="#ffffff" />}
+                      icon={<Sparkles size={13} color="#ffffff" />}
                       bg="rgba(255, 255, 255, 0.20)"
                       border="rgba(255, 255, 255, 0.40)"
                       color="#ffffff"
-                      fontSize={11}
+                      fontSize={12}
                       fontWeight={900}
-                      padding="3px 9px"
+                      padding="4px 12px"
+                      borderRadius={8}
                       style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.10)' }}
                     >
                       Ano Letivo {anoLetivo}
                     </PropostaBadge>
 
                     <PropostaBadge
-                      icon={<CheckCircle2 size={11} color="#93c5fd" />}
+                      icon={<CheckCircle2 size={12} color="#93c5fd" />}
                       bg="rgba(15, 23, 42, 0.25)"
                       border="rgba(255, 255, 255, 0.25)"
                       color="#e0f2fe"
-                      fontSize={10}
+                      fontSize={11.5}
                       fontWeight={800}
-                      padding="3px 9px"
+                      padding="4px 12px"
+                      borderRadius={8}
                     >
                       Proposta Oficial
                     </PropostaBadge>
@@ -3459,30 +3533,30 @@ export default function ValoresPage() {
                 </div>
 
 
-                <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ padding: '22px 26px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {/* Métricas Principais (Sem somar mensalidades) */}
                   {selectedSeries.length === 1 ? (
-                    <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div style={{ padding: '14px 16px', borderRadius: 14, background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      <div style={{ padding: '16px 20px', borderRadius: 16, background: '#eff6ff', border: '1.5px solid #bfdbfe', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.04)' }}>
                         <div>
-                          <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#1e40af', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-                            <DollarSign size={13} color="#2563eb" />
+                          <span style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1e40af', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                            <DollarSign size={15} color="#2563eb" />
                             Mensalidade {anoLetivo}
                           </span>
-                          <span style={{ fontSize: 22, fontWeight: 900, color: '#1d4ed8', display: 'block' }}>
+                          <span style={{ fontSize: 27, fontWeight: 900, color: '#1d4ed8', display: 'block', lineHeight: 1.15 }}>
                             {fmt(calculations.seriesCalc[0]?.mensalidadeLiq || 0)}
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginLeft: 2 }}>/mês</span>
+                            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#64748b', marginLeft: 3 }}>/mês</span>
                           </span>
                         </div>
                         {descontoPercent > 0 && (
-                          <div style={{ marginTop: 6 }}>
+                          <div style={{ marginTop: 8 }}>
                             <PropostaBadge
                               bg="#ecfdf5"
                               border="#a7f3d0"
                               color="#059669"
-                              fontSize={10}
+                              fontSize={11.5}
                               fontWeight={800}
-                              padding="3px 8px"
+                              padding="4px 10px"
                             >
                               Economia: -{fmt(calculations.seriesCalc[0]?.descMensal || 0)}/mês ({descontoPercent}% OFF)
                             </PropostaBadge>
@@ -3490,50 +3564,50 @@ export default function ValoresPage() {
                         )}
                       </div>
 
-                      <div style={{ padding: '14px 16px', borderRadius: 14, background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div style={{ padding: '16px 20px', borderRadius: 16, background: '#ecfdf5', border: '1.5px solid #a7f3d0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(5, 150, 105, 0.04)' }}>
                         <div>
-                          <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#065f46', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-                            <Calendar size={13} color="#059669" />
+                          <span style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#065f46', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                            <Calendar size={15} color="#059669" />
                             Matrícula ({primeiroMesNome})
                           </span>
-                          <span style={{ fontSize: 22, fontWeight: 900, color: '#047857', display: 'block' }}>
+                          <span style={{ fontSize: 27, fontWeight: 900, color: '#047857', display: 'block', lineHeight: 1.15 }}>
                             {fmt(calculations.seriesCalc[0]?.finalMatAVista || 0)}
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', marginLeft: 4 }}>à vista</span>
+                            <span style={{ fontSize: 13.5, fontWeight: 700, color: '#059669', marginLeft: 4 }}>à vista</span>
                           </span>
                         </div>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: '#475569', display: 'block', marginTop: 4 }}>
-                          ou em até <strong>{numParcelasMatricula}x de {fmt(calculations.seriesCalc[0]?.parcelaMat || 0)}</strong> sem juros
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', display: 'block', marginTop: 6 }}>
+                          ou em até <strong style={{ color: '#047857', fontWeight: 800 }}>{numParcelasMatricula}x de {fmt(calculations.seriesCalc[0]?.parcelaMat || 0)}</strong> sem juros
                         </span>
                       </div>
                     </div>
                   ) : (
-                    <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div style={{ padding: '14px 16px', borderRadius: 14, background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div className="print-avoid-break" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                      <div style={{ padding: '16px 20px', borderRadius: 16, background: '#eff6ff', border: '1.5px solid #bfdbfe', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.04)' }}>
                         <div>
-                          <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#1e40af', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-                            <Layers size={13} color="#2563eb" />
+                          <span style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1e40af', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                            <Layers size={15} color="#2563eb" />
                             Modalidades Selecionadas
                           </span>
-                          <span style={{ fontSize: 20, fontWeight: 900, color: '#1d4ed8', display: 'block' }}>
+                          <span style={{ fontSize: 24, fontWeight: 900, color: '#1d4ed8', display: 'block', lineHeight: 1.15 }}>
                             {selectedSeries.length} Opções de Turno
                           </span>
                         </div>
-                        <span style={{ fontSize: 10, color: '#64748b', display: 'block', marginTop: 4 }}>
+                        <span style={{ fontSize: 12, color: '#64748b', display: 'block', marginTop: 5, fontWeight: 500 }}>
                           Valores individuais detalhados abaixo
                         </span>
                       </div>
 
-                      <div style={{ padding: '14px 16px', borderRadius: 14, background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div style={{ padding: '16px 20px', borderRadius: 16, background: '#ecfdf5', border: '1.5px solid #a7f3d0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 2px 8px rgba(5, 150, 105, 0.04)' }}>
                         <div>
-                          <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#065f46', display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-                            <Sparkles size={13} color="#059669" />
+                          <span style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#065f46', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                            <Sparkles size={15} color="#059669" />
                             Campanha ({primeiroMesNome})
                           </span>
-                          <span style={{ fontSize: 20, fontWeight: 900, color: '#047857', display: 'block' }}>
+                          <span style={{ fontSize: 24, fontWeight: 900, color: '#047857', display: 'block', lineHeight: 1.15 }}>
                             {calculations.aVistaPct > 0 ? `Até ${calculations.aVistaPct}% OFF` : 'Tabela Regular'}
                           </span>
                         </div>
-                        <span style={{ fontSize: 10, color: '#475569', display: 'block', marginTop: 4 }}>
+                        <span style={{ fontSize: 12, color: '#475569', display: 'block', marginTop: 5, fontWeight: 500 }}>
                           Parcelamento em até {numParcelasMatricula}x sem juros
                         </span>
                       </div>
@@ -3541,10 +3615,10 @@ export default function ValoresPage() {
                   )}
 
                   {/* Detalhamento Individual por Série (NUNCA SOMA MENSALIDADES) */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Layers size={14} color="#2563eb" />
+                      <span style={{ fontSize: 13, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#334155', display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <Layers size={16} color="#2563eb" />
                         {selectedSeries.length === 1 ? 'Condições da Série' : `Opções de Valores (${selectedSeries.length} modalidades)`}
                       </span>
                       {descontoPercent > 0 && (
@@ -3552,16 +3626,16 @@ export default function ValoresPage() {
                           bg="#ecfdf5"
                           border="#a7f3d0"
                           color="#059669"
-                          fontSize={9.5}
+                          fontSize={11}
                           fontWeight={800}
-                          padding="2.5px 8px"
+                          padding="3px 10px"
                         >
                           {descontoPercent}% de desconto ativo
                         </PropostaBadge>
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                       {calculations.seriesCalc.map(sc => {
                         const isIntegral = sc.serie.id === 'integral' || sc.serie.nome.toLowerCase().includes('integral')
                         const isIntermediario = sc.serie.id === 'intermediario' || sc.serie.nome.toLowerCase().includes('intermediário') || sc.serie.nome.toLowerCase().includes('intermediario')
@@ -3573,7 +3647,7 @@ export default function ValoresPage() {
                               badgeBorder: '#ddd6fe',
                               accentColor: '#7c3aed',
                               iconBoxBg: '#ede9fe',
-                              icon: <Sparkles size={16} color="#7c3aed" />
+                              icon: <Sparkles size={18} color="#7c3aed" />
                             }
                           : isIntermediario
                           ? {
@@ -3582,7 +3656,7 @@ export default function ValoresPage() {
                               badgeBorder: '#fde68a',
                               accentColor: '#d97706',
                               iconBoxBg: '#fef3c7',
-                              icon: <Clock size={16} color="#d97706" />
+                              icon: <Clock size={18} color="#d97706" />
                             }
                           : {
                               tag: 'Meio Período',
@@ -3590,7 +3664,7 @@ export default function ValoresPage() {
                               badgeBorder: '#bfdbfe',
                               accentColor: '#2563eb',
                               iconBoxBg: '#eff6ff',
-                              icon: <GraduationCap size={16} color="#2563eb" />
+                              icon: <GraduationCap size={18} color="#2563eb" />
                             }
 
                         return (
@@ -3599,13 +3673,13 @@ export default function ValoresPage() {
                             className="print-avoid-break"
                             style={{
                               background: '#ffffff',
-                              borderRadius: 16,
-                              border: '1px solid #e2e8f0',
-                              padding: '14px 16px',
+                              borderRadius: 18,
+                              border: '1.5px solid #e2e8f0',
+                              padding: '16px 18px',
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: 11,
-                              boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.04)'
+                              gap: 13,
+                              boxShadow: '0 2px 10px -2px rgba(15, 23, 42, 0.05)'
                             }}
                           >
 
@@ -3616,14 +3690,14 @@ export default function ValoresPage() {
                               alignItems: 'center',
                               flexWrap: 'wrap',
                               gap: 10,
-                              paddingBottom: 12,
+                              paddingBottom: 13,
                               borderBottom: '1px solid #f1f5f9'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0, flex: 1 }}>
                                 <div style={{
-                                  width: 40,
-                                  height: 40,
-                                  borderRadius: 10,
+                                  width: 44,
+                                  height: 44,
+                                  borderRadius: 12,
                                   background: theme.iconBoxBg,
                                   display: 'flex',
                                   alignItems: 'center',
@@ -3633,28 +3707,30 @@ export default function ValoresPage() {
                                   {theme.icon}
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
-                                  <span style={{ fontSize: 17, fontWeight: 900, color: '#0f172a', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+                                  <span style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
                                     {sc.serie.nome}
                                   </span>
                                   <PropostaBadge
                                     bg={theme.badgeBg}
                                     border={theme.badgeBorder}
                                     color={theme.accentColor}
-                                    fontSize={10}
+                                    fontSize={11}
                                     fontWeight={800}
-                                    padding="3px 9px"
+                                    padding="3.5px 10px"
+                                    borderRadius={7}
                                   >
                                     {theme.tag.toUpperCase()}
                                   </PropostaBadge>
                                   {sc.serie.detalhe && (
                                     <PropostaBadge
-                                      icon={<Utensils size={11} color="#92400e" />}
+                                      icon={<Utensils size={12} color="#92400e" />}
                                       bg="#fef3c7"
                                       border="#fde68a"
                                       color="#92400e"
-                                      fontSize={10}
+                                      fontSize={11}
                                       fontWeight={800}
-                                      padding="3px 9px"
+                                      padding="3.5px 10px"
+                                      borderRadius={7}
                                     >
                                       {sc.serie.detalhe}
                                     </PropostaBadge>
@@ -3664,26 +3740,28 @@ export default function ValoresPage() {
 
                               {descontoPercent > 0 ? (
                                 <PropostaBadge
-                                  icon={<Sparkles size={11} color="#059669" />}
+                                  icon={<Sparkles size={12} color="#059669" />}
                                   bg="linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)"
                                   border="#a7f3d0"
                                   color="#065f46"
-                                  fontSize={10}
+                                  fontSize={11.5}
                                   fontWeight={800}
-                                  padding="3px 9px"
+                                  padding="3.5px 11px"
+                                  borderRadius={7}
                                   style={{ boxShadow: '0 1px 2px rgba(5, 150, 105, 0.06)' }}
                                 >
-                                  Economia Anual: <strong style={{ color: '#047857', marginLeft: 3 }}>{fmt(sc.econAnualMensalidades)}</strong>
+                                  Economia Anual: <strong style={{ color: '#047857', marginLeft: 4 }}>{fmt(sc.econAnualMensalidades)}</strong>
                                 </PropostaBadge>
                               ) : (
                                 <PropostaBadge
-                                  icon={<ShieldCheck size={11} color="#64748b" />}
+                                  icon={<ShieldCheck size={12} color="#64748b" />}
                                   bg="#f8fafc"
                                   border="#e2e8f0"
                                   color="#64748b"
-                                  fontSize={10}
+                                  fontSize={11}
                                   fontWeight={700}
-                                  padding="3px 9px"
+                                  padding="3.5px 10px"
+                                  borderRadius={7}
                                 >
                                   Tabela Padrão
                                 </PropostaBadge>
@@ -3698,25 +3776,25 @@ export default function ValoresPage() {
                               background: descontoPercent > 0
                                 ? 'linear-gradient(135deg, #f8fafc 0%, #f0fdf4 100%)'
                                 : '#f8fafc',
-                              padding: '11px 14px',
-                              borderRadius: 12,
-                              border: descontoPercent > 0 ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                              padding: '13px 16px',
+                              borderRadius: 14,
+                              border: descontoPercent > 0 ? '1.5px solid #bbf7d0' : '1.5px solid #e2e8f0',
                               flexWrap: 'nowrap',
-                              gap: 10
+                              gap: 12
                             }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
                                   <span style={{
-                                    fontSize: 9.5,
-                                    color: '#64748b',
+                                    fontSize: 11.5,
+                                    color: '#475569',
                                     fontWeight: 800,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.04em',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: 4
+                                    gap: 5
                                   }}>
-                                    <DollarSign size={12} color="#2563eb" />
+                                    <DollarSign size={14} color="#2563eb" />
                                     Investimento Mensal ({anoLetivo}):
                                   </span>
                                   {descontoPercent > 0 && (
@@ -3724,10 +3802,10 @@ export default function ValoresPage() {
                                       bg="#dcfce7"
                                       border="#86efac"
                                       color="#047857"
-                                      fontSize={9}
+                                      fontSize={10.5}
                                       fontWeight={800}
-                                      minHeight={20}
-                                      padding="2px 7px"
+                                      minHeight={22}
+                                      padding="2.5px 8px"
                                     >
                                       {descontoPercent}% OFF
                                     </PropostaBadge>
@@ -3736,18 +3814,19 @@ export default function ValoresPage() {
 
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
                                   <span style={{
-                                    fontSize: 20,
+                                    fontSize: 25,
                                     fontWeight: 900,
                                     color: '#1d4ed8',
-                                    whiteSpace: 'nowrap'
+                                    whiteSpace: 'nowrap',
+                                    lineHeight: 1.15
                                   }}>
                                     {fmt(sc.mensalidadeLiq)}
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginLeft: 3 }}>/mês</span>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginLeft: 3 }}>/mês</span>
                                   </span>
 
                                   {descontoPercent > 0 && (
                                     <span style={{
-                                      fontSize: 11,
+                                      fontSize: 12.5,
                                       color: '#94a3b8',
                                       textDecoration: 'line-through',
                                       fontWeight: 600,
@@ -3768,17 +3847,17 @@ export default function ValoresPage() {
                                   flexShrink: 0
                                 }}>
                                   <PropostaBadge
-                                    icon={<Percent size={10} color="#059669" />}
+                                    icon={<Percent size={11} color="#059669" />}
                                     bg="#ecfdf5"
                                     border="#a7f3d0"
                                     color="#065f46"
-                                    fontSize={10}
+                                    fontSize={11.5}
                                     fontWeight={800}
-                                    padding="3px 8px"
+                                    padding="4px 10px"
                                   >
                                     Economia: <strong style={{ color: '#047857', marginLeft: 3 }}>-{fmt(sc.descMensal)}/mês</strong>
                                   </PropostaBadge>
-                                  <span style={{ fontSize: 9, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                  <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>
                                     12 parcelas com desconto garantido
                                   </span>
                                 </div>
@@ -3794,9 +3873,10 @@ export default function ValoresPage() {
                                     bg="#f1f5f9"
                                     border="#e2e8f0"
                                     color="#64748b"
-                                    fontSize={10}
+                                    fontSize={11}
                                     fontWeight={700}
-                                    padding="3px 9px"
+                                    padding="3.5px 10px"
+                                    borderRadius={7}
                                   >
                                     12 parcelas regulares
                                   </PropostaBadge>
@@ -3805,19 +3885,20 @@ export default function ValoresPage() {
                             </div>
 
                             {/* Cronograma de Parcelamento e Matrícula de Todos os Meses */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                                <span style={{ fontSize: 9.5, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 5 }}>
-                                  <Calendar size={12} color="#059669" />
+                                <span style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <Calendar size={14} color="#059669" />
                                   Opções de Matrícula & Parcelamento por Mês:
                                 </span>
                                 <PropostaBadge
                                   bg="#f0fdf4"
                                   border="#bbf7d0"
                                   color="#065f46"
-                                  fontSize={9}
+                                  fontSize={10.5}
                                   fontWeight={700}
-                                  padding="2.5px 7.5px"
+                                  padding="3px 9px"
+                                  borderRadius={6}
                                 >
                                   Em até {numParcelasMatricula}x sem juros
                                 </PropostaBadge>
@@ -3834,27 +3915,27 @@ export default function ValoresPage() {
                                 const labelMes = isRegular ? 'A partir de Jan' : m.mes
                                 const isBestMonth = isSelectedMonth && (m.mes === 'Outubro' || sc.matCampanha.filter(x => selectedMeses.includes(x.mes))[0]?.mes === m.mes)
                                 const regraInfo = ANTECIPACAO_REGRAS.find(r => r.mes === m.mes)
-                                const tagDestaque = m.aVistaPct > 0 ? (regraInfo?.destaque || `Até ${m.aVistaPct}% OFF`) : 'Tabela Padrão'
+                                const tagDestaque = m.aVistaPct > 0 ? (regraInfo?.destaque || `Até ${m.aVistaPct}% OFF`) : 'Padrão'
 
                                 return (
                                   <div
                                     key={m.mes}
                                     style={{
-                                      padding: '9px 10px',
-                                      borderRadius: 12,
+                                      padding: '10px 11px',
+                                      borderRadius: 14,
                                       background: isBestMonth
                                         ? 'linear-gradient(180deg, #f0fdf4 0%, #ffffff 50%)'
                                         : '#ffffff',
                                       border: isBestMonth
                                         ? '1.5px solid #10b981'
-                                        : (isSelectedMonth ? '1px solid #cbd5e1' : '1px solid #f1f5f9'),
+                                        : (isSelectedMonth ? '1.5px solid #cbd5e1' : '1px solid #f1f5f9'),
                                       boxShadow: isBestMonth
-                                        ? '0 3px 8px -2px rgba(16, 185, 129, 0.15)'
-                                        : '0 1px 3px rgba(0, 0, 0, 0.02)',
+                                        ? '0 3px 10px -2px rgba(16, 185, 129, 0.18)'
+                                        : '0 1px 4px rgba(0, 0, 0, 0.03)',
                                       display: 'flex',
                                       flexDirection: 'column',
                                       justifyContent: 'space-between',
-                                      gap: 6,
+                                      gap: 7,
                                       opacity: isSelectedMonth ? 1 : 0.5,
                                       position: 'relative'
                                     }}
@@ -3862,7 +3943,7 @@ export default function ValoresPage() {
                                     {/* Cabeçalho do Mês Sincronizado com o Site */}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, minHeight: 22 }}>
                                       <span style={{
-                                        fontSize: 10.5,
+                                        fontSize: 12.5,
                                         fontWeight: 900,
                                         color: isBestMonth ? '#065f46' : '#1e293b',
                                         whiteSpace: 'nowrap',
@@ -3874,9 +3955,10 @@ export default function ValoresPage() {
                                         bg={m.aVistaPct >= 20 ? '#ecfdf5' : (m.aVistaPct >= 15 ? '#eff6ff' : (m.aVistaPct > 0 ? '#fffbeb' : '#f8fafc'))}
                                         border={m.aVistaPct >= 20 ? '#a7f3d0' : (m.aVistaPct >= 15 ? '#bfdbfe' : (m.aVistaPct > 0 ? '#fde68a' : '#cbd5e1'))}
                                         color={m.aVistaPct >= 20 ? '#047857' : (m.aVistaPct >= 15 ? '#1e40af' : (m.aVistaPct > 0 ? '#92400e' : '#475569'))}
-                                        fontSize={7.5}
+                                        fontSize={9.5}
                                         fontWeight={800}
-                                        padding="2px 6px"
+                                        padding="2.5px 7px"
+                                        borderRadius={6}
                                       >
                                         {tagDestaque}
                                       </PropostaBadge>
@@ -3885,31 +3967,31 @@ export default function ValoresPage() {
                                     {/* Bloco À Vista */}
                                     <div style={{
                                       background: isBestMonth ? '#ffffff' : '#f8fafc',
-                                      padding: '6px 8px',
-                                      borderRadius: 8,
+                                      padding: '7px 9px',
+                                      borderRadius: 9,
                                       border: isBestMonth ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
                                       display: 'flex',
                                       flexDirection: 'column',
-                                      gap: 2
+                                      gap: 2.5
                                     }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: 7.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2 }}>
+                                        <span style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2 }}>
                                           À Vista
                                         </span>
                                         <PropostaBadge
                                           bg={m.aVistaPct > 0 ? '#dcfce7' : '#f1f5f9'}
                                           border={m.aVistaPct > 0 ? '#bbf7d0' : '#e2e8f0'}
                                           color={m.aVistaPct > 0 ? '#047857' : '#64748b'}
-                                          fontSize={7.5}
+                                          fontSize={9.5}
                                           fontWeight={m.aVistaPct > 0 ? 800 : 700}
-                                          padding="1.5px 5px"
+                                          padding="2px 6px"
                                           borderRadius={5}
                                         >
                                           {m.aVistaPct > 0 ? `${m.aVistaPct}% desc.` : 'Integral'}
                                         </PropostaBadge>
                                       </div>
                                       <div style={{
-                                        fontSize: 13,
+                                        fontSize: 15.5,
                                         fontWeight: 900,
                                         color: isBestMonth ? '#047857' : '#0f172a',
                                         lineHeight: 1.2,
@@ -3918,9 +4000,9 @@ export default function ValoresPage() {
                                         {fmt(m.finalAVista)}
                                       </div>
                                       <div style={{
-                                        fontSize: 7.5,
+                                        fontSize: 9.5,
                                         color: m.descAVista > 0 ? '#059669' : '#94a3b8',
-                                        fontWeight: m.descAVista > 0 ? 600 : 500,
+                                        fontWeight: m.descAVista > 0 ? 700 : 500,
                                         lineHeight: 1.2,
                                         whiteSpace: 'nowrap'
                                       }}>
@@ -3931,32 +4013,32 @@ export default function ValoresPage() {
                                     {/* Bloco Parcelado */}
                                     <div style={{
                                       background: isBestMonth ? '#ffffff' : '#f8fafc',
-                                      padding: '6px 8px',
-                                      borderRadius: 8,
+                                      padding: '7px 9px',
+                                      borderRadius: 9,
                                       border: isBestMonth ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
                                       display: 'flex',
                                       flexDirection: 'column',
-                                      gap: 2
+                                      gap: 2.5
                                     }}>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: 7.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2 }}>
+                                        <span style={{ fontSize: 9.5, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2 }}>
                                           Até {numParcelasMatricula}x
                                         </span>
                                         <PropostaBadge
                                           bg={m.parceladoPct > 0 ? '#eff6ff' : '#f1f5f9'}
                                           border={m.parceladoPct > 0 ? '#bfdbfe' : '#e2e8f0'}
                                           color={m.parceladoPct > 0 ? '#1e40af' : '#64748b'}
-                                          fontSize={7.5}
+                                          fontSize={9.5}
                                           fontWeight={m.parceladoPct > 0 ? 800 : 700}
-                                          padding="1.5px 5px"
+                                          padding="2px 6px"
                                           borderRadius={5}
                                         >
                                           {m.parceladoPct > 0 ? `${m.parceladoPct}% desc.` : 'Sem juros'}
                                         </PropostaBadge>
                                       </div>
                                       <div style={{
-                                        fontSize: 11.5,
-                                        fontWeight: 800,
+                                        fontSize: 13.5,
+                                        fontWeight: 900,
                                         color: '#1d4ed8',
                                         whiteSpace: 'nowrap',
                                         lineHeight: 1.2
@@ -3964,7 +4046,7 @@ export default function ValoresPage() {
                                         {numParcelasMatricula}x de {fmt(m.parcela)}
                                       </div>
                                       <div style={{
-                                        fontSize: 7.5,
+                                        fontSize: 9.5,
                                         color: '#64748b',
                                         fontWeight: 600,
                                         lineHeight: 1.2,
@@ -3989,44 +4071,93 @@ export default function ValoresPage() {
                     <div className="print-avoid-break" style={{
                       background: '#faf5ff',
                       borderRadius: 14,
-                      border: '1px solid #e9d5ff',
-                      padding: '12px 14px',
+                      border: '1.5px solid #d8b4fe',
+                      padding: '16px 20px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 8
+                      gap: 12
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: '#6b21a8', display: 'flex', alignItems: 'center', gap: 6, textTransform: 'uppercase' }}>
-                          <BookOpen size={13} color="#9333ea" />
-                          Material Didático e Livros ({selectedMaterialIds.length})
+                      {/* Topo do Card de Materiais - Sem informação abaixo do título e sem badges */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                        paddingBottom: 8,
+                        borderBottom: '1.5px solid #ede9fe'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                          <BookOpen size={19} color="#7e22ce" />
+                          <span style={{
+                            fontSize: 14,
+                            fontWeight: 900,
+                            color: '#581c87',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em'
+                          }}>
+                            Material Didático & Livros ({selectedMaterialIds.length})
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: '#7e22ce' }}>
+                          Em até {MAX_PARCELAS_MATERIAL}x sem juros no cartão
                         </span>
-                        <PropostaBadge
-                          bg="#f3e8ff"
-                          border="#e9d5ff"
-                          color="#7e22ce"
-                          fontSize={9.5}
-                          fontWeight={700}
-                          minHeight={22}
-                          padding="3px 8px"
-                        >
-                          Até {MAX_PARCELAS_MATERIAL}x sem juros
-                        </PropostaBadge>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+
+                      {/* Lista Estruturada de Materiais - Sem informação abaixo do nome e parcelamento em texto puro (sem badge) */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {OPCOES_MATERIAIS.filter(m => selectedMaterialIds.includes(m.id)).map(m => (
-                          <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#581c87', padding: '3px 0', borderBottom: '1px dashed #f3e8ff' }}>
-                            <span style={{ fontWeight: 600 }}>• {m.nome}:</span>
-                            <span style={{ fontWeight: 800 }}>
-                              {fmt(m.valor)} <span style={{ fontSize: 9.5, color: '#7e22ce', fontWeight: 600 }}>({MAX_PARCELAS_MATERIAL}x de {fmt(m.valor / MAX_PARCELAS_MATERIAL)})</span>
+                          <div
+                            key={m.id}
+                            style={{
+                              background: '#ffffff',
+                              borderRadius: 10,
+                              border: '1px solid #e9d5ff',
+                              padding: '11px 16px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: 14
+                            }}
+                          >
+                            <span style={{ fontSize: 14, fontWeight: 800, color: '#1e1b4b' }}>
+                              • {m.nome}
                             </span>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
+                              <span style={{ fontSize: 16, fontWeight: 900, color: '#581c87' }}>
+                                {fmt(m.valor)}
+                              </span>
+                              <span style={{ fontSize: 12.5, fontWeight: 600, color: '#7e22ce' }}>
+                                ({MAX_PARCELAS_MATERIAL}x de {fmt(m.valor / MAX_PARCELAS_MATERIAL)} sem juros)
+                              </span>
+                            </div>
                           </div>
                         ))}
+
+                        {/* Totalizador quando houver mais de 1 material */}
                         {selectedMaterialIds.length > 1 && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#581c87', padding: '4px 0 0', marginTop: 2, borderTop: '1px solid #e9d5ff', fontWeight: 800 }}>
-                            <span>Total Materiais:</span>
-                            <span>
-                              {fmt(calculations.valorMaterial)} <span style={{ fontSize: 9.5, color: '#7e22ce', fontWeight: 600 }}>({MAX_PARCELAS_MATERIAL}x de {fmt(calculations.valorMaterial / MAX_PARCELAS_MATERIAL)})</span>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            background: '#f3e8ff',
+                            borderRadius: 10,
+                            border: '1.5px solid #d8b4fe',
+                            marginTop: 2,
+                            gap: 14
+                          }}>
+                            <span style={{ fontSize: 14, fontWeight: 900, color: '#4c1d95' }}>
+                              Total Material Didático:
                             </span>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
+                              <span style={{ fontSize: 17, fontWeight: 900, color: '#4c1d95' }}>
+                                {fmt(calculations.valorMaterial)}
+                              </span>
+                              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#7e22ce' }}>
+                                ({MAX_PARCELAS_MATERIAL}x de {fmt(calculations.valorMaterial / MAX_PARCELAS_MATERIAL)} sem juros)
+                              </span>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -4036,36 +4167,59 @@ export default function ValoresPage() {
                   {/* Extracurriculares (se selecionado) */}
                   {incluirExtracurricular && (
                     <div className="print-avoid-break" style={{
-                      background: '#eff6ff',
-                      borderRadius: 14,
-                      border: '1px solid #bfdbfe',
-                      padding: '12px 14px',
+                      background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)',
+                      borderRadius: 16,
+                      border: '1.5px solid #bfdbfe',
+                      padding: '15px 18px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 8
+                      gap: 10,
+                      boxShadow: '0 2px 8px rgba(37, 99, 235, 0.04)'
                     }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 6, textTransform: 'uppercase' }}>
-                          <Award size={13} color="#2563eb" />
-                          Atividades Extracurriculares (2 aulas/sem)
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 900, color: '#1d4ed8' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 10,
+                            background: '#dbeafe',
+                            border: '1px solid #bfdbfe',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                          }}>
+                            <Award size={18} color="#2563eb" />
+                          </div>
+                          <div>
+                            <span style={{ fontSize: 13.5, fontWeight: 900, color: '#1e40af', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              Atividades Extracurriculares
+                            </span>
+                            <span style={{ fontSize: 11.5, color: '#2563eb', fontWeight: 600 }}>
+                              2 aulas semanais por modalidade
+                            </span>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 13.5, fontWeight: 900, color: '#1d4ed8' }}>
                           {fmt(SERVICOS_ADICIONAIS.extracurricularMensal)}/mês cada
                         </span>
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingTop: 2 }}>
                         {SERVICOS_ADICIONAIS.atividadesExtracurriculares.map(at => (
                           <PropostaBadge
                             key={at}
                             bg="#ffffff"
-                            border="#bfdbfe"
+                            border="#93c5fd"
                             color="#1e40af"
-                            fontSize={10}
-                            fontWeight={700}
-                            minHeight={24}
-                            padding="3px 10px"
+                            fontSize={12}
+                            fontWeight={800}
+                            padding="4px 14px"
+                            borderRadius={8}
+                            style={{
+                              boxShadow: '0 1px 3px rgba(37, 99, 235, 0.08)'
+                            }}
                           >
-                            • {at}
+                            {at}
                           </PropostaBadge>
                         ))}
                       </div>
@@ -4076,19 +4230,19 @@ export default function ValoresPage() {
                   {incluirDP && (
                     <div className="print-avoid-break" style={{
                       background: '#fffbeb',
-                      borderRadius: 12,
-                      border: '1px solid #fde68a',
-                      padding: '10px 14px',
+                      borderRadius: 14,
+                      border: '1.5px solid #fde68a',
+                      padding: '13px 18px',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      fontSize: 11,
+                      fontSize: 12.5,
                       color: '#92400e'
                     }}>
-                      <span style={{ fontWeight: 700 }}>
+                      <span style={{ fontWeight: 800 }}>
                         Progressão Parcial ({numMateriasDP} {numMateriasDP > 1 ? 'matérias' : 'matéria'}):
                       </span>
-                      <span style={{ fontWeight: 900 }}>
+                      <span style={{ fontWeight: 900, color: '#78350f', fontSize: 13.5 }}>
                         + {fmt(calculations.valorDP)} (R$ 300,00 cada)
                       </span>
                     </div>
@@ -4098,35 +4252,35 @@ export default function ValoresPage() {
                   {(calculations.aVistaPct > 0 || descontoPercent > 0) && (
                     <div className="print-avoid-break" style={{
                       marginTop: 2,
-                      padding: '12px 16px',
-                      borderRadius: 14,
+                      padding: '14px 20px',
+                      borderRadius: 16,
                       background: 'linear-gradient(135deg, #064e3b 0%, #047857 50%, #059669 100%)',
                       color: '#ffffff',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       flexWrap: 'nowrap',
-                      gap: 12,
-                      boxShadow: '0 3px 10px rgba(5, 150, 105, 0.15)'
+                      gap: 14,
+                      boxShadow: '0 3px 12px rgba(5, 150, 105, 0.18)'
                     }}>
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <Sparkles size={14} color="#6ee7b7" />
-                          <span style={{ fontSize: 10.5, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#6ee7b7' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <Sparkles size={16} color="#6ee7b7" />
+                          <span style={{ fontSize: 12, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#6ee7b7' }}>
                             Condições Especiais • {anoLetivo}
                           </span>
                         </div>
 
-                        <span style={{ fontSize: 11, color: '#e6fffa', display: 'block', marginTop: 2, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 12.5, color: '#e6fffa', display: 'block', marginTop: 3, fontWeight: 600, whiteSpace: 'nowrap' }}>
                           {primeiroMesNome} • Cartão de crédito em até {numParcelasMatricula}x sem juros
                         </span>
                       </div>
                       {calculations.aVistaPct > 0 && (
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <span style={{ fontSize: 9.5, color: '#a7f3d0', textTransform: 'uppercase', fontWeight: 700, display: 'block' }}>
+                          <span style={{ fontSize: 10.5, color: '#a7f3d0', textTransform: 'uppercase', fontWeight: 800, display: 'block' }}>
                             Matrícula
                           </span>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: '#ffffff', whiteSpace: 'nowrap' }}>
+                          <span style={{ fontSize: 19, fontWeight: 900, color: '#ffffff', whiteSpace: 'nowrap' }}>
                             {calculations.aVistaPct}% OFF
                           </span>
                         </div>

@@ -36,11 +36,36 @@ export function CapacitorResumeGuard() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
+    // Verifica se a barreira de logout é legítima ou resíduo de sessão anterior
+    const isLogoutBarrierActiveAndValid = async (hasBarrier: any, legacyPending: string | null) => {
+      if (!hasBarrier && !legacyPending) return false
+
+      // Se há um usuário logado ativo no localStorage, a barreira é resíduo antigo
+      const currentUserRaw = localStorage.getItem('edu-current-user')
+      if (currentUserRaw) {
+        try {
+          const user = JSON.parse(currentUserRaw)
+          if (user?.id) {
+            // Sessão ativa detectada! Purga resíduo silenciosamente sem ejetar
+            clearLogoutBarrier().catch(() => {})
+            localStorage.removeItem(LOGOUT_FLAG)
+            return false
+          }
+        } catch {}
+      }
+      return true
+    }
+
     // 1. Ao montar: verificar se havia um logout pendente (app foi fechado durante logout ou offline logout)
     const checkBarrierAndFreshen = async () => {
       const hasBarrier = await getLogoutBarrier()
       const legacyPending = localStorage.getItem(LOGOUT_FLAG)
       if (hasBarrier || legacyPending) {
+        const isLegitLogout = await isLogoutBarrierActiveAndValid(hasBarrier, legacyPending)
+        if (!isLegitLogout) {
+          return await checkAndFreshenSession('cold boot / montagem inicial')
+        }
+
         localStorage.removeItem(LOGOUT_FLAG)
         if (window.location.pathname !== '/login') {
           console.log('[CapacitorResumeGuard] Marcador de logout ativo — redirecionando para /login')
@@ -54,8 +79,9 @@ export function CapacitorResumeGuard() {
 
     // Função para verificar se a sessão necessita de renovação proativa
     const checkAndFreshenSession = async (reason: string) => {
-      // Se houver barreira de logout, nunca renova nem restaura
-      if (await getLogoutBarrier()) return
+      // Se houver barreira de logout legítima, nunca renova nem restaura
+      const barrier = await getLogoutBarrier()
+      if (barrier && (await isLogoutBarrierActiveAndValid(barrier, null))) return
 
       const now = Date.now()
       // Throttle: não verificar mais de uma vez a cada 10 segundos
@@ -94,6 +120,11 @@ export function CapacitorResumeGuard() {
         const hasBarrier = await getLogoutBarrier()
         const pending = localStorage.getItem(LOGOUT_FLAG)
         if (hasBarrier || pending) {
+          const isLegitLogout = await isLogoutBarrierActiveAndValid(hasBarrier, pending)
+          if (!isLegitLogout) {
+            checkAndFreshenSession('retorno ao primeiro plano (visibility)')
+            return
+          }
           localStorage.removeItem(LOGOUT_FLAG)
           if (window.location.pathname !== '/login') {
             window.location.replace('/login')
@@ -114,6 +145,11 @@ export function CapacitorResumeGuard() {
           const hasBarrier = await getLogoutBarrier()
           const pending = localStorage.getItem(LOGOUT_FLAG)
           if (hasBarrier || pending) {
+            const isLegitLogout = await isLogoutBarrierActiveAndValid(hasBarrier, pending)
+            if (!isLegitLogout) {
+              checkAndFreshenSession('retorno nativo (app resume)')
+              return
+            }
             localStorage.removeItem(LOGOUT_FLAG)
             if (window.location.pathname !== '/login') {
               console.log('[CapacitorResumeGuard] App retomado com logout pendente — reload para /login')

@@ -158,6 +158,7 @@ export function GlobalNotificationProvider() {
   const { currentUser, hydrated } = useApp()
   const currentUserRef = useRef(currentUser)
   const hydratedRef = useRef(hydrated)
+  const lastSyncedIdentityRef = useRef<string | null>(null)
 
   useEffect(() => {
     currentUserRef.current = currentUser
@@ -410,16 +411,29 @@ export function GlobalNotificationProvider() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
+    // CRÍTICO: Nunca executar antes da hidratação completa da sessão no AppContext.
+    // Antes da hidratação, currentUser é temporariamente null no primeiro render de qualquer página,
+    // o que causava um falso clearUser()/logout() no OneSignal e quebrava a Push Subscription ao relogar!
+    if (!hydrated) return
+
     if (currentUser?.id) {
+      const identityKey = `${currentUser.id}:${currentUser.perfil || ''}:${currentUser.cargo || ''}`
+      if (lastSyncedIdentityRef.current === identityKey) return
+      lastSyncedIdentityRef.current = identityKey
+
       notificationService.syncUser(currentUser).catch(err => {
         console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
       })
     } else {
+      // Só dispara clearUser() se havia uma identidade autenticada previamente
+      if (lastSyncedIdentityRef.current === null) return
+      lastSyncedIdentityRef.current = null
+
       notificationService.clearUser().catch(err => {
         console.warn('[GlobalPush] Aviso no logout do usuário:', err)
       })
     }
-  }, [currentUser?.id, currentUser?.perfil, currentUser?.cargo])
+  }, [hydrated, currentUser?.id, currentUser?.perfil, currentUser?.cargo])
 
   return <NotificationPermissionModal />
 }

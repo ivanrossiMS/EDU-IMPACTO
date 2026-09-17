@@ -27,6 +27,7 @@ class NotificationService {
   private initializingPromise: Promise<void> | null = null
   private nativeListenersConfigured = false
   private currentUserId: string | null = null
+  private identityQueue: Promise<void> = Promise.resolve()
 
   private state: NotificationDiagnosticState = {
     platform: 'web',
@@ -63,6 +64,29 @@ class NotificationService {
       NotificationService.instance = new NotificationService()
     }
     return NotificationService.instance
+  }
+
+  /**
+   * Enfileira operações de identidade (login, logout, syncUser, clearUser)
+   * garantindo que sejam executadas sequencialmente e de forma atômica,
+   * prevenindo race conditions entre logout() e login() no OneSignal nativo.
+   */
+  private enqueueIdentityOp<T>(op: () => Promise<T>): Promise<T> {
+    const run = async () => {
+      try {
+        return await op()
+      } catch (err) {
+        console.error('❌ [NotificationService] Erro em operação de identidade enfileirada:', err)
+        throw err
+      }
+    }
+    const resultPromise = this.identityQueue.then(run, run)
+    // Atualiza a cauda da fila para que a próxima operação aguarde a conclusão desta (mesmo se falhar)
+    this.identityQueue = resultPromise.then(
+      () => {},
+      () => {}
+    )
+    return resultPromise
   }
 
   /**
@@ -303,10 +327,10 @@ class NotificationService {
         const osId = await OneSignalNative.User.getOnesignalId().catch(() => null)
         const extId = await OneSignalNative.User.getExternalId().catch(() => null)
 
-        // Se o SO autorizou mas o OneSignal estiver com optOut, ativa optIn automaticamente
-        if ((permStatus === 'authorized' || permStatus === 'provisional') && !optedIn) {
+        // Se o SO autorizou E há usuário autenticado com optOut, reativa optIn automaticamente
+        if (this.currentUserId && (permStatus === 'authorized' || permStatus === 'provisional') && !optedIn) {
           try {
-            console.log('📱 [NotificationService] SO autorizado, garantindo optIn no OneSignal...')
+            console.log('📱 [NotificationService] SO autorizado e usuário autenticado, garantindo optIn no OneSignal...')
             await OneSignalNative.User.pushSubscription.optIn()
           } catch {}
         }
@@ -444,6 +468,7 @@ class NotificationService {
 
   /**
    * Sincroniza o usuário autenticado com o OneSignal (External ID, Aliases e Tags).
+   * Executa em fila atômica para evitar race conditions com logout/clearUser.
    */
   public async syncUser(
     user: any,
@@ -456,7 +481,26 @@ class NotificationService {
       hasDualAccess?: boolean
     }
   ): Promise<void> {
+    return this.enqueueIdentityOp(() => this._doSyncUser(user, extraData))
+  }
+
+  private async _doSyncUser(
+    user: any,
+    extraData?: {
+      meusAlunos?: any[] | null
+      alunoId?: string | null
+      turmaNome?: string | null
+      alunoObj?: any
+      extraStaffIds?: string[] | null
+      hasDualAccess?: boolean
+    }
+  ): Promise<void> {
     if (!user?.id) return
+
+    // Garante que o SDK esteja devidamente inicializado antes de vincular usuário
+    if (!this.initialized) {
+      await this.initialize()
+    }
 
     const userId = String(user.id)
     const isNative = Capacitor.isNativePlatform()
@@ -489,24 +533,24 @@ class NotificationService {
       }
 
       // Aliases para permitir envio flexível pelo backend (por ID de responsável, aluno, email, etc.)
-      const aliasesToRegister: Array<{ label: string; id: string }> = []
+      const aliasesRecord: Record<string, string> = {}
       const rId = user.responsavel_id || user.user_metadata?.responsavel_id || user.responsavelId
       if (rId) {
-        aliasesToRegister.push({ label: 'responsavel_id', id: String(rId) })
+        aliasesRecord['responsavel_id'] = String(rId)
       }
       if (user.aluno_id) {
-        aliasesToRegister.push({ label: 'aluno_id', id: String(user.aluno_id) })
+        aliasesRecord['aluno_id'] = String(user.aluno_id)
       }
       if (extraData?.alunoId && String(extraData.alunoId) !== String(user.aluno_id)) {
-        aliasesToRegister.push({ label: 'aluno_id', id: String(extraData.alunoId) })
+        aliasesRecord['aluno_id'] = String(extraData.alunoId)
       }
       if (Array.isArray(extraData?.meusAlunos)) {
         extraData.meusAlunos.forEach(s => {
           if (s?.id) {
-            aliasesToRegister.push({ label: 'aluno_id', id: String(s.id) })
+            aliasesRecord['aluno_id'] = String(s.id)
             const cleanId = String(s.id).replace(/^(a_|_ALU)/, '')
             if (cleanId !== String(s.id)) {
-              aliasesToRegister.push({ label: 'aluno_id', id: cleanId })
+              aliasesRecord['aluno_id_clean'] = cleanId
             }
           }
         })
@@ -519,36 +563,52 @@ class NotificationService {
         user.user_metadata?.system_user_id ||
         staffIds[0]
       if (colabId) {
-        aliasesToRegister.push({ label: 'colaborador_id', id: String(colabId) })
-        aliasesToRegister.push({ label: 'system_user_id', id: String(colabId) })
+        aliasesRecord['colaborador_id'] = String(colabId)
+        aliasesRecord['system_user_id'] = String(colabId)
       }
       const cod = user.codigo || user.user_metadata?.codigo
       if (cod) {
-        aliasesToRegister.push({ label: 'codigo', id: String(cod) })
+        aliasesRecord['codigo'] = String(cod)
       }
       if (user.email) {
-        aliasesToRegister.push({ label: 'email', id: String(user.email).toLowerCase().trim() })
+        aliasesRecord['email'] = String(user.email).toLowerCase().trim()
       }
 
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
-        if (this.currentUserId !== userId) {
+        // Checa o External ID nativo real no SDK
+        const nativeExtId = await OneSignalNative.User.getExternalId().catch(() => null)
+        const needsLogin = nativeExtId !== userId || this.currentUserId !== userId
+
+        if (needsLogin) {
+          console.log(`📱 [NotificationService] Associando usuário ao OneSignal Nativo (External ID: ${userId}, nativo anterior: ${nativeExtId || 'anônimo'})...`)
           await OneSignalNative.login(userId)
           this.currentUserId = userId
-          console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo (External ID: ${userId})`)
+          console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo com sucesso (External ID: ${userId})`)
+        } else {
+          this.currentUserId = userId
         }
 
-        if (OneSignalNative.User?.pushSubscription?.optIn) {
+        // Se o SO concedeu permissão, garante que a PushSubscription fique com optIn
+        const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
+        const isGranted = Boolean(hasPerm) || this.state.permissionStatus === 'authorized'
+        if (isGranted && OneSignalNative.User?.pushSubscription?.optIn) {
           await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
         }
 
-        if (OneSignalNative.User?.addAlias) {
-          for (const alias of aliasesToRegister) {
-            OneSignalNative.User.addAlias(alias.label, alias.id).catch(() => {})
+        // Registra Aliases
+        if (Object.keys(aliasesRecord).length > 0) {
+          if (typeof OneSignalNative.User?.addAliases === 'function') {
+            await OneSignalNative.User.addAliases(aliasesRecord).catch(() => {})
+          } else if (typeof OneSignalNative.User?.addAlias === 'function') {
+            for (const [label, id] of Object.entries(aliasesRecord)) {
+              OneSignalNative.User.addAlias(label, id).catch(() => {})
+            }
           }
         }
 
+        // Registra Tags
         if (OneSignalNative.User?.addTags) {
           await OneSignalNative.User.addTags(tags).catch(() => {})
         }
@@ -564,13 +624,15 @@ class NotificationService {
           }
 
           const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
-          if (typeof optInFn === 'function') {
+          if (typeof optInFn === 'function' && Notification.permission === 'granted') {
             await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
           }
 
-          if (OS.User?.addAlias) {
-            for (const alias of aliasesToRegister) {
-              await OS.User.addAlias(alias.label, alias.id).catch(() => {})
+          if (OS.User?.addAliases && Object.keys(aliasesRecord).length > 0) {
+            await OS.User.addAliases(aliasesRecord).catch(() => {})
+          } else if (OS.User?.addAlias) {
+            for (const [label, id] of Object.entries(aliasesRecord)) {
+              await OS.User.addAlias(label, id).catch(() => {})
             }
           }
 
@@ -598,17 +660,26 @@ class NotificationService {
 
   /**
    * Desassocia o usuário no logout do app sem destruir o registro nativo do aparelho.
+   * Executa em fila atômica para evitar race conditions com login/syncUser.
    */
   public async clearUser(): Promise<void> {
+    return this.enqueueIdentityOp(() => this._doClearUser())
+  }
+
+  private async _doClearUser(): Promise<void> {
     this.currentUserId = null
     const isNative = Capacitor.isNativePlatform()
 
     try {
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
-        if (typeof OneSignalNative.logout === 'function') {
+        const nativeExtId = await OneSignalNative.User?.getExternalId?.().catch(() => null)
+
+        // Só executa logout nativo se houver external ID associado, evitando chamadas repetidas
+        if (typeof OneSignalNative.logout === 'function' && nativeExtId) {
+          console.log(`🚪 [NotificationService] Deslogando usuário do OneSignal Nativo (External ID anterior: ${nativeExtId})...`)
           await OneSignalNative.logout()
-          console.log('🚪 [NotificationService] Usuário deslogado do OneSignal.')
+          console.log('🚪 [NotificationService] Usuário deslogado do OneSignal Nativo com sucesso.')
         }
       } else {
         const OS = (window as any).OneSignal
@@ -619,6 +690,7 @@ class NotificationService {
     } catch (err) {
       console.warn('[NotificationService] Erro no logout do OneSignal:', err)
     } finally {
+      // Atualiza o estado sem forçar optIn em conta anônima deslogada (pois this.currentUserId === null)
       await this.refresh().catch(() => {})
     }
   }
