@@ -602,11 +602,18 @@ export default function LoginPage() {
         }
       } catch (e) {}
 
+      // No celular nativo, garante solicitação nativa oficial do SO caso o usuário ainda não tenha respondido
+      if (Capacitor.isNativePlatform()) {
+        try {
+          await notificationService.promptInitialPermissionIfNeeded().catch(() => {})
+        } catch {}
+      }
+
       // Sincroniza usuário e push no OneSignal de forma confiável aguardando a ponte nativa
       try {
         await Promise.race([
           notificationService.syncUser(userObj),
-          new Promise(res => setTimeout(res, 1200))
+          new Promise(res => setTimeout(res, 2500))
         ])
       } catch (err) {
         console.warn('[Login] Aviso ao sincronizar OneSignal pós-login:', err)

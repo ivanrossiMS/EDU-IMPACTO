@@ -27,6 +27,8 @@ class NotificationService {
   private initializingPromise: Promise<void> | null = null
   private nativeListenersConfigured = false
   private currentUserId: string | null = null
+  private lastSyncedAliases: Record<string, string> = {}
+  private lastSyncedTags: Record<string, string> = {}
   private identityQueue: Promise<void> = Promise.resolve()
 
   private state: NotificationDiagnosticState = {
@@ -136,8 +138,15 @@ class NotificationService {
         // Configura listeners de ciclo de vida e mudanças de estado
         this.setupNativeListeners(OneSignalNative)
 
-        // Atualiza estado imediatamente após inicialização sem solicitar permissão
+        // Atualiza estado imediatamente após inicialização
         await this.refresh()
+
+        // No ambiente nativo (iOS / Android), se o dispositivo ainda não foi autorizado,
+        // dispara imediatamente o diálogo nativo oficial do SO (fallbackToSettings: false)
+        if (isNative && !this.state.hasPermissionBool && this.state.permissionStatus !== 'authorized') {
+          console.log('📱 [NotificationService] Inicialização nativa: disparando prompt inicial de permissão do SO...')
+          await this.promptInitialPermissionIfNeeded().catch(() => {})
+        }
 
         console.log('✅ [NotificationService] OneSignal nativo inicializado com sucesso!')
       } catch (err: any) {
@@ -214,9 +223,32 @@ class NotificationService {
 
       // 2. Mudança de Push Subscription (token, id, opt-in)
       if (OneSignalNative.User?.pushSubscription?.addEventListener) {
-        OneSignalNative.User.pushSubscription.addEventListener('change', (event: any) => {
-          console.log('📱 [NotificationService] Mudança na subscrição push:', event)
-          this.refresh().catch(() => {})
+        OneSignalNative.User.pushSubscription.addEventListener('change', async (event: any) => {
+          console.log('📱 [NotificationService] Mudança na subscrição push detectada:', event)
+          await this.refresh().catch(() => {})
+
+          // Se houver usuário autenticado, garante vinculação server-to-server imediata da nova subscrição
+          const activeUserId = this.currentUserId
+          if (activeUserId) {
+            try {
+              const subId = await OneSignalNative.User?.pushSubscription?.getIdAsync?.().catch(() => null)
+              if (subId && typeof subId === 'string' && subId.trim()) {
+                console.log(`📱 [NotificationService] Re-sincronizando subscrição (${subId.trim()}) com backend para usuário ${activeUserId}...`)
+                fetch('/api/push/sync-subscription', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    subscriptionId: subId.trim(),
+                    userId: activeUserId,
+                    aliases: this.lastSyncedAliases,
+                    tags: this.lastSyncedTags,
+                  }),
+                }).catch(err => console.warn('[NotificationService] Aviso no sync reativo da subscrição:', err))
+              }
+            } catch (e) {
+              console.warn('[NotificationService] Erro ao sincronizar subscrição no evento change:', e)
+            }
+          }
         })
       }
 
@@ -461,28 +493,36 @@ class NotificationService {
   }
 
   /**
-   * Dispara a solicitação nativa oficial (Apple APNs / Android 13+) apenas se o status
-   * estiver como 'notDetermined' ou canRequest === true (primeiro acesso pós-instalação ou novo login).
+   * Dispara a solicitação nativa oficial (Apple APNs / Android 13+) no primeiro acesso,
+   * após reinstalação ou durante login se o status não estiver explicitamente autorizado.
    *
    * REGRA DE OURO:
-   * 1. NUNCA tenta invocar o prompt nativo se o usuário já estiver 'denied' (pois o SO ignora silenciosamente).
-   * 2. Usa fallbackToSettings: false para acionar diretamente o diálogo oficial da Apple em Português
-   *    sem o popup feio em inglês do OneSignal v5.
-   * 3. Garante que o menu "Notificações" seja criado nos Ajustes do iPhone (Ajustes > Impacto Edu).
+   * 1. Usa fallbackToSettings: false para acionar diretamente o diálogo oficial da Apple/Google em Português
+   *    sem o popup feio em inglês do OneSignal v5 ("Open Settings").
+   * 2. Se o usuário já aceitou ou recusou nos Ajustes, o SO não abre nada e retorna instantaneamente.
+   * 3. Garante que o menu "Notificações" seja criado nos Ajustes do iPhone (Ajustes > Impacto Edu)
+   *    e que o token APNs seja gerado e entregue à OneSignal.
    */
   public async promptInitialPermissionIfNeeded(): Promise<boolean> {
     if (typeof window === 'undefined') return false
 
+    const isNative = Capacitor.isNativePlatform()
+
+    if (!isNative) {
+      return this.state.permissionStatus === 'authorized'
+    }
+
     // Garante que o estado mais recente esteja atualizado
     await this.refresh()
 
-    // Se estiver em ambiente nativo e ainda não determinado, aciona o prompt nativo oficial
-    if (this.state.isNative && (this.state.permissionStatus === 'notDetermined' || this.state.canRequest)) {
-      console.log('📱 [NotificationService] Permissão não determinada detectada em ambiente nativo. Disparando prompt oficial do SO...')
-      return await this.requestNotificationPermission()
+    // Se já estiver explicitamente autorizado pelo SO, retorna true imediatamente
+    if (this.state.hasPermissionBool || this.state.permissionStatus === 'authorized' || this.state.permissionStatus === 'provisional') {
+      return true
     }
 
-    return this.state.permissionStatus === 'authorized' || this.state.permissionStatus === 'provisional'
+    // Se estiver em ambiente nativo e ainda não autorizado, aciona o prompt nativo oficial (fallbackToSettings: false)
+    console.log('📱 [NotificationService] Disparando prompt nativo oficial do SO (fallbackToSettings: false)...')
+    return await this.requestNotificationPermission()
   }
 
   /**
@@ -602,6 +642,10 @@ class NotificationService {
         aliasesRecord['email'] = String(user.email).toLowerCase().trim()
       }
 
+      // Armazena em cache para que o listener de evento change possa reenviar se o token APNs chegar depois
+      this.lastSyncedAliases = { ...aliasesRecord }
+      this.lastSyncedTags = { ...tags }
+
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
@@ -625,10 +669,8 @@ class NotificationService {
           this.currentUserId = userId
         }
 
-        // Se o SO concedeu permissão, garante que a PushSubscription fique com optIn
-        const hasPerm = await OneSignalNative.Notifications.hasPermission().catch(() => false)
-        const isGranted = Boolean(hasPerm) || this.state.permissionStatus === 'authorized'
-        if (isGranted && OneSignalNative.User?.pushSubscription?.optIn) {
+        // Garante que a PushSubscription fique com optIn para receber notificações
+        if (OneSignalNative.User?.pushSubscription?.optIn) {
           await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
         }
 
@@ -649,10 +691,10 @@ class NotificationService {
         }
 
         // DUPLA GARANTIA SERVER-TO-SERVER COM RETRY RESILIENTE:
-        // Obtém o Subscription ID ativo do aparelho (com retry assíncrono para o handshake do SDK v5)
+        // Obtém o Subscription ID ativo do aparelho (com retry assíncrono para o handshake do SDK v5 e APNs)
         // e aciona a rota segura do servidor para garantir o vínculo e podar subscrições mortas
         let subId: string | null = null
-        for (let attempt = 0; attempt < 5; attempt++) {
+        for (let attempt = 0; attempt < 15; attempt++) {
           subId = await OneSignalNative.User?.pushSubscription?.getIdAsync?.().catch(() => null)
           if (subId && typeof subId === 'string' && subId.trim()) break
           await new Promise(r => setTimeout(r, 200))
@@ -660,6 +702,7 @@ class NotificationService {
 
         if (subId && typeof subId === 'string' && subId.trim()) {
           try {
+            console.log(`📱 [NotificationService] Enviando subscrição ${subId.trim()} ao servidor para vínculo com external_id ${userId}...`)
             fetch('/api/push/sync-subscription', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },

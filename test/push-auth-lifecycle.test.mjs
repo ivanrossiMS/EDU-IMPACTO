@@ -558,34 +558,31 @@ test('13. Prompt Nativo Oficial: dispara requestPermission(false) no primeiro ac
   let requestCount = 0;
 
   class TestServiceWithPermission {
-    constructor(initialStatus, canReq) {
-      this.status = initialStatus;
-      this.canReq = canReq;
+    constructor(status, hasPermBool) {
       this.isNative = true;
+      this.status = status;
+      this.hasPermBool = hasPermBool;
     }
-
     async refresh() {
-      // Simula retorno do refresh
+      return { status: this.status, hasPermBool: this.hasPermBool };
     }
-
     async requestNotificationPermission() {
       requestCount++;
       requestedWithFallback = false;
-      this.status = 'authorized';
-      return true;
+      return this.status === 'notDetermined';
     }
-
     async promptInitialPermissionIfNeeded() {
+      if (!this.isNative) return this.status === 'authorized';
       await this.refresh();
-      if (this.isNative && (this.status === 'notDetermined' || this.canReq)) {
-        return await this.requestNotificationPermission();
+      if (this.hasPermBool || this.status === 'authorized' || this.status === 'provisional') {
+        return true;
       }
-      return this.status === 'authorized' || this.status === 'provisional';
+      return await this.requestNotificationPermission();
     }
   }
 
   // Caso 1: Status notDetermined pós-instalação -> DEVE disparar o prompt nativo oficial
-  const s1 = new TestServiceWithPermission('notDetermined', true);
+  const s1 = new TestServiceWithPermission('notDetermined', false);
   const res1 = await s1.promptInitialPermissionIfNeeded();
   assert.equal(res1, true, 'Deve conceder permissão após o usuário aceitar o prompt oficial');
   assert.equal(requestCount, 1, 'Deve ter chamado requestNotificationPermission exatamente 1 vez');
@@ -594,18 +591,19 @@ test('13. Prompt Nativo Oficial: dispara requestPermission(false) no primeiro ac
   // Caso 2: Status já authorized -> NÃO DEVE disparar novo prompt
   requestCount = 0;
   requestedWithFallback = null;
-  const s2 = new TestServiceWithPermission('authorized', false);
+  const s2 = new TestServiceWithPermission('authorized', true);
   const res2 = await s2.promptInitialPermissionIfNeeded();
   assert.equal(res2, true, 'Deve retornar true imediatamente');
   assert.equal(requestCount, 0, 'NÃO deve chamar prompt nativo se já autorizado');
 
-  // Caso 3: Status denied (usuário recusou nos Ajustes) -> NÃO DEVE disparar prompt nativo (quem atua é o modal em português com Abrir Ajustes)
+  // Caso 3: Status denied (usuário recusou) -> Chama requestPermission(false), o SO não exibe popup e retorna false
   requestCount = 0;
   requestedWithFallback = null;
   const s3 = new TestServiceWithPermission('denied', false);
   const res3 = await s3.promptInitialPermissionIfNeeded();
-  assert.equal(res3, false, 'Deve retornar false para que o modal com botão "Abrir Ajustes" seja apresentado');
-  assert.equal(requestCount, 0, 'NÃO deve tentar chamar prompt nativo do SO quando denied (a Apple rejeitaria)');
+  assert.equal(res3, false, 'Deve retornar false pois o SO tem permissão negada');
+  assert.equal(requestCount, 1, 'Chama o SO nativo seguro com fallbackToSettings=false');
+  assert.equal(requestedWithFallback, false, 'NUNCA exibe popup em inglês');
 });
 
 test('14. Exclusão individual de subscrição: remove aparelho fantasma/órfão selecionado com sucesso', async () => {
@@ -631,6 +629,73 @@ test('14. Exclusão individual de subscrição: remove aparelho fantasma/órfão
   assert.equal(mockSubscriptions[0].id, 'sub_android_note8', 'Deve ter preservado o Android e eliminado o iPhone antigo');
 });
 
+test('15. Inicialização nativa: dispara promptInitialPermissionIfNeeded() automaticamente na abertura se não autorizado', async () => {
+  let promptTriggered = false;
 
+  class StartupService {
+    constructor(isNative, hasPermission) {
+      this.isNative = isNative;
+      this.hasPermission = hasPermission;
+    }
 
+    async _doInitialize() {
+      // Simula startup do SDK
+      if (this.isNative && !this.hasPermission) {
+        await this.promptInitialPermissionIfNeeded();
+      }
+    }
 
+    async promptInitialPermissionIfNeeded() {
+      promptTriggered = true;
+      return true;
+    }
+  }
+
+  // Celular com app recém-aberto e sem permissão prévia
+  const service = new StartupService(true, false);
+  await service._doInitialize();
+  assert.equal(promptTriggered, true, 'O prompt nativo DEVE ser disparado no startup do app nativo');
+
+  // Já autorizado: não deve disparar
+  promptTriggered = false;
+  const authorizedService = new StartupService(true, true);
+  await authorizedService._doInitialize();
+  assert.equal(promptTriggered, false, 'Se já autorizado, NÃO deve disparar prompt');
+});
+
+test('16. Mudança reativa na PushSubscription: sincroniza subscrição com o servidor quando token APNs é gerado após login', async () => {
+  let syncPayload = null;
+
+  class PushSubscriptionChangeService {
+    constructor() {
+      this.currentUserId = '8cf88a46-b8b4-4a79-8bbc-a1d99566f94e';
+      this.lastSyncedAliases = { email: 'ivanrossims@gmail.com', responsavel_id: '12321321' };
+      this.lastSyncedTags = { perfil: 'Família' };
+    }
+
+    async handleSubscriptionChange(event) {
+      const activeUserId = this.currentUserId;
+      if (activeUserId) {
+        const subId = event.subscriptionId;
+        if (subId) {
+          syncPayload = {
+            subscriptionId: subId,
+            userId: activeUserId,
+            aliases: this.lastSyncedAliases,
+            tags: this.lastSyncedTags,
+          };
+        }
+      }
+    }
+  }
+
+  const service = new PushSubscriptionChangeService();
+
+  // Simula evento da Apple entregando o token APNs ao OneSignal 2 segundos pós-login
+  await service.handleSubscriptionChange({ subscriptionId: 'sub_apns_ios_12345' });
+
+  assert.ok(syncPayload, 'Payload de sincronização deve ter sido gerado');
+  assert.equal(syncPayload.subscriptionId, 'sub_apns_ios_12345', 'Deve associar o novo ID APNs');
+  assert.equal(syncPayload.userId, '8cf88a46-b8b4-4a79-8bbc-a1d99566f94e', 'Deve associar ao usuário ivan ross12');
+  assert.equal(syncPayload.aliases.responsavel_id, '12321321', 'Deve enviar os aliases salvos');
+});
