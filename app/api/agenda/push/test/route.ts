@@ -491,6 +491,84 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
+
+    // Ação administrativa: Limpeza de sessões/dispositivos duplicados ou órfãos de um usuário
+    if (body.action === 'cleanup_user_devices') {
+      const targetUserId = String(body.userId || '').trim()
+      if (!targetUserId) {
+        return NextResponse.json({ error: 'userId é obrigatório para limpeza de aparelhos.' }, { status: 400 })
+      }
+
+      const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
+      const apiKey = process.env.ONESIGNAL_REST_API_KEY
+      if (!appId || !apiKey) {
+        return NextResponse.json({ error: 'OneSignal não configurado no servidor.' }, { status: 400 })
+      }
+
+      const userRes = await fetch(`https://api.onesignal.com/apps/${appId}/users/by/external_id/${encodeURIComponent(targetUserId)}`, {
+        headers: { Authorization: `Basic ${apiKey}` }
+      })
+
+      if (!userRes.ok) {
+        return NextResponse.json({ success: false, message: 'Usuário não localizado no OneSignal.' })
+      }
+
+      const data = await userRes.json()
+      const subs: any[] = Array.isArray(data.subscriptions) ? data.subscriptions : []
+
+      if (subs.length <= 1) {
+        return NextResponse.json({ success: true, message: 'Nenhuma subscrição duplicada encontrada.', cleanedCount: 0 })
+      }
+
+      // Agrupar por device_model e tipo para identificar reinstalações do mesmo aparelho
+      const modelGroups = new Map<string, any[]>()
+      const deadSubs: any[] = []
+
+      for (const s of subs) {
+        if (!s.enabled || !s.token) {
+          deadSubs.push(s)
+          continue
+        }
+        const key = `${s.type}:${s.device_model || 'unknown'}`
+        if (!modelGroups.has(key)) {
+          modelGroups.set(key, [])
+        }
+        modelGroups.get(key)!.push(s)
+      }
+
+      // Para cada modelo com mais de 1 subscrição ativa, mantém apenas a que teve mais sessões ou atividade recente
+      for (const [key, group] of modelGroups.entries()) {
+        if (group.length > 1) {
+          // Ordena por session_count decrescente e session_time decrescente
+          group.sort((a, b) => (b.session_count || 0) - (a.session_count || 0) || (b.session_time || 0) - (a.session_time || 0))
+          // O primeiro é o que mais tem atividade; todos os outros são duplicados de reinstalação
+          const [keep, ...duplicates] = group
+          deadSubs.push(...duplicates)
+        }
+      }
+
+      let cleanedCount = 0
+      for (const dead of deadSubs) {
+        try {
+          const delRes = await fetch(`https://api.onesignal.com/apps/${appId}/subscriptions/${dead.id}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Basic ${apiKey}` }
+          })
+          if (delRes.ok || delRes.status === 202) {
+            cleanedCount++
+            console.log(`🧹 [admin-cleanup] Subscrição órfã removida: ${dead.id} (${dead.device_model || dead.type})`)
+          }
+        } catch {}
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `${cleanedCount} aparelho(s) duplicado(s) ou órfão(s) removido(s) com sucesso.`,
+        cleanedCount,
+        remainingCount: subs.length - cleanedCount,
+      })
+    }
+
     const {
       alunoId,
       responsavelIds = [],

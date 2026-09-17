@@ -465,3 +465,37 @@ test('10. Poda de subscrições excedentes: remove subscrições mortas (sem tok
   assert.ok(!deadSubs.some(s => s.id === currentSubId), 'Nunca deve podar a subscrição ativa atual');
 });
 
+test('11. Poda de reinstalações do mesmo celular: remove subscrições órfãs do mesmo modelo e plataforma', () => {
+  const currentSubId = 'iphone_ativo_novo';
+  const currentSub = { id: currentSubId, type: 'iOSPush', device_model: 'iPhone18,2', enabled: true, token: 'token_novo', session_count: 1 };
+  
+  const existingSubs = [
+    currentSub,
+    { id: 'iphone_antigo_1', type: 'iOSPush', device_model: 'iPhone18,2', enabled: true, token: 'token_antigo_1', session_count: 5 },
+    { id: 'iphone_antigo_2', type: 'iOSPush', device_model: 'iPhone18,2', enabled: true, token: 'token_antigo_2', session_count: 10 },
+    { id: 'android_outro', type: 'AndroidPush', device_model: 'Redmi Note 8', enabled: true, token: 'token_android', session_count: 2 },
+  ];
+
+  const isCurrentMobile = currentSub.type === 'iOSPush' || currentSub.type === 'AndroidPush';
+
+  const deadSubs = existingSubs.filter(s => {
+    if (s.id === currentSubId) return false;
+    if (s.enabled === false || !s.token || s.token === '') return true;
+
+    if (isCurrentMobile) {
+      const sameType = s.type === currentSub.type;
+      const sameModel = Boolean(s.device_model && currentSub.device_model && s.device_model === currentSub.device_model);
+      if (sameType && (sameModel || currentSub.type === 'iOSPush')) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  assert.equal(deadSubs.length, 2, 'Deve identificar as 2 subscrições antigas do mesmo iPhone');
+  assert.deepEqual(deadSubs.map(s => s.id), ['iphone_antigo_1', 'iphone_antigo_2']);
+  assert.ok(!deadSubs.some(s => s.id === 'android_outro'), 'Não deve podar aparelhos de outro tipo/modelo (ex: Redmi Android)');
+  assert.ok(!deadSubs.some(s => s.id === currentSubId), 'Nunca deve podar a subscrição recém-sincronizada');
+});
+
+

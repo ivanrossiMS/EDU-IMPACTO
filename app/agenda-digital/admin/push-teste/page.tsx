@@ -7,7 +7,7 @@ import {
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
   Info, Check, Calendar, Camera, Clock, DollarSign, Award,
   Car, FileText, ChevronRight, ChevronDown, ChevronUp, Search, X, Copy, Terminal,
-  Radio, CheckCheck, Eye, Zap, Shield, Laptop
+  Radio, CheckCheck, Eye, Zap, Shield, Laptop, Trash2
 } from 'lucide-react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -463,6 +463,41 @@ export default function ADAdminPushTestPage() {
       console.error('Erro ao buscar responsáveis do aluno:', err)
     } finally {
       setIsLoadingGuardians(false)
+    }
+  }
+
+  // 4.1 Limpeza de Sessões Duplicadas / Órfãs de um Usuário
+  const [cleaningUserId, setCleaningUserId] = useState<string | null>(null)
+
+  const handleCleanupDevices = async (userId: string) => {
+    if (!userId || cleaningUserId) return
+    setCleaningUserId(userId)
+    try {
+      const res = await fetch('/api/agenda/push/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cleanup_user_devices',
+          userId,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast.success(data.message || 'Sessões antigas limpas com sucesso!')
+        if (selectedAluno) {
+          const reloadRes = await fetch(`/api/agenda/push/test?aluno_id=${encodeURIComponent(selectedAluno.id)}`)
+          if (reloadRes.ok) {
+            const reloadData = await reloadRes.json()
+            setGuardians(reloadData.responsaveis || [])
+          }
+        }
+      } else {
+        toast.error(data.error || 'Erro ao limpar aparelhos duplicados.')
+      }
+    } catch (err: any) {
+      toast.error('Erro de conexão ao limpar aparelhos.')
+    } finally {
+      setCleaningUserId(null)
     }
   }
 
@@ -1021,13 +1056,42 @@ export default function ADAdminPushTestPage() {
                                   <span style={{ color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 5 }}>
                                     <Smartphone size={13} color="#6366f1" /> Aparelhos registrados no OneSignal ({totalDevs}):
                                   </span>
-                                  <span style={{
-                                    fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6,
-                                    background: activeDevs > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                                    color: activeDevs > 0 ? '#059669' : '#dc2626'
-                                  }}>
-                                    {activeDevs > 0 ? `✓ ${activeDevs} recebendo notificações` : '✕ Nenhum aparelho ativo'}
-                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {totalDevs > 1 && (
+                                      <button
+                                        type="button"
+                                        disabled={cleaningUserId === String(g.responsavel_id)}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleCleanupDevices(String(g.responsavel_id))
+                                        }}
+                                        style={{
+                                          background: 'rgba(239, 68, 68, 0.08)',
+                                          border: '1px solid rgba(239, 68, 68, 0.25)',
+                                          borderRadius: 6,
+                                          padding: '2px 8px',
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          color: '#ef4444',
+                                          cursor: cleaningUserId === String(g.responsavel_id) ? 'wait' : 'pointer',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 4,
+                                        }}
+                                        title="Remove sessões antigas de reinstalações no mesmo aparelho"
+                                      >
+                                        <Trash2 size={10} />
+                                        {cleaningUserId === String(g.responsavel_id) ? 'Limpando...' : 'Limpar sessões antigas'}
+                                      </button>
+                                    )}
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6,
+                                      background: activeDevs > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                      color: activeDevs > 0 ? '#059669' : '#dc2626'
+                                    }}>
+                                      {activeDevs > 0 ? `✓ ${activeDevs} recebendo notificações` : '✕ Nenhum aparelho ativo'}
+                                    </span>
+                                  </div>
                                 </div>
 
                                 {devices.length === 0 ? (

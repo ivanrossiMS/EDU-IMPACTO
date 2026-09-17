@@ -85,10 +85,10 @@ export async function POST(request: Request) {
       })
     }
 
-    // 3. Limpeza proativa de subscrições mortas para prevenir o teto de 20 subscrições do OneSignal
+    // 3. Limpeza inteligente de subscrições órfãs e duplicadas do mesmo celular
     let cleanedCount = 0
     try {
-      const userRes = await fetch(`https://onesignal.com/api/v1/apps/${appId}/users/by/external_id/${encodeURIComponent(cleanUserId)}`, {
+      const userRes = await fetch(`https://api.onesignal.com/apps/${appId}/users/by/external_id/${encodeURIComponent(cleanUserId)}`, {
         headers: {
           Authorization: `Basic ${apiKey}`,
         },
@@ -98,10 +98,30 @@ export async function POST(request: Request) {
         const userData = await userRes.json()
         const subs: any[] = Array.isArray(userData.subscriptions) ? userData.subscriptions : []
 
-        if (subs.length >= 6) {
-          const deadSubs = subs.filter(
-            s => s.id !== cleanSubId && s.enabled === false && (!s.token || s.token === '')
-          )
+        if (subs.length > 1) {
+          const currentSub = subs.find(s => s.id === cleanSubId)
+          const isCurrentMobile = currentSub?.type === 'iOSPush' || currentSub?.type === 'AndroidPush'
+
+          const deadSubs = subs.filter(s => {
+            // Nunca deleta a subscrição recém-sincronizada
+            if (s.id === cleanSubId) return false
+
+            // Subscrição desativada ou sem token push
+            if (s.enabled === false || !s.token || s.token === '') return true
+
+            // Se o aparelho atual é um celular (iOS ou Android), subscrições antigas do mesmo tipo e modelo
+            // são tokens órfãos gerados por reinstalações sucessivas no mesmo aparelho físico
+            if (isCurrentMobile && currentSub) {
+              const sameType = s.type === currentSub.type
+              const sameModel = Boolean(s.device_model && currentSub.device_model && s.device_model === currentSub.device_model)
+              // No iOS, aparelhos idênticos (ex: iPhone18,2) com ID diferente do atual são reinstalações passadas
+              if (sameType && (sameModel || currentSub.type === 'iOSPush')) {
+                return true
+              }
+            }
+
+            return false
+          })
 
           for (const dead of deadSubs) {
             try {
@@ -113,12 +133,13 @@ export async function POST(request: Request) {
               })
               if (delRes.ok || delRes.status === 202) {
                 cleanedCount++
+                console.log(`🧹 [sync-subscription] Subscrição órfã removida: ${dead.id} (${dead.device_model || dead.type})`)
               }
             } catch {}
           }
 
           if (cleanedCount > 0) {
-            console.log(`🧹 [sync-subscription] ${cleanedCount} subscrições mortas podadas para o usuário ${cleanUserId}`)
+            console.log(`🧹 [sync-subscription] Total de ${cleanedCount} subscrições duplicadas/órfãs podadas para o usuário ${cleanUserId}`)
           }
         }
       }

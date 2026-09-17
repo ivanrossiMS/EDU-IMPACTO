@@ -15,12 +15,15 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BellRing, Settings2, X } from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { useApp } from '@/lib/context'
 
-const DISMISS_SESSION_KEY = 'edu_push_blocked_dismissed_session'
+const DISMISS_SESSION_KEY = 'edu_push_modal_dismissed_session_v3'
 
 export function NotificationPermissionModal() {
-  const { isDenied, isAuthorized, isLoading, openSettings } = usePushNotifications()
+  const { currentUser, hydrated } = useApp()
+  const { isDenied, isNotDetermined, isAuthorized, isLoading, requestPermission, openSettings } = usePushNotifications()
   const [dismissed, setDismissed] = useState(true)
+  const [requesting, setRequesting] = useState(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -42,13 +45,33 @@ export function NotificationPermissionModal() {
     } catch {}
   }
 
+  const handleActivate = async () => {
+    setRequesting(true)
+    try {
+      console.log('🔔 [PermissionModal] Usuário clicou para ativar notificações...')
+      const granted = await requestPermission()
+      console.log('🔔 [PermissionModal] Resultado da solicitação nativa:', granted)
+      if (granted) {
+        handleDismiss()
+      }
+    } catch (err) {
+      console.error('❌ [PermissionModal] Erro ao solicitar permissão:', err)
+    } finally {
+      setRequesting(false)
+    }
+  }
+
   const handleOpenSettings = async () => {
     handleDismiss()
     await openSettings()
   }
 
-  // Apenas renderiza se o status for estritamente 'denied', não estiver carregando e não foi dispensado
-  const shouldShow = isDenied && !isLoading && !dismissed
+  // Apenas renderiza se o usuário estiver autenticado, não estiver autorizado, não estiver carregando e não foi dispensado
+  const isEligible = Boolean(hydrated && currentUser?.id && !isAuthorized && !isLoading && !dismissed)
+  const isPromptMode = isNotDetermined
+  const isBlockedMode = isDenied
+
+  const shouldShow = isEligible && (isPromptMode || isBlockedMode)
 
   return (
     <AnimatePresence>
@@ -94,7 +117,9 @@ export function NotificationPermissionModal() {
                 width: 140,
                 height: 140,
                 borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, transparent 70%)',
+                background: isBlockedMode
+                  ? 'radial-gradient(circle, rgba(239, 68, 68, 0.25) 0%, transparent 70%)'
+                  : 'radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%)',
                 pointerEvents: 'none',
               }}
             />
@@ -129,12 +154,16 @@ export function NotificationPermissionModal() {
                 width: 52,
                 height: 52,
                 borderRadius: 16,
-                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                background: isBlockedMode
+                  ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                  : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginBottom: 18,
-                boxShadow: '0 8px 20px rgba(79, 70, 229, 0.35)',
+                boxShadow: isBlockedMode
+                  ? '0 8px 20px rgba(239, 68, 68, 0.35)'
+                  : '0 8px 20px rgba(79, 70, 229, 0.35)',
               }}
             >
               <BellRing size={26} color="#ffffff" />
@@ -150,7 +179,7 @@ export function NotificationPermissionModal() {
                 letterSpacing: '-0.02em',
               }}
             >
-              Ativar notificações
+              {isPromptMode ? 'Ativar notificações escolares' : 'Ativar notificações'}
             </h3>
 
             {/* Mensagem Oficial */}
@@ -162,7 +191,9 @@ export function NotificationPermissionModal() {
                 marginBottom: 24,
               }}
             >
-              As notificações do Impacto Edu estão desativadas neste aparelho. Ative-as nos Ajustes para receber comunicados, avisos de entrada e saída e outras informações importantes.
+              {isPromptMode
+                ? 'Receba comunicados, avisos de entrada e saída, notas e eventos escolares importantes em tempo real diretamente neste aparelho.'
+                : 'As notificações do Impacto Edu estão desativadas neste aparelho. Ative-as nos Ajustes para receber comunicados, avisos de entrada e saída e outras informações importantes.'}
             </p>
 
             {/* Ações */}
@@ -185,29 +216,57 @@ export function NotificationPermissionModal() {
                 Agora não
               </button>
 
-              <button
-                onClick={handleOpenSettings}
-                style={{
-                  flex: 1.5,
-                  padding: '12px 18px',
-                  borderRadius: 14,
-                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-                  border: 'none',
-                  color: '#ffffff',
-                  fontSize: 14,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 8,
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(79, 70, 229, 0.4)',
-                  transition: 'transform 0.15s ease',
-                }}
-              >
-                <Settings2 size={16} />
-                Abrir Ajustes
-              </button>
+              {isPromptMode ? (
+                <button
+                  onClick={handleActivate}
+                  disabled={requesting}
+                  style={{
+                    flex: 1.5,
+                    padding: '12px 18px',
+                    borderRadius: 14,
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    cursor: requesting ? 'wait' : 'pointer',
+                    opacity: requesting ? 0.7 : 1,
+                    boxShadow: '0 4px 14px rgba(79, 70, 229, 0.4)',
+                    transition: 'transform 0.15s ease',
+                  }}
+                >
+                  <BellRing size={16} />
+                  {requesting ? 'Ativando...' : 'Ativar notificações'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleOpenSettings}
+                  style={{
+                    flex: 1.5,
+                    padding: '12px 18px',
+                    borderRadius: 14,
+                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                    border: 'none',
+                    color: '#ffffff',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)',
+                    transition: 'transform 0.15s ease',
+                  }}
+                >
+                  <Settings2 size={16} />
+                  Abrir Ajustes
+                </button>
+              )}
             </div>
           </motion.div>
         </div>
