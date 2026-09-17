@@ -401,9 +401,20 @@ export function GlobalNotificationProvider() {
     }
 
     // Inicialização do serviço em paralelo
-    notificationService.initialize().catch(err => {
-      console.warn('[GlobalPush] Aviso na inicialização do serviço:', err)
-    })
+    notificationService.initialize()
+      .then(async () => {
+        if (Capacitor.isNativePlatform()) {
+          // No app nativo (iOS / Android), solicita a permissão nativa do sistema operacional
+          // na primeira abertura (Never Prompted). Com fallbackToSettings = false, não exibe alertas indevidos.
+          console.log('📱 [GlobalPush] App nativo inicializado. Solicitando permissão push nativa...')
+          await notificationService.requestNotificationPermission().catch(err => {
+            console.warn('[GlobalPush] Aviso ao solicitar permissão nativa inicial:', err)
+          })
+        }
+      })
+      .catch(err => {
+        console.warn('[GlobalPush] Aviso na inicialização do serviço:', err)
+      })
   }, [])
 
   // 2. Gerenciamento Global de Usuário no OneSignal via NotificationService

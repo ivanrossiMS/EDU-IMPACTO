@@ -637,18 +637,6 @@ class NotificationService {
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
-        // Se o aparelho nativo nunca exibiu o prompt de permissão (Never Prompted no OneSignal),
-        // solicita a permissão nativa do sistema operacional para registrar o token APNs no iOS/Android.
-        try {
-          const canRequest = await OneSignalNative.Notifications.canRequestPermission().catch(() => false)
-          if (canRequest) {
-            console.log('📱 [NotificationService] Aparelho nativo nunca solicitado (canRequest: true). Solicitando permissão push...')
-            await OneSignalNative.Notifications.requestPermission(false).catch(() => {})
-          }
-        } catch (promptErr) {
-          console.warn('[NotificationService] Aviso ao verificar canRequestPermission:', promptErr)
-        }
-
         // Login resiliente no OneSignal nativo com verificação e retry
         const performLogin = async (retryCount = 0): Promise<boolean> => {
           try {
@@ -658,12 +646,12 @@ class NotificationService {
             console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo (External ID: ${userId})`)
 
             // Verificação pós-login: confirma que o external_id foi realmente vinculado
-            await new Promise(r => setTimeout(r, 300))
+            await new Promise(r => setTimeout(r, 200))
             const verifiedExtId = await OneSignalNative.User.getExternalId().catch(() => null)
             if (verifiedExtId !== userId) {
               if (retryCount < 2) {
                 console.warn(`⚠️ [NotificationService] External ID não vinculado após login (tentativa ${retryCount + 1}). Retry...`)
-                await new Promise(r => setTimeout(r, 500 * (retryCount + 1)))
+                await new Promise(r => setTimeout(r, 300 * (retryCount + 1)))
                 return performLogin(retryCount + 1)
               }
               console.warn(`⚠️ [NotificationService] External ID não vinculado após ${retryCount + 1} tentativas. Forçando via backend.`)
@@ -720,6 +708,14 @@ class NotificationService {
             email: user.email ? String(user.email).toLowerCase().trim() : undefined,
             tags,
           }).catch(() => {})
+        }
+
+        // Se a permissão nativa ainda não estiver autorizada, solicita ao SO de forma não-bloqueante
+        // (fallbackToSettings: false) para registrar o APNs token sem atrasar o retorno do syncUser
+        if (this.state.permissionStatus !== 'authorized' && this.state.permissionStatus !== 'provisional') {
+          this.requestNotificationPermission().catch(err => {
+            console.warn('[NotificationService] Aviso ao solicitar permissão nativa pós-login:', err)
+          })
         }
       } else {
         // Web User Sync
@@ -837,6 +833,21 @@ class NotificationService {
       this.initialized = false
       this.nativeListenersConfigured = false
       this.state.oneSignalInitialized = false
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('edu_push_dismissed_v2')
+          localStorage.removeItem('edu_push_dismissed')
+          sessionStorage.removeItem('edu_push_blocked_dismissed_session')
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i)
+            if (key && key.startsWith('edu_push_')) {
+              localStorage.removeItem(key)
+            }
+          }
+          window.dispatchEvent(new CustomEvent('edu:reset-push-permission'))
+        } catch (_) {}
+      }
 
       await this.refresh().catch(() => {})
     }

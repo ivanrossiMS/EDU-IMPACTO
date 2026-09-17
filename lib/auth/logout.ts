@@ -58,6 +58,9 @@ async function executeLogout(userId?: string): Promise<void> {
         'edu-current-perfil',
         'edu_auth_user',
         'edu-active-modules',
+        'edu_push_dismissed_v2',
+        'edu_push_dismissed',
+        'edu_push_blocked_dismissed_session',
         LOGOUT_FLAG,
       ];
       if (userId) {
@@ -69,8 +72,20 @@ async function executeLogout(userId?: string): Promise<void> {
         );
       }
       keysToClear.forEach(k => window.localStorage.removeItem(k));
+
+      // Limpeza exaustiva de quaisquer flags de push no localStorage
+      for (let i = window.localStorage.length - 1; i >= 0; i--) {
+        const k = window.localStorage.key(i);
+        if (k && k.startsWith('edu_push_')) {
+          window.localStorage.removeItem(k);
+        }
+      }
+
       window.localStorage.setItem(LOGOUT_FLAG, '1');
       window.sessionStorage.clear();
+      try {
+        window.dispatchEvent(new CustomEvent('edu:reset-push-permission'));
+      } catch (_) {}
       console.log('[Auth Logout] Chaves de autenticação do usuário removidas com sucesso.');
     } catch (error) {
       console.error('[Auth Logout] Erro ao limpar chaves do storage:', error);

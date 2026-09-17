@@ -14,11 +14,13 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BellRing, Settings2, X } from 'lucide-react'
+import { usePathname } from 'next/navigation'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 
 const DISMISS_SESSION_KEY = 'edu_push_blocked_dismissed_session'
 
 export function NotificationPermissionModal() {
+  const pathname = usePathname()
   const { isDenied, isAuthorized, isLoading, openSettings } = usePushNotifications()
   const [dismissed, setDismissed] = useState(true)
 
@@ -54,8 +56,9 @@ export function NotificationPermissionModal() {
     await openSettings()
   }
 
-  // Apenas renderiza se o status for estritamente 'denied', não estiver carregando e não foi dispensado
-  const shouldShow = isDenied && !isLoading && !dismissed
+  // Apenas renderiza se o status for estritamente 'denied', não estiver carregando, não foi dispensado e não está na tela de login
+  const isLoginPage = pathname === '/login' || pathname?.startsWith('/login')
+  const shouldShow = isDenied && !isLoading && !dismissed && !isLoginPage
 
   return (
     <AnimatePresence>
