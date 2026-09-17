@@ -158,8 +158,6 @@ export function GlobalNotificationProvider() {
   const { currentUser, hydrated } = useApp()
   const currentUserRef = useRef(currentUser)
   const hydratedRef = useRef(hydrated)
-  const lastSyncedIdentityRef = useRef<string | null>(null)
-  const isSyncingRef = useRef(false)
 
   useEffect(() => {
     currentUserRef.current = currentUser
@@ -412,83 +410,16 @@ export function GlobalNotificationProvider() {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    // CRÍTICO: Nunca executar antes da hidratação completa da sessão no AppContext.
-    // Antes da hidratação, currentUser é temporariamente null no primeiro render de qualquer página,
-    // o que causava um falso clearUser()/logout() no OneSignal e quebrava a Push Subscription ao relogar!
-    if (!hydrated) return
-
     if (currentUser?.id) {
-      const identityKey = `${currentUser.id}:${currentUser.perfil || ''}:${currentUser.cargo || ''}`
-      if (lastSyncedIdentityRef.current === identityKey || isSyncingRef.current) return
-
-      isSyncingRef.current = true
-      notificationService
-        .syncUser(currentUser)
-        .then(() => {
-          lastSyncedIdentityRef.current = identityKey
-          console.log(`✅ [GlobalPush] Identidade confirmada e sincronizada no OneSignal: ${identityKey}`)
-          // Em plataformas móveis nativas (iOS/Android), garante a apresentação do prompt oficial do SO
-          // caso o usuário ainda não tenha sido perguntado (status notDetermined)
-          if (Capacitor.isNativePlatform()) {
-            notificationService.promptInitialPermissionIfNeeded().catch(permErr => {
-              console.warn('[GlobalPush] Aviso ao checar prompt nativo inicial:', permErr)
-            })
-          }
-        })
-        .catch(err => {
-          console.warn('[GlobalPush] Aviso na sincronização do usuário (permitirá retry automático):', err)
-          // Em caso de erro, NÃO trava lastSyncedIdentityRef, permitindo que re-renders ou eventos de foreground tentem novamente
-        })
-        .finally(() => {
-          isSyncingRef.current = false
-        })
+      notificationService.syncUser(currentUser).catch(err => {
+        console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
+      })
     } else {
-      // Só dispara clearUser() se havia uma identidade autenticada previamente
-      if (lastSyncedIdentityRef.current === null && !isSyncingRef.current) return
-      lastSyncedIdentityRef.current = null
-
       notificationService.clearUser().catch(err => {
         console.warn('[GlobalPush] Aviso no logout do usuário:', err)
       })
     }
-  }, [hydrated, currentUser?.id, currentUser?.perfil, currentUser?.cargo])
-
-  // 3. Revalidação de Identidade e Permissão ao retornar ao FOREGROUND (Settings -> App ou troca de apps)
-  useEffect(() => {
-    if (typeof window === 'undefined' || !Capacitor.isNativePlatform()) return
-
-    let cleanupListener: (() => void) | undefined
-    import('@capacitor/app').then(({ App }) => {
-      const handle = App.addListener('appStateChange', ({ isActive }) => {
-        if (isActive && hydratedRef.current && currentUserRef.current?.id) {
-          const u = currentUserRef.current
-          const identityKey = `${u.id}:${u.perfil || ''}:${u.cargo || ''}`
-          if (lastSyncedIdentityRef.current !== identityKey && !isSyncingRef.current) {
-            console.log('📱 [GlobalPush] App em FOREGROUND com identidade pendente de confirmação. Re-sincronizando...')
-            isSyncingRef.current = true
-            notificationService
-              .syncUser(u)
-              .then(() => {
-                lastSyncedIdentityRef.current = identityKey
-              })
-              .catch(err => {
-                console.warn('[GlobalPush] Aviso no retry de foreground:', err)
-              })
-              .finally(() => {
-                isSyncingRef.current = false
-              })
-          }
-        }
-      })
-      cleanupListener = () => {
-        handle.then(h => h.remove()).catch(() => {})
-      }
-    }).catch(() => {})
-
-    return () => {
-      if (cleanupListener) cleanupListener()
-    }
-  }, [])
+  }, [currentUser?.id, currentUser?.perfil, currentUser?.cargo])
 
   return <NotificationPermissionModal />
 }

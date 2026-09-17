@@ -7,7 +7,7 @@ import {
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
   Info, Check, Calendar, Camera, Clock, DollarSign, Award,
   Car, FileText, ChevronRight, ChevronDown, ChevronUp, Search, X, Copy, Terminal,
-  Radio, CheckCheck, Eye, Zap, Shield, Laptop, Trash2
+  Radio, CheckCheck, Eye, Zap, Shield, Laptop
 } from 'lucide-react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -463,90 +463,6 @@ export default function ADAdminPushTestPage() {
       console.error('Erro ao buscar responsáveis do aluno:', err)
     } finally {
       setIsLoadingGuardians(false)
-    }
-  }
-
-  // 4.1 Limpeza de Sessões Duplicadas / Órfãs de um Usuário
-  const [cleaningUserId, setCleaningUserId] = useState<string | null>(null)
-
-  const handleCleanupDevices = async (resp: any) => {
-    const authId = resp?.authId || ''
-    const email = resp?.email || ''
-    const responsavelId = String(resp?.responsavel_id || '')
-    const idKey = responsavelId || authId || email
-    if (!idKey || cleaningUserId) return
-    setCleaningUserId(idKey)
-    try {
-      const res = await fetch('/api/agenda/push/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'cleanup_user_devices',
-          userId: authId || email || responsavelId,
-          authId,
-          email,
-          responsavelId,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
-        if (data.cleanedCount > 0) {
-          toast.success(data.message || 'Sessões antigas limpas com sucesso!')
-        } else {
-          toast.info(data.message || 'Nenhum aparelho duplicado encontrado.')
-        }
-        if (selectedAluno) {
-          const reloadRes = await fetch(`/api/agenda/push/test?aluno_id=${encodeURIComponent(selectedAluno.id)}`)
-          if (reloadRes.ok) {
-            const reloadData = await reloadRes.json()
-            setGuardians(reloadData.responsaveis || [])
-          }
-        }
-      } else {
-        toast.error(data.message || data.error || 'Erro ao limpar aparelhos duplicados.')
-      }
-    } catch (err: any) {
-      toast.error('Erro de conexão ao limpar aparelhos.')
-    } finally {
-      setCleaningUserId(null)
-    }
-  }
-
-  const [deletingSubId, setDeletingSubId] = useState<string | null>(null)
-
-  const handleDeleteSingleDevice = async (subId: string, devName: string) => {
-    if (!subId || deletingSubId) return
-    if (!window.confirm(`Deseja realmente remover o aparelho "${devName}" do OneSignal? Essa ação excluirá o registro na nuvem caso o app tenha sido desinstalado.`)) {
-      return
-    }
-
-    setDeletingSubId(subId)
-    try {
-      const res = await fetch('/api/agenda/push/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete_single_subscription',
-          subscriptionId: subId,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.success) {
-        toast.success(data.message || 'Aparelho removido com sucesso!')
-        if (selectedAluno) {
-          const reloadRes = await fetch(`/api/agenda/push/test?aluno_id=${encodeURIComponent(selectedAluno.id)}`)
-          if (reloadRes.ok) {
-            const reloadData = await reloadRes.json()
-            setGuardians(reloadData.responsaveis || [])
-          }
-        }
-      } else {
-        toast.error(data.error || data.message || 'Erro ao remover aparelho.')
-      }
-    } catch {
-      toast.error('Erro de conexão ao remover aparelho.')
-    } finally {
-      setDeletingSubId(null)
     }
   }
 
@@ -1105,45 +1021,13 @@ export default function ADAdminPushTestPage() {
                                   <span style={{ color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 5 }}>
                                     <Smartphone size={13} color="#6366f1" /> Aparelhos registrados no OneSignal ({totalDevs}):
                                   </span>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    {devices.some((d: any, idx: number) =>
-                                      !d.isSubscribed ||
-                                      devices.slice(idx + 1).some((o: any) => o.modelo === d.modelo && o.tipo === d.tipo)
-                                    ) && (
-                                      <button
-                                        type="button"
-                                        disabled={cleaningUserId === (String(g.responsavel_id) || g.authId || g.email)}
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleCleanupDevices(g)
-                                        }}
-                                        style={{
-                                          background: 'rgba(239, 68, 68, 0.08)',
-                                          border: '1px solid rgba(239, 68, 68, 0.25)',
-                                          borderRadius: 6,
-                                          padding: '2px 8px',
-                                          fontSize: 10,
-                                          fontWeight: 700,
-                                          color: '#ef4444',
-                                          cursor: cleaningUserId === (String(g.responsavel_id) || g.authId || g.email) ? 'wait' : 'pointer',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: 4,
-                                        }}
-                                        title="Remove sessões antigas de reinstalações no mesmo aparelho"
-                                      >
-                                        <Trash2 size={10} />
-                                        {cleaningUserId === (String(g.responsavel_id) || g.authId || g.email) ? 'Limpando...' : 'Limpar sessões antigas'}
-                                      </button>
-                                    )}
-                                    <span style={{
-                                      fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6,
-                                      background: activeDevs > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
-                                      color: activeDevs > 0 ? '#059669' : '#dc2626'
-                                    }}>
-                                      {activeDevs > 0 ? `✓ ${activeDevs} recebendo notificações` : '✕ Nenhum aparelho ativo'}
-                                    </span>
-                                  </div>
+                                  <span style={{
+                                    fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6,
+                                    background: activeDevs > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                    color: activeDevs > 0 ? '#059669' : '#dc2626'
+                                  }}>
+                                    {activeDevs > 0 ? `✓ ${activeDevs} recebendo notificações` : '✕ Nenhum aparelho ativo'}
+                                  </span>
                                 </div>
 
                                 {devices.length === 0 ? (
@@ -1190,41 +1074,17 @@ export default function ADAdminPushTestPage() {
                                           </div>
                                         </div>
 
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                                            <span style={{
-                                              fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
-                                              background: dev.statusTone === 'danger' ? 'rgba(239, 68, 68, 0.12)' : dev.statusTone === 'warning' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                              color: dev.statusTone === 'danger' ? '#dc2626' : dev.statusTone === 'warning' ? '#d97706' : '#059669',
-                                            }}>
-                                              {dev.statusTone === 'danger' ? '✕ Inativo' : dev.statusTone === 'warning' ? '⚠️ Em Nuvem' : '✓ Push Ativo'}
-                                            </span>
-                                            <span style={{ fontSize: 9, color: dev.statusTone === 'danger' ? '#ef4444' : dev.statusTone === 'warning' ? '#f59e0b' : '#10b981', fontWeight: 600 }}>
-                                              {dev.statusDescription || (dev.isSubscribed ? 'Recebe Notificações' : (dev.notificationCode === -10 ? 'Token substituído / inativo' : 'Sem permissão push'))}
-                                            </span>
-                                          </div>
-
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              handleDeleteSingleDevice(dev.id || dev.subscriptionId, dev.modelo || 'Aparelho')
-                                            }}
-                                            disabled={deletingSubId === (dev.id || dev.subscriptionId)}
-                                            title="Remover este aparelho do OneSignal (útil para sessões antigas ou desinstaladas)"
-                                            style={{
-                                              width: 28, height: 28, borderRadius: 8,
-                                              background: 'rgba(239, 68, 68, 0.08)',
-                                              border: '1px solid rgba(239, 68, 68, 0.2)',
-                                              color: '#ef4444',
-                                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                              cursor: deletingSubId === (dev.id || dev.subscriptionId) ? 'wait' : 'pointer',
-                                              opacity: deletingSubId === (dev.id || dev.subscriptionId) ? 0.5 : 1,
-                                              transition: 'all 0.15s',
-                                            }}
-                                          >
-                                            <Trash2 size={13} />
-                                          </button>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                          <span style={{
+                                            fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+                                            background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)',
+                                            color: dev.isSubscribed ? '#059669' : '#dc2626',
+                                          }}>
+                                            {dev.isSubscribed ? '✓ Push Ativo' : '✕ Desativado'}
+                                          </span>
+                                          <span style={{ fontSize: 9, color: dev.isSubscribed ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                                            {dev.isSubscribed ? 'Recebe Notificações' : (dev.notificationCode === -10 ? 'Token substituído / inativo' : 'Sem permissão push')}
+                                          </span>
                                         </div>
                                       </div>
                                     ))}

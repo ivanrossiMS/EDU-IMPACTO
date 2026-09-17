@@ -1181,15 +1181,15 @@ function SelecionarAlunoContent() {
       if (typeof window !== 'undefined') {
         const u = currentUser as any;
         if (u && u.perfilReal !== 'Família' && u.perfilReal !== 'Responsável' && !u.hasDualRole && u.perfil === 'Aluno') {
-          router.replace(`/agenda-digital/aluno/${redirectTarget}`)
+          setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
           return
         }
       }
       if (currentUser.id) {
-        router.replace(`/agenda-digital/aluno/${redirectTarget}`)
+        setTimeout(() => { window.location.href = `/agenda-digital/aluno/${redirectTarget}` }, 50)
       }
     }
-  }, [isStillLoading, currentUser, redirectTarget, router])
+  }, [isStillLoading, currentUser, redirectTarget])
 
   // Redirecionamento automático caso haja uma notificação pendente para um dependente específico
   useEffect(() => {
@@ -1236,7 +1236,7 @@ function SelecionarAlunoContent() {
                 const { Preferences } = await import('@capacitor/preferences')
                 await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
               } catch {}
-              router.replace(dest)
+              window.location.replace(dest)
               return
             }
 
@@ -1247,7 +1247,7 @@ function SelecionarAlunoContent() {
                    (s.matricula && String(s.matricula) === targetSlug)
             )
             if (found) {
-              console.log(`[SelecionarAluno] Rota pendente identificada para ${found.nome} (${dest}). Redirecionando imediatamente via SPA...`)
+              console.log(`[SelecionarAluno] Rota pendente identificada para ${found.nome} (${dest}). Redirecionando imediatamente...`)
               if (typeof window !== 'undefined') {
                 (window as any).__EDU_PENDING_PUSH_ROUTE__ = null
                 localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
@@ -1256,7 +1256,7 @@ function SelecionarAlunoContent() {
                 const { Preferences } = await import('@capacitor/preferences')
                 await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
               } catch {}
-              router.replace(dest)
+              window.location.replace(dest)
               return
             }
 
@@ -1265,7 +1265,7 @@ function SelecionarAlunoContent() {
             if (knownModules.includes(targetSlug) && meusAlunos.length > 0) {
               const targetStudent = meusAlunos[0]
               const fixedDest = dest.replace(`/agenda-digital/${targetSlug}`, `/agenda-digital/${targetStudent.id}/${targetSlug}`)
-              console.log(`[SelecionarAluno] Rota sem aluno reescrita para ${targetStudent.nome} (${fixedDest}). Redirecionando via SPA...`)
+              console.log(`[SelecionarAluno] Rota sem aluno reescrita para ${targetStudent.nome} (${fixedDest}). Redirecionando...`)
               if (typeof window !== 'undefined') {
                 (window as any).__EDU_PENDING_PUSH_ROUTE__ = null
                 localStorage.removeItem(PENDING_PUSH_ROUTE_KEY)
@@ -1274,7 +1274,7 @@ function SelecionarAlunoContent() {
                 const { Preferences } = await import('@capacitor/preferences')
                 await Preferences.remove({ key: PENDING_PUSH_ROUTE_KEY })
               } catch {}
-              router.replace(fixedDest)
+              window.location.replace(fixedDest)
               return
             }
           }
@@ -1287,8 +1287,8 @@ function SelecionarAlunoContent() {
       if (!isManual && !isColab && meusAlunos.length === 1) {
         const singleStudent = meusAlunos[0]
         const singleDest = `/agenda-digital/${singleStudent.id}/${redirectTarget}${getForwardParams()}`
-        console.log(`[SelecionarAluno] Família com 1 aluno único (${singleStudent.nome}). Redirecionando via SPA para ${singleDest}...`)
-        router.replace(singleDest)
+        console.log(`[SelecionarAluno] Família com 1 aluno único (${singleStudent.nome}). Redirecionando direto para ${singleDest}...`)
+        window.location.replace(singleDest)
         return
       }
     }

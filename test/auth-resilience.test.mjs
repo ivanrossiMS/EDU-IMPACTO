@@ -105,16 +105,12 @@ Preferences.set = async ({ key, value }) => {
 };
 Preferences.remove = async ({ key }) => {
   preferencesMap.delete(key);
-  storageMap.delete(`CapacitorStorage.${key}`);
 };
 Preferences.keys = async () => {
   return { keys: Array.from(preferencesMap.keys()) };
 };
 Preferences.clear = async () => {
   preferencesMap.clear();
-  for (const k of Array.from(storageMap.keys())) {
-    if (k.startsWith('CapacitorStorage.')) storageMap.delete(k);
-  }
 };
 
 const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
@@ -131,15 +127,6 @@ SecureStoragePlugin.set = async ({ key, value }) => {
 SecureStoragePlugin.remove = async ({ key }) => {
   if (!secureStorageAvailable) throw new Error('Keychain unavailable');
   secureStorageMap.delete(key);
-  storageMap.delete(`cap_sec_${key}`);
-  return { value: true };
-};
-SecureStoragePlugin.clear = async () => {
-  if (!secureStorageAvailable) throw new Error('Keychain unavailable');
-  secureStorageMap.clear();
-  for (const k of Array.from(storageMap.keys())) {
-    if (k.startsWith('cap_sec_')) storageMap.delete(k);
-  }
   return { value: true };
 };
 SecureStoragePlugin.keys = async () => {

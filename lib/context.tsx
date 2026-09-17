@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useCallback, useEffect } from 'rea
 import { Preferences } from '@capacitor/preferences'
 import { Capacitor } from '@capacitor/core'
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin'
-import { restoreSessionSecurely, getLogoutBarrier, isUserLoggedOut, ensureCleanInstallCheck } from '@/lib/auth/secureSession'
+import { restoreSessionSecurely, getLogoutBarrier, isUserLoggedOut } from '@/lib/auth/secureSession'
 import { supabase } from '@/lib/supabase'
 
 export type Theme = 'dark' | 'light'
@@ -218,17 +218,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrate() {
       try {
-        // Se for primeira inicialização pós-instalação ou reinstalação limpa, purga o Keychain e inicia deslogado
-        const isCleanInstall = await ensureCleanInstallCheck()
-        if (isCleanInstall) {
-          console.log('[Context Hydration] Instalação limpa detectada. Iniciando deslogado.')
-          setCurrentUserState(null)
-          setCurrentUserPerfilState('')
-          if (!isMounted) return
-          setHydrated(true)
-          return
-        }
-
         const barrier = await getLogoutBarrier()
         const isLoggedOut = isUserLoggedOut() || Boolean(barrier)
 

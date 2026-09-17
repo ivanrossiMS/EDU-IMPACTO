@@ -47,17 +47,33 @@ async function executeLogout(userId?: string): Promise<void> {
   // 2. Limpa cookies de sessão no cliente imediatamente (proteção para logout offline)
   clearSessionCookiesOnClient();
 
-  // 3. Zera completamente o armazenamento local do aplicativo (conforme solicitado: reset total no logout)
+  // 3. Limpa seletivamente chaves de autenticação do browser, preservando preferências de UI
+  const projectStorageKey = getProjectStorageKey();
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.clear();
-      window.sessionStorage.clear();
-      // Restaura a barreira de logout e flag para navegação
-      setLogoutBarrier(userId);
+      const keysToClear = [
+        SESSION_KEY,
+        projectStorageKey,
+        'edu-current-user',
+        'edu-current-perfil',
+        'edu_auth_user',
+        'edu-active-modules',
+        LOGOUT_FLAG,
+      ];
+      if (userId) {
+        keysToClear.push(
+          `edu-user-photo-${userId}`,
+          `edu-profile-extra-${userId}`,
+          `edu-active-modules-${userId}`,
+          `edu-active-unit-${userId}`
+        );
+      }
+      keysToClear.forEach(k => window.localStorage.removeItem(k));
       window.localStorage.setItem(LOGOUT_FLAG, '1');
-      console.log('[Auth Logout] Dados do aplicativo zerados com sucesso.');
+      window.sessionStorage.clear();
+      console.log('[Auth Logout] Chaves de autenticação do usuário removidas com sucesso.');
     } catch (error) {
-      console.error('[Auth Logout] Erro ao zerar storage:', error);
+      console.error('[Auth Logout] Erro ao limpar chaves do storage:', error);
     }
   }
 

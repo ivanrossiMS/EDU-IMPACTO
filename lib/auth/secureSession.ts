@@ -5,57 +5,6 @@ import { SupabaseClient } from '@supabase/supabase-js';
 
 export const SESSION_KEY = 'edu_impacto_secure_session';
 export const LOGOUT_BARRIER_KEY = 'edu_logout_pending_barrier';
-export const APP_FIRST_RUN_KEY = 'edu_app_installed_marker_v1';
-
-let cleanInstallChecked = false;
-let cleanInstallPromise: Promise<boolean> | null = null;
-
-/**
- * Garante que em uma instalação limpa (app novo ou reinstalado), qualquer
- * resíduo antigo deixado no iOS Keychain seja completamente purgado.
- * No iOS, o Keychain NÃO é apagado pela Apple na desinstalação.
- * Como o Preferences (UserDefaults) É apagado, a ausência de APP_FIRST_RUN_KEY
- * indica com 100% de certeza que se trata de uma nova instalação.
- */
-export async function ensureCleanInstallCheck(): Promise<boolean> {
-  if (!Capacitor.isNativePlatform()) return false;
-  if (cleanInstallChecked) return false;
-  if (cleanInstallPromise) return cleanInstallPromise;
-
-  cleanInstallPromise = (async () => {
-    try {
-      const { value } = await Preferences.get({ key: APP_FIRST_RUN_KEY });
-      if (!value) {
-        console.log('🆕 [FirstRun] Instalação limpa detectada (app recém-instalado ou reinstalado)!');
-        console.log('🧹 [FirstRun] Purgando credenciais e sessões órfãs do iOS Keychain...');
-
-        // 1. Limpa completamente o Keychain do hardware
-        await SecureStoragePlugin.clear().catch(() => {});
-
-        // 2. Limpa dados de sessão e usuário locais
-        if (typeof window !== 'undefined') {
-          try { window.localStorage.clear(); } catch {}
-          try { window.sessionStorage.clear(); } catch {}
-        }
-
-        // 3. Marca que o app agora está instalado
-        await Preferences.set({ key: APP_FIRST_RUN_KEY, value: 'installed' });
-        cleanInstallChecked = true;
-        return true;
-      }
-      cleanInstallChecked = true;
-      return false;
-    } catch (err) {
-      console.warn('[FirstRun] Erro na checagem de primeira instalação:', err);
-      cleanInstallChecked = true;
-      return false;
-    } finally {
-      cleanInstallPromise = null;
-    }
-  })();
-
-  return cleanInstallPromise;
-}
 
 /**
  * Retorna o identificador do projeto Supabase atual de forma resiliente.
@@ -932,13 +881,10 @@ export async function clearSessionSecurely(userId?: string) {
 
   if (Capacitor.isNativePlatform()) {
     try {
-      // 1. Limpa completamente o Keychain do dispositivo
-      await SecureStoragePlugin.clear().catch(() => {});
+      await SecureStoragePlugin.remove({ key: SESSION_KEY }).catch(() => {});
+      await SecureStoragePlugin.remove({ key: projectStorageKey }).catch(() => {});
       await SecureStoragePlugin.remove({ key: 'edu-current-user' }).catch(() => {});
       await SecureStoragePlugin.remove({ key: 'edu-current-perfil' }).catch(() => {});
-      await SecureStoragePlugin.remove({ key: SESSION_KEY }).catch(() => {});
-
-      // 2. Remove artefatos de sessão e dados de usuário no Preferences
       await Preferences.remove({ key: SESSION_KEY }).catch(() => {});
       await Preferences.remove({ key: projectStorageKey }).catch(() => {});
       await Preferences.remove({ key: `${SESSION_KEY}_meta` }).catch(() => {});
@@ -952,8 +898,6 @@ export async function clearSessionSecurely(userId?: string) {
         await Preferences.remove({ key: `edu-active-modules-${userId}` }).catch(() => {});
         await Preferences.remove({ key: `edu-active-unit-${userId}` }).catch(() => {});
       }
-      // Garante que o app continue marcado como instalado
-      await Preferences.set({ key: APP_FIRST_RUN_KEY, value: 'installed' }).catch(() => {});
     } catch {}
   }
 }

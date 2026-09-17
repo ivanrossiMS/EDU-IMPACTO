@@ -121,9 +121,6 @@ async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
     const data = await res.json()
     const subscriptions = data.subscriptions || []
 
-    const lastActiveTimestamp = data.properties?.last_active ? Number(data.properties.last_active) * 1000 : null
-    const isRecentlyActive = lastActiveTimestamp ? (Date.now() - lastActiveTimestamp) < (48 * 60 * 60 * 1000) : false
-
     return subscriptions.map((sub: any) => {
       const typeStr = sub.type || ''
       const isIos = typeStr.toLowerCase().includes('ios')
@@ -148,15 +145,10 @@ async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
         } else {
           statusDescription = '🔴 Notificações Bloqueadas nos Ajustes'
         }
-      } else if (!isRecentlyActive && (sub.session_count || 0) > 0) {
-        // Aparelho com registro histórico na nuvem, mas sem atividade nas últimas 48h
-        statusTone = 'warning'
-        statusDescription = '🟡 Registro em Nuvem (Aparelho pode estar desligado ou foi reinstalado)'
       }
 
       return {
         id: sub.id,
-        subscriptionId: sub.id,
         tipo: isIos ? 'iOS' : isAndroid ? 'Android' : 'Web',
         tipoRaw: typeStr,
         modelo: formatDeviceModel(sub.device_model, typeStr),
@@ -171,8 +163,7 @@ async function fetchOneSignalUserDevices(identifier: string, isEmail = false) {
         notificationCode: notifType,
         hasToken: Boolean(sub.token),
         tokenPreview: sub.token ? `${sub.token.slice(0, 8)}...${sub.token.slice(-4)}` : null,
-        lastActive: lastActiveTimestamp ? new Date(lastActiveTimestamp).toISOString() : null,
-        isRecentlyActive,
+        lastActive: data.properties?.last_active ? new Date(data.properties.last_active * 1000).toISOString() : null,
       }
     })
   } catch (err: any) {
@@ -500,157 +491,6 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-
-    // Ação administrativa: Exclusão individual de uma subscrição específica (aparelho órfão/antigo)
-    if (body.action === 'delete_single_subscription') {
-      const subscriptionId = String(body.subscriptionId || '').trim()
-      if (!subscriptionId) {
-        return NextResponse.json({ error: 'subscriptionId é obrigatório para exclusão.' }, { status: 400 })
-      }
-
-      const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
-      const apiKey = process.env.ONESIGNAL_REST_API_KEY
-      if (!appId || !apiKey) {
-        return NextResponse.json({ error: 'OneSignal não configurado no servidor.' }, { status: 400 })
-      }
-
-      try {
-        const delRes = await fetch(`https://api.onesignal.com/apps/${appId}/subscriptions/${subscriptionId}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Basic ${apiKey}` },
-        })
-
-        if (delRes.ok || delRes.status === 202 || delRes.status === 404) {
-          console.log(`🧹 [admin-delete-device] Subscrição ${subscriptionId} excluída manualmente com sucesso.`)
-          return NextResponse.json({
-            success: true,
-            message: 'Aparelho removido com sucesso do OneSignal.',
-            subscriptionId,
-          })
-        }
-
-        const errData = await delRes.json().catch(() => ({}))
-        return NextResponse.json({
-          success: false,
-          error: errData?.errors?.[0] || 'Falha ao remover aparelho no OneSignal.',
-        }, { status: delRes.status })
-      } catch (err: any) {
-        return NextResponse.json({ error: err?.message || 'Erro interno ao remover aparelho.' }, { status: 500 })
-      }
-    }
-
-    // Ação administrativa: Limpeza de sessões/dispositivos duplicados ou órfãos de um usuário
-    if (body.action === 'cleanup_user_devices') {
-      const targetUserId = String(body.userId || body.authId || '').trim()
-      const targetEmail = String(body.email || '').trim()
-      const targetRespId = String(body.responsavelId || '').trim()
-
-      if (!targetUserId && !targetEmail && !targetRespId) {
-        return NextResponse.json({ error: 'Identificador do usuário é obrigatório para limpeza de aparelhos.' }, { status: 400 })
-      }
-
-      const appId = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID
-      const apiKey = process.env.ONESIGNAL_REST_API_KEY
-      if (!appId || !apiKey) {
-        return NextResponse.json({ error: 'OneSignal não configurado no servidor.' }, { status: 400 })
-      }
-
-      // Tentativas em cascata para localizar o usuário no OneSignal
-      let userData: any = null
-      const candidateEndpoints = [
-        targetUserId ? `https://api.onesignal.com/apps/${appId}/users/by/external_id/${encodeURIComponent(targetUserId)}` : null,
-        targetEmail ? `https://onesignal.com/api/v1/apps/${appId}/users/by/email/${encodeURIComponent(targetEmail.toLowerCase())}` : null,
-        targetRespId && targetRespId !== targetUserId ? `https://api.onesignal.com/apps/${appId}/users/by/external_id/${encodeURIComponent(targetRespId)}` : null,
-      ].filter(Boolean) as string[]
-
-      for (const url of candidateEndpoints) {
-        try {
-          const res = await fetch(url, {
-            headers: { Authorization: `Basic ${apiKey}` },
-          })
-          if (res.ok) {
-            userData = await res.json()
-            if (userData?.subscriptions && userData.subscriptions.length > 0) {
-              break
-            }
-          }
-        } catch {}
-      }
-
-      if (!userData) {
-        return NextResponse.json({
-          success: false,
-          message: 'Usuário não localizado no OneSignal pelos identificadores fornecidos.',
-        })
-      }
-
-      const subs: any[] = Array.isArray(userData.subscriptions) ? userData.subscriptions : []
-
-      if (subs.length <= 1) {
-        return NextResponse.json({
-          success: true,
-          message: 'Nenhum aparelho duplicado encontrado. O usuário possui apenas 1 aparelho registrado.',
-          cleanedCount: 0,
-          remainingCount: subs.length,
-        })
-      }
-
-      // Agrupar por device_model e tipo para identificar reinstalações do mesmo aparelho
-      const modelGroups = new Map<string, any[]>()
-      const deadSubs: any[] = []
-
-      for (const s of subs) {
-        if (!s.enabled || !s.token) {
-          deadSubs.push(s)
-          continue
-        }
-        const key = `${s.type}:${s.device_model || 'unknown'}`
-        if (!modelGroups.has(key)) {
-          modelGroups.set(key, [])
-        }
-        modelGroups.get(key)!.push(s)
-      }
-
-      // Para cada modelo com mais de 1 subscrição ativa, mantém apenas a que teve mais sessões ou atividade recente
-      for (const [, group] of modelGroups.entries()) {
-        if (group.length > 1) {
-          group.sort((a, b) => (b.session_count || 0) - (a.session_count || 0) || (b.session_time || 0) - (a.session_time || 0))
-          const [, ...duplicates] = group
-          deadSubs.push(...duplicates)
-        }
-      }
-
-      if (deadSubs.length === 0) {
-        return NextResponse.json({
-          success: true,
-          message: 'Não há sessões duplicadas. Todos os aparelhos conectados são modelos distintos e estão ativos.',
-          cleanedCount: 0,
-          remainingCount: subs.length,
-        })
-      }
-
-      let cleanedCount = 0
-      for (const dead of deadSubs) {
-        try {
-          const delRes = await fetch(`https://api.onesignal.com/apps/${appId}/subscriptions/${dead.id}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Basic ${apiKey}` },
-          })
-          if (delRes.ok || delRes.status === 202) {
-            cleanedCount++
-            console.log(`🧹 [admin-cleanup] Subscrição órfã removida: ${dead.id} (${dead.device_model || dead.type})`)
-          }
-        } catch {}
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: `${cleanedCount} aparelho(s) duplicado(s) ou órfão(s) removido(s) com sucesso.`,
-        cleanedCount,
-        remainingCount: subs.length - cleanedCount,
-      })
-    }
-
     const {
       alunoId,
       responsavelIds = [],

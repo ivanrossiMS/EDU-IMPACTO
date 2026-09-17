@@ -12,7 +12,6 @@ import { Preferences } from '@capacitor/preferences'
 import { LogOut } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
-import { notificationService } from '@/lib/notifications/notificationService'
 import {
   isFamilyOrStudent,
   getAgendaDigitalDestination,
@@ -574,7 +573,7 @@ export default function LoginPage() {
         user_metadata: meta
       }
       setCurrentUser(userObj)
-
+      
       // Sincroniza sessão no cliente Supabase e Keychain/Keystore
       if (authData.session) {
         try {
@@ -602,26 +601,11 @@ export default function LoginPage() {
         }
       } catch (e) {}
 
-      // No celular nativo, garante solicitação nativa oficial do SO caso o usuário ainda não tenha respondido
-      if (Capacitor.isNativePlatform()) {
-        try {
-          await notificationService.promptInitialPermissionIfNeeded().catch(() => {})
-        } catch {}
-      }
-
-      // Sincroniza usuário e push no OneSignal de forma confiável aguardando a ponte nativa
-      try {
-        await Promise.race([
-          notificationService.syncUser(userObj),
-          new Promise(res => setTimeout(res, 2500))
-        ])
-      } catch (err) {
-        console.warn('[Login] Aviso ao sincronizar OneSignal pós-login:', err)
-      }
-
-      // Função de navegação segura via SPA (sem destruir a WebView nem abortar promessas em voo)
+      // Função de navegação segura que garante que os cookies sejam consolidados
       const navigateSafely = (targetUrl: string) => {
-        router.replace(targetUrl)
+        setTimeout(() => {
+          window.location.href = targetUrl
+        }, 120)
       }
 
       // Se houver notificação pendente ou redirect especificado, vai direto para ele!

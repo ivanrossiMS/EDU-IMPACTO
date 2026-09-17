@@ -25,8 +25,7 @@ import {
   isSessionExpiredOrExpiringSoon,
   getSessionFromStorageTiers,
   getLogoutBarrier,
-  clearLogoutBarrier,
-  ensureCleanInstallCheck
+  clearLogoutBarrier
 } from '@/lib/auth/secureSession'
 
 const LOGOUT_FLAG = 'edu-logout-pending'
@@ -36,9 +35,6 @@ export function CapacitorResumeGuard() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-
-    // 0. Purgar resíduos de Keychain se for instalação limpa
-    ensureCleanInstallCheck().catch(() => {})
 
     // Verifica se a barreira de logout é legítima ou resíduo de sessão anterior
     const isLogoutBarrierActiveAndValid = async (hasBarrier: any, legacyPending: string | null) => {
