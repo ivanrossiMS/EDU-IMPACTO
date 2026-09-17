@@ -7,7 +7,8 @@ import {
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
   Info, Check, Calendar, Camera, Clock, DollarSign, Award,
   Car, FileText, ChevronRight, ChevronDown, ChevronUp, Search, X, Copy, Terminal,
-  Radio, CheckCheck, Eye, Zap, Shield, Laptop, Trash2, RotateCcw
+  Radio, CheckCheck, Eye, Zap, Shield, Laptop, Trash2, RotateCcw,
+  GraduationCap, Briefcase, Crown
 } from 'lucide-react'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
@@ -17,7 +18,8 @@ import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 import { useApp } from '@/lib/context'
 import { toast } from 'sonner'
 import { notificationService } from '@/lib/notifications/notificationService'
-import { DevicePushDiagnosticCard } from '@/components/notifications/DevicePushDiagnosticCard'
+
+export type RecipientTab = 'todos' | 'alunos' | 'colaboradores' | 'master'
 
 // ── Tipos e Presets de Notificação ──────────────────────────────────────────
 type PushCategory =
@@ -352,6 +354,7 @@ export default function ADAdminPushTestPage() {
   }
 
   // ── Estados de Seleção de Destino ──
+  const [recipientTab, setRecipientTab] = useState<RecipientTab>('todos')
   const [searchTerm, setSearchTerm] = useState('')
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const searchContainerRef = useRef<HTMLDivElement>(null)
@@ -361,6 +364,13 @@ export default function ADAdminPushTestPage() {
   const [selectedRespIds, setSelectedRespIds] = useState<string[]>([])
   const [includeAlunoDirect, setIncludeAlunoDirect] = useState(false)
   const [expandedRespDevices, setExpandedRespDevices] = useState<Record<string, boolean>>({})
+
+  // Estados de Colaboradores e Institucional / Master
+  const [colaboradores, setColaboradores] = useState<any[]>([])
+  const [isColaboradoresLoading, setIsColaboradoresLoading] = useState(false)
+  const [selectedColaborador, setSelectedColaborador] = useState<any | null>(null)
+  const [colaboradorDevices, setColaboradorDevices] = useState<any[]>([])
+  const [isLoadingColaboradorDevices, setIsLoadingColaboradorDevices] = useState(false)
 
   const toggleDevices = (respId: string) => {
     setExpandedRespDevices(prev => ({ ...prev, [respId]: !prev[respId] }))
@@ -419,9 +429,26 @@ export default function ADAdminPushTestPage() {
     }
   }
 
+  // 2.1 Carregar Lista de Colaboradores e Institucional / Master
+  const loadColaboradores = async () => {
+    setIsColaboradoresLoading(true)
+    try {
+      const res = await fetch('/api/agenda/push/test?colaboradores=true')
+      if (res.ok) {
+        const data = await res.json()
+        setColaboradores(data.colaboradores || [])
+      }
+    } catch (e) {
+      console.error('Erro ao carregar colaboradores:', e)
+    } finally {
+      setIsColaboradoresLoading(false)
+    }
+  }
+
   useEffect(() => {
     loadConfig()
     loadRecentLogs()
+    loadColaboradores()
     checkCurrentDevicePush()
 
     function handleClickOutside(e: MouseEvent) {
@@ -433,23 +460,62 @@ export default function ADAdminPushTestPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // 3. Autocomplete / Filtro de Alunos
-  const filteredAlunos = useMemo(() => {
-    if (!searchTerm || searchTerm.trim().length < 2) return []
+  // 3. Autocomplete / Filtro Unificado (Alunos e Colaboradores / Institucional / Master)
+  const searchResults = useMemo(() => {
     const term = searchTerm.toLowerCase().trim()
-    return (alunos || [])
-      .filter((a: any) => {
-        const n = String(a.nome || '').toLowerCase()
-        const m = String(a.matricula || a.id || '').toLowerCase()
-        const t = String(a.turma || '').toLowerCase()
-        return n.includes(term) || m.includes(term) || t.includes(term)
-      })
-      .slice(0, 8)
-  }, [alunos, searchTerm])
 
-  // 4. Carregar Responsáveis ao selecionar um aluno
+    // Se aba "master" e sem termo de busca, exibir institucional e master diretamente prontos para 1 clique
+    if (recipientTab === 'master' && term.length < 2) {
+      return (colaboradores || [])
+        .filter((c: any) => c.isMaster || c.isInstitucional)
+        .slice(0, 15)
+        .map((c: any) => ({ ...c, _type: 'colaborador' }))
+    }
+
+    if (!term || term.length < 2) return []
+
+    const results: any[] = []
+
+    // Alunos
+    if (recipientTab === 'todos' || recipientTab === 'alunos') {
+      const matchedAlunos = (alunos || [])
+        .filter((a: any) => {
+          const n = String(a.nome || '').toLowerCase()
+          const m = String(a.matricula || a.id || '').toLowerCase()
+          const t = String(a.turma || '').toLowerCase()
+          return n.includes(term) || m.includes(term) || t.includes(term)
+        })
+        .slice(0, recipientTab === 'alunos' ? 12 : 6)
+        .map((a: any) => ({ ...a, _type: 'aluno' }))
+
+      results.push(...matchedAlunos)
+    }
+
+    // Colaboradores / Institucional / Master
+    if (recipientTab === 'todos' || recipientTab === 'colaboradores' || recipientTab === 'master') {
+      const matchedColabs = (colaboradores || [])
+        .filter((c: any) => {
+          if (recipientTab === 'master' && !c.isMaster && !c.isInstitucional) return false
+          const n = String(c.nome || '').toLowerCase()
+          const e = String(c.email || '').toLowerCase()
+          const crg = String(c.cargo || '').toLowerCase()
+          const p = String(c.perfil || '').toLowerCase()
+          return n.includes(term) || e.includes(term) || crg.includes(term) || p.includes(term)
+        })
+        .slice(0, recipientTab === 'colaboradores' || recipientTab === 'master' ? 12 : 6)
+        .map((c: any) => ({ ...c, _type: 'colaborador' }))
+
+      results.push(...matchedColabs)
+    }
+
+    return results
+  }, [alunos, colaboradores, searchTerm, recipientTab])
+
+  // 4. Seleção de Aluno
   const handleSelectAluno = async (aluno: any) => {
     setSelectedAluno(aluno)
+    setSelectedColaborador(null)
+    setColaboradorDevices([])
     setSearchTerm('')
     setIsSearchOpen(false)
     setIsLoadingGuardians(true)
@@ -469,6 +535,95 @@ export default function ADAdminPushTestPage() {
       console.error('Erro ao buscar responsáveis do aluno:', err)
     } finally {
       setIsLoadingGuardians(false)
+    }
+  }
+
+  // 4.1 Seleção de Colaborador / Administrador Master / Institucional
+  const handleSelectColaborador = async (colab: any) => {
+    setSelectedColaborador(colab)
+    setSelectedAluno(null)
+    setGuardians([])
+    setSelectedRespIds([])
+    setSearchTerm('')
+    setIsSearchOpen(false)
+    setIsLoadingColaboradorDevices(true)
+    setColaboradorDevices([])
+
+    try {
+      const res = await fetch(`/api/agenda/push/test?colaborador_id=${encodeURIComponent(colab.id)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setColaboradorDevices(data.dispositivos || [])
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dispositivos do colaborador:', err)
+    } finally {
+      setIsLoadingColaboradorDevices(false)
+    }
+  }
+
+  // Recarregar dispositivos do colaborador
+  const reloadColaboradorDevices = async (overrideId?: string) => {
+    const targetId = overrideId || selectedColaborador?.id
+    if (!targetId) return
+    setIsLoadingColaboradorDevices(true)
+    try {
+      const res = await fetch(`/api/agenda/push/test?colaborador_id=${encodeURIComponent(targetId)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setColaboradorDevices(data.dispositivos || [])
+      }
+    } catch (err) {
+      console.error('Erro ao recarregar dispositivos do colaborador:', err)
+    } finally {
+      setIsLoadingColaboradorDevices(false)
+    }
+  }
+
+  // Limpar seleção de destinatário
+  const handleClearRecipient = () => {
+    setSelectedAluno(null)
+    setSelectedColaborador(null)
+    setGuardians([])
+    setSelectedRespIds([])
+    setColaboradorDevices([])
+  }
+
+  // Exclusão em lote de todas as sessões de um colaborador no OneSignal
+  const handleDeleteAllColaboradorDevices = async () => {
+    if (!selectedColaborador) return
+    const total = colaboradorDevices.length
+    if (total === 0) return
+
+    if (!confirm(`Deseja excluir TODAS as ${total} sessão(ões) registradas de "${selectedColaborador.nome}" no OneSignal?\n\nIsso permitirá reiniciar as permissões push do zero no aparelho.`)) {
+      return
+    }
+
+    setIsDeletingBatch(true)
+    try {
+      const subIds = colaboradorDevices.map((d: any) => d.id).filter(Boolean)
+      const res = await fetch('/api/agenda/push/test', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscriptionIds: subIds,
+          colaboradorId: selectedColaborador.id,
+          authId: selectedColaborador.auth_id,
+          clearAllForUser: true,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        toast.success(`${data.deletedCount} sessão(ões) excluída(s) com sucesso!`)
+        await reloadColaboradorDevices()
+        await checkCurrentDevicePush()
+      } else {
+        toast.error(data.error || 'Falha ao excluir sessões em lote.')
+      }
+    } catch (err: any) {
+      toast.error('Erro ao excluir sessões em lote: ' + err.message)
+    } finally {
+      setIsDeletingBatch(false)
     }
   }
 
@@ -508,6 +663,7 @@ export default function ADAdminPushTestPage() {
       if (res.ok && data.success) {
         toast.success(`Sessão do aparelho "${deviceName}" excluída com sucesso!`)
         await reloadGuardians()
+        await reloadColaboradorDevices()
         await checkCurrentDevicePush()
       } else {
         toast.error(data.error || 'Falha ao excluir sessão do aparelho.')
@@ -625,30 +781,43 @@ export default function ADAdminPushTestPage() {
     setTargetRoute(preset.routeSuffix)
   }
 
-  // 7. Preview da mensagem com o nome real do aluno substituído de forma amigável
-  const alunoNomeExibicao = selectedAluno?.nome ? formatFriendlyStudentName(selectedAluno.nome) : 'Cecilia'
+  // 7. Preview da mensagem com o nome real do destinatário (aluno ou colaborador/master)
+  const recipientDisplayName = useMemo(() => {
+    if (selectedColaborador?.nome) return selectedColaborador.nome
+    if (selectedAluno?.nome) return formatFriendlyStudentName(selectedAluno.nome)
+    return 'Cecilia'
+  }, [selectedColaborador, selectedAluno])
+
+  const recipientTurmaOrRole = useMemo(() => {
+    if (selectedColaborador) return selectedColaborador.cargo || selectedColaborador.perfil || 'Equipe Escolar'
+    if (selectedAluno) return selectedAluno.turma || 'Turma A'
+    return 'Turma A'
+  }, [selectedColaborador, selectedAluno])
+
   const previewTitle = useMemo(() => {
-    return title.replace(/{aluno}/gi, alunoNomeExibicao).replace(/{turma}/gi, selectedAluno?.turma || 'Turma A')
-  }, [title, alunoNomeExibicao, selectedAluno])
+    return title.replace(/{aluno}/gi, recipientDisplayName).replace(/{turma}/gi, recipientTurmaOrRole)
+  }, [title, recipientDisplayName, recipientTurmaOrRole])
 
   const previewMessage = useMemo(() => {
     const agoraHora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     return message
-      .replace(/{aluno}/gi, alunoNomeExibicao)
-      .replace(/{turma}/gi, selectedAluno?.turma || 'Turma A')
+      .replace(/{aluno}/gi, recipientDisplayName)
+      .replace(/{turma}/gi, recipientTurmaOrRole)
       .replace(/{hora}/gi, agoraHora)
-  }, [message, alunoNomeExibicao, selectedAluno])
+  }, [message, recipientDisplayName, recipientTurmaOrRole])
 
   const previewTargetUrl = useMemo(() => {
     let route = (targetRoute || '').trim()
     if (selectedAluno?.id) {
       route = route.replace(/{alunoId}/gi, String(selectedAluno.id))
+    } else if (selectedColaborador?.id) {
+      route = route.replace(/{alunoId}/gi, 'colaborador')
     } else {
       route = route.replace(/{alunoId}/gi, 'aluno')
     }
     if (route && !route.startsWith('/')) route = `/${route}`
     return `/agenda-digital${route}`
-  }, [selectedAluno, targetRoute])
+  }, [selectedAluno, selectedColaborador, targetRoute])
 
   // 8. Disparo do Push de Teste
   const handleSendTestPush = async () => {
@@ -663,8 +832,10 @@ export default function ADAdminPushTestPage() {
     try {
       const payload = {
         alunoId: selectedAluno?.id || null,
-        responsavelIds: selectedRespIds,
-        includeAlunoDirect,
+        colaboradorId: selectedColaborador?.id || null,
+        targetType: selectedColaborador ? 'colaborador' : 'aluno',
+        responsavelIds: selectedAluno ? selectedRespIds : [],
+        includeAlunoDirect: selectedAluno ? includeAlunoDirect : false,
         type: activeCategory,
         title,
         message,
@@ -673,6 +844,7 @@ export default function ADAdminPushTestPage() {
         metadata: {
           presetId: selectedPresetId,
           source: 'admin_push_tester',
+          recipientName: recipientDisplayName,
         },
       }
 
@@ -849,21 +1021,6 @@ export default function ADAdminPushTestPage() {
               <Trash2 size={13} />
               {isPurgingOrphans ? 'Limpando...' : 'Limpar Órfãos em Lote'}
             </button>
-
-            <Link
-              href="/diagnostico-push"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-                borderRadius: 10, border: '1px solid rgba(99, 102, 241, 0.4)',
-                background: 'rgba(99, 102, 241, 0.2)', color: '#c7d2fe',
-                fontSize: 12, fontWeight: 700, textDecoration: 'none',
-                transition: 'all 0.15s'
-              }}
-              title="Abrir tela dedicada de diagnóstico do aparelho"
-            >
-              <Smartphone size={13} />
-              Tela de Auditoria iOS
-            </Link>
           </div>
         </div>
 
@@ -948,14 +1105,6 @@ export default function ADAdminPushTestPage() {
         )}
       </div>
 
-      {/* ── CARD DE AUDITORIA COMPLETA DO APARELHO AO VIVO ── */}
-      <div style={{ marginBottom: 24 }}>
-        <DevicePushDiagnosticCard
-          title="Auditoria & Diagnóstico Nativo do Aparelho (OneSignal / iOS)"
-          description="Consulte e interaja diretamente com o SDK nativo OneSignal e os subsistemas do iOS sem intermediários."
-        />
-      </div>
-
       {/* ── GRID PRINCIPAL: CONTROLES & PREVIEW ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
         
@@ -969,20 +1118,69 @@ export default function ADAdminPushTestPage() {
                 <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99, 102, 241, 0.12)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13 }}>
                   1
                 </div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Para quem enviar? (Destinatário)</h3>
+                <div>
+                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Para quem enviar? (Destinatário)</h3>
+                  <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', margin: '2px 0 0' }}>
+                    Selecione um aluno/responsável, colaborador da escola ou usuário com acesso institucional / master.
+                  </p>
+                </div>
               </div>
-              {selectedAluno && (
+              {(selectedAluno || selectedColaborador) && (
                 <button
-                  onClick={() => { setSelectedAluno(null); setGuardians([]); setSelectedRespIds([]); }}
+                  onClick={handleClearRecipient}
                   style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
                 >
-                  Trocar aluno
+                  Trocar destinatário
                 </button>
               )}
             </div>
 
-            {!selectedAluno ? (
+            {!selectedAluno && !selectedColaborador ? (
               <div ref={searchContainerRef} style={{ position: 'relative', zIndex: 110 }}>
+                {/* Abas de Filtro de Categoria */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                  {[
+                    { id: 'todos', label: 'Todos', icon: Users, count: (alunos?.length || 0) + (colaboradores?.length || 0) },
+                    { id: 'alunos', label: 'Alunos & Família', icon: GraduationCap, count: alunos?.length || 0 },
+                    { id: 'colaboradores', label: 'Colaboradores', icon: Briefcase, count: colaboradores?.length || 0 },
+                    { id: 'master', label: 'Institucional & Master', icon: Crown, count: (colaboradores || []).filter((c: any) => c.isMaster || c.isInstitucional).length },
+                  ].map(tab => {
+                    const isActive = recipientTab === tab.id
+                    const Icon = tab.icon
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          setRecipientTab(tab.id as any)
+                          setIsSearchOpen(true)
+                        }}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          padding: '6px 12px', borderRadius: 10,
+                          fontSize: 12, fontWeight: isActive ? 700 : 600,
+                          border: isActive ? '1.5px solid #6366f1' : '1px solid hsl(var(--border-subtle))',
+                          background: isActive ? 'rgba(99, 102, 241, 0.12)' : 'hsl(var(--bg-main))',
+                          color: isActive ? '#6366f1' : 'hsl(var(--text-muted))',
+                          cursor: 'pointer', transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <Icon size={14} />
+                        <span>{tab.label}</span>
+                        <span style={{
+                          fontSize: 10, padding: '1px 6px', borderRadius: 8,
+                          background: isActive ? '#6366f1' : 'rgba(100, 116, 139, 0.15)',
+                          color: isActive ? '#fff' : 'inherit',
+                          fontWeight: 700
+                        }}>
+                          {tab.count}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Input de Busca */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, border: '1px solid hsl(var(--border-subtle))', background: 'hsl(var(--bg-main))' }}>
                   <Search size={18} color="hsl(var(--text-muted))" />
                   <input
@@ -993,62 +1191,134 @@ export default function ADAdminPushTestPage() {
                       setIsSearchOpen(true)
                     }}
                     onFocus={() => setIsSearchOpen(true)}
-                    placeholder="Buscar aluno por nome, matrícula ou turma..."
+                    placeholder={
+                      recipientTab === 'alunos'
+                        ? 'Buscar aluno por nome, matrícula ou turma...'
+                        : recipientTab === 'colaboradores'
+                        ? 'Buscar colaborador por nome, cargo ou e-mail...'
+                        : recipientTab === 'master'
+                        ? 'Buscar administrador master ou acesso institucional...'
+                        : 'Buscar por aluno, colaborador, cargo, matrícula ou e-mail...'
+                    }
                     style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: 14, color: 'inherit' }}
                   />
                   {searchTerm && (
-                    <button onClick={() => { setSearchTerm(''); setIsSearchOpen(false); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
+                    <button onClick={() => { setSearchTerm(''); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
                       <X size={16} />
                     </button>
                   )}
                 </div>
 
-                {/* Dropdown de sugestões de alunos */}
-                {isSearchOpen && filteredAlunos.length > 0 && (
+                {/* Dropdown de sugestões */}
+                {isSearchOpen && searchResults.length > 0 && (
                   <div style={{
                     position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
                     background: 'hsl(var(--bg-surface))', border: '1.5px solid hsl(var(--border-default))',
                     borderRadius: 14, boxShadow: '0 25px 60px -10px rgba(0,0,0,0.4), 0 0 0 1px rgba(99, 102, 241, 0.25)',
-                    zIndex: 99999, maxHeight: 340, overflowY: 'auto', padding: 8
+                    zIndex: 99999, maxHeight: 380, overflowY: 'auto', padding: 8
                   }}>
-                    {filteredAlunos.map((a: any) => (
-                      <div
-                        key={a.id}
-                        onClick={() => handleSelectAluno(a)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                          borderRadius: 10, cursor: 'pointer', transition: 'background 0.15s'
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <UserAvatar name={a.nome} fotoUrl={a.foto} size={36} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                            {a.nome}
-                          </div>
-                          <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', display: 'flex', gap: 8, marginTop: 2 }}>
-                            <span>Turma: <b>{a.turma || '—'}</b></span>
-                            <span>•</span>
-                            <span>Matrícula: {a.matricula || a.id}</span>
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 12, color: '#4f46e5', fontWeight: 600 }}>Selecionar →</span>
+                    {recipientTab === 'master' && !searchTerm && (
+                      <div style={{
+                        padding: '8px 12px', fontSize: 11, fontWeight: 700, color: '#d97706',
+                        background: 'rgba(245, 158, 11, 0.08)', borderRadius: 8, marginBottom: 6,
+                        display: 'flex', alignItems: 'center', gap: 6
+                      }}>
+                        <Crown size={13} /> Contas com Acesso Institucional & Master (clique para selecionar):
                       </div>
-                    ))}
+                    )}
+
+                    {searchResults.map((item: any) => {
+                      const isAluno = item._type === 'aluno'
+                      return (
+                        <div
+                          key={`${item._type}-${item.id}`}
+                          onClick={() => {
+                            if (isAluno) handleSelectAluno(item)
+                            else handleSelectColaborador(item)
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                            borderRadius: 10, cursor: 'pointer', transition: 'background 0.15s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.08)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <UserAvatar name={item.nome} fotoUrl={item.foto} size={38} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontWeight: 700, fontSize: 14, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                {item.nome}
+                              </span>
+                              {isAluno ? (
+                                <span style={{
+                                  fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700,
+                                  background: 'rgba(99, 102, 241, 0.12)', color: '#4f46e5'
+                                }}>
+                                  Aluno
+                                </span>
+                              ) : item.isMaster ? (
+                                <span style={{
+                                  fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 800,
+                                  background: 'rgba(245, 158, 11, 0.15)', color: '#d97706',
+                                  border: '1px solid rgba(245, 158, 11, 0.35)', display: 'inline-flex', alignItems: 'center', gap: 3
+                                }}>
+                                  <Crown size={10} /> Admin Master
+                                </span>
+                              ) : item.isInstitucional ? (
+                                <span style={{
+                                  fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700,
+                                  background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6',
+                                  border: '1px solid rgba(139, 92, 246, 0.3)'
+                                }}>
+                                  Institucional
+                                </span>
+                              ) : (
+                                <span style={{
+                                  fontSize: 10, padding: '1px 6px', borderRadius: 4, fontWeight: 700,
+                                  background: 'rgba(16, 185, 129, 0.15)', color: '#059669',
+                                  border: '1px solid rgba(16, 185, 129, 0.3)'
+                                }}>
+                                  Colaborador
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', display: 'flex', gap: 8, marginTop: 2 }}>
+                              {isAluno ? (
+                                <>
+                                  <span>Turma: <b>{item.turma || '—'}</b></span>
+                                  <span>•</span>
+                                  <span>Matrícula: {item.matricula || item.id}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>{item.cargo || item.perfil}</span>
+                                  {item.email && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{item.email}</span>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 12, color: '#4f46e5', fontWeight: 600 }}>Selecionar →</span>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
 
-                {isAlunosLoading && (
-                  <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 8 }}>Carregando lista de alunos...</p>
+                {(isAlunosLoading || isColaboradoresLoading) && (
+                  <p style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginTop: 8 }}>Carregando dados...</p>
                 )}
-                {!isAlunosLoading && searchTerm && filteredAlunos.length === 0 && (
+                {!isAlunosLoading && !isColaboradoresLoading && searchTerm && searchResults.length === 0 && (
                   <p style={{ fontSize: 13, color: 'hsl(var(--text-muted))', marginTop: 8, textAlign: 'center' }}>
-                    Nenhum aluno encontrado para &quot;{searchTerm}&quot;
+                    Nenhum resultado encontrado para &quot;{searchTerm}&quot;
                   </p>
                 )}
               </div>
-            ) : (
+            ) : selectedAluno ? (
               /* Aluno Selecionado */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{
@@ -1352,7 +1622,198 @@ export default function ADAdminPushTestPage() {
                   </label>
                 </div>
               </div>
-            )}
+            ) : selectedColaborador ? (
+              /* Colaborador / Administrador Master Selecionado */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 14, padding: 14,
+                  borderRadius: 12,
+                  background: selectedColaborador.isMaster
+                    ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)'
+                    : selectedColaborador.isInstitucional
+                    ? 'rgba(139, 92, 246, 0.07)'
+                    : 'rgba(99, 102, 241, 0.06)',
+                  border: `1.5px solid ${selectedColaborador.isMaster ? 'rgba(245, 158, 11, 0.35)' : selectedColaborador.isInstitucional ? 'rgba(139, 92, 246, 0.3)' : 'rgba(99, 102, 241, 0.2)'}`
+                }}>
+                  <UserAvatar name={selectedColaborador.nome} fotoUrl={selectedColaborador.foto} size={50} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 800, fontSize: 16, color: 'hsl(var(--text-main))' }}>
+                        {selectedColaborador.nome}
+                      </span>
+                      {selectedColaborador.isMaster && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+                          background: 'rgba(245, 158, 11, 0.15)', color: '#d97706',
+                          border: '1px solid rgba(245, 158, 11, 0.35)', display: 'inline-flex', alignItems: 'center', gap: 4
+                        }}>
+                          <Crown size={12} /> Administrador Master
+                        </span>
+                      )}
+                      {selectedColaborador.isInstitucional && !selectedColaborador.isMaster && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                          background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6',
+                          border: '1px solid rgba(139, 92, 246, 0.3)', display: 'inline-flex', alignItems: 'center', gap: 4
+                        }}>
+                          <Shield size={12} /> Acesso Institucional
+                        </span>
+                      )}
+                      {!selectedColaborador.isInstitucional && !selectedColaborador.isMaster && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                          background: 'rgba(16, 185, 129, 0.15)', color: '#059669',
+                          border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: 4
+                        }}>
+                          <Briefcase size={12} /> Colaborador
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
+                      <span style={{ background: 'hsl(var(--bg-main))', padding: '2px 8px', borderRadius: 6, border: '1px solid hsl(var(--border-subtle))' }}>
+                        Cargo: <b>{selectedColaborador.cargo || '—'}</b>
+                      </span>
+                      <span style={{ background: 'hsl(var(--bg-main))', padding: '2px 8px', borderRadius: 6, border: '1px solid hsl(var(--border-subtle))' }}>
+                        Perfil: <b>{selectedColaborador.perfil || '—'}</b>
+                      </span>
+                      {selectedColaborador.email && (
+                        <span style={{ background: 'hsl(var(--bg-main))', padding: '2px 8px', borderRadius: 6, border: '1px solid hsl(var(--border-subtle))' }}>
+                          E-mail: <b>{selectedColaborador.email}</b>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Aparelhos Conectados no OneSignal */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Smartphone size={15} color="#6366f1" />
+                      Dispositivos registrados no OneSignal ({colaboradorDevices.length}):
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => reloadColaboradorDevices()}
+                        disabled={isLoadingColaboradorDevices}
+                        style={{
+                          background: 'transparent', border: '1px solid hsl(var(--border-subtle))',
+                          borderRadius: 8, padding: '3px 8px', fontSize: 11, fontWeight: 600,
+                          color: 'hsl(var(--text-muted))', display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer'
+                        }}
+                      >
+                        <RefreshCw size={12} className={isLoadingColaboradorDevices ? 'animate-spin' : ''} />
+                        Atualizar
+                      </button>
+                      {colaboradorDevices.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleDeleteAllColaboradorDevices}
+                          disabled={isDeletingBatch}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            padding: '3px 8px', borderRadius: 8,
+                            background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                            fontSize: 11, fontWeight: 700, cursor: isDeletingBatch ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          <Trash2 size={11} /> {isDeletingBatch ? 'Excluindo...' : 'Limpar Sessões Deste Usuário'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isLoadingColaboradorDevices ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 0', fontSize: 13, color: 'hsl(var(--text-muted))' }}>
+                      <RefreshCw size={14} className="animate-spin" /> Consultando aparelhos e tokens no OneSignal...
+                    </div>
+                  ) : colaboradorDevices.length === 0 ? (
+                    <div style={{ padding: '14px', borderRadius: 10, background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)', fontSize: 13, color: '#d97706' }}>
+                      Nenhum smartphone ou navegador registrado no OneSignal para esta conta ainda. O colaborador precisa fazer login no app no celular ou navegador para sincronizar a sessão. O disparo de teste usará os aliases cadastrados (ID/e-mail).
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {colaboradorDevices.map((dev: any, dIdx: number) => (
+                        <div
+                          key={dev.id || dIdx}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '10px 14px', borderRadius: 10,
+                            background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.04)',
+                            border: `1px solid ${dev.isSubscribed ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.2)'}`,
+                            gap: 12, flexWrap: 'wrap'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                            <div style={{
+                              width: 34, height: 34, borderRadius: 10,
+                              background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 16, flexShrink: 0
+                            }}>
+                              {dev.tipo === 'iOS' ? '🍏' : dev.tipo === 'Android' ? '🤖' : '💻'}
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-main))' }}>
+                                {dev.modelo}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                                {dev.sistema && <span>{dev.sistema}</span>}
+                                <span>• {dev.sessoes} sessão{dev.sessoes > 1 ? 'ões' : ''}</span>
+                                {dev.lastActive && (
+                                  <span>• Visto em: {new Date(dev.lastActive).toLocaleDateString('pt-BR')} {new Date(dev.lastActive).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                )}
+                                {dev.tokenPreview && (
+                                  <span>• Token: <code>{dev.tokenPreview}</code></span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                              <span style={{
+                                fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6,
+                                background: dev.isSubscribed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.12)',
+                                color: dev.isSubscribed ? '#059669' : '#dc2626',
+                              }}>
+                                {dev.isSubscribed ? '✓ Push Ativo' : '✕ Desativado'}
+                              </span>
+                              <span style={{ fontSize: 9, color: dev.isSubscribed ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                                {dev.statusDescription || (dev.isSubscribed ? 'Recebe Notificações' : 'Sem permissão push')}
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteDevice(dev.id, dev.modelo || 'Aparelho')
+                              }}
+                              disabled={deletingDeviceId === dev.id}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '5px 8px', borderRadius: 6,
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                color: '#ef4444', fontSize: 10, fontWeight: 700,
+                                cursor: deletingDeviceId === dev.id ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.15s',
+                              }}
+                              title="Excluir esta sessão no OneSignal para reiniciar o registro no aparelho"
+                            >
+                              <Trash2 size={11} />
+                              {deletingDeviceId === dev.id ? '...' : 'Excluir'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {/* PASSO 2: SELEÇÃO DO TIPO DE NOTIFICAÇÃO PUSH */}

@@ -5,15 +5,18 @@ import { createAdminClient } from '@/lib/server/supabaseServerFactory'
 export const dynamic = 'force-dynamic'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {
-    const { bucket, fileName, folder = 'uploads' } = await request.json()
+    const { bucket: requestedBucket, fileName, folder = 'uploads' } = await request.json()
 
-    if (!bucket || !fileName) {
+    if (!requestedBucket || !fileName) {
       return NextResponse.json({ error: 'Faltam parâmetros obrigatórios: bucket, fileName' }, { status: 400 })
     }
+
+    const ALLOWED_BUCKETS = ['comunicados-midia', 'fotos-perfil', 'documentos']
+    const bucket = ALLOWED_BUCKETS.includes(requestedBucket) ? requestedBucket : 'comunicados-midia'
 
     const supabase = createAdminClient()
     

@@ -1,6 +1,11 @@
 'use client'
 
-// Retirado o import da Server Action generateSignedUploadUrl para evitar erros de registro no servidor
+import { supabase } from '@/lib/supabase'
+import { apiFetch } from '@/lib/api/apiClient'
+import { resolveMimeType } from './mimeUtils'
+
+// Re-exporta para manter 100% de compatibilidade reversa com arquivos clientes existentes
+export { resolveMimeType } from './mimeUtils'
 
 export interface UploadOptions {
   bucket: string
@@ -20,51 +25,23 @@ export interface UploadResult {
   error?: string
 }
 
-export function resolveMimeType(fileName: string, currentType?: string): string {
-  if (currentType && currentType !== 'application/octet-stream' && currentType.trim() !== '') {
-    return currentType
-  }
-  const ext = fileName.toLowerCase().split('.').pop() || ''
-  const mimeMap: Record<string, string> = {
-    // Imagens
-    jpg: 'image/jpeg',
-    jpeg: 'image/jpeg',
-    png: 'image/png',
-    webp: 'image/webp',
-    gif: 'image/gif',
-    bmp: 'image/bmp',
-    svg: 'image/svg+xml',
-    heic: 'image/heic',
-    heif: 'image/heif',
-    // Vídeos
-    mp4: 'video/mp4',
-    mov: 'video/quicktime',
-    webm: 'video/webm',
-    m4v: 'video/x-m4v',
-    '3gp': 'video/3gpp',
-    mkv: 'video/x-matroska',
-    avi: 'video/x-msvideo',
-    // Documentos
-    pdf: 'application/pdf',
-    doc: 'application/msword',
-    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    xls: 'application/vnd.ms-excel',
-    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  }
-  return mimeMap[ext] || 'application/octet-stream'
-}
-
 /**
  * Fallback transparente: envia o arquivo via rota de API servidora com autenticação e Service Role
  */
-async function fallbackServerUpload(bucket: string, folder: string, file: File): Promise<UploadResult> {
+async function fallbackServerUpload(
+  bucket: string,
+  folder: string,
+  file: File,
+  usageType: 'common' | 'fixed' = 'common'
+): Promise<UploadResult> {
   try {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('bucket', bucket)
     formData.append('folder', folder)
+    formData.append('usageType', usageType)
 
-    const res = await fetch('/api/upload-midia', {
+    const res = await apiFetch('/api/upload-midia', {
       method: 'POST',
       body: formData
     })
@@ -97,7 +74,12 @@ async function fallbackServerUpload(bucket: string, folder: string, file: File):
  * e evita timeouts ao usar URLs assinadas diretamente para o bucket,
  * com fallback automático para a rota de API caso o envio direto falhe.
  */
-export async function uploadFileToSupabase({ bucket, folder = 'uploads', file, usageType }: UploadOptions): Promise<UploadResult> {
+export async function uploadFileToSupabase({
+  bucket,
+  folder = 'uploads',
+  file,
+  usageType
+}: UploadOptions): Promise<UploadResult> {
   try {
     // 0. Validação prévia de tamanho (100MB é o limite configurado no Supabase Storage)
     const MAX_BUCKET_SIZE = 100 * 1024 * 1024
@@ -110,8 +92,8 @@ export async function uploadFileToSupabase({ bucket, folder = 'uploads', file, u
 
     const mimeType = resolveMimeType(file.name, file.type)
 
-    // 1. Obter URL assinada via API Route (evita UnrecognizedActionError do Next.js)
-    const signRes = await fetch('/api/upload-midia/sign', {
+    // 1. Obter URL assinada via API Route (com Bearer token via apiFetch)
+    const signRes = await apiFetch('/api/upload-midia/sign', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -122,45 +104,69 @@ export async function uploadFileToSupabase({ bucket, folder = 'uploads', file, u
     if (!signRes.ok) {
       const errData = await signRes.json().catch(() => ({}))
       console.warn('[uploadFileToSupabase] Falha ao obter URL assinada, tentando fallback:', errData.error)
-      return await fallbackServerUpload(bucket, folder, file)
+      return await fallbackServerUpload(bucket, folder, file, usageType)
     }
 
     const signedRes = await signRes.json()
 
-    // 2. Definir Cache-Control com base no uso
-    const cacheControl = usageType === 'fixed' 
-      ? 'max-age=31536000' // 1 ano para avatares, logos, etc.
-      : 'max-age=2592000'  // 30 dias para comunicados, arquivos comuns
+    // 2. Definir Cache-Control com base no uso (em segundos para Supabase)
+    const cacheControlSeconds = usageType === 'fixed'
+      ? '31536000' // 1 ano para avatares, logos, etc.
+      : '2592000'  // 30 dias para comunicados, arquivos comuns
 
-    // 3. Upload direto para o Supabase via PUT (usando a URL assinada)
+    // 3. Upload direto para o Supabase Storage via URL assinada
     let directUploadOk = false
     let directError = ''
 
+    // 3.1 Tentativa prioritária: SDK Supabase oficial (monta FormData correto e evita cabeçalhos customizados que causam CORS)
     try {
-      const uploadRes = await fetch(signedRes.signedUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': mimeType,
-          'Cache-Control': cacheControl
-        }
-      })
+      if (signedRes.token && signedRes.path) {
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from(bucket)
+          .uploadToSignedUrl(signedRes.path, signedRes.token, file, {
+            cacheControl: cacheControlSeconds,
+            contentType: mimeType,
+            upsert: false
+          })
 
-      if (uploadRes.ok) {
-        directUploadOk = true
-      } else {
-        const errText = await uploadRes.text().catch(() => '')
-        console.warn('[uploadFileToSupabase] Direct upload failed with status:', uploadRes.status, errText)
-
-        if (uploadRes.status === 413 || errText.includes('EntityTooLarge') || errText.includes('exceeded the maximum')) {
-          return { ok: false, error: `O arquivo "${file.name}" excede o limite máximo de 100MB suportado pelo servidor.` }
-        }
-        if (uploadRes.status === 415 || errText.includes('InvalidMimeType')) {
-          directError = `Formato de mídia não suportado (${mimeType}).`
+        if (!uploadErr && uploadData) {
+          directUploadOk = true
+        } else if (uploadErr) {
+          console.warn('[uploadFileToSupabase] SDK uploadToSignedUrl falhou:', uploadErr.message)
+          directError = uploadErr.message
         }
       }
-    } catch (netErr: any) {
-      console.warn('[uploadFileToSupabase] Direct PUT fetch threw error (CORS/rede):', netErr)
+    } catch (sdkErr: any) {
+      console.warn('[uploadFileToSupabase] Exceção no SDK uploadToSignedUrl:', sdkErr)
+    }
+
+    // 3.2 Tentativa secundária: Se o SDK falhou mas há URL assinada direta, tentar via FormData PUT nativo
+    if (!directUploadOk && signedRes.signedUrl) {
+      try {
+        const formBody = new FormData()
+        formBody.append('cacheControl', cacheControlSeconds)
+        formBody.append('', file)
+
+        const uploadRes = await fetch(signedRes.signedUrl, {
+          method: 'PUT',
+          body: formBody
+        })
+
+        if (uploadRes.ok) {
+          directUploadOk = true
+        } else {
+          const errText = await uploadRes.text().catch(() => '')
+          console.warn('[uploadFileToSupabase] Direct FormData PUT falhou:', uploadRes.status, errText)
+          if (uploadRes.status === 413 || errText.includes('EntityTooLarge') || errText.includes('exceeded the maximum')) {
+            return { ok: false, error: `O arquivo "${file.name}" excede o limite máximo de 100MB suportado pelo servidor.` }
+          }
+          if (uploadRes.status === 415 || errText.includes('InvalidMimeType')) {
+            directError = `Formato de mídia não suportado (${mimeType}).`
+          }
+        }
+      } catch (putErr: any) {
+        console.warn('[uploadFileToSupabase] Exceção no Direct FormData PUT:', putErr)
+      }
     }
 
     if (directUploadOk) {
@@ -171,9 +177,9 @@ export async function uploadFileToSupabase({ bucket, folder = 'uploads', file, u
       }
     }
 
-    // 4. Fallback automático transparente via rota servidora
+    // 4. Fallback automático transparente via rota servidora (com apiFetch e Service Role)
     console.info('[uploadFileToSupabase] Tentando fallback para /api/upload-midia...')
-    const fallbackResult = await fallbackServerUpload(bucket, folder, file)
+    const fallbackResult = await fallbackServerUpload(bucket, folder, file, usageType)
     if (fallbackResult.ok) {
       return fallbackResult
     }

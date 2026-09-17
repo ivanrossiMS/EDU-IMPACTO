@@ -180,6 +180,8 @@ async function fetchDevicesForGuardian(r: {
   authId?: string | null
   responsavel_id?: string | null
   email?: string | null
+  colaborador_id?: string | null
+  system_user_id?: string | null
 }): Promise<any[]> {
   const deviceMap = new Map<string, any>()
 
@@ -195,7 +197,19 @@ async function fetchDevicesForGuardian(r: {
     devs.forEach((d: any) => deviceMap.set(d.id, d))
   }
 
-  // 3. Tenta por email se ainda não localizou ou para cobrir navegadores web adicionais
+  // 3. Tenta por colaborador_id
+  if (r.colaborador_id) {
+    const devs = await fetchOneSignalUserDevices(r.colaborador_id, 'colaborador_id')
+    devs.forEach((d: any) => deviceMap.set(d.id, d))
+  }
+
+  // 4. Tenta por system_user_id
+  if (r.system_user_id) {
+    const devs = await fetchOneSignalUserDevices(r.system_user_id, 'system_user_id')
+    devs.forEach((d: any) => deviceMap.set(d.id, d))
+  }
+
+  // 5. Tenta por email se ainda não localizou ou para cobrir navegadores web adicionais
   if (r.email) {
     const devs = await fetchOneSignalUserDevices(r.email, 'email')
     devs.forEach((d: any) => deviceMap.set(d.id, d))
@@ -218,6 +232,8 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const alunoId = searchParams.get('aluno_id')
+  const colaboradorId = searchParams.get('colaborador_id') || searchParams.get('usuario_id')
+  const wantColaboradores = searchParams.get('colaboradores') === 'true'
   const wantLogs = searchParams.get('logs') === 'true'
   const wantConfig = searchParams.get('config') === 'true'
   const supabase = supabaseServer
@@ -264,11 +280,118 @@ export async function GET(request: Request) {
       if (devices.length === 0 && !isEmail) {
         devices = await fetchOneSignalUserDevices(userForDevices, 'aluno_id')
       }
+      if (devices.length === 0 && !isEmail) {
+        devices = await fetchOneSignalUserDevices(userForDevices, 'colaborador_id')
+      }
+      if (devices.length === 0 && !isEmail) {
+        devices = await fetchOneSignalUserDevices(userForDevices, 'system_user_id')
+      }
       return NextResponse.json({
         user: userForDevices,
         dispositivos: devices,
         totalDispositivos: devices.length,
         dispositivosAtivos: devices.filter((d: any) => d.isSubscribed).length,
+      })
+    }
+
+    // 2.2 Lista de colaboradores para o dropdown / autocomplete de teste
+    if (wantColaboradores) {
+      const { data: rawUsers, error: usersErr } = await supabase
+        .from('system_users')
+        .select('id, nome, email, cargo, perfil, status, dados, auth_id')
+        .order('nome', { ascending: true })
+
+      if (usersErr) {
+        return NextResponse.json({ error: usersErr.message }, { status: 400 })
+      }
+
+      const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master']
+      const mapped = (rawUsers || []).map((u: any) => {
+        const cargoLower = String(u.cargo || '').toLowerCase().trim()
+        const perfilLower = String(u.perfil || '').toLowerCase().trim()
+        const isMaster = masterRoles.includes(cargoLower) || masterRoles.includes(perfilLower) || String(u.nome || '').toLowerCase().includes('ivan rossi')
+        const isInstitucional = isMaster || ['Direção', 'Diretor Geral', 'Administrador'].includes(u.perfil)
+
+        return {
+          id: String(u.id),
+          nome: u.nome || 'Colaborador',
+          email: (u.email || '').trim().toLowerCase(),
+          cargo: u.cargo || 'Não definido',
+          perfil: u.perfil || 'Colaborador',
+          status: u.status || 'ativo',
+          foto: u.foto || u.dados?.foto || null,
+          auth_id: u.auth_id || null,
+          isMaster,
+          isInstitucional,
+        }
+      })
+
+      // Ordenar: Master admins e Institucional primeiro, depois ordem alfabética
+      mapped.sort((a, b) => {
+        if (a.isMaster && !b.isMaster) return -1
+        if (!a.isMaster && b.isMaster) return 1
+        if (a.isInstitucional && !b.isInstitucional) return -1
+        if (!a.isInstitucional && b.isInstitucional) return 1
+        return a.nome.localeCompare(b.nome)
+      })
+
+      return NextResponse.json({ colaboradores: mapped })
+    }
+
+    // 2.3 Inspeção detalhada de um Colaborador / Administrador e seus aparelhos no OneSignal
+    if (colaboradorId) {
+      const cleanColabId = colaboradorId.trim()
+
+      const { data: userRow, error: uErr } = await supabase
+        .from('system_users')
+        .select('id, nome, email, cargo, perfil, status, dados, auth_id')
+        .or(`id.eq.${cleanColabId},auth_id.eq.${cleanColabId},email.eq.${cleanColabId}`)
+        .maybeSingle()
+
+      if (uErr || !userRow) {
+        return NextResponse.json({ error: 'Colaborador / Usuário não encontrado no banco de dados.' }, { status: 404 })
+      }
+
+      const masterRoles = ['administrador master', 'administrador', 'admin', 'diretor geral', 'diretora geral', 'master']
+      const cargoLower = String(userRow.cargo || '').toLowerCase().trim()
+      const perfilLower = String(userRow.perfil || '').toLowerCase().trim()
+      const isMaster = masterRoles.includes(cargoLower) || masterRoles.includes(perfilLower) || String(userRow.nome || '').toLowerCase().includes('ivan rossi')
+      const isInstitucional = isMaster || ['Direção', 'Diretor Geral', 'Administrador'].includes(userRow.perfil)
+
+      const devices = await fetchDevicesForGuardian({
+        authId: userRow.auth_id || (String(userRow.id).length > 20 ? userRow.id : null),
+        system_user_id: String(userRow.id),
+        colaborador_id: String(userRow.id),
+        email: userRow.email,
+      })
+
+      const ativos = devices.filter((d: any) => d.isSubscribed).length
+
+      // Buscar logs recentes específicos deste colaborador
+      const { data: recentLogs } = await supabase
+        .from('agenda_push_logs')
+        .select('*')
+        .or(`item_id.ilike.%${userRow.id}%,user_id.eq.${userRow.auth_id || userRow.id},message.ilike.%${userRow.nome}%`)
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      return NextResponse.json({
+        colaborador: {
+          id: String(userRow.id),
+          nome: userRow.nome,
+          email: userRow.email,
+          cargo: userRow.cargo || 'Não definido',
+          perfil: userRow.perfil || 'Colaborador',
+          status: userRow.status || 'ativo',
+          foto: (userRow as any).foto || userRow.dados?.foto || null,
+          auth_id: userRow.auth_id || null,
+          isMaster,
+          isInstitucional,
+        },
+        dispositivos: devices,
+        totalDispositivos: devices.length,
+        dispositivosAtivos: ativos,
+        recentLogs: recentLogs || [],
       })
     }
 
@@ -501,7 +624,7 @@ export async function GET(request: Request) {
       })
     }
 
-    return NextResponse.json({ message: 'Parâmetro aluno_id, logs ou config não especificado.' }, { status: 400 })
+    return NextResponse.json({ message: 'Parâmetro aluno_id, colaborador_id, colaboradores, logs ou config não especificado.' }, { status: 400 })
   } catch (err: any) {
     console.error('[API Push Test GET] Erro:', err)
     return NextResponse.json({ error: err.message || 'Erro interno ao consultar dados.' }, { status: 500 })
@@ -541,6 +664,7 @@ export async function POST(request: Request) {
   try {
     const {
       alunoId,
+      colaboradorId,
       responsavelIds = [],
       includeAlunoDirect = false,
       type = 'test',
@@ -562,8 +686,36 @@ export async function POST(request: Request) {
     }
 
     let studentData: any = null
+    let colabData: any = null
     const targetUserIdsSet = new Set<string>()
     const targetDetails: any[] = []
+
+    // 0. Resolução de Colaborador / Administrador se fornecido
+    if (colaboradorId) {
+      const { data: colab } = await supabase
+        .from('system_users')
+        .select('id, nome, email, cargo, perfil, auth_id')
+        .or(`id.eq.${String(colaboradorId).trim()},auth_id.eq.${String(colaboradorId).trim()},email.eq.${String(colaboradorId).trim()}`)
+        .maybeSingle()
+
+      if (colab) {
+        colabData = colab
+        if (colab.id) targetUserIdsSet.add(String(colab.id))
+        if (colab.auth_id) targetUserIdsSet.add(String(colab.auth_id))
+        if (colab.email) targetUserIdsSet.add(String(colab.email).toLowerCase().trim())
+
+        targetDetails.push({
+          tipo: 'colaborador',
+          id: String(colab.id),
+          nome: colab.nome,
+          cargo: colab.cargo || 'Não informado',
+          perfil: colab.perfil || 'Colaborador',
+          email: colab.email,
+          authId: colab.auth_id || null,
+          descricao: `${colab.cargo || colab.perfil || 'Colaborador'} (${colab.email || colab.id})`,
+        })
+      }
+    }
 
     // 1. Resolução do Aluno se fornecido
     if (alunoId) {
@@ -735,27 +887,27 @@ export async function POST(request: Request) {
     const cleanTargetIds = Array.from(targetUserIdsSet).filter(Boolean)
 
     // Formatar texto com formatFriendlyStudentName exatamente como a Agenda Digital real
-    const rawNomeAluno = studentData?.nome || 'Aluno'
-    const nomeAluno = studentData?.nome ? formatFriendlyStudentName(studentData.nome) : 'Aluno'
-    const matriculaAluno = studentData?.matricula || ''
-    const turmaAluno = studentData?.turma || ''
+    const rawNomeAlvo = colabData?.nome || studentData?.nome || 'Destinatário'
+    const nomeAlvo = colabData?.nome ? colabData.nome : (studentData?.nome ? formatFriendlyStudentName(studentData.nome) : 'Destinatário')
+    const matriculaAlvo = studentData?.matricula || (colabData ? (colabData.cargo || colabData.perfil || '') : '')
+    const turmaAlvo = colabData ? (colabData.cargo || colabData.perfil || 'Equipe Escolar') : (studentData?.turma || '')
     const agoraHora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
     const finalTitle = title
-      .replace(/{aluno}/gi, nomeAluno)
-      .replace(/{turma}/gi, turmaAluno)
+      .replace(/{aluno}/gi, nomeAlvo)
+      .replace(/{turma}/gi, turmaAlvo)
       .replace(/{hora}/gi, agoraHora)
 
     const finalMessage = message
-      .replace(/{aluno}/gi, nomeAluno)
-      .replace(/{turma}/gi, turmaAluno)
-      .replace(/{matricula}/gi, matriculaAluno)
+      .replace(/{aluno}/gi, nomeAlvo)
+      .replace(/{turma}/gi, turmaAlvo)
+      .replace(/{matricula}/gi, matriculaAlvo)
       .replace(/{hora}/gi, agoraHora)
 
     // Gerar item_id único para testes (evita bloqueio pela deduplicação)
     const uniqueTestId = bypassDedup
       ? `test-${type}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`
-      : `test-${type}-${alunoId || 'general'}`
+      : `test-${type}-${colabData?.id || alunoId || 'general'}`
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://resilient-cuchufli-2b4125.netlify.app'
     let resolvedTargetUrl = targetUrl || `/agenda-digital${studentData?.id ? `/${studentData.id}` : ''}`
@@ -767,7 +919,7 @@ export async function POST(request: Request) {
       : `${appUrl}${resolvedTargetUrl.startsWith('/') ? '' : '/'}${resolvedTargetUrl}`
 
     console.log(`🧪 [API Push Test] Disparando push de teste [${type}] para ${cleanTargetIds.length} alvo(s)...`, {
-      aluno: nomeAluno,
+      aluno: nomeAlvo,
       targetCount: cleanTargetIds.length,
       item_id: uniqueTestId,
     })
@@ -784,7 +936,7 @@ export async function POST(request: Request) {
         item_id: uniqueTestId,
         is_test: true,
         aluno_id: studentData?.id || alunoId || null,
-        aluno_nome: nomeAluno,
+        aluno_nome: nomeAlvo,
         timestamp: new Date().toISOString(),
         ...metadata,
       },
@@ -901,16 +1053,19 @@ export async function DELETE(request: Request) {
     const subscriptionIds = Array.isArray(body.subscriptionIds) ? body.subscriptionIds : (subscriptionId ? [subscriptionId] : [])
     const responsavelId = body.responsavelId || searchParams.get('responsavelId')
     const authId = body.authId || searchParams.get('authId')
+    const colabId = body.colaboradorId || body.userId || searchParams.get('colaboradorId') || searchParams.get('userId')
     const clearAllForUser = body.clearAllForUser || searchParams.get('clearAllForUser') === 'true'
     const clearAllOrphans = body.clearAllOrphans || searchParams.get('clearAllOrphans') === 'true'
 
     const targetsToDelete = new Set<string>(subscriptionIds.filter(Boolean))
 
-    // 1. Se solicitado excluir todas as sessões de um responsável
-    if ((responsavelId || authId) && (clearAllForUser || targetsToDelete.size === 0)) {
+    // 1. Se solicitado excluir todas as sessões de um responsável ou colaborador
+    if ((responsavelId || authId || colabId) && (clearAllForUser || targetsToDelete.size === 0)) {
       const devs = await fetchDevicesForGuardian({
         authId: authId || null,
         responsavel_id: responsavelId || null,
+        colaborador_id: colabId || null,
+        system_user_id: colabId || null,
       })
       devs.forEach((d: any) => {
         if (d.id) targetsToDelete.add(d.id)

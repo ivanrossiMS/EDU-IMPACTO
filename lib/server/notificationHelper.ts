@@ -1042,6 +1042,16 @@ export async function getStudentTargetsForComunicados(dados: TargetParams | null
       }))
     }
 
+    // Para relatórios individuais de alunos (AD-COM-REL-STU- / tipoRelatorio individual),
+    // o destinatário exclusivo são os responsáveis do aluno. Colaboradores e Administradores Institucionais
+    // recebem apenas o comunicado consolidado da turma (AD-COM-REL-COLAB-), evitando enxurrada de notificações.
+    if (isIndividualStudentReport) {
+      return {
+        students: studentsResult,
+        directColaboradores: []
+      }
+    }
+
     // Mapear colaboradoresIds para incluir IDs de system_users, funcionarios e Auth UUIDs (OneSignal external_id)
     const finalColabIds = new Set<string>()
     colaboradoresIds.forEach(id => {

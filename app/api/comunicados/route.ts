@@ -501,8 +501,12 @@ export async function POST(request: Request) {
         const allPushPromises = [];
         for (const row of rows) {
           const isInterno = row.destino === 'interno';
-          const isIndividualStudentReport = Boolean(row.id && String(row.id).startsWith('AD-COM-REL-STU-'));
-          const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(row.dados || {}), id: row.id });
+          const isIndividualStudentReport = Boolean(
+            (row.id && String(row.id).startsWith('AD-COM-REL-STU-')) ||
+            row.tipoRelatorio === 'individual' ||
+            row.dados?.tipoRelatorio === 'individual'
+          );
+          const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(row.dados || {}), id: row.id, tipoRelatorio: row.tipoRelatorio || row.dados?.tipoRelatorio });
           
           if (!isInterno) {
             if (isIndividualStudentReport) {
@@ -558,7 +562,7 @@ export async function POST(request: Request) {
             }
           }
 
-          if (directColaboradores.length > 0) {
+          if (directColaboradores.length > 0 && !isIndividualStudentReport) {
             allPushPromises.push(
               sendAgendaPushNotification({
                 type: 'comunicados',
@@ -637,8 +641,12 @@ export async function POST(request: Request) {
     // 3. Disparar Push em background apenas se tudo deu certo
     after(async () => {
       const isInterno = data.destino === 'interno';
-      const isIndividualStudentReport = Boolean(data.id && String(data.id).startsWith('AD-COM-REL-STU-'));
-      const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(data.dados || {}), id: data.id });
+      const isIndividualStudentReport = Boolean(
+        (data.id && String(data.id).startsWith('AD-COM-REL-STU-')) ||
+        data.tipoRelatorio === 'individual' ||
+        data.dados?.tipoRelatorio === 'individual'
+      );
+      const { students, directColaboradores } = await getStudentTargetsForComunicados({ ...(data.dados || {}), id: data.id, tipoRelatorio: data.tipoRelatorio || data.dados?.tipoRelatorio });
       console.log(`[Push Comunicado][${data.id}] students=${students.length} colaboradores=${directColaboradores.length} destino=${data.destino} funcionariosIds=${JSON.stringify(data.dados?.funcionariosIds || [])}`);
       const pushPromises = [];
       
@@ -696,7 +704,7 @@ export async function POST(request: Request) {
         }
       }
 
-      if (directColaboradores.length > 0) {
+      if (directColaboradores.length > 0 && !isIndividualStudentReport) {
         console.log(`[Push Comunicado][${data.id}] Enviando push para ${directColaboradores.length} colaboradores:`, directColaboradores.slice(0, 10));
         pushPromises.push(
           sendAgendaPushNotification({

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createClient } from '@supabase/supabase-js'
-import { resolveMimeType } from '@/lib/upload/uploadClient'
+import { resolveMimeType } from '@/lib/upload/mimeUtils'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -10,7 +10,7 @@ export const maxDuration = 60
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   // Use service role key to bypass storage RLS (since we already authenticated the user)
@@ -72,6 +72,9 @@ export async function POST(request: Request) {
     const folder = requestedFolder ? requestedFolder.replace(/[^a-zA-Z0-9_-]/g, '') : 'uploads'
     const filePath = `${folder}/${Date.now()}_${safeBaseName || 'file'}${safeExt}`
 
+    const usageType = formData.get('usageType') as string
+    const cacheControl = usageType === 'fixed' ? '31536000' : '2592000'
+
     const arrayBuffer = await file.arrayBuffer()
 
     const { error } = await supabase.storage
@@ -79,7 +82,7 @@ export async function POST(request: Request) {
       .upload(filePath, arrayBuffer, {
         contentType: mimeType,
         upsert: false,
-        cacheControl: '2592000',
+        cacheControl,
       })
 
     if (error) {

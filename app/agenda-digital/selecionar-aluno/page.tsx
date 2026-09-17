@@ -1479,26 +1479,6 @@ function SelecionarAlunoContent() {
           <span>Sair da Conta</span>
         </button>
       </footer>
-
-      <div style={{ textAlign: 'center', marginTop: -20, marginBottom: 36, position: 'relative', zIndex: 10 }}>
-        <Link
-          href="/diagnostico-push"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 11,
-            color: 'rgba(148, 163, 184, 0.7)',
-            textDecoration: 'none',
-            padding: '6px 14px',
-            borderRadius: 100,
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-          }}
-        >
-          <span>🔔</span> Diagnóstico de Notificações
-        </Link>
-      </div>
     </div>
     </>
   )
