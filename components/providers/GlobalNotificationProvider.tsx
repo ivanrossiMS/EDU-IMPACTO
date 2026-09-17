@@ -416,23 +416,18 @@ export function GlobalNotificationProvider() {
     if (!hydrated) return
 
     if (currentUser?.id) {
-      // Debounce de 300ms: garante que o clearUser() do logout anterior (assíncrono) tenha
-      // tempo de completar antes de chamarmos syncUser(), evitando corrida entre as duas operações.
-      const debounceTimer = setTimeout(() => {
-        notificationService.syncUser(currentUser).catch(err => {
-          console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
-        })
+      // Sincroniza imediatamente sem debounce (a serialização interna do notificationService
+      // já impede corridas, garantindo que navegações rápidas não cancelem a sincronização).
+      notificationService.syncUser(currentUser).catch(err => {
+        console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
+      })
 
-        // Retry de segurança: 4 segundos após o login, sincroniza novamente para capturar
-        // casos onde o SDK OneSignal precisou de mais tempo para se recuperar do logout anterior.
-        const retryTimer = setTimeout(() => {
-          notificationService.syncUser(currentUser).catch(() => {})
-        }, 4000)
+      // Retry de segurança após 3 segundos para garantir que tokens assíncronos do APNs sejam vinculados
+      const retryTimer = setTimeout(() => {
+        notificationService.syncUser(currentUser).catch(() => {})
+      }, 3000)
 
-        return () => clearTimeout(retryTimer)
-      }, 300)
-
-      return () => clearTimeout(debounceTimer)
+      return () => clearTimeout(retryTimer)
     } else {
       notificationService.clearUser().catch(err => {
         console.warn('[GlobalPush] Aviso no logout do usuário:', err)

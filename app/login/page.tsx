@@ -603,25 +603,24 @@ export default function LoginPage() {
         }
       } catch (e) {}
 
-      // ── Sincronização OneSignal após Login ────────────────────────────────
-      // Essencial para o ciclo logout → login: o GlobalNotificationProvider pode
-      // disparar syncUser antes do SDK estar pronto. Aqui forçamos a sincronização
-      // com delay de 500ms para dar tempo ao SDK de se recuperar do estado pós-logout.
-      const userObjForSync = userObj
-      setTimeout(() => {
-        notificationService.syncUser(userObjForSync).catch(() => {})
-      }, 500)
-      // Retry de segurança após 5s — cobre casos onde o SDK ainda estava reinicializando
-      setTimeout(() => {
-        notificationService.syncUser(userObjForSync).catch(() => {})
-      }, 5000)
+      // ── Sincronização OneSignal imediata antes de navegar ────────────────
+      // Garante que o aparelho seja associado ao usuário antes do redirecionamento
+      // descarregar a página. O timeout de 1200ms garante que o login nunca trave.
+      try {
+        await Promise.race([
+          notificationService.syncUser(userObj),
+          new Promise(r => setTimeout(r, 1200))
+        ])
+      } catch (e) {
+        console.warn('[Login] Aviso ao sincronizar push no OneSignal:', e)
+      }
       // ─────────────────────────────────────────────────────────────────────
 
       // Função de navegação segura que garante que os cookies sejam consolidados
       const navigateSafely = (targetUrl: string) => {
         setTimeout(() => {
           window.location.href = targetUrl
-        }, 120)
+        }, 80)
       }
 
       // Se houver notificação pendente ou redirect especificado, vai direto para ele!

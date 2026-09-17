@@ -28,6 +28,7 @@ const PUBLIC_PATHS = [
   '/api/auth/reset-access',
   '/api/auth/debug-db',
   '/api/test',
+  '/api/push/sync-subscription', // Sincronização direta de push OneSignal (App Móvel / WebView)
   '/monitor-tv',        // painel TV da portaria
   '/painel-tablet',     // tablet da portaria
   '/api/portaria/webhook', // catraca iDFace — recebe push dos dispositivos (auth por token próprio)
