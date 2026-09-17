@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { useApp, loadSettingAsync, saveSetting, removeSettingAsync } from '@/lib/context'
 import { DEFAULT_PERFIS } from '@/lib/dataContext'
@@ -963,17 +964,51 @@ export default function LoginPage() {
             Seus dados estão protegidos com<br/>criptografia de ponta.
           </p>
         </div>
-        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginBottom: 20 }}>Desenvolvido por Ivan Rossi © 2025 Todos os direitos reservados</p>
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 16px', borderRadius:100, border:'1px solid rgba(16,185,129,0.15)', background: 'rgba(16,185,129,0.05)' }}>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginBottom: 16 }}>Desenvolvido por Ivan Rossi © 2025 Todos os direitos reservados</p>
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 16px', borderRadius:100, border:'1px solid rgba(16,185,129,0.15)', background: 'rgba(16,185,129,0.05)', marginBottom: 16 }}>
           <div style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', boxShadow:'0 0 8px #10b981' }} />
           <span style={{ fontSize:11, color:'#34d399', fontWeight:800, letterSpacing:'0.08em' }}>SISTEMA SEGURO</span>
         </div>
 
-        
-        
+        <Link
+          href="/diagnostico-push"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 11,
+            color: 'rgba(148, 163, 184, 0.8)',
+            textDecoration: 'none',
+            padding: '6px 14px',
+            borderRadius: 100,
+            background: 'rgba(255, 255, 255, 0.06)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+          }}
+        >
+          <span>🔔</span> Diagnóstico Push
+        </Link>
       </div>
 
-      <div className="hide-on-mobile" style={{ marginTop:28, textAlign:'center' }}>
+      <div className="hide-on-mobile" style={{ marginTop:24, textAlign:'center' }}>
+        <div style={{ marginBottom: 10 }}>
+          <Link
+            href="/diagnostico-push"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 11,
+              color: 'rgba(148, 163, 184, 0.7)',
+              textDecoration: 'none',
+              padding: '6px 14px',
+              borderRadius: 100,
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+            }}
+          >
+            <span>🔔</span> Diagnóstico de Notificações Push
+          </Link>
+        </div>
         <p style={{ fontSize:11, color:'rgba(255,255,255,0.13)' }}>Desenvolvido por Ivan Rossi © 2025 Todos os direitos reservados</p>
       </div>
     </div>

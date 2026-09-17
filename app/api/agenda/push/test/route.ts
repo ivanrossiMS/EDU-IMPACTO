@@ -514,13 +514,31 @@ export async function GET(request: Request) {
  * Dispara notificação push de teste para o aluno e seus responsáveis.
  */
 export async function POST(request: Request) {
-  const auth = await verifyAdminAuth()
-  if (!auth.authorized) return auth.errorResponse!
+  let body: any = {}
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Corpo da requisição inválido.' }, { status: 400 })
+  }
+
+  const targetSubId = body.targetSubscriptionId || body.targetSubscriptionIds?.[0]
+  let authUser: any = null
+
+  if (targetSubId) {
+    const { user, errorResponse } = await requireAuth()
+    if (errorResponse || !user) {
+      return errorResponse || NextResponse.json({ error: 'Não autorizado para teste de dispositivo.' }, { status: 401 })
+    }
+    authUser = user
+  } else {
+    const auth = await verifyAdminAuth()
+    if (!auth.authorized) return auth.errorResponse!
+    authUser = auth.user
+  }
 
   const supabase = supabaseServer
 
   try {
-    const body = await request.json()
     const {
       alunoId,
       responsavelIds = [],
@@ -529,6 +547,7 @@ export async function POST(request: Request) {
       title,
       message,
       targetUrl,
+      targetSubscriptionId,
       metadata = {},
       bypassDedup = true,
       ignoreGlobalConfig = true,
@@ -702,13 +721,13 @@ export async function POST(request: Request) {
     }
 
     // Se nenhum destinatário for encontrado, adicionar o ID do admin para teste de envio
-    if (targetUserIdsSet.size === 0) {
-      const adminId = String(auth.user.id)
+    if (targetUserIdsSet.size === 0 && !targetSubscriptionId) {
+      const adminId = String(authUser.id)
       targetUserIdsSet.add(adminId)
       targetDetails.push({
         tipo: 'admin_fallback',
         id: adminId,
-        nome: (auth.user as any).nome || 'Administrador (Auto-teste)',
+        nome: (authUser as any).nome || 'Administrador (Auto-teste)',
         descricao: 'Nenhum responsável encontrado para o aluno; teste redirecionado para o seu usuário.',
       })
     }
@@ -757,7 +776,8 @@ export async function POST(request: Request) {
     const pushResult = await sendPushNotification({
       title: finalTitle,
       body: finalMessage,
-      targetUserIds: cleanTargetIds,
+      targetUserIds: targetSubscriptionId ? undefined : cleanTargetIds,
+      targetSubscriptionIds: targetSubscriptionId ? [String(targetSubscriptionId).trim()] : undefined,
       url: finalTargetUrl,
       data: {
         type: type as AgendaPushType,
@@ -803,7 +823,7 @@ export async function POST(request: Request) {
     const { data: savedLog, error: logSaveError } = await supabase
       .from('agenda_push_logs')
       .insert({
-        user_id: auth.user.id,
+        user_id: authUser.id,
         type: type,
         item_id: uniqueTestId,
         title: finalTitle,

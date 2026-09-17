@@ -62,3 +62,58 @@ export interface NotificationDiagnosticState {
   error: string | null
   updatedAt: string
 }
+
+export interface DiagnosticLogEntry {
+  id: string
+  timestamp: string
+  action: string
+  status: 'ok' | 'error' | 'pending' | 'info'
+  details?: any
+  error?: string | null
+}
+
+export interface DetailedDeviceDiagnostic {
+  appInfo: {
+    name: string
+    id: string
+    version: string
+    build: string
+  }
+  platform: 'ios' | 'android' | 'web'
+  isNative: boolean
+  oneSignalAppId: string
+  subscriptionId: string | null
+  oneSignalId: string | null
+  externalId: string | null
+  currentUser: {
+    id: string | null
+    email: string | null
+    nome: string | null
+    perfil: string | null
+    cargo: string | null
+    responsavelId: string | null
+    alunoId: string | null
+  } | null
+  identityMatch: {
+    isMatched: boolean
+    details: string
+  }
+  permission: {
+    permissionStatus: NotificationPermissionStatus
+    nativePermissionCode: number | null
+    nativePermissionLabel: string
+    hasPermission: boolean
+    canRequestPermission: boolean
+    webPermission?: string
+  }
+  pushSubscription: {
+    optedIn: boolean
+    hasToken: boolean
+    tokenMasked: string | null
+    tokenLength: number
+    tokenType: 'APNs' | 'FCM' | 'WebPush' | 'None'
+  }
+  auditLogs: DiagnosticLogEntry[]
+  queryErrors: Array<{ field: string; error: string }>
+  timestamp: string
+}

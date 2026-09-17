@@ -17,6 +17,7 @@ import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 import { useApp } from '@/lib/context'
 import { toast } from 'sonner'
 import { notificationService } from '@/lib/notifications/notificationService'
+import { DevicePushDiagnosticCard } from '@/components/notifications/DevicePushDiagnosticCard'
 
 // ── Tipos e Presets de Notificação ──────────────────────────────────────────
 type PushCategory =
@@ -848,6 +849,21 @@ export default function ADAdminPushTestPage() {
               <Trash2 size={13} />
               {isPurgingOrphans ? 'Limpando...' : 'Limpar Órfãos em Lote'}
             </button>
+
+            <Link
+              href="/diagnostico-push"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                borderRadius: 10, border: '1px solid rgba(99, 102, 241, 0.4)',
+                background: 'rgba(99, 102, 241, 0.2)', color: '#c7d2fe',
+                fontSize: 12, fontWeight: 700, textDecoration: 'none',
+                transition: 'all 0.15s'
+              }}
+              title="Abrir tela dedicada de diagnóstico do aparelho"
+            >
+              <Smartphone size={13} />
+              Tela de Auditoria iOS
+            </Link>
           </div>
         </div>
 
@@ -930,6 +946,14 @@ export default function ADAdminPushTestPage() {
             </span>
           </div>
         )}
+      </div>
+
+      {/* ── CARD DE AUDITORIA COMPLETA DO APARELHO AO VIVO ── */}
+      <div style={{ marginBottom: 24 }}>
+        <DevicePushDiagnosticCard
+          title="Auditoria & Diagnóstico Nativo do Aparelho (OneSignal / iOS)"
+          description="Consulte e interaja diretamente com o SDK nativo OneSignal e os subsistemas do iOS sem intermediários."
+        />
       </div>
 
       {/* ── GRID PRINCIPAL: CONTROLES & PREVIEW ── */}

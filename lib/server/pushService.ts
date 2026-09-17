@@ -21,6 +21,10 @@ export interface PushPayload {
    * O OneSignal busca por external_id, responsavel_id e aluno_id.
    */
   targetUserIds?: string[]
+  /**
+   * Subscription IDs diretos (ou Player IDs do OneSignal) para teste direcionado ao aparelho.
+   */
+  targetSubscriptionIds?: string[]
   url?: string
   data?: Record<string, any>
   sendAfter?: string // formato: "2024-01-01 20:00:00 GMT-0300"
@@ -205,7 +209,9 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     )
   )
 
-  if (rawTargetUserIds.length === 0) {
+  const hasSubscriptionTargets = Boolean(params.targetSubscriptionIds && params.targetSubscriptionIds.length > 0)
+
+  if (rawTargetUserIds.length === 0 && !hasSubscriptionTargets) {
     console.log('[PushService] Nenhum destinatário válido informado. Push ignorado.')
     return { success: true, skipped: true }
   }
@@ -292,6 +298,22 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
       : {}),
     android_visibility: 1,
     ttl: 86400,
+  }
+
+  // ── Envio Direto por Subscription ID (para diagnóstico e teste físico do aparelho) ──
+  if (params.targetSubscriptionIds && params.targetSubscriptionIds.length > 0) {
+    const validSubIds = params.targetSubscriptionIds
+      .filter(id => id && typeof id === 'string' && id.trim().length > 0)
+      .map(id => id.trim())
+    if (validSubIds.length > 0) {
+      console.log(`🎯 [PushService] Envio direcionado a ${validSubIds.length} Subscription ID(s) específico(s):`, validSubIds)
+      const directSubPayload: Record<string, any> = {
+        ...commonFields,
+        include_subscription_ids: validSubIds,
+        include_player_ids: validSubIds,
+      }
+      return await attemptSend(directSubPayload, ONESIGNAL_REST_API_KEY)
+    }
   }
 
   // ── Tentativa 1: OneSignal User Model (external_id + colaborador_id + system_user_id + responsavel_id + aluno_id + email) ──

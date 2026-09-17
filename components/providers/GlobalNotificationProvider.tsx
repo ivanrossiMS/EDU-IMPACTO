@@ -158,9 +158,13 @@ export function GlobalNotificationProvider() {
   const { currentUser, hydrated } = useApp()
   const currentUserRef = useRef(currentUser)
   const hydratedRef = useRef(hydrated)
+  const wasLoggedInRef = useRef(false)
 
   useEffect(() => {
     currentUserRef.current = currentUser
+    if (currentUser?.id) {
+      wasLoggedInRef.current = true
+    }
   }, [currentUser])
 
   useEffect(() => {
@@ -427,6 +431,7 @@ export function GlobalNotificationProvider() {
     if (!hydrated) return
 
     if (currentUser?.id) {
+      wasLoggedInRef.current = true
       // Sincroniza imediatamente sem debounce (a serialização interna do notificationService
       // já impede corridas, garantindo que navegações rápidas não cancelem a sincronização).
       notificationService.syncUser(currentUser).catch(err => {
@@ -439,7 +444,10 @@ export function GlobalNotificationProvider() {
       }, 3000)
 
       return () => clearTimeout(retryTimer)
-    } else {
+    } else if (wasLoggedInRef.current) {
+      // Apenas executa clearUser se o usuário estava anteriormente logado nesta sessão e deslogou.
+      // Isso evita que visitantes ou usuários recém-abertos no /login fiquem limpando em loop.
+      wasLoggedInRef.current = false
       notificationService.clearUser().catch(err => {
         console.warn('[GlobalPush] Aviso no logout do usuário:', err)
       })
