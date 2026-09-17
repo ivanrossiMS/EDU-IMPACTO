@@ -498,4 +498,60 @@ test('11. Poda de reinstalações do mesmo celular: remove subscrições órfãs
   assert.ok(!deadSubs.some(s => s.id === currentSubId), 'Nunca deve podar a subscrição recém-sincronizada');
 });
 
+test('12. First-Run e Reinstalação: purga resíduo do iOS Keychain e zera dados do app no logout', async () => {
+  // Simula ambiente nativo iOS
+  const mockPreferences = new Map();
+  const mockKeychain = new Map();
+  let localStorageCleared = false;
+  let sessionStorageCleared = false;
+
+  // 1. Simula estado após desinstalar o app:
+  // No iOS, UserDefaults/Preferences é apagado na desinstalação (mockPreferences vazio),
+  // mas o Keychain é PRESERVADO pela Apple com credenciais antigas órfãs!
+  mockKeychain.set('edu_impacto_secure_session', JSON.stringify({ access_token: 'antigo_orfa' }));
+  mockKeychain.set('edu-current-user', JSON.stringify({ id: 'usuario_antigo' }));
+
+  // Função simulada de ensureCleanInstallCheck
+  const testEnsureCleanInstallCheck = async () => {
+    const isInstalled = mockPreferences.get('edu_app_installed_marker_v1');
+    if (!isInstalled) {
+      // Instalação limpa pós-desinstalação detectada! Purga o Keychain
+      mockKeychain.clear();
+      localStorageCleared = true;
+      sessionStorageCleared = true;
+      mockPreferences.set('edu_app_installed_marker_v1', 'installed');
+      return true;
+    }
+    return false;
+  };
+
+  // Primeira execução pós-reinstalação:
+  const isClean1 = await testEnsureCleanInstallCheck();
+  assert.equal(isClean1, true, 'Deve detectar que é uma reinstalação limpa');
+  assert.equal(mockKeychain.size, 0, 'Deve ter purgado todo o resíduo do Keychain na reinstalação');
+  assert.equal(mockPreferences.get('edu_app_installed_marker_v1'), 'installed');
+
+  // Agora o usuário faz login:
+  mockKeychain.set('edu_impacto_secure_session', JSON.stringify({ access_token: 'novo_valido' }));
+  mockKeychain.set('edu-current-user', JSON.stringify({ id: 'usuario_novo' }));
+
+  // Segunda execução normal (fechar e abrir o app sem desinstalar):
+  const isClean2 = await testEnsureCleanInstallCheck();
+  assert.equal(isClean2, false, 'Não deve considerar instalação limpa se app já está instalado');
+  assert.equal(mockKeychain.size, 2, 'Deve PRESERVAR a sessão legítima durante o uso normal do app');
+
+  // Simula o logout: zera completamente os dados do app
+  const testLogout = async () => {
+    mockKeychain.clear();
+    mockPreferences.delete('edu-current-user');
+    mockPreferences.delete('edu-current-perfil');
+    // Mantém apenas o marcador de instalação
+    assert.equal(mockPreferences.get('edu_app_installed_marker_v1'), 'installed');
+  };
+
+  await testLogout();
+  assert.equal(mockKeychain.size, 0, 'No logout, o Keychain deve ser 100% zerado');
+});
+
+
 

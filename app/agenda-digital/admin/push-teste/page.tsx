@@ -469,21 +469,32 @@ export default function ADAdminPushTestPage() {
   // 4.1 Limpeza de Sessões Duplicadas / Órfãs de um Usuário
   const [cleaningUserId, setCleaningUserId] = useState<string | null>(null)
 
-  const handleCleanupDevices = async (userId: string) => {
-    if (!userId || cleaningUserId) return
-    setCleaningUserId(userId)
+  const handleCleanupDevices = async (resp: any) => {
+    const authId = resp?.authId || ''
+    const email = resp?.email || ''
+    const responsavelId = String(resp?.responsavel_id || '')
+    const idKey = responsavelId || authId || email
+    if (!idKey || cleaningUserId) return
+    setCleaningUserId(idKey)
     try {
       const res = await fetch('/api/agenda/push/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'cleanup_user_devices',
-          userId,
+          userId: authId || email || responsavelId,
+          authId,
+          email,
+          responsavelId,
         }),
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        toast.success(data.message || 'Sessões antigas limpas com sucesso!')
+        if (data.cleanedCount > 0) {
+          toast.success(data.message || 'Sessões antigas limpas com sucesso!')
+        } else {
+          toast.info(data.message || 'Nenhum aparelho duplicado encontrado.')
+        }
         if (selectedAluno) {
           const reloadRes = await fetch(`/api/agenda/push/test?aluno_id=${encodeURIComponent(selectedAluno.id)}`)
           if (reloadRes.ok) {
@@ -492,7 +503,7 @@ export default function ADAdminPushTestPage() {
           }
         }
       } else {
-        toast.error(data.error || 'Erro ao limpar aparelhos duplicados.')
+        toast.error(data.message || data.error || 'Erro ao limpar aparelhos duplicados.')
       }
     } catch (err: any) {
       toast.error('Erro de conexão ao limpar aparelhos.')
@@ -1057,13 +1068,16 @@ export default function ADAdminPushTestPage() {
                                     <Smartphone size={13} color="#6366f1" /> Aparelhos registrados no OneSignal ({totalDevs}):
                                   </span>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    {totalDevs > 1 && (
+                                    {devices.some((d: any, idx: number) =>
+                                      !d.isSubscribed ||
+                                      devices.slice(idx + 1).some((o: any) => o.modelo === d.modelo && o.tipo === d.tipo)
+                                    ) && (
                                       <button
                                         type="button"
-                                        disabled={cleaningUserId === String(g.responsavel_id)}
+                                        disabled={cleaningUserId === (String(g.responsavel_id) || g.authId || g.email)}
                                         onClick={(e) => {
                                           e.stopPropagation()
-                                          handleCleanupDevices(String(g.responsavel_id))
+                                          handleCleanupDevices(g)
                                         }}
                                         style={{
                                           background: 'rgba(239, 68, 68, 0.08)',
@@ -1073,7 +1087,7 @@ export default function ADAdminPushTestPage() {
                                           fontSize: 10,
                                           fontWeight: 700,
                                           color: '#ef4444',
-                                          cursor: cleaningUserId === String(g.responsavel_id) ? 'wait' : 'pointer',
+                                          cursor: cleaningUserId === (String(g.responsavel_id) || g.authId || g.email) ? 'wait' : 'pointer',
                                           display: 'flex',
                                           alignItems: 'center',
                                           gap: 4,
@@ -1081,7 +1095,7 @@ export default function ADAdminPushTestPage() {
                                         title="Remove sessões antigas de reinstalações no mesmo aparelho"
                                       >
                                         <Trash2 size={10} />
-                                        {cleaningUserId === String(g.responsavel_id) ? 'Limpando...' : 'Limpar sessões antigas'}
+                                        {cleaningUserId === (String(g.responsavel_id) || g.authId || g.email) ? 'Limpando...' : 'Limpar sessões antigas'}
                                       </button>
                                     )}
                                     <span style={{

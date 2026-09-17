@@ -77,7 +77,7 @@ function removeDocumentCookie(key: string) {
 }
 
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin'
-import { SESSION_KEY } from '@/lib/auth/secureSession'
+import { SESSION_KEY, ensureCleanInstallCheck } from '@/lib/auth/secureSession'
 
 // Custom async storage adapter that evaluates native platform at runtime
 // and maintains document.cookie in sync so SSR/middleware can always see the session
@@ -87,6 +87,10 @@ const customStorage = {
 
     // 1. Native Secure Storage (iOS Keychain / Android Keystore) com retry
     if (Capacitor.isNativePlatform()) {
+      // Se for primeira inicialização pós-instalação ou reinstalação limpa, purga o Keychain
+      const isClean = await ensureCleanInstallCheck()
+      if (isClean) return null
+
       const secVal = await getSecureStorageWithRetry(key)
       const valid = decodeAndValidate(secVal)
       if (valid) return valid
