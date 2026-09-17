@@ -14,11 +14,11 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { tipo, ids, alunoId } = body
 
-    let isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável' || !!user.user_metadata?.responsavel_id || !!user.user_metadata?.aluno_id;
+    let isFamily = user.user_metadata?.perfil === 'Família' || user.user_metadata?.perfil === 'Responsável' || user.user_metadata?.perfil === 'Aluno' || user.user_metadata?.cargo === 'Aluno' || user.user_metadata?.cargo === 'Responsável' || !!user.user_metadata?.responsavel_id || !!user.user_metadata?.aluno_id;
     if (!isFamily) {
       const { data: dbUser } = await supabase.from('system_users').select('perfil, cargo').eq('id', user.id).maybeSingle();
       if (dbUser) {
-        isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
+        isFamily = dbUser.perfil === 'Família' || dbUser.perfil === 'Responsável' || dbUser.perfil === 'Aluno' || dbUser.cargo === 'Aluno' || dbUser.cargo === 'Responsável'
       } else {
         // Fallback to check if it's in responsaveis or alunos directly
         const { data: respUser } = await supabase.from('responsaveis').select('id').eq('id', user.id).maybeSingle();
@@ -62,12 +62,12 @@ export async function POST(request: Request) {
     
     try {
       const readRecords = ids.map((id: string) => ({
-        usuario_id: isFamily && alunoId ? `${readerId}#${alunoId}` : readerId, 
+        usuario_id: alunoId ? `${readerId}#${alunoId}` : readerId, 
         perfil: isFamily ? 'aluno' : 'admin', 
         content_type: tipo,
-        content_id: id,
+        content_id: String(id),
         read_at: now,
-        aluno_id: isFamily && alunoId ? String(alunoId) : null
+        aluno_id: alunoId ? String(alunoId) : null
       }));
 
       // Utiliza insert em vez de upsert para não depender de UNIQUE CONSTRAINT nomeada no PostgREST

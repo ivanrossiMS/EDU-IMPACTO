@@ -309,16 +309,19 @@ export async function GET(request: Request) {
     query = query.not('id', 'like', 'AD-COM-REL-STU-%');
   }
 
-  // Ocultar relatórios de colaboradores (COLAB) do feed de alunos e famílias
+  // Ocultar relatórios de colaboradores (COLAB), turmas e comunicados internos do feed de alunos e famílias
   if ((alunoId || isFamilyOrStudent) && !idParam) {
     query = query.not('id', 'like', 'AD-COM-REL-COLAB-%');
+    query = query.not('id', 'like', 'AD-COM-REL-TURMA-%');
+    query = query.neq('destino', 'interno');
+    query = query.neq('destino', 'funcionarios');
   }
   
-  query = query.order('data', { ascending: false });
+  query = query.order('data', { ascending: false }).order('id', { ascending: false });
   
   if (limitParam) {
-     const limit = parseInt(limitParam);
-     const offset = offsetParam ? parseInt(offsetParam) : 0;
+     const limit = parseInt(limitParam) || 5;
+     const offset = offsetParam ? (parseInt(offsetParam) || 0) : 0;
      query = query.range(offset, offset + limit - 1);
   } else {
      query = query.limit(30);
@@ -410,19 +413,23 @@ export async function GET(request: Request) {
      const merged = normalizeRow(row);
      
      // Merge das novas tabelas sobre o que eventualmente já estava no JSON (fallback para históricos)
-     const itemReads = allReads.filter(r => r.content_id === String(row.id));
-     itemReads.forEach(r => {
-        const cleanUsuarioId = r.usuario_id ? r.usuario_id.split('#')[0] : r.usuario_id;
-        const key = r.aluno_id ? `${cleanUsuarioId}_${r.aluno_id}` : cleanUsuarioId;
-        merged.leituras[key] = r.read_at;
-     });
+      const itemReads = allReads.filter(r => r.content_id === String(row.id));
+      itemReads.forEach(r => {
+         const cleanUsuarioId = r.usuario_id ? r.usuario_id.split('#')[0] : r.usuario_id;
+         const key = r.aluno_id ? `${cleanUsuarioId}_${r.aluno_id}` : cleanUsuarioId;
+         merged.leituras[key] = r.read_at;
+         if (cleanUsuarioId) merged.leituras[cleanUsuarioId] = r.read_at;
+         if (r.aluno_id) merged.leituras[r.aluno_id] = r.read_at;
+      });
 
-     const itemCiencias = allCiencias.filter(c => c.content_id === String(row.id));
-     itemCiencias.forEach(c => {
-        const cleanUsuarioId = c.usuario_id ? c.usuario_id.split('#')[0] : c.usuario_id;
-        const key = c.aluno_id ? `${cleanUsuarioId}_${c.aluno_id}` : cleanUsuarioId;
-        merged.ciencias[key] = c.ciente_em;
-     });
+      const itemCiencias = allCiencias.filter(c => c.content_id === String(row.id));
+      itemCiencias.forEach(c => {
+         const cleanUsuarioId = c.usuario_id ? c.usuario_id.split('#')[0] : c.usuario_id;
+         const key = c.aluno_id ? `${cleanUsuarioId}_${c.aluno_id}` : cleanUsuarioId;
+         merged.ciencias[key] = c.ciente_em;
+         if (cleanUsuarioId) merged.ciencias[cleanUsuarioId] = c.ciente_em;
+         if (c.aluno_id) merged.ciencias[c.aluno_id] = c.ciente_em;
+      });
 
      return merged;
   });

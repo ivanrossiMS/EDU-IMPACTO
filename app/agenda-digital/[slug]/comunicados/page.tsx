@@ -4,11 +4,11 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar } from 'lucide-react'
+import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Loader2, ChevronDown } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
-import { use, useState, useEffect, useRef } from 'react'
+import { use, useState, useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useQueryComunicados } from '@/lib/hooks/useAgendaQueries'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
@@ -97,7 +97,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   const resolvedParams = useParams() as { slug: string }
   
   const { currentUser } = useApp()
-  const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
+  const isFamily = currentUser?.perfil === 'Família' || currentUser?.perfil === 'Responsável' || currentUser?.perfil === 'Aluno' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável';
   const { aluno } = useSelectedStudent()
   const { turmas = [] } = useData()
   const rawTurma = aluno?.turma
@@ -110,7 +110,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
 
   const endpoint = resolvedParams?.slug ? `/api/comunicados?aluno_id=${resolvedParams.slug}` : null
   
-  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 20, { enabled: true })
+  const { data: comunicadosData, isLoading: loading, refetch, hasNextPage, fetchNextPage, isFetchingNextPage } = useQueryComunicados(endpoint, 5, { enabled: true })
   const comunicados = comunicadosData?.pages?.flat() || []
   
   const searchParams = useSearchParams()
@@ -118,6 +118,87 @@ export default function ADComunicadosPage({ params }: { params: any }) {
   const router = useRouter()
   
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
+  const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(() => new Set())
+  const [locallyCienteIds, setLocallyCienteIds] = useState<Set<string>>(() => new Set())
+
+  const markComunicadoAsRead = useCallback((comunicadoItem: any) => {
+    if (!comunicadoItem || !comunicadoItem.id) return;
+    const cId = String(comunicadoItem.id);
+
+    // 1. Instantaneous Local State Update (synchronous, 0ms latency)
+    setLocallyReadIds(prev => {
+      if (prev.has(cId)) return prev;
+      const next = new Set(prev);
+      next.add(cId);
+      return next;
+    });
+
+    const espelharRespId = searchParams?.get('espelhar_responsavel');
+    const espelharColabId = searchParams?.get('espelhar_colaborador');
+    const espelharAluno = searchParams?.get('espelhar_aluno') === 'true';
+    const isMirroring = !!(espelharRespId || espelharAluno || espelharColabId);
+
+    const nowIso = new Date().toISOString();
+    const currentReaderId = isMirroring ? (espelharRespId || espelharColabId || resolvedParams.slug) : (currentUser?.id || '');
+    const legacyResponsavelId = isMirroring ? espelharRespId : ((currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '');
+    const legacyAlunoId = isMirroring ? (espelharAluno ? resolvedParams.slug : '') : ((currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '');
+    const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
+    const currentReaderWithSlug = currentReaderId ? `${currentReaderId}_${resolvedParams.slug}` : '';
+
+    const updatedLeituras = {
+      ...(comunicadoItem.leituras || {}),
+      ...(currentReaderId ? { [currentReaderId]: nowIso } : {}),
+      ...(resolvedParams.slug ? { [resolvedParams.slug]: nowIso } : {}),
+      ...(legacyResponsavelId ? { [legacyResponsavelId]: nowIso } : {}),
+      ...(legacyAlunoId ? { [legacyAlunoId]: nowIso } : {}),
+      ...(readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
+      ...(currentReaderWithSlug ? { [currentReaderWithSlug]: nowIso } : {}),
+      ...(currentUser?.id ? { [currentUser.id]: nowIso, [`${currentUser.id}_${resolvedParams.slug}`]: nowIso } : {})
+    };
+
+    setSelectedComunicado((curr: any) => {
+      if (curr && String(curr.id) === cId) {
+        return { ...curr, leituras: updatedLeituras };
+      }
+      return curr;
+    });
+
+    // 2. Update React Query Cache
+    queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (old: any) => {
+      if (!old || !old.pages) return old;
+      return {
+        ...old,
+        pages: old.pages.map((page: any[]) =>
+          page.map((x: any) => String(x.id) === cId ? { ...x, leituras: updatedLeituras } : x)
+        )
+      };
+    });
+
+    // 3. Persist to server (if not mirroring)
+    if (!isMirroring) {
+      fetch('/api/agenda/notificacoes/marcar-lido', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'comunicado',
+          ids: [cId],
+          alunoId: resolvedParams.slug
+        })
+      })
+      .then(res => {
+        if (res.ok) {
+          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
+        }
+      })
+      .catch(err => console.error('Failed to mark comunicado as read:', err));
+    }
+  }, [searchParams, resolvedParams?.slug, currentUser, queryClient]);
+
+  useEffect(() => {
+    if (selectedComunicado?.id) {
+      markComunicadoAsRead(selectedComunicado);
+    }
+  }, [selectedComunicado?.id, markComunicadoAsRead]);
   
   // Auto-open comunicado if queryId is present (only once)
   const hasAutoOpened = useRef(false)
@@ -220,25 +301,32 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     if (isMirroringMode) return;
     
     const nowIso = new Date().toISOString()
-    
+    const cId = String(comunicadoId);
+
+    // Instantaneous local state
+    setLocallyReadIds(prev => new Set(prev).add(cId));
+    setLocallyCienteIds(prev => new Set(prev).add(cId));
+
+    const currentReaderId = currentUser?.id || '';
+    const fallbackKey = `${currentReaderId}_${resolvedParams?.slug}`;
+
     // Optimistic Update Temporário
-    queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
+    queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (old: any) => {
       if (!old || !old.pages) return old;
       return {
         ...old,
         pages: old.pages.map((page: any[]) => page.map((c: any) => {
-          if (c.id === comunicadoId) {
-            const currentReaderId = currentUser?.id || '';
-            const fallbackKey = `${currentReaderId}_${resolvedParams.slug}`;
-
+          if (String(c.id) === cId) {
             const updated = { 
               ...c, 
               ciencias: { 
                 ...(c.ciencias || {}), 
-                [fallbackKey]: nowIso
+                [fallbackKey]: nowIso,
+                ...(currentReaderId ? { [currentReaderId]: nowIso } : {}),
+                ...(resolvedParams?.slug ? { [resolvedParams.slug]: nowIso } : {})
               } 
             }
-            if (selectedComunicado && selectedComunicado.id === comunicadoId) {
+            if (selectedComunicado && String(selectedComunicado.id) === cId) {
               setSelectedComunicado(updated)
             }
             return updated
@@ -255,27 +343,29 @@ export default function ADComunicadosPage({ params }: { params: any }) {
         body: JSON.stringify({
            tipo: 'comunicado',
            id: comunicadoId,
-           alunoId: resolvedParams.slug
+           alunoId: resolvedParams?.slug
         })
       });
       const data = await res.json();
       
       // Update definitivo com a chave gerada pelo servidor
       if (data.ok && data.key) {
-        queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
+        queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (old: any) => {
           if (!old || !old.pages) return old;
           return {
             ...old,
             pages: old.pages.map((page: any[]) => page.map((c: any) => {
-              if (c.id === comunicadoId) {
+              if (String(c.id) === cId) {
                 const updated = { 
                   ...c, 
                   ciencias: { 
                     ...(c.ciencias || {}), 
-                    [data.key]: nowIso
+                    [data.key]: nowIso,
+                    ...(currentReaderId ? { [currentReaderId]: nowIso } : {}),
+                    ...(resolvedParams?.slug ? { [resolvedParams.slug]: nowIso } : {})
                   } 
                 }
-                if (selectedComunicado && selectedComunicado.id === comunicadoId) {
+                if (selectedComunicado && String(selectedComunicado.id) === cId) {
                   setSelectedComunicado(updated)
                 }
                 return updated
@@ -717,7 +807,7 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           const paginatedComunicados = filteredComunicados;
           
           if (loading || !aluno) {
-            return <ComunicadoSkeleton count={3} />
+            return <ComunicadoSkeleton count={5} />
           }
           
           if (paginatedComunicados.length === 0) {
@@ -755,22 +845,32 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
             const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
 
-            const isRead = !!(
+            const isRead = locallyReadIds.has(String(c.id)) || !!(
               (c.leituras || {})[currentReaderId] || 
-              (c.leituras || {})[resolvedParams.slug] || 
+              (c.leituras || {})[resolvedParams?.slug] || 
               (legacyResponsavelId && (c.leituras || {})[legacyResponsavelId]) || 
               (legacyAlunoId && (c.leituras || {})[legacyAlunoId]) ||
               (readerIdWithSlug && (c.leituras || {})[readerIdWithSlug]) ||
-              (c.leituras || {})[currentReaderWithSlug]
+              (c.leituras || {})[currentReaderWithSlug] ||
+              (c.leituras && typeof c.leituras === 'object' && Object.keys(c.leituras).some(k => 
+                (resolvedParams?.slug && (k === resolvedParams.slug || k.endsWith(`_${resolvedParams.slug}`) || k.startsWith(`${resolvedParams.slug}_`))) ||
+                (currentUser?.id && (k === currentUser.id || k.startsWith(`${currentUser.id}_`) || k.endsWith(`_${currentUser.id}`))) ||
+                (legacyResponsavelId && (k === legacyResponsavelId || k.startsWith(`${legacyResponsavelId}_`) || k.endsWith(`_${legacyResponsavelId}`)))
+              ))
             );
 
-            const isCiencia = !!(
+            const isCiencia = locallyCienteIds.has(String(c.id)) || !!(
               (c.ciencias || {})[currentReaderId] || 
-              (c.ciencias || {})[resolvedParams.slug] || 
+              (c.ciencias || {})[resolvedParams?.slug] || 
               (legacyResponsavelId && (c.ciencias || {})[legacyResponsavelId]) || 
               (legacyAlunoId && (c.ciencias || {})[legacyAlunoId]) ||
               (readerIdWithSlug && (c.ciencias || {})[readerIdWithSlug]) ||
-              (c.ciencias || {})[currentReaderWithSlug]
+              (c.ciencias || {})[currentReaderWithSlug] ||
+              (c.ciencias && typeof c.ciencias === 'object' && Object.keys(c.ciencias).some(k => 
+                (resolvedParams?.slug && (k === resolvedParams.slug || k.endsWith(`_${resolvedParams.slug}`) || k.startsWith(`${resolvedParams.slug}_`))) ||
+                (currentUser?.id && (k === currentUser.id || k.startsWith(`${currentUser.id}_`) || k.endsWith(`_${currentUser.id}`))) ||
+                (legacyResponsavelId && (k === legacyResponsavelId || k.startsWith(`${legacyResponsavelId}_`) || k.endsWith(`_${legacyResponsavelId}`)))
+              ))
             );
 
             return (
@@ -864,57 +964,8 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                     gap: 16
                   }}
                   onClick={() => {
-                    const legacyResponsavelId = (currentUser as any)?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || '';
-                    const legacyAlunoId = (currentUser as any)?.aluno_id || (currentUser as any)?.user_metadata?.aluno_id || '';
-                    const readerIdWithSlug = legacyResponsavelId ? `${legacyResponsavelId}_${resolvedParams.slug}` : '';
-                    const currentReaderWithSlug = `${currentReaderId}_${resolvedParams.slug}`;
-
-                    const isRead = !!(
-                      (c.leituras || {})[currentReaderId] || 
-                      (c.leituras || {})[resolvedParams.slug] || 
-                      (legacyResponsavelId && (c.leituras || {})[legacyResponsavelId]) || 
-                      (legacyAlunoId && (c.leituras || {})[legacyAlunoId]) ||
-                      (readerIdWithSlug && (c.leituras || {})[readerIdWithSlug]) ||
-                      (c.leituras || {})[currentReaderWithSlug]
-                    );
-
-                    const nowIso = new Date().toISOString();
-                    const updatedComunicado = { 
-                      ...c, 
-                      leituras: { 
-                        ...(c.leituras || {}), 
-                        ...(isFamily ? {} : { [currentReaderId]: nowIso, [resolvedParams.slug]: nowIso }),
-                        ...(isFamily && readerIdWithSlug ? { [readerIdWithSlug]: nowIso } : {}),
-                        ...(isFamily ? { [currentReaderWithSlug]: nowIso } : {})
-                      } 
-                    };
-                    
-                    setSelectedComunicado(updatedComunicado)
-                    
-                    if (!isRead && !isMirroring) {
-                      queryClient.setQueryData(['agenda', 'comunicados', endpoint], (old: any) => {
-                        if (!old || !old.pages) return old;
-                        return {
-                          ...old,
-                          pages: old.pages.map((page: any[]) => page.map((x: any) => x.id === c.id ? updatedComunicado : x))
-                        };
-                      })
-                      fetch('/api/agenda/notificacoes/marcar-lido', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          tipo: 'comunicado',
-                          ids: [c.id],
-                          alunoId: resolvedParams.slug
-                        })
-                      })
-                      .then(res => {
-                        if (res.ok) {
-                          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-                        }
-                      })
-                      .catch(err => console.error('Failed to mark comunicado as read:', err))
-                    }
+                    markComunicadoAsRead(c);
+                    setSelectedComunicado(c);
                   }}
                   onMouseEnter={e => {
                     e.currentTarget.style.transform = 'translateY(-3px)';
@@ -1050,15 +1101,65 @@ export default function ADComunicadosPage({ params }: { params: any }) {
             )
           })}
               {hasNextPage && (
-                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, marginBottom: 24 }}>
-                   <button onClick={() => {
-                     if (hasNextPage && fetchNextPage) {
-                       fetchNextPage()
-                     }
-                   }} className="btn" style={{ background: '#4f46e5', color: '#fff', padding: '10px 24px', borderRadius: 100, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
-                     Carregar Mais
-                   </button>
-                 </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: 24, marginBottom: 24, gap: 10 }}>
+                  <motion.button 
+                    whileHover={!isFetchingNextPage ? { scale: 1.02, translateY: -1 } : {}}
+                    whileTap={!isFetchingNextPage ? { scale: 0.98 } : {}}
+                    onClick={() => {
+                      if (hasNextPage && !isFetchingNextPage && fetchNextPage) {
+                        fetchNextPage()
+                      }
+                    }} 
+                    disabled={isFetchingNextPage}
+                    className="ad-btn-load-more"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', 
+                      color: '#ffffff', 
+                      padding: '12px 28px', 
+                      borderRadius: 100, 
+                      border: 'none', 
+                      fontWeight: 700, 
+                      fontSize: 13.5,
+                      letterSpacing: -0.2,
+                      cursor: isFetchingNextPage ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      boxShadow: '0 8px 20px -4px rgba(79, 70, 229, 0.4), 0 2px 6px rgba(0, 0, 0, 0.06)',
+                      transition: 'all 0.2s ease',
+                      opacity: isFetchingNextPage ? 0.75 : 1,
+                    }}
+                  >
+                    {isFetchingNextPage ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Carregando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Carregar mais</span>
+                        <ChevronDown size={16} strokeWidth={2.5} />
+                      </>
+                    )}
+                  </motion.button>
+                </div>
+              )}
+              {!hasNextPage && paginatedComunicados.length >= 5 && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  marginTop: 20,
+                  marginBottom: 24,
+                  color: '#94a3b8',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                }}>
+                  <CheckCircle2 size={15} style={{ opacity: 0.7, color: '#10b981' }} />
+                  <span>Todos os comunicados foram carregados</span>
+                </div>
               )}
             </>
           )

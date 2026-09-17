@@ -105,7 +105,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     const myName = currentUser?.nome || 'Você'
     
     // Otimistic UI
-    queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {
+    queryClient.setQueriesData({ queryKey: ['agenda', 'momentos'] }, (old: any) => {
       if (!old || !old.pages) return old;
       return {
         ...old,
@@ -141,7 +141,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     const myName = currentUser?.nome || 'Você'
 
     // Otimistic UI
-    queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {
+    queryClient.setQueriesData({ queryKey: ['agenda', 'momentos'] }, (old: any) => {
       if (!old || !old.pages) return old;
       return {
         ...old,
@@ -170,7 +170,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
   }
 
   const handleDeleteComment = async (momentId: string | number, commentId: string) => {
-    queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {
+    queryClient.setQueriesData({ queryKey: ['agenda', 'momentos'] }, (old: any) => {
       if (!old || !old.pages) return old;
       return {
         ...old,
@@ -293,7 +293,7 @@ export default function ADMomentosPage({ params }: { params: Promise<{ slug: str
     if (isMirroring) return;
 
     if (unreadIds.length > 0) {
-      queryClient.setQueryData(['agenda', 'momentos', endpoint || '/api/agenda/momentos'], (old: any) => {
+      queryClient.setQueriesData({ queryKey: ['agenda', 'momentos'] }, (old: any) => {
         if (!old || !old.pages) return old;
         const nowIso = new Date().toISOString();
         return {

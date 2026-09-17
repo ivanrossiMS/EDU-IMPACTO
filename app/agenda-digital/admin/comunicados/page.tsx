@@ -165,12 +165,12 @@ export default function ADAdminComunicados() {
   const [showEngagementDashboard, setShowEngagementDashboard] = useState(false);
   const [colaboradores, setColaboradores] = useState<{nome: string}[]>([]);
 
-  const [visibleCount, setVisibleCount] = useState(10);
+  const [visibleCount, setVisibleCount] = useState(5);
   const [selectedComs, setSelectedComs] = useState<string[]>([]);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
 
   useEffect(() => {
-    setVisibleCount(10);
+    setVisibleCount(5);
   }, [tab, search, authorFilter, attachmentFilter]);
 
   useEffect(() => {
@@ -823,7 +823,7 @@ export default function ADAdminComunicados() {
                       setIsFetchingMore(false);
                     }
                   }
-                  setVisibleCount(prev => prev + 10)
+                  setVisibleCount(prev => prev + 5)
                 }}
                 disabled={isFetchingMore}
                 style={{
@@ -853,9 +853,25 @@ export default function ADAdminComunicados() {
                     <Loader2 size={16} className="animate-spin" /> Carregando...
                   </>
                 ) : (
-                  'Carregar Mais Comunicados'
+                  'Carregar mais'
                 )}
               </button>
+            </div>
+          )}
+          {!(filtered.length > visibleCount || hasNextPageComunicados) && filtered.length >= 5 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              marginTop: 16,
+              marginBottom: 32,
+              color: '#94a3b8',
+              fontSize: 13,
+              fontWeight: 600,
+            }}>
+              <CheckCircle2 size={15} style={{ opacity: 0.7, color: '#10b981' }} />
+              <span>Todos os comunicados foram carregados</span>
             </div>
           )}
         </div>

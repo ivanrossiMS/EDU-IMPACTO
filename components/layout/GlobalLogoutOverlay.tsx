@@ -12,15 +12,30 @@ export function GlobalLogoutOverlay() {
   const isNavigatingRef = useRef(false)
   const isMobile = useIsMobileVersion()
 
+  const logoutStartTimeRef = useRef<number>(0)
+
   useEffect(() => {
     const handleLogoutStart = () => {
+      logoutStartTimeRef.current = Date.now()
       isNavigatingRef.current = false
       setIsLoggingOut(true)
       setIsCleanupDone(false)
     }
 
     const handleLogoutReady = () => {
-      setIsCleanupDone(true)
+      // Garante um tempo mínimo de exibição suave (500ms) para não haver piscar
+      // de tela se a limpeza for ultrarrápida, mantendo transição elegante.
+      const elapsed = Date.now() - (logoutStartTimeRef.current || Date.now())
+      const minDisplayTime = 500
+      const remainingTime = Math.max(0, minDisplayTime - elapsed)
+
+      if (remainingTime > 0) {
+        setTimeout(() => {
+          setIsCleanupDone(true)
+        }, remainingTime)
+      } else {
+        setIsCleanupDone(true)
+      }
     }
 
     window.addEventListener('edu:logout-start', handleLogoutStart)
@@ -35,16 +50,19 @@ export function GlobalLogoutOverlay() {
   // Se loadingPath for 'logout' (disparado por sidebars e layouts)
   useEffect(() => {
     if (loadingPath === 'logout') {
+      if (!logoutStartTimeRef.current) {
+        logoutStartTimeRef.current = Date.now()
+      }
       setIsLoggingOut(true)
     }
   }, [loadingPath])
 
-  // Fallback de segurança: se o cleanup demorar mais de 1.8s, libera a transição
+  // Fallback de segurança: se o cleanup demorar mais de 2.0s, libera a transição
   useEffect(() => {
     if (isLoggingOut && !isCleanupDone) {
       const timeout = setTimeout(() => {
         setIsCleanupDone(true)
-      }, 1800)
+      }, 2000)
       return () => clearTimeout(timeout)
     }
   }, [isLoggingOut, isCleanupDone])
@@ -62,9 +80,11 @@ export function GlobalLogoutOverlay() {
       } catch (_) {}
     }
 
-    setIsLoggingOut(false)
-    setIsCleanupDone(false)
-    setLoadingPath(null)
+    // ATENÇÃO CRÍTICA: NÃO chamar setIsLoggingOut(false) ou setLoadingPath(null) aqui!
+    // O overlay DEVE permanecer ativo cobrindo 100% da tela (#0A0F24) até que
+    // o navegador conclua o carregamento da rota /login e desmonte o DOM atual.
+    // Chamar setIsLoggingOut(false) antes da navegação do browser fazia o overlay sumir
+    // e o dashboard antigo (imagem2) reaparecer temporariamente antes de ir para o login.
 
     if (typeof window !== 'undefined') {
       if (window.location.pathname !== '/login') {
@@ -73,7 +93,7 @@ export function GlobalLogoutOverlay() {
         window.location.reload()
       }
     }
-  }, [setLoadingPath])
+  }, [])
 
   // No desktop: assim que o cleanup for concluído, redireciona imediatamente
   useEffect(() => {

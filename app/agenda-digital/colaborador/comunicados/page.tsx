@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Trash2, Edit2 } from 'lucide-react'
+import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Trash2, Edit2, Loader2, ChevronDown } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
@@ -554,11 +554,69 @@ function ColaboradorComunicadosContent() {
 
   const [comunicadoToDelete, setComunicadoToDelete] = useState<string | null>(null)
   const [selectedComunicado, setSelectedComunicado] = useState<any>(null)
+  const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(() => new Set())
   const [searchTerm, setSearchTerm] = useState('')
   const [limit, setLimit] = useState(6)
 
   const router = useRouter()
   const queryId = searchParams?.get('id')
+
+  const markComunicadoAsReadColab = useCallback((comunicadoItem: any) => {
+    if (!comunicadoItem || !comunicadoItem.id) return;
+    const cId = String(comunicadoItem.id);
+
+    setLocallyReadIds(prev => {
+      if (prev.has(cId)) return prev;
+      const next = new Set(prev);
+      next.add(cId);
+      return next;
+    });
+
+    const nowIso = new Date().toISOString();
+    const updated = {
+      ...comunicadoItem,
+      leituras: {
+        ...(comunicadoItem.leituras || {}),
+        [userSlug]: nowIso,
+        ...(effectiveUser?.id ? { [effectiveUser.id]: nowIso } : {})
+      }
+    };
+
+    setSelectedComunicado((curr: any) => {
+      if (curr && String(curr.id) === cId) {
+        return { ...curr, leituras: updated.leituras };
+      }
+      return curr;
+    });
+
+    const updateFn = (prev: any) => (prev || []).map((x: any) => String(x.id) === cId ? updated : x);
+    if (setComunicadosLocally) {
+      setComunicadosLocally(updateFn);
+    } else if (setComunicados) {
+      setComunicados(updateFn);
+    }
+
+    fetch('/api/agenda/notificacoes/marcar-lido', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: 'comunicado',
+        ids: [cId]
+      })
+    })
+    .then(res => {
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'));
+      }
+    })
+    .catch(err => console.error('Failed to mark comunicado as read:', err));
+  }, [userSlug, effectiveUser?.id, setComunicadosLocally, setComunicados]);
+
+  useEffect(() => {
+    if (selectedComunicado?.id) {
+      markComunicadoAsReadColab(selectedComunicado);
+    }
+  }, [selectedComunicado?.id, markComunicadoAsReadColab]);
 
   // Auto-open comunicado if queryId is present in URL or via custom event
   const hasAutoOpened = useRef(false)
@@ -1273,7 +1331,7 @@ function ColaboradorComunicadosContent() {
                 transition={{ duration: 0.25 }}
                 style={{ width: '100%' }}
               >
-                <ComunicadoSkeleton count={3} />
+                <ComunicadoSkeleton count={5} />
               </motion.div>
             );
           }
@@ -1317,8 +1375,14 @@ function ColaboradorComunicadosContent() {
             const month = parsedDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
             const time = parsedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             
-            const isRead = !!(c.leituras || {})[userSlug];
-            const isCiencia = !!(c.ciencias || {})[userSlug];
+            const isRead = locallyReadIds.has(String(c.id)) || !!(
+              (c.leituras || {})[userSlug] ||
+              (effectiveUser?.id && (c.leituras || {})[effectiveUser.id])
+            );
+            const isCiencia = !!(
+              (c.ciencias || {})[userSlug] ||
+              (effectiveUser?.id && (c.ciencias || {})[effectiveUser.id])
+            );
 
             return (
               <motion.div 
@@ -1403,37 +1467,8 @@ function ColaboradorComunicadosContent() {
                     overflow: 'hidden'
                   }}
                   onClick={() => {
-                    const nowIso = new Date().toISOString();
-                    const updatedComunicado = { ...c, leituras: { ...(c.leituras || {}), [userSlug]: nowIso } };
-                    
-                    setSelectedComunicado(updatedComunicado)
-                    
-                    if (!isRead) {
-                      const updateFn = (prev: any) => prev.map((x: any) => x.id === c.id ? updatedComunicado : x)
-                      if (setComunicadosLocally) {
-                        setComunicadosLocally(updateFn)
-                      } else {
-                        setComunicados(updateFn)
-                      }
-                      
-                      fetch('/api/agenda/notificacoes/marcar-lido', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          tipo: 'comunicado',
-                          ids: [c.id]
-                          // Colaboradores não enviam alunoId — evita mismatch de chave
-                          // na tabela agenda_notification_reads (chave seria "userId_userId"
-                          // mas o frontend verifica só "userId")
-                        })
-                      })
-                      .then(res => {
-                        if (res.ok) {
-                          window.dispatchEvent(new CustomEvent('agenda-digital:unread-updated'))
-                        }
-                      })
-                      .catch(err => console.error('Failed to mark comunicado as read:', err))
-                    }
+                    markComunicadoAsReadColab(c);
+                    setSelectedComunicado(c);
                   }}
                   onMouseEnter={e => {
                     e.currentTarget.style.transform = 'translateY(-3px)';
@@ -1592,42 +1627,73 @@ function ColaboradorComunicadosContent() {
             )
           })}
               {hasNextPageComunicados && (
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 32 }}>
-              <button 
-                className="btn btn-secondary" 
-                style={{ 
-                  background: isSimulatedLoading ? '#818cf8' : '#4f46e5', 
-                  color: '#fff', 
-                  padding: '10px 24px', 
-                  borderRadius: 100, 
-                  border: 'none', 
-                  fontWeight: 600, 
-                  cursor: isSimulatedLoading ? 'wait' : 'pointer',
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: 32, marginBottom: 24, gap: 10 }}>
+                  <motion.button 
+                    whileHover={!isSimulatedLoading ? { scale: 1.02, translateY: -1 } : {}}
+                    whileTap={!isSimulatedLoading ? { scale: 0.98 } : {}}
+                    onClick={async () => {
+                      if (hasNextPageComunicados && !isSimulatedLoading && fetchNextPageComunicados) {
+                        setIsSimulatedLoading(true);
+                        try {
+                          await fetchNextPageComunicados();
+                        } catch (e) {
+                          console.error('Erro ao carregar mais comunicados:', e);
+                        } finally {
+                          setIsSimulatedLoading(false);
+                        }
+                      }
+                    }} 
+                    disabled={isSimulatedLoading}
+                    className="ad-btn-load-more"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', 
+                      color: '#ffffff', 
+                      padding: '12px 28px', 
+                      borderRadius: 100, 
+                      border: 'none', 
+                      fontWeight: 700, 
+                      fontSize: 13.5,
+                      letterSpacing: -0.2,
+                      cursor: isSimulatedLoading ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      boxShadow: '0 8px 20px -4px rgba(79, 70, 229, 0.4), 0 2px 6px rgba(0, 0, 0, 0.06)',
+                      transition: 'all 0.2s ease',
+                      opacity: isSimulatedLoading ? 0.75 : 1,
+                    }}
+                  >
+                    {isSimulatedLoading ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Carregando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Carregar mais</span>
+                        <ChevronDown size={16} strokeWidth={2.5} />
+                      </>
+                    )}
+                  </motion.button>
+                </div>
+              )}
+              {!hasNextPageComunicados && paginatedComunicados.length >= 5 && (
+                <div style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
-                  transition: 'all 0.3s',
-                  boxShadow: '0 4px 14px rgba(79, 70, 229, 0.4)'
-                }} 
-                disabled={isSimulatedLoading}
-                onClick={() => {
-                  setIsSimulatedLoading(true);
-                  if (fetchNextPageComunicados) {
-                    fetchNextPageComunicados();
-                  }
-                  setTimeout(() => {
-                    setIsSimulatedLoading(false);
-                  }, 800);
+                  justifyContent: 'center',
+                  gap: 8,
+                  marginTop: 20,
+                  marginBottom: 24,
+                  color: '#94a3b8',
+                  fontSize: 12.5,
+                  fontWeight: 600,
                 }}>
-                {isSimulatedLoading ? (
-                  <>
-                    <div className="ad-spinner-small" style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                    Carregando...
-                  </>
-                ) : 'Carregar mais'}
-              </button>
-            </div>
-          )}
+                  <CheckCircle2 size={15} style={{ opacity: 0.7, color: '#10b981' }} />
+                  <span>Todos os comunicados foram carregados</span>
+                </div>
+              )}
             </motion.div>
           )
         })()}

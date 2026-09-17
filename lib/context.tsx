@@ -336,6 +336,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Limpa o estado em memória instantaneamente quando o logout é iniciado
+  useEffect(() => {
+    const handleLogoutStart = () => {
+      setCurrentUserState(null)
+      setCurrentUserPerfilState('')
+    }
+    window.addEventListener('edu:logout-start', handleLogoutStart)
+    return () => {
+      window.removeEventListener('edu:logout-start', handleLogoutStart)
+    }
+  }, [])
+
   const toggleSidebar = useCallback(() => setSidebarCollapsed(prev => !prev), [])
 
   const setTheme = useCallback((t: Theme) => {

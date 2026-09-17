@@ -29,7 +29,7 @@ export interface PushPayload {
   imageUrl?: string
 }
 
-interface PushResult {
+export interface PushResult {
   success: boolean
   mock?: boolean
   skipped?: boolean
@@ -38,6 +38,7 @@ interface PushResult {
   statusCode?: number
   retriesUsed?: number
   recipients?: number
+  notificationId?: string
 }
 
 const MAX_RETRIES = 2
@@ -119,7 +120,26 @@ async function attemptSend(
         data: parsedBody,
         statusCode: response.status,
         recipients: recipientCount,
+        notificationId: notificationId || undefined,
       }
+    }
+
+    // Auto-recuperação: se o OneSignal rejeitar porque o android_channel_id não existe no dashboard,
+    // reenvia imediatamente sem o canal para garantir 100% de entrega a todos os aparelhos
+    const isChannelError =
+      response.status === 400 &&
+      Boolean(payload.android_channel_id) &&
+      (
+        (Array.isArray(parsedBody.errors) && parsedBody.errors.some((e: any) => typeof e === 'string' && e.includes('android_channel_id'))) ||
+        (typeof parsedBody.errors === 'string' && parsedBody.errors.includes('android_channel_id')) ||
+        (typeof responseBody === 'string' && responseBody.includes('android_channel_id'))
+      )
+
+    if (isChannelError) {
+      console.warn(`⚠️ [PushService] OneSignal rejeitou android_channel_id '${payload.android_channel_id}'. Reenviando automaticamente sem o canal para garantir a entrega aos dispositivos...`)
+      const payloadWithoutChannel = { ...payload }
+      delete payloadWithoutChannel.android_channel_id
+      return attemptSend(payloadWithoutChannel, apiKey, attempt)
     }
 
     // Erro de negócio (400) — sem retry
@@ -267,7 +287,9 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ios_badgeType: 'Increase',
     ios_badgeCount: 1,
     android_sound: 'default',
-    android_channel_id: 'impacto_edu_default',
+    ...(process.env.ONESIGNAL_ANDROID_CHANNEL_ID?.trim()
+      ? { android_channel_id: process.env.ONESIGNAL_ANDROID_CHANNEL_ID.trim() }
+      : {}),
     android_visibility: 1,
     ttl: 86400,
   }
@@ -389,4 +411,27 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
 
   // Retornar o resultado com o erro mais informativo
   return resultExternalId.error ? resultExternalId : resultLegacy
+}
+
+/**
+ * Consulta o status e estatísticas de entrega reais de uma notificação diretamente no OneSignal.
+ * Permite obter a contagem exata de entregas por plataforma (iOS, Android, Web).
+ */
+export async function getNotificationStats(notificationId: string): Promise<any | null> {
+  const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || ''
+  const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY || ''
+  if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY || !notificationId) return null
+
+  try {
+    const res = await fetch(`https://onesignal.com/api/v1/notifications/${encodeURIComponent(notificationId)}?app_id=${ONESIGNAL_APP_ID}`, {
+      headers: {
+        Authorization: `Basic ${ONESIGNAL_REST_API_KEY}`,
+      },
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
 }

@@ -739,6 +739,25 @@ export default function ADAdminPushTestPage() {
             </div>
           </div>
         </div>
+
+        {typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+          <div style={{
+            fontSize: 11,
+            color: '#cbd5e1',
+            background: 'rgba(99, 102, 241, 0.1)',
+            border: '1px solid rgba(99, 102, 241, 0.25)',
+            borderRadius: 10,
+            padding: '8px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            <span>💡</span>
+            <span>
+              <b>Ambiente Localhost:</b> O Web Push no navegador PC/Mac é configurado para o domínio oficial (<code>impacto-edu.net</code>). Todos os disparos feitos aqui chegam em tempo real aos <b>aplicativos instalados no iPhone (iOS) e Android</b> dos responsáveis selecionados.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* ── GRID PRINCIPAL: CONTROLES & PREVIEW ── */}
@@ -1440,7 +1459,21 @@ export default function ADAdminPushTestPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, fontSize: 11, color: 'hsl(var(--text-muted))', marginBottom: 10 }}>
                 <div>ID OneSignal: <b style={{ color: 'hsl(var(--text-main))' }}>{lastResult.notificationId || 'N/A (mock)'}</b></div>
-                <div>Aparelhos Atingidos: <b style={{ color: 'hsl(var(--text-main))' }}>{lastResult.recipients ?? 0}</b></div>
+                <div>
+                  Aparelhos Atingidos:{' '}
+                  <b style={{ color: 'hsl(var(--text-main))' }}>
+                    {lastResult.recipients ?? 0}
+                    {lastResult.platformDeliveryStats ? (
+                      <span style={{ fontSize: 10, fontWeight: 500, color: 'hsl(var(--text-muted))', marginLeft: 4 }}>
+                        ({[
+                          lastResult.platformDeliveryStats.ios?.successful ? `${lastResult.platformDeliveryStats.ios.successful} iOS` : null,
+                          lastResult.platformDeliveryStats.android?.successful ? `${lastResult.platformDeliveryStats.android.successful} Android` : null,
+                          lastResult.platformDeliveryStats.web?.successful ? `${lastResult.platformDeliveryStats.web.successful} Web` : null,
+                        ].filter(Boolean).join(', ') || 'Processando entrega'})
+                      </span>
+                    ) : null}
+                  </b>
+                </div>
                 <div>Alvos Resolvidos: <b style={{ color: 'hsl(var(--text-main))' }}>{lastResult.targetCount ?? 0}</b></div>
                 <div>Tipo de Evento: <b style={{ color: 'hsl(var(--text-main))' }}>{lastResult.itemId?.split('-')[1] || activeCategory}</b></div>
               </div>

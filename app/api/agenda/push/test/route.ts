@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { sendPushNotification } from '@/lib/server/pushService'
+import { sendPushNotification, getNotificationStats } from '@/lib/server/pushService'
 import { AgendaPushType } from '@/lib/server/agendaNotifications'
 import { formatFriendlyStudentName } from '@/lib/studentNameHelper'
 
@@ -740,6 +740,30 @@ export async function POST(request: Request) {
       },
     })
 
+    // Obter estatísticas reais de entrega diretamente do OneSignal
+    let finalRecipients = pushResult.recipients ?? 0
+    let platformDeliveryStats: any = null
+    let rawOneSignalResponse = pushResult.data ? JSON.stringify(pushResult.data) : null
+
+    if (pushResult.success && pushResult.data?.id) {
+      // Aguardar janela curta (600ms) para o OneSignal processar a entrega nos gateways (APNs e FCM)
+      await new Promise(resolve => setTimeout(resolve, 600))
+      try {
+        const stats = await getNotificationStats(pushResult.data.id)
+        if (stats) {
+          if (typeof stats.successful === 'number' && stats.successful > 0) {
+            finalRecipients = stats.successful
+          }
+          if (stats.platform_delivery_stats) {
+            platformDeliveryStats = stats.platform_delivery_stats
+          }
+          rawOneSignalResponse = JSON.stringify(stats)
+        }
+      } catch (statsErr: any) {
+        console.warn('[API Push Test] Erro ao consultar estatísticas do OneSignal:', statsErr?.message)
+      }
+    }
+
     // Gravar log na tabela agenda_push_logs
     const logStatus = pushResult.success ? 'sent' : 'failed'
     const logErrorMsg = pushResult.mock
@@ -755,10 +779,10 @@ export async function POST(request: Request) {
         title: finalTitle,
         message: finalMessage,
         target_url: finalTargetUrl,
-        target_count: cleanTargetIds.length,
+        target_count: finalRecipients || cleanTargetIds.length,
         status: logStatus,
         error_message: logErrorMsg,
-        onesignal_response: pushResult.data ? JSON.stringify(pushResult.data) : null,
+        onesignal_response: rawOneSignalResponse,
         created_at: new Date().toISOString(),
       })
       .select()
@@ -772,14 +796,15 @@ export async function POST(request: Request) {
     let warning: string | null = null
     if (pushResult.mock) {
       warning = 'O sistema está em Modo Mock (variáveis ONESIGNAL_APP_ID e/ou ONESIGNAL_REST_API_KEY não configuradas no servidor). A notificação foi simulada com sucesso.'
-    } else if (pushResult.recipients === 0) {
+    } else if (finalRecipients === 0) {
       warning = 'A notificação foi aceita pelo OneSignal, porém retornou 0 destinatários inscritos ativos. Isso geralmente ocorre se o responsável ainda não abriu o aplicativo no celular para aceitar as permissões de notificação push.'
     }
 
     return NextResponse.json({
       ok: pushResult.success,
       notificationId: pushResult.data?.id || null,
-      recipients: pushResult.recipients ?? 0,
+      recipients: finalRecipients,
+      platformDeliveryStats,
       mock: Boolean(pushResult.mock),
       status: logStatus,
       targetCount: cleanTargetIds.length,

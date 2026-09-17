@@ -35,7 +35,10 @@ export async function GET(request: NextRequest) {
   )
 
   try {
-    await supabase.auth.signOut()
+    await Promise.race([
+      supabase.auth.signOut({ scope: 'local' }),
+      new Promise((resolve) => setTimeout(resolve, 500)),
+    ])
   } catch (error) {
     // Silencia erros de token durante signOut
   }
@@ -88,7 +91,10 @@ export async function POST(request: NextRequest) {
   )
 
   try {
-    await supabase.auth.signOut()
+    await Promise.race([
+      supabase.auth.signOut({ scope: 'local' }),
+      new Promise((resolve) => setTimeout(resolve, 500)),
+    ])
   } catch (error) {
     // Silencia erros durante signOut
   }
