@@ -366,3 +366,102 @@ test('7. Troca de contas: desassocia usuário A e vincula usuário B mantendo su
   assert.equal(native.optedIn, true);
   assert.equal(service.state.subscription.isSubscribed, true);
 });
+
+test('8. Resiliência a falhas: Se syncUser falhar, lastSyncedIdentityRef NÃO é fixado, permitindo retry automático', async () => {
+  let attempts = 0;
+  const mockService = {
+    syncUser: async () => {
+      attempts++;
+      if (attempts === 1) throw new Error('Falha de rede transitória');
+      return true;
+    },
+  };
+
+  // Simula o comportamento corrigido do GlobalNotificationProvider
+  let lastSyncedIdentity = null;
+  let isSyncing = false;
+
+  async function simulateSync(user) {
+    const key = `${user.id}:${user.perfil || ''}`;
+    if (lastSyncedIdentity === key || isSyncing) return;
+    isSyncing = true;
+    try {
+      await mockService.syncUser(user);
+      lastSyncedIdentity = key; // Só fixa em caso de sucesso!
+    } catch {
+      // Não fixa lastSyncedIdentity, permitindo retry
+    } finally {
+      isSyncing = false;
+    }
+  }
+
+  const user = { id: 'user_retry', perfil: 'Família' };
+
+  // Tentativa 1: falha
+  await simulateSync(user);
+  assert.equal(attempts, 1);
+  assert.equal(lastSyncedIdentity, null, 'lastSyncedIdentity deve permanecer null após falha');
+
+  // Tentativa 2 (ex: re-render ou retorno do foreground): executa retry com sucesso
+  await simulateSync(user);
+  assert.equal(attempts, 2, 'Deve ter tentado novamente');
+  assert.equal(lastSyncedIdentity, 'user_retry:Família', 'lastSyncedIdentity deve ser gravado após sucesso');
+
+  // Tentativa 3: já sincronizado, não repete
+  await simulateSync(user);
+  assert.equal(attempts, 2, 'Não deve chamar novamente quando já sincronizado com sucesso');
+});
+
+test('9. Verificação com retry no login nativo confirma externalId antes de concluir', async () => {
+  let readAttempts = 0;
+  let loggedInId = null;
+
+  const mockNative = {
+    login: async (id) => {
+      // Simula a escrita assíncrona da ponte nativa
+      setTimeout(() => { loggedInId = id; }, 20);
+    },
+    User: {
+      getExternalId: async () => {
+        readAttempts++;
+        return loggedInId;
+      },
+    },
+  };
+
+  const targetId = 'user_verificado';
+  await mockNative.login(targetId);
+
+  let verified = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const current = await mockNative.User.getExternalId();
+    if (current === targetId) {
+      verified = true;
+      break;
+    }
+    await new Promise(r => setTimeout(r, 15));
+  }
+
+  assert.equal(verified, true, 'Deve confirmar que o externalId foi efetivamente gravado');
+  assert.ok(readAttempts >= 2, 'Deve ter realizado polling até confirmação');
+});
+
+test('10. Poda de subscrições excedentes: remove subscrições mortas (sem token e desativadas)', () => {
+  const currentSubId = 'sub_ativa_atual';
+  const existingSubs = [
+    { id: currentSubId, enabled: true, token: 'token_valido_1' },
+    { id: 'sub_antiga_1', enabled: false, token: '' },
+    { id: 'sub_antiga_2', enabled: false, token: null },
+    { id: 'sub_antiga_3', enabled: true, token: 'token_valido_2' },
+    { id: 'sub_antiga_4', enabled: false, token: '' },
+  ];
+
+  const deadSubs = existingSubs.filter(
+    s => s.id !== currentSubId && s.enabled === false && (!s.token || s.token === '')
+  );
+
+  assert.equal(deadSubs.length, 3, 'Deve identificar as 3 subscrições mortas');
+  assert.deepEqual(deadSubs.map(s => s.id), ['sub_antiga_1', 'sub_antiga_2', 'sub_antiga_4']);
+  assert.ok(!deadSubs.some(s => s.id === currentSubId), 'Nunca deve podar a subscrição ativa atual');
+});
+

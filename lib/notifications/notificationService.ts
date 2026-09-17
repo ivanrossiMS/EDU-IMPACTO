@@ -578,14 +578,21 @@ class NotificationService {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
         // Checa o External ID nativo real no SDK
-        const nativeExtId = await OneSignalNative.User.getExternalId().catch(() => null)
+        let nativeExtId = await OneSignalNative.User.getExternalId().catch(() => null)
         const needsLogin = nativeExtId !== userId || this.currentUserId !== userId
 
         if (needsLogin) {
           console.log(`📱 [NotificationService] Associando usuário ao OneSignal Nativo (External ID: ${userId}, nativo anterior: ${nativeExtId || 'anônimo'})...`)
           await OneSignalNative.login(userId)
+
+          // Verificação ativa: confirma se o externalId refletiu no SDK nativo
+          for (let attempt = 0; attempt < 3; attempt++) {
+            nativeExtId = await OneSignalNative.User.getExternalId().catch(() => null)
+            if (nativeExtId === userId) break
+            await new Promise(r => setTimeout(r, 150))
+          }
           this.currentUserId = userId
-          console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo com sucesso (External ID: ${userId})`)
+          console.log(`✅ [NotificationService] Usuário associado ao OneSignal Nativo (External ID: ${userId}, verificado: ${nativeExtId === userId})`)
         } else {
           this.currentUserId = userId
         }
@@ -611,6 +618,25 @@ class NotificationService {
         // Registra Tags
         if (OneSignalNative.User?.addTags) {
           await OneSignalNative.User.addTags(tags).catch(() => {})
+        }
+
+        // DUPLA GARANTIA SERVER-TO-SERVER:
+        // Obtém o Subscription ID ativo do aparelho e aciona a rota segura do servidor
+        // para garantir a associação imediata no OneSignal e podar subscrições mortas
+        const subId = await OneSignalNative.User?.pushSubscription?.getIdAsync?.().catch(() => null)
+        if (subId && typeof subId === 'string' && subId.trim()) {
+          try {
+            fetch('/api/push/sync-subscription', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                subscriptionId: subId.trim(),
+                userId,
+                aliases: aliasesRecord,
+                tags,
+              }),
+            }).catch(e => console.warn('[NotificationService] Aviso no sync-subscription do servidor:', e))
+          } catch {}
         }
       } else {
         // Web User Sync

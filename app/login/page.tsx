@@ -575,11 +575,6 @@ export default function LoginPage() {
       }
       setCurrentUser(userObj)
 
-      // Sincroniza usuário e push no OneSignal de forma confiável
-      notificationService.syncUser(userObj).catch(err => {
-        console.warn('[Login] Aviso ao sincronizar OneSignal pós-login:', err)
-      })
-      
       // Sincroniza sessão no cliente Supabase e Keychain/Keystore
       if (authData.session) {
         try {
@@ -607,11 +602,19 @@ export default function LoginPage() {
         }
       } catch (e) {}
 
-      // Função de navegação segura que garante que os cookies sejam consolidados
+      // Sincroniza usuário e push no OneSignal de forma confiável aguardando a ponte nativa
+      try {
+        await Promise.race([
+          notificationService.syncUser(userObj),
+          new Promise(res => setTimeout(res, 1200))
+        ])
+      } catch (err) {
+        console.warn('[Login] Aviso ao sincronizar OneSignal pós-login:', err)
+      }
+
+      // Função de navegação segura via SPA (sem destruir a WebView nem abortar promessas em voo)
       const navigateSafely = (targetUrl: string) => {
-        setTimeout(() => {
-          window.location.href = targetUrl
-        }, 120)
+        router.replace(targetUrl)
       }
 
       // Se houver notificação pendente ou redirect especificado, vai direto para ele!

@@ -159,6 +159,7 @@ export function GlobalNotificationProvider() {
   const currentUserRef = useRef(currentUser)
   const hydratedRef = useRef(hydrated)
   const lastSyncedIdentityRef = useRef<string | null>(null)
+  const isSyncingRef = useRef(false)
 
   useEffect(() => {
     currentUserRef.current = currentUser
@@ -418,15 +419,25 @@ export function GlobalNotificationProvider() {
 
     if (currentUser?.id) {
       const identityKey = `${currentUser.id}:${currentUser.perfil || ''}:${currentUser.cargo || ''}`
-      if (lastSyncedIdentityRef.current === identityKey) return
-      lastSyncedIdentityRef.current = identityKey
+      if (lastSyncedIdentityRef.current === identityKey || isSyncingRef.current) return
 
-      notificationService.syncUser(currentUser).catch(err => {
-        console.warn('[GlobalPush] Aviso na sincronização do usuário:', err)
-      })
+      isSyncingRef.current = true
+      notificationService
+        .syncUser(currentUser)
+        .then(() => {
+          lastSyncedIdentityRef.current = identityKey
+          console.log(`✅ [GlobalPush] Identidade confirmada e sincronizada no OneSignal: ${identityKey}`)
+        })
+        .catch(err => {
+          console.warn('[GlobalPush] Aviso na sincronização do usuário (permitirá retry automático):', err)
+          // Em caso de erro, NÃO trava lastSyncedIdentityRef, permitindo que re-renders ou eventos de foreground tentem novamente
+        })
+        .finally(() => {
+          isSyncingRef.current = false
+        })
     } else {
       // Só dispara clearUser() se havia uma identidade autenticada previamente
-      if (lastSyncedIdentityRef.current === null) return
+      if (lastSyncedIdentityRef.current === null && !isSyncingRef.current) return
       lastSyncedIdentityRef.current = null
 
       notificationService.clearUser().catch(err => {
@@ -434,6 +445,43 @@ export function GlobalNotificationProvider() {
       })
     }
   }, [hydrated, currentUser?.id, currentUser?.perfil, currentUser?.cargo])
+
+  // 3. Revalidação de Identidade e Permissão ao retornar ao FOREGROUND (Settings -> App ou troca de apps)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !Capacitor.isNativePlatform()) return
+
+    let cleanupListener: (() => void) | undefined
+    import('@capacitor/app').then(({ App }) => {
+      const handle = App.addListener('appStateChange', ({ isActive }) => {
+        if (isActive && hydratedRef.current && currentUserRef.current?.id) {
+          const u = currentUserRef.current
+          const identityKey = `${u.id}:${u.perfil || ''}:${u.cargo || ''}`
+          if (lastSyncedIdentityRef.current !== identityKey && !isSyncingRef.current) {
+            console.log('📱 [GlobalPush] App em FOREGROUND com identidade pendente de confirmação. Re-sincronizando...')
+            isSyncingRef.current = true
+            notificationService
+              .syncUser(u)
+              .then(() => {
+                lastSyncedIdentityRef.current = identityKey
+              })
+              .catch(err => {
+                console.warn('[GlobalPush] Aviso no retry de foreground:', err)
+              })
+              .finally(() => {
+                isSyncingRef.current = false
+              })
+          }
+        }
+      })
+      cleanupListener = () => {
+        handle.then(h => h.remove()).catch(() => {})
+      }
+    }).catch(() => {})
+
+    return () => {
+      if (cleanupListener) cleanupListener()
+    }
+  }, [])
 
   return <NotificationPermissionModal />
 }
