@@ -314,6 +314,35 @@
           font-family: 'Outfit', sans-serif;
         }
 
+        @keyframes popIn {
+          0% { transform: scale(0.95); opacity: 0; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes spin-anim {
+          100% { transform: rotate(360deg); }
+        }
+        .spin-anim {
+          animation: spin-anim 1.5s linear infinite;
+        }
+        @keyframes sab-gradientShift {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        @keyframes sab-pulseDot {
+          0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+          70% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+        .ad-sab-active {
+          animation: sab-gradientShift 2.5s ease infinite;
+        }
+        .sab-pulse-dot {
+          animation: sab-pulseDot 1.5s ease-out infinite;
+        }
+        .ad-confirmed-btn {
+          animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
         /* Linha 2: Botões Secundários Ultra Modernos e Discretos */
         .ad-secondary-actions-grid {
           display: grid;
