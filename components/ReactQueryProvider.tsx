@@ -7,9 +7,11 @@ export function ReactQueryProvider({ children }: { children: React.ReactNode }) 
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 60 * 1000 * 5, // 5 min cache otimizado para ERP
-        refetchOnWindowFocus: false, // Evita re-fetch irritante ao mudar de abas
-        retry: 1 // Minimiza requests em caso de erro 500 do backend
+        staleTime: 60 * 1000 * 5, // 5 min cache otimizado para navegação instantânea
+        gcTime: 24 * 60 * 60 * 1000, // 24h de retenção em cache para resiliência offline
+        refetchOnWindowFocus: false, // Evita re-fetch excessivo ao alternar abas
+        refetchOnReconnect: true, // Recarrega automaticamente ao restabelecer sinal de rede
+        retry: 1 // Minimiza requests em caso de erro 500
       }
     }
   }))

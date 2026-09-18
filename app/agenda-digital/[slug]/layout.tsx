@@ -1,737 +1,38 @@
 'use client'
-import { performLogout } from "@/lib/auth/logout";
-import { motion, AnimatePresence } from 'framer-motion';
-import { useSupabaseArray } from '@/lib/useSupabaseCollection';
-import { SelectedStudentProvider } from '@/lib/selectedStudentContext';
-import { getAlunoTurnoDisplay, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils';
 
-import { useQueryClient } from '@tanstack/react-query';
-
-import { useData } from '@/lib/dataContext'
-import { useSaida } from '@/lib/saidaContext'
-import { useApp } from '@/lib/context'
-import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { getInitials } from '@/lib/utils'
-import Image from 'next/image'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePathname, useRouter, useParams, useSearchParams } from 'next/navigation'
-import React, { use, useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
-import { 
-  Bell, MessageSquare, Image as ImageIcon, Calendar, 
-  BarChart2, AlertTriangle, GraduationCap, DollarSign, BookOpen, UserCog, Users, X, LogOut,
-  Megaphone, Loader2, CheckCircle2, Building, ShieldCheck, KeyRound, Send, Check, MonitorSmartphone
-} from 'lucide-react'
-import { LoadingGlass } from '@/components/LoadingGlass'
-import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useQueryClient } from '@tanstack/react-query'
+import { LogOut, MonitorSmartphone, X } from 'lucide-react'
 
-function abbreviateName(name: string): string {
-  if (!name) return '';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length <= 2) return name;
-  const first = parts[0];
-  const last = parts[parts.length - 1];
-  const middle = parts.slice(1, -1).map(p => {
-    if (['de', 'da', 'do', 'dos', 'das'].includes(p.toLowerCase())) return p;
-    return p.charAt(0).toUpperCase() + '.';
-  }).join(' ');
-  return `${first} ${middle} ${last}`;
-}
+import { useApp } from '@/lib/context'
+import { useData } from '@/lib/dataContext'
+import { useSaida } from '@/lib/saidaContext'
+import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { useSupabaseArray } from '@/lib/useSupabaseCollection'
+import { SelectedStudentProvider } from '@/lib/selectedStudentContext'
+import { getAlunoTurnoDisplay, isAlunoIntegralIntermediario } from '@/lib/studentTurmaUtils'
+import { getInitials } from '@/lib/utils'
+import { performLogout } from '@/lib/auth/logout'
+import { hideSplashScreen } from '@/lib/capacitor/splash'
+import { LoadingGlass } from '@/components/LoadingGlass'
+
+import { StudentHeaderCard } from './components/StudentHeaderCard'
+import { StudentCallController } from './components/StudentCallController'
+import { AgendaNavigationTabBar } from './components/AgendaNavigationTabBar'
+
+// Estilos extraídos do monólito para CSS modularizado e otimizado
+import './agenda-layout.css'
 
 function PortalWrapper({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
-  
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
+  useEffect(() => setMounted(true), [])
   if (!mounted || typeof document === 'undefined') return null
-
   return createPortal(children, document.body)
 }
-
-function StudentCallButton({ aluno, currentUser, vinculo, onOpenModal, meusAlunos = [] }: { aluno: any, currentUser: any, vinculo?: any, onOpenModal?: () => void, meusAlunos?: any[] }) {
-  const searchParams = useSearchParams()
-  const { activeCalls, callStudent, cancelCall } = useSaida()
-  const [localConfirmed, setLocalConfirmed] = useState(false)
-  const call = activeCalls.find(c => {
-    if (!aluno?.id || !c.studentId) return false
-    const sId = String(c.studentId).trim()
-    const aId = String(aluno.id).trim()
-    return sId === aId || sId === aId.replace(/^0+/, '') || sId.padStart(6, '0') === aId.padStart(6, '0')
-  })
-
-  const espelharRespId = searchParams?.get('espelhar_responsavel');
-  const espelharColabId = searchParams?.get('espelhar_colaborador');
-  const isMirroringMode = !!(espelharRespId || espelharColabId || searchParams?.get('espelhar_aluno') === 'true');
-
-  const espelharNome = searchParams?.get('espelhar_nome');
-  
-  const effectiveUser = React.useMemo(() => {
-    if (isMirroringMode) {
-      return { 
-        ...currentUser, 
-        id: espelharRespId || espelharColabId || currentUser.id, 
-        nome: espelharNome || currentUser.nome 
-      };
-    }
-    return currentUser;
-  }, [isMirroringMode, espelharRespId, espelharColabId, espelharNome, currentUser]);
-
-
-
-  // Unified effect for local confirmed state
-  useEffect(() => {
-    if (!aluno?.id) return
-
-    const storageKey = `edu-confirmed-exit-${aluno.id}`
-
-    // 1. Read the cache first
-    let cachedId: string | null = null
-    let isToday = false
-    let cachedTime = 0
-    try {
-      const stored = localStorage.getItem(storageKey)
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        cachedId = parsed.callId
-        isToday = parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()
-        if (parsed.time) cachedTime = new Date(parsed.time).getTime()
-      }
-    } catch(e) {}
-
-    if (call?.status === 'confirmed') {
-      // Always trust the live confirmation
-      setLocalConfirmed(true)
-      try {
-        localStorage.setItem(storageKey, JSON.stringify({
-          callId: call.id,
-          time: call.confirmedAt || new Date().toISOString(),
-          by: call.guardianName || ''
-        }))
-      } catch (e) {}
-    } else if (call && (call.status === 'waiting' || call.status === 'called' || call.status === 'cancelled')) {
-      // It was explicitly active or cancelled.
-      if (cachedId && isToday) {
-        const calledTime = call.calledAt ? new Date(call.calledAt).getTime() : 0
-        
-        if (cachedId !== call.id) {
-          if (calledTime > cachedTime) {
-            // The DB has a NEW call created AFTER the old confirmed cache.
-            // Wipe the stale cache so the button shows "Chamando Aluno"
-            setLocalConfirmed(false)
-            try { localStorage.removeItem(storageKey) } catch(e) {}
-          } else {
-            // The DB returned an OLD call, but we have a FRESHER cache
-            setLocalConfirmed(true)
-          }
-        } else if ((call.status === 'waiting' || call.status === 'called') && calledTime <= cachedTime) {
-          // The DB returned the SAME call as 'waiting'/'called', but its calledAt timestamp is OLDER
-          // than our confirmed cache. This means the Operator's DB save failed (DB lag).
-          // DO NOT WIPE! KEEP IT CONFIRMED!
-          setLocalConfirmed(true)
-        } else {
-          // Genuinely reverted (calledAt updated) or cancelled!
-          setLocalConfirmed(false)
-          try { localStorage.removeItem(storageKey) } catch(e) {}
-        }
-      } else {
-        setLocalConfirmed(false)
-        try { localStorage.removeItem(storageKey) } catch(e) {}
-      }
-    } else {
-      // For 'special_auth', 'blocked', or !call
-      if (isToday) {
-        // ALWAYS trust the cache if it's from today!
-        setLocalConfirmed(true)
-      } else {
-        setLocalConfirmed(false)
-        try { localStorage.removeItem(storageKey) } catch(e) {}
-      }
-    }
-  }, [call?.status, call?.id, call?.confirmedAt, call?.guardianName, call?.calledAt, aluno?.id])
-
-  const { isProibido, isDiaRestrito, diasPermitidos } = React.useMemo(() => {
-    let proibido = false;
-    let diaRestrito = false;
-    let dias: string[] = [];
-
-    const rawSaude = aluno?.dados?.saude || {};
-    const autorizados = rawSaude.autorizados || [];
-    const responsaveis = aluno?.responsaveis || aluno?.dados?.responsaveis || [];
-    
-    const currentNameKey = (effectiveUser?.nome || '').toLowerCase().trim();
-    const currentId = vinculo?.id || effectiveUser?.responsavel_id || (effectiveUser?.dados?.responsavel_id) || effectiveUser?.id;
-    const currentEmail = (effectiveUser?.email || '').toLowerCase().trim();
-
-    const findMatch = (list: any[]) => {
-      return list.find((r: any) => {
-        if (currentId && r.id && String(r.id) === String(currentId)) return true;
-        if (currentEmail && r.email && String(r.email).toLowerCase().trim() === currentEmail) return true;
-        if (currentNameKey && r.nome && String(r.nome).toLowerCase().trim() === currentNameKey) return true;
-        
-        // Loose name match as last resort
-        if (currentNameKey && r.nome) {
-          const rName = String(r.nome).toLowerCase().trim();
-          if (rName.includes(currentNameKey) || currentNameKey.includes(rName)) return true;
-        }
-        return false;
-      });
-    };
-
-    let isFound = false;
-
-    const autMatch = findMatch(autorizados);
-    if (autMatch) {
-      isFound = true;
-      proibido = autMatch.proibido === true;
-      dias = autMatch.diasSemana || [];
-    } else {
-      const respMatch = findMatch(responsaveis);
-      if (respMatch) {
-        isFound = true;
-        proibido = respMatch.proibido === true;
-        dias = respMatch.diasAcesso || respMatch.dias_acesso || respMatch.diasSemana || [];
-      } else if (responsaveis.length === 1) {
-        // Fallback to the only guardian if no exact match
-        isFound = true;
-        proibido = responsaveis[0].proibido === true;
-        dias = responsaveis[0].diasAcesso || responsaveis[0].dias_acesso || responsaveis[0].diasSemana || [];
-      }
-    }
-
-    if (isFound) {
-      if (proibido) {
-        // Explicitly forbidden
-        diaRestrito = false;
-      } else if (dias.length === 0) {
-        // No days allowed
-        diaRestrito = true;
-      } else {
-        const remap = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
-        const todayIdx = new Date().getDay();
-        const todayK = remap[todayIdx];
-        if (!dias.includes(todayK)) {
-          diaRestrito = true;
-        }
-      }
-    } else {
-      // If we COULD NOT match them to ANY responsible in the list...
-      // This is a safety fallback. Since manual names/IDs might break the match, 
-      // we will check if ANY guardian is allowed today. If at least one is, we'll allow it.
-      // Otherwise, we block it.
-      if (responsaveis.length > 0) {
-        let anyAllowedToday = false;
-        const remap = ['Dom','Seg','Ter','Qua','Qui','Sex','Sab'];
-        const todayK = remap[new Date().getDay()];
-
-        for (const r of responsaveis) {
-          if (r.proibido) continue;
-          const rDias = r.diasAcesso || r.dias_acesso || r.diasSemana || [];
-          if (rDias.includes(todayK)) {
-            anyAllowedToday = true;
-            break;
-          }
-        }
-
-        if (!anyAllowedToday) {
-           diaRestrito = true;
-           dias = responsaveis[0].diasAcesso || responsaveis[0].dias_acesso || responsaveis[0].diasSemana || [];
-        }
-      }
-    }
-
-    return { isProibido: proibido, isDiaRestrito: diaRestrito, diasPermitidos: dias };
-  }, [aluno?.dados, effectiveUser]);
-
-  const meusAlunosIds = React.useMemo(() => {
-    return (meusAlunos || []).map((a: any) => String(a.id))
-  }, [meusAlunos])
-
-  const allFamilyStudentIds = React.useMemo(() => {
-    const set = new Set<string>()
-    const addId = (rawId: any) => {
-      if (rawId == null) return
-      const s = String(rawId).trim()
-      if (!s) return
-      set.add(s)
-      set.add(s.replace(/^0+/, ''))
-      set.add(s.replace(/^0+/, '').padStart(6, '0'))
-    }
-    addId(aluno?.id)
-    addId(aluno?.matricula)
-    if (Array.isArray(meusAlunos)) {
-      meusAlunos.forEach((a: any) => {
-        addId(a?.id)
-        addId(a?.matricula)
-      })
-    }
-    return set
-  }, [aluno?.id, aluno?.matricula, meusAlunos])
-
-  const gId = effectiveUser.id || 'usr-fam';
-
-  // Find all active/recent calls for this guardian or for this family's students
-  const myCalls = React.useMemo(() => {
-    const calls = activeCalls.filter(c => {
-      const cStudentId = c.studentId ? String(c.studentId).trim() : ''
-      const isMyStudent = cStudentId ? (allFamilyStudentIds.has(cStudentId) || (aluno?.id && String(aluno.id).trim() === cStudentId)) : false
-      const isMyGuardian = gId && c.guardianId && String(c.guardianId).trim() === String(gId).trim()
-
-      if (!isMyStudent && !isMyGuardian) return false
-
-      return (
-        c.status === 'waiting' || 
-        c.status === 'called' || 
-        c.status === 'special_auth' || 
-        c.status === 'confirmed' ||
-        c.status === 'blocked'
-      )
-    })
-    // Sort by priority so that waiting/called > confirmed > special_auth > blocked
-    const priority: any = { 'waiting': 1, 'called': 2, 'confirmed': 3, 'special_auth': 4, 'blocked': 5 }
-    return calls.sort((a, b) => (priority[a.status] || 99) - (priority[b.status] || 99))
-  }, [activeCalls, gId, allFamilyStudentIds, aluno?.id])
-
-  const isStudentConfirmedToday = useCallback((studentId: string) => {
-    if (!studentId) return false;
-    const sId = String(studentId).trim();
-    const c = activeCalls.find(ac => {
-      const acId = ac.studentId ? String(ac.studentId).trim() : '';
-      return (acId === sId || acId === sId.replace(/^0+/, '') || acId.padStart(6, '0') === sId.padStart(6, '0')) && ac.status === 'confirmed';
-    });
-    if (c) return true;
-    
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`edu-confirmed-exit-${studentId}`);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) {
-            return true;
-          }
-        }
-      } catch (e) {}
-    }
-    return false;
-  }, [activeCalls]);
-
-  const [pendingStudentIds, confirmedStudentIds, specialStudentIds] = React.useMemo(() => {
-    const pending = new Set<string>()
-    const confirmed = new Set<string>()
-    const special = new Set<string>()
-
-    for (const c of myCalls) {
-      const sId = String(c.studentId).trim()
-      if (pending.has(sId) || confirmed.has(sId) || special.has(sId)) continue
-      
-      if (c.status === 'waiting' || c.status === 'called') {
-        pending.add(sId)
-        pending.add(sId.replace(/^0+/, ''))
-      } else if (c.status === 'confirmed') {
-        confirmed.add(sId)
-        confirmed.add(sId.replace(/^0+/, ''))
-      } else if (c.status === 'special_auth') {
-        special.add(sId)
-        special.add(sId.replace(/^0+/, ''))
-      }
-    }
-    return [pending, confirmed, special]
-  }, [myCalls])
-
-  const pendingCalls = myCalls.filter(c => (c.status === 'waiting' || c.status === 'called') && (
-    pendingStudentIds.has(String(c.studentId).trim()) || pendingStudentIds.has(String(c.studentId).replace(/^0+/, ''))
-  ))
-  const confirmedCalls = myCalls.filter(c => c.status === 'confirmed' && (
-    confirmedStudentIds.has(String(c.studentId).trim()) || confirmedStudentIds.has(String(c.studentId).replace(/^0+/, ''))
-  ))
-  const specialAuthCalls = myCalls.filter(c => c.status === 'special_auth' && (
-    specialStudentIds.has(String(c.studentId).trim()) || specialStudentIds.has(String(c.studentId).replace(/^0+/, ''))
-  ))
-
-  const pendingCount = pendingStudentIds.size
-  const specialCount = specialStudentIds.size
-
-  // Is the current student's call specifically active, confirmed, or special?
-  const currentStudentIdStr = aluno?.id ? String(aluno.id).trim() : ''
-  const myCall = myCalls.find(c => {
-    const cStudentId = c.studentId ? String(c.studentId).trim() : ''
-    if (!cStudentId || !currentStudentIdStr) return false
-    return cStudentId === currentStudentIdStr || allFamilyStudentIds.has(cStudentId)
-  }) || call
-  const isBlocked = myCall?.status === 'blocked'
-
-  // The button for THIS student should be green ONLY if THIS specific student was confirmed
-  const isConfirmed = isStudentConfirmedToday(aluno?.id) || localConfirmed
-
-  // We show active state for THIS student if THIS student is in pending calls or direct call is waiting/called
-  const isActiveState = (call && (call.status === 'waiting' || call.status === 'called')) ||
-                        (myCall && (myCall.status === 'waiting' || myCall.status === 'called')) ||
-                        (currentStudentIdStr ? pendingStudentIds.has(currentStudentIdStr) : false) ||
-                        (currentStudentIdStr ? pendingStudentIds.has(currentStudentIdStr.replace(/^0+/, '')) : false)
-
-  // We show special auth state for THIS student if THIS student is in special_auth
-  const isSpecialAuth = (call && call.status === 'special_auth') ||
-                        (myCall && myCall.status === 'special_auth') ||
-                        (currentStudentIdStr ? specialStudentIds.has(currentStudentIdStr) : false) ||
-                        (currentStudentIdStr ? specialStudentIds.has(currentStudentIdStr.replace(/^0+/, '')) : false)
-
-  // Summary of OTHER students linked to this guardian
-  const otherStudentsSummary = useMemo(() => {
-    if (!meusAlunos || meusAlunos.length <= 1 || !aluno?.id) return null;
-    const otherStudents = meusAlunos.filter((a: any) => String(a.id) !== String(aluno?.id));
-    if (otherStudents.length === 0) return null;
-
-    let confirmedCount = 0;
-    let pendingCount = 0;
-
-    for (const os of otherStudents) {
-      const sId = String(os.id);
-      if (isStudentConfirmedToday(sId)) {
-        confirmedCount++;
-      } else if (pendingStudentIds.has(sId) || activeCalls.some(ac => String(ac.studentId) === sId && (ac.status === 'waiting' || ac.status === 'called'))) {
-        pendingCount++;
-      }
-    }
-
-    if (confirmedCount === 0 && pendingCount === 0) return null;
-
-    const parts = [];
-    if (confirmedCount > 0) {
-      parts.push(confirmedCount === 1 ? '1 outro aluno já retirado' : `${confirmedCount} outros alunos já retirados`);
-    }
-    if (pendingCount > 0) {
-      parts.push(pendingCount === 1 ? '1 outro em chamada' : `${pendingCount} outros em chamada`);
-    }
-
-    return parts.join(' • ');
-  }, [meusAlunos, aluno?.id, isStudentConfirmedToday, pendingStudentIds, activeCalls]);
-
-  const callLabel = pendingCount > 1 ? 'Chamando Alunos' : 'Chamando Aluno'
-
-  const handleCall = () => {
-    if (isActiveState || isConfirmed || isProibido || isDiaRestrito || isSpecialAuth) return
-    if (onOpenModal) {
-      onOpenModal()
-    } else {
-      if (isMirroringMode) {
-        alert("Ação desabilitada no modo de visualização/espelhamento.");
-        return;
-      }
-      const gName = currentUser.nome || 'Responsável'
-      const gId = currentUser.id || 'usr-fam'
-      callStudent(aluno.id, aluno.nome, aluno.turma || '', gId, gName, 'manual', undefined, aluno.foto)
-    }
-  }
-
-  const baseBtnStyle: React.CSSProperties = {
-    height: '100%',
-    minHeight: 56,
-    borderRadius: 20,
-    fontWeight: 800,
-    fontSize: 16,
-    border: 'none',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 10,
-    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-    whiteSpace: 'nowrap',
-    width: '100%',
-    padding: '0 16px',
-    fontFamily: 'Outfit, Inter, sans-serif',
-    boxSizing: 'border-box',
-  }
-
-  if (!isActiveState && !isSpecialAuth && !isConfirmed && !isBlocked) {
-    if (isProibido) {
-      return (
-        <div style={{
-          ...baseBtnStyle,
-          background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(248, 113, 113, 0.03) 100%)',
-          border: '1.5px solid rgba(239, 68, 68, 0.28)',
-          color: '#ef4444',
-          boxShadow: '0 4px 14px rgba(239, 68, 68, 0.06)',
-          cursor: 'not-allowed'
-        }} title="Você está proibido de retirar este aluno.">
-          <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(239, 68, 68, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#ef4444' }}>
-            <AlertTriangle size={18} strokeWidth={2.4} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800 }}>Retirada Proibida</span>
-              <span style={{ fontSize: 10.5, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', fontWeight: 600 }}>
-                Liberado: {diasPermitidos.length > 0 ? diasPermitidos.join(', ') : 'Nenhum dia'}
-              </span>
-          </div>
-        </div>
-      )
-    }
-
-    if (isDiaRestrito) {
-      return (
-        <div style={{
-          ...baseBtnStyle,
-          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(251, 191, 36, 0.03) 100%)',
-          border: '1.5px solid rgba(245, 158, 11, 0.28)',
-          color: '#d97706',
-          boxShadow: '0 4px 14px rgba(245, 158, 11, 0.06)',
-          cursor: 'not-allowed'
-        }} title={`Dias permitidos: ${diasPermitidos.join(', ')}`}>
-          <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(245, 158, 11, 0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#d97706' }}>
-            <Calendar size={18} strokeWidth={2.4} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 13.5, fontWeight: 800 }}>Fora do Dia Permitido</span>
-              <span style={{ fontSize: 10.5, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', fontWeight: 600 }}>
-                Liberado: {diasPermitidos.join(', ')}
-              </span>
-          </div>
-        </div>
-      )
-    }
-
-    return (
-      <button 
-        className="ad-premium-cta-btn"
-        onClick={handleCall}
-        style={{
-          ...baseBtnStyle,
-          background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #4f46e5 100%)',
-          color: 'white',
-          boxShadow: '0 6px 18px rgba(37, 99, 235, 0.28)',
-          padding: otherStudentsSummary ? '8px 16px' : '0 16px',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.transform = 'translateY(-1.5px)'
-          e.currentTarget.style.boxShadow = '0 10px 24px rgba(37, 99, 235, 0.38)'
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = '0 6px 18px rgba(37, 99, 235, 0.28)'
-        }}
-      >
-        <div className="ad-call-icon-box" style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Megaphone size={20} strokeWidth={2.3} />
-        </div>
-        <div className="ad-call-divider" style={{ width: 1.5, height: 26, background: 'rgba(255, 255, 255, 0.25)', flexShrink: 0, margin: '0 2px' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 17, fontWeight: 800, letterSpacing: '-0.2px' }}>Chamar aluno</span>
-          {otherStudentsSummary && (
-            <span style={{ fontSize: 10.5, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
-              {otherStudentsSummary}
-            </span>
-          )}
-        </div>
-      </button>
-    )
-  }
-
-  const formatTime = (isoStr?: string) => {
-    if (!isoStr) return ''
-    try {
-      let str = String(isoStr).trim()
-      if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
-        const [h, m] = str.split(':').map(Number)
-        const dateToday = new Date().toISOString().split('T')[0]
-        str = `${dateToday}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
-      } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
-        str += '-03:00'
-      }
-      return new Date(str).toLocaleTimeString('pt-BR', { timeZone: 'America/Campo_Grande', hour: '2-digit', minute: '2-digit' })
-    } catch { return '' }
-  }
-
-  // Obter dados do cache local caso a chamada já tenha sido limpa pelo operador
-  const getConfirmedData = () => {
-    if (call?.status === 'confirmed') {
-      return { by: call.guardianName, time: call.confirmedAt }
-    }
-    try {
-      const stored = localStorage.getItem(`edu-confirmed-exit-${aluno.id}`)
-      if (stored) return JSON.parse(stored)
-    } catch(e) {}
-    return { by: '', time: new Date().toISOString() }
-  }
-
-  const confData = getConfirmedData()
-
-  if (isConfirmed) {
-    return (
-      <div style={{
-        ...baseBtnStyle,
-        background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
-        color: 'white',
-        boxShadow: '0 6px 18px rgba(16, 185, 129, 0.35)',
-        animation: 'popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-        padding: '0 16px',
-        height: '100%',
-        minHeight: 56,
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-      }}>
-        <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <CheckCircle2 size={20} strokeWidth={2.6} />
-        </div>
-        <div style={{ width: 1.5, height: 24, background: 'rgba(255, 255, 255, 0.25)', flexShrink: 0, margin: '0 2px' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15, fontWeight: 800 }}>Saída Confirmada!</span>
-          <span style={{ fontSize: 11, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
-            {confData.by ? `${confData.by.split(' ')[0]} ` : ''}às {formatTime(confData.time)}
-          </span>
-        </div>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-        `}} />
-      </div>
-    )
-  }
-
-  if (isSpecialAuth) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: '100%', minHeight: 56 }}>
-        <button 
-          onClick={() => specialAuthCalls.forEach(c => {
-             cancelCall(c.id)
-          })}
-          title="Cancelar autorização"
-          style={{
-            width: 46, height: 56, borderRadius: 16, cursor: 'pointer',
-            background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.25)', color: '#ef4444',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s', flexShrink: 0
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
-        >
-          <X size={20} />
-        </button>
-        <div style={{
-          ...baseBtnStyle,
-          width: 'auto',
-          flex: 1,
-          minWidth: 0,
-          height: '100%',
-          minHeight: 56,
-          borderRadius: 20,
-          background: 'linear-gradient(270deg, #f59e0b, #fbbf24, #f59e0b)',
-          backgroundSize: '300% 300%',
-          border: 'none',
-          color: 'white',
-          boxShadow: '0 6px 20px rgba(245, 158, 11, 0.3)',
-          cursor: 'default',
-          padding: '0 14px',
-          justifyContent: 'flex-start',
-          alignItems: 'center',
-        }} className="ad-sab-active">
-          <div style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: '#fff',
-            boxShadow: '0 0 0 0 rgba(255,255,255,0.7)',
-            flexShrink: 0
-          }} className="sab-pulse-dot" />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8, overflow: 'hidden' }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 14.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
-              {specialCount > 1 ? 'Autorizações Ativas' : 'Autorização Ativa'}
-            </span>
-            <span style={{ fontSize: 10.5, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
-              {specialAuthCalls.length > 0 ? (specialAuthCalls[0].guardianName ? specialAuthCalls[0].guardianName.split('—')[0].trim() : 'Aguardando portaria') : 'Aguardando portaria'}
-            </span>
-          </div>
-          <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.95)', fontWeight: 700, flexShrink: 0, marginLeft: 'auto' }}>
-            {formatTime(specialAuthCalls.length > 0 ? specialAuthCalls[0].calledAt : undefined)}
-          </span>
-        </div>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes sab-gradientShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
-          @keyframes sab-pulseDot { 0%{box-shadow:0 0 0 0 rgba(255,255,255,0.7)} 70%{box-shadow:0 0 0 8px rgba(255,255,255,0)} 100%{box-shadow:0 0 0 0 rgba(255,255,255,0)} }
-          @keyframes sab-popIn { 0%{transform:scale(0.94);opacity:0} 100%{transform:scale(1);opacity:1} }
-          .ad-sab-active { animation: sab-gradientShift 2.5s ease infinite, sab-popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
-          .sab-pulse-dot { animation: sab-pulseDot 1.5s ease-out infinite; }
-        `}} />
-      </div>
-    )
-  }
-
-  if (isActiveState) {
-    const activeCallToDisplay = (myCall && (myCall.status === 'waiting' || myCall.status === 'called')) 
-      ? myCall 
-      : (call && (call.status === 'waiting' || call.status === 'called')) 
-        ? call 
-        : myCalls.find(c => c.status === 'waiting' || c.status === 'called') || myCalls[0]
-
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: '100%', minHeight: 56 }}>
-        <button 
-          onClick={() => {
-            const toCancel = pendingCalls.length > 0 ? pendingCalls : (activeCallToDisplay ? [activeCallToDisplay] : [])
-            toCancel.forEach(c => cancelCall(c.id))
-          }}
-          title="Cancelar chamada"
-          style={{
-            width: 46, height: 56, borderRadius: 16, cursor: 'pointer',
-            background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.25)', color: '#ef4444',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s', flexShrink: 0
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
-        >
-          <X size={20} />
-        </button>
-        <div style={{
-          ...baseBtnStyle,
-          width: 'auto',
-          flex: 1,
-          minWidth: 0,
-          height: '100%',
-          minHeight: 56,
-          borderRadius: 20,
-          background: 'linear-gradient(45deg, #f59e0b, #fbbf24, #f59e0b)',
-          backgroundSize: '200% 200%',
-          border: 'none',
-          color: 'white',
-          boxShadow: '0 6px 20px rgba(245, 158, 11, 0.3)',
-          cursor: 'default',
-          padding: '0 14px',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-        }}>
-          <Loader2 size={20} className="spin-anim" style={{ flexShrink: 0 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 10, overflow: 'hidden' }}>
-            <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>{callLabel}</span>
-            <span style={{ fontSize: 10.5, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
-              por {activeCallToDisplay?.guardianName ? activeCallToDisplay.guardianName.split(' ')[0] : 'Responsável'} às {formatTime(activeCallToDisplay?.calledAt)}
-            </span>
-          </div>
-        </div>
-        <style dangerouslySetInnerHTML={{__html: `
-          @keyframes spin-anim { 100% { transform: rotate(360deg); } }
-          .spin-anim { animation: spin-anim 1.5s linear infinite; }
-        `}} />
-      </div>
-    )
-  }
-
-  if (isBlocked) {
-    return (
-      <div style={{
-        ...baseBtnStyle,
-        background: 'rgba(239, 68, 68, 0.08)',
-        border: '2px solid rgba(239, 68, 68, 0.3)',
-        color: '#ef4444',
-        cursor: 'default'
-      }}>
-        <AlertTriangle size={18} />
-        <span className="ad-call-btn-label">Acesso Bloqueado</span>
-      </div>
-    )
-  }
-
-  return null
-}
-
-
 
 export default function ADInnerLayout({ 
   children,
@@ -740,24 +41,17 @@ export default function ADInnerLayout({
   children: React.ReactNode, 
   params: any
 }) {
-
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
   const [profileData, setProfileData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [switcherOpen, setSwitcherOpen] = useState(false)
-  // ── Autorização Especial ──────────────────────────────────────────────────
-  const [isSpecialAuthModalOpen, setIsSpecialAuthModalOpen] = useState(false)
-  const [selectedAlunos, setSelectedAlunos] = useState<string[]>([])
-  const [specialAuthText, setSpecialAuthText] = useState('')
-  const [specialAuthSending, setSpecialAuthSending] = useState(false)
-  const [specialAuthSent, setSpecialAuthSent] = useState(false)
-  const specialAuthTextRef = useRef<HTMLTextAreaElement>(null)
 
-  const { turmas = [] } = useData();
-  const [grupos = []] = useSupabaseArray<any>('agenda/grupos');
-  const { adConfig, setAdLoading } = useAgendaDigital();
-  const { currentUser, hydrated, setCurrentUser, setLoadingPath } = useApp()
-  const { callStudent, addSpecialAuth, activeCalls = [] } = useSaida()
+  const { turmas = [] } = useData()
+  const [grupos = []] = useSupabaseArray<any>('agenda/grupos')
+  const { adConfig, setAdLoading } = useAgendaDigital()
+  const { currentUser, hydrated, setLoadingPath } = useApp()
+  const { activeCalls = [] } = useSaida()
+  
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -769,7 +63,7 @@ export default function ADInnerLayout({
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const isMirrorModeActive = !!isMirroringAluno || !!espelharRespId || !!espelharColabId
 
-  // Intercept generic push notification URLs (e.g., /agenda-digital/comunicados)
+  // Intercepta rotas genéricas de push notification (ex: /agenda-digital/comunicados)
   const isGenericModule = ['comunicados', 'momentos', 'calendario', 'frequencia', 'ocorrencias', 'notas'].includes(resolvedParams?.slug || '')
   
   useEffect(() => {
@@ -787,7 +81,6 @@ export default function ADInnerLayout({
   const baseRespId = (currentUser as any)?.responsavel_id || (currentUser as any)?.dados?.responsavel_id || (currentUser as any)?.user_metadata?.responsavel_id || currentUser?.id || ''
   const respId = espelharRespId || baseRespId
   const isAlunoLogado = isMirroringAluno || currentUser?.cargo === 'Aluno'
-  
   const isMirrorMode = currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria'
 
   useEffect(() => {
@@ -797,92 +90,78 @@ export default function ADInnerLayout({
   }, [hydrated])
 
   useEffect(() => {
-     if (!hydrated || !currentUser) return
-     if (!resolvedParams?.slug) return
+    if (!hydrated || !currentUser) return
+    if (!resolvedParams?.slug) return
 
-     if (isAlunoLogado) {
-        const directId = (currentUser as any).aluno_id || (currentUser as any).user_metadata?.aluno_id
-        if (directId && String(resolvedParams.slug) !== String(directId)) {
-          const currentPath = pathname || ''
-          const newPath = currentPath.replace(`/agenda-digital/${resolvedParams.slug}`, `/agenda-digital/${directId}`)
-          router.replace(newPath)
+    if (isAlunoLogado) {
+      const directId = (currentUser as any).aluno_id || (currentUser as any).user_metadata?.aluno_id
+      if (directId && String(resolvedParams.slug) !== String(directId)) {
+        const currentPath = pathname || ''
+        const newPath = currentPath.replace(`/agenda-digital/${resolvedParams.slug}`, `/agenda-digital/${directId}`)
+        router.replace(newPath)
+        return
+      }
+    }
+
+    setIsLoading(true)
+    const loadProfile = async () => {
+      try {
+        const res = await fetch(`/api/agenda/perfil-acesso?slug=${resolvedParams.slug}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`)
+        
+        const contentType = res.headers.get("content-type")
+        if (!contentType || !contentType.includes("application/json")) {
           return
         }
-     }
 
-     setIsLoading(true)
-     const loadProfile = async () => {
-        try {
-           const res = await fetch(`/api/agenda/perfil-acesso?slug=${resolvedParams.slug}&responsavel_id=${respId}&is_aluno_profile=${isAlunoLogado}`)
-           
-           const contentType = res.headers.get("content-type");
-           if (!contentType || !contentType.includes("application/json")) {
-             console.error('Expected JSON, but received HTML or other format.');
-             return;
-           }
-
-           if (!res.ok) {
-              const data = await res.json()
-              console.error(data.error)
-              return
-           }
-
-           const data = await res.json()
-           setProfileData(data)
-        } catch(e) {
-           console.error('Failed to load profile data:', e)
-        } finally {
-           setIsLoading(false)
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          console.error(data.error)
+          return
         }
-     }
-     loadProfile()
-  }, [hydrated, currentUser, resolvedParams?.slug, respId, isAlunoLogado])
+
+        const data = await res.json()
+        setProfileData(data)
+      } catch(e) {
+        console.error('Failed to load profile data:', e)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadProfile()
+  }, [hydrated, currentUser, resolvedParams?.slug, respId, isAlunoLogado, pathname, router])
 
   useEffect(() => {
-    if (setAdLoading) setAdLoading(isLoading);
-    return () => { if (setAdLoading) setAdLoading(false); }
-  }, [isLoading, setAdLoading]);
+    if (setAdLoading) setAdLoading(isLoading)
+    return () => { if (setAdLoading) setAdLoading(false) }
+  }, [isLoading, setAdLoading])
 
-  // Lock body scroll when modals are open
+  // Trava scroll do body quando modal estiver aberto
   useEffect(() => {
-    if (switcherOpen || isSpecialAuthModalOpen) {
+    if (switcherOpen) {
       document.body.style.overflow = 'hidden'
-      document.body.style.touchAction = 'none'
-      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
-      if (mainScroll) mainScroll.style.overflow = 'hidden'
     } else {
       document.body.style.overflow = ''
-      document.body.style.touchAction = ''
-      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
-      if (mainScroll) mainScroll.style.overflow = 'auto'
     }
-    return () => {
-      document.body.style.overflow = ''
-      document.body.style.touchAction = ''
-      const mainScroll = document.querySelector('.ad-main-scroll') as HTMLElement
-      if (mainScroll) mainScroll.style.overflow = 'auto'
-    }
-  }, [switcherOpen, isSpecialAuthModalOpen])
+    return () => { document.body.style.overflow = '' }
+  }, [switcherOpen])
 
   const aluno = profileData?.aluno || null
   const vinculo = profileData?.vinculo || null
   const meusAlunos = profileData?.meusAlunos || []
 
-  const cleanTurma = (() => {
+  const cleanTurma = useMemo(() => {
     if (!aluno) return 'S/T'
-    // 1. Tenta usar o nome já resolvido pela API de perfil
     if (aluno.turma_nome && aluno.turma_nome !== aluno.turma) {
       return aluno.turma_nome.split('-')[0].trim()
     }
-    // 2. Fallback para o turmas em cache
     const turmaObj = (turmas || []).find(t => t && (String(t.id) === String(aluno.turma) || String(t.codigo) === String(aluno.turma) || String(t.nome) === String(aluno.turma)))
     const nomeTurma = turmaObj?.nome || aluno.turma_nome || aluno.turma || 'S/T'
     return nomeTurma.split('-')[0].trim()
-  })()
+  }, [aluno, turmas])
 
   const cleanTurno = getAlunoTurnoDisplay(aluno, turmas, grupos)
 
-  const userAccessRole = React.useMemo(() => {
+  const userAccessRole = useMemo(() => {
     if (!isMirrorModeActive && (currentUser?.perfil === 'Administrador' || currentUser?.perfil === 'Gestor' || currentUser?.perfil === 'Direção' || currentUser?.perfil === 'Secretaria')) {
       return { isFin: true, isPed: true, parentesco: currentUser.perfil }
     }
@@ -893,2013 +172,161 @@ export default function ADInnerLayout({
       parentesco: vinculo.parentesco || 'Responsável'
     }
   }, [vinculo, currentUser, isMirrorModeActive])
-  const navItems = [
-    { label: 'Comunicados', href: `/agenda-digital/${aluno?.id}/comunicados`, icon: <Bell size={18} /> },
 
-    { label: 'Mídia', href: `/agenda-digital/${aluno?.id}/momentos`, icon: <ImageIcon size={18} /> },
-    { label: 'Calendário', href: `/agenda-digital/${aluno?.id}/calendario`, icon: <Calendar size={18} /> },
-    { label: 'Financeiro', href: `/agenda-digital/${aluno?.id}/financeiro`, icon: <DollarSign size={18} /> },
-    { label: 'Frequência', href: `/agenda-digital/${aluno?.id}/frequencia`, icon: <BarChart2 size={18} /> },
-    { label: 'Ocorrências', href: `/agenda-digital/${aluno?.id}/ocorrencias`, icon: <AlertTriangle size={18} /> },
-    { label: 'Notas', href: `/agenda-digital/${aluno?.id}/notas`, icon: <GraduationCap size={18} /> },
-    { label: 'Meu Perfil', href: `/agenda-digital/${aluno?.id}/perfil`, icon: <UserCog size={18} /> },
-  ]
-
-  const filteredNavItems = navItems.filter(item => {
-    if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
-    if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
-    if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
-    if (item.label === 'Financeiro') {
-      if (adConfig?.permissoes?.visualizarFinanceiro === false) return false;
-      if (!userAccessRole.isFin) return false;
-    }
-    return true
-  })
-
-  // ── Handler de Autorização Especial e Chamada Normal ────────────────────
-  const handleNormalCallConfirm = useCallback(() => {
-    if (isMirrorModeActive) {
-      alert("Ação desabilitada no modo de visualização/espelhamento.");
-      return;
-    }
-    if (selectedAlunos.length === 0) return
-    const gName = currentUser?.nome || 'Responsável'
-    const gId = currentUser?.id || 'usr-fam'
-    
-    selectedAlunos.forEach(id => {
-      const a = profileData?.meusAlunos?.find((x: any) => x.id === id) || (aluno?.id === id ? aluno : null);
-      if (a) {
-        const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
-        let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
-        if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
-           aTurma = aTurma.split('-')[0].trim()
-        }
-        callStudent(a.id, a.nome, aTurma, gId, gName, 'manual', undefined, a.foto || a.imagem1)
-      }
-    });
-
-    setIsSpecialAuthModalOpen(false)
-  }, [selectedAlunos, profileData?.meusAlunos, aluno, turmas, currentUser, callStudent])
-
-  const handleSpecialAuthConfirm = useCallback(async () => {
-    if (isMirrorModeActive) {
-      alert("Ação desabilitada no modo de visualização/espelhamento.");
-      return;
-    }
-    if (!specialAuthText.trim() || selectedAlunos.length === 0) return
-    setSpecialAuthSending(true)
-    try {
-      const gName = currentUser?.nome || 'Responsável'
-      const gId = currentUser?.id || 'usr-fam'
-
-      await Promise.all(selectedAlunos.map(async id => {
-        const a = profileData?.meusAlunos?.find((x: any) => x.id === id) || (aluno?.id === id ? aluno : null);
-        if (!a) return;
-        
-        const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
-        let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
-        if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
-           aTurma = aTurma.split('-')[0].trim()
-        }
-
-        // 1. Broadcast via Supabase Realtime
-        const newCall = addSpecialAuth(
-          a.id,
-          a.nome,
-          aTurma,
-          specialAuthText.trim(),
-          gName,
-          a.foto || a.imagem1 || null,
-        )
-
-        // 2. Persist to DB so the record survives page reloads
-        await fetch('/api/saida/calls', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: newCall.id,
-            studentId: newCall.studentId,
-            studentName: newCall.studentName,
-            studentClass: newCall.studentClass,
-            studentPhoto: newCall.studentPhoto,
-            guardianId: newCall.guardianId,
-            guardianName: newCall.guardianName,
-            operatorId: newCall.operatorId,
-            calledAt: newCall.calledAt,
-            status: 'special_auth',
-            source: 'agenda_digital',
-          })
-        }).catch(err => console.warn('[SpecialAuth] DB persist failed (call still broadcast):', err))
-      }));
-
-      setSpecialAuthSent(true)
-      setTimeout(() => {
-        setIsSpecialAuthModalOpen(false)
-        setSpecialAuthText('')
-        setSpecialAuthSent(false)
-      }, 2200)
-    } catch (err) {
-      console.error('Erro ao registrar autorização especial:', err)
-    } finally {
-      setSpecialAuthSending(false)
-    }
-  }, [specialAuthText, selectedAlunos, profileData?.meusAlunos, aluno, turmas, currentUser, addSpecialAuth])
+  const handleLogout = useCallback(async () => {
+    setLoadingPath('logout')
+    await performLogout()
+  }, [setLoadingPath])
 
   return (
     <>
-    {isMirrorModeActive && (
-      <div style={{
-        position: 'sticky', top: 0, left: 0, right: 0, zIndex: 10000,
-        background: 'rgba(239, 68, 68, 0.95)', backdropFilter: 'blur(12px)',
-        color: '#fff', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)', borderBottom: '1px solid rgba(255,255,255,0.1)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-          </div>
-          <div>
-            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Modo Visualização (Espelhar Agenda)</h4>
-            <p style={{ margin: 0, fontSize: 12, opacity: 0.9 }}>Você está visualizando o aplicativo como outro usuário. Ações que modificam dados estão restritas.</p>
-          </div>
-        </div>
-        <Link href="/agenda-digital/admin/espelhar" style={{
-          background: '#fff', color: '#ef4444', padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 800, textDecoration: 'none', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 6
-        }} onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-          <LogOut size={16} strokeWidth={2.5} />
-          Voltar para Espelhar
-        </Link>
-      </div>
-    )}
-    {/* Student Switcher Overlay */}
-    <PortalWrapper>
-      <AnimatePresence>
-        {switcherOpen && (
-          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(15,23,42,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setSwitcherOpen(false)}>
-        <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} className="ad-modal-container" style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
-            <button onClick={() => setSwitcherOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
-              <X size={24} />
-            </button>
-          </div>
-          <div style={{ display: 'grid', gap: 12 }}>
-            {meusAlunos.map((a: any) => (
-              <div key={a.id} className="ad-switcher-item" onClick={() => {
-                const newPath = pathname.replace(aluno?.id || '', a.id)
-                router.push(newPath)
-                setSwitcherOpen(false)
-              }} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 12, border: `1px solid ${a.id === aluno?.id ? 'hsl(var(--primary))' : 'hsl(var(--border-subtle))'}`, background: a.id === aluno?.id ? 'rgba(99,102,241,0.05)' : 'transparent', cursor: 'pointer', transition: 'all 0.2s' }}>
-                 <div className="avatar" style={{ width: 48, height: 48, fontSize: 18, background: 'var(--gradient-purple)', color: 'white' }}>
-                    {getInitials(a.nome)}
-                  </div>
-                  <div>
-                    <div className="ad-switcher-item-name" style={{ fontWeight: 700, color: 'hsl(var(--text-main))' }}>{a.nome}</div>
-                    {(() => {
-                      const turmaObj = turmas.find(t => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
-                      let rawTurma = a.turma_nome || a.turmaNome || turmaObj?.nome || a.turma || 'S/T'
-                      const activeHist = Array.isArray(a.historicoTurmas || a.dados?.historicoTurmas)
-                        ? (a.historicoTurmas || a.dados.historicoTurmas)[(a.historicoTurmas || a.dados.historicoTurmas).length - 1]
-                        : null;
-                      const isIntegral = Boolean(
-                        a.isIntegralIntermediario ||
-                        a.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-                        a.dados?.isIntegralIntermediario ||
-                        a.dados?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-                        activeHist?.isIntegralIntermediario ||
-                        activeHist?.modalidade === 'INTEGRAL/INTERMEDIÁRIO' ||
-                        a.turno_nome === 'Integral/Intermediário' ||
-                        String(a.turno || '').toLowerCase().includes('integral') ||
-                        String(a.turno || '').toLowerCase().includes('intermediario') ||
-                        rawTurma.toUpperCase().includes('INTEGRAL') ||
-                        rawTurma.toUpperCase().includes('INTERMEDIÁRIO') ||
-                        isAlunoIntegralIntermediario(a, turmas)
-                      )
-                      const baseTurma = rawTurma.split('-')[0].trim()
-                      const displayTurma = isIntegral ? (baseTurma.toUpperCase().includes('INTEGRAL') ? baseTurma : `${baseTurma} - INTEGRAL/INTERMEDIÁRIO`) : baseTurma
-                      return (
-                        <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>Turma {displayTurma}</div>
-                      )
-                    })()}
-                  </div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      </motion.div>
-        )}
-      </AnimatePresence>
-    </PortalWrapper>
-
-{/* ── MODAL AUTORIZAÇÃO ESPECIAL ─────────────────────────────────────── */}
-<PortalWrapper>
-  <AnimatePresence>
-    {isSpecialAuthModalOpen && (
-      <motion.div
-        key="special-auth-modal-overlay"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(248, 250, 252, 0.45)',
-          zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-          padding: '0 16px', overscrollBehavior: 'none'
-        }}
-        onClick={() => { if (!specialAuthSending) { setIsSpecialAuthModalOpen(false); setSpecialAuthText('') } }}
-      >
-        <motion.div
-          key="special-auth-modal-box"
-      initial={{ scale: 0.92, opacity: 0, y: 24 }}
-      animate={{ scale: 1, opacity: 1, y: 0 }}
-      exit={{ scale: 0.92, opacity: 0, y: 24 }}
-      transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-      className="ad-modal-container"
-      style={{
-        background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
-        borderRadius: 28,
-        padding: '28px 28px 24px',
-        width: '100%',
-        maxWidth: 440,
-        boxShadow: '0 32px 80px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04)',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-      onClick={e => e.stopPropagation()}
-    >
-      {/* Decorative gradient blob */}
-      <div style={{
-        position: 'absolute', top: -60, right: -60, width: 200, height: 200,
-        background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute', bottom: -40, left: -40, width: 160, height: 160,
-        background: 'radial-gradient(circle, rgba(245,158,11,0.08) 0%, transparent 70%)',
-        borderRadius: '50%', pointerEvents: 'none',
-      }} />
-
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 12,
-              background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
-              flexShrink: 0,
-            }}>
-              <Megaphone size={18} color="#fff" strokeWidth={2.5} />
+      {/* Banner de Modo Espelhar (Administração) */}
+      {isMirrorModeActive && (
+        <div style={{
+          position: 'sticky', top: 0, left: 0, right: 0, zIndex: 10000,
+          background: 'rgba(239, 68, 68, 0.95)', backdropFilter: 'blur(12px)',
+          color: '#fff', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)', borderBottom: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>
+              </svg>
             </div>
             <div>
-              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', letterSpacing: '-0.02em' }}>
-                Opções de Retirada
-              </h3>
-              <p style={{ fontSize: 11, color: '#64748b', margin: 0, lineHeight: 1.3 }}>
-                Como deseja retirar o(a) aluno(a)?
-              </p>
+              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Outfit, sans-serif' }}>Modo Visualização (Espelhar Agenda)</h4>
+              <p style={{ margin: 0, fontSize: 12, opacity: 0.9 }}>Você está visualizando o aplicativo como outro usuário. Ações que modificam dados estão restritas.</p>
             </div>
           </div>
-        </div>
-        <button
-          onClick={() => { if (!specialAuthSending) { setIsSpecialAuthModalOpen(false); setSpecialAuthText('') } }}
-          style={{
-            background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)',
-            borderRadius: 10, width: 32, height: 32, display: 'flex', alignItems: 'center',
-            justifyContent: 'center', cursor: 'pointer', color: '#64748b',
-            flexShrink: 0,
-          }}
-        >
-          <X size={16} />
-        </button>
-      </div>
-
-      {/* Student Cards List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, position: 'relative', zIndex: 1, maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
-        {(profileData?.meusAlunos?.length > 0 ? profileData.meusAlunos : (aluno ? [aluno] : [])).map((a: any) => {
-          const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
-          let aTurma = tObj?.nome || a.turma_nome || a.turma || 'S/T'
-          if (aTurma && aTurma !== 'S/T' && aTurma.includes('-')) {
-             aTurma = aTurma.split('-')[0].trim()
-          }
-          const isSelected = selectedAlunos.includes(a.id)
-
-          const isConfirmedExit = (() => {
-            if (activeCalls.some(c => String(c.studentId) === String(a.id) && c.status === 'confirmed')) return true;
-            try {
-              const stored = localStorage.getItem(`edu-confirmed-exit-${a.id}`);
-              if (stored) {
-                const parsed = JSON.parse(stored);
-                if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) return true;
-              }
-            } catch(e) {}
-            return false;
-          })();
-
-          const isPendingCall = activeCalls.some(c => String(c.studentId) === String(a.id) && (c.status === 'waiting' || c.status === 'called'));
-
-          return (
-            <div 
-              key={a.id}
-              onClick={() => {
-                if (isConfirmedExit) return;
-                if (isSelected) {
-                  setSelectedAlunos(prev => prev.filter(id => id !== a.id))
-                } else {
-                  setSelectedAlunos(prev => [...prev, a.id])
-                }
-              }}
-              style={{
-                background: isConfirmedExit 
-                  ? 'rgba(0,0,0,0.02)' 
-                  : isSelected ? 'rgba(99,102,241,0.05)' : 'rgba(0,0,0,0.02)',
-                border: `1px solid ${isConfirmedExit ? 'rgba(0,0,0,0.04)' : isSelected ? 'rgba(99,102,241,0.3)' : 'rgba(0,0,0,0.04)'}`,
-                borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center',
-                gap: 14,
-                cursor: isConfirmedExit ? 'not-allowed' : 'pointer',
-                opacity: isConfirmedExit ? 0.6 : 1,
-                transition: 'all 0.2s',
-              }}
-            >
-              <div style={{
-                width: 52, height: 52, borderRadius: 16, flexShrink: 0, overflow: 'hidden',
-                background: isConfirmedExit ? '#cbd5e1' : 'linear-gradient(135deg, #a855f7, #ec4899)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 18, fontWeight: 900, color: '#fff',
-                boxShadow: isSelected && !isConfirmedExit ? '0 4px 16px rgba(168,85,247,0.25)' : 'none',
-                filter: isConfirmedExit ? 'grayscale(0.6)' : 'none',
-              }}>
-                {a.foto || a.imagem1
-                  ? <img src={a.foto || a.imagem1} alt={a.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : getInitials(a.nome || '')
-                }
-              </div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: isConfirmedExit ? '#64748b' : '#0f172a', fontFamily: 'Outfit, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {abbreviateName(a.nome || '')}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Turma:</span>
-                  <span style={{
-                    fontSize: 11, fontWeight: 800, color: isConfirmedExit ? '#64748b' : '#4f46e5',
-                    background: isConfirmedExit ? 'rgba(0,0,0,0.05)' : 'rgba(99,102,241,0.1)', padding: '2px 8px', borderRadius: 100,
-                  }}>{aTurma}</span>
-
-                  {isConfirmedExit && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 800, color: '#059669',
-                      background: 'rgba(16,185,129,0.12)', padding: '2px 8px', borderRadius: 100,
-                      display: 'flex', alignItems: 'center', gap: 4
-                    }}>
-                      <CheckCircle2 size={12} /> Retirado
-                    </span>
-                  )}
-                  {isPendingCall && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 800, color: '#d97706',
-                      background: 'rgba(245,158,11,0.12)', padding: '2px 8px', borderRadius: 100,
-                      display: 'flex', alignItems: 'center', gap: 4
-                    }}>
-                      <Loader2 size={12} className="spin-anim" /> Em chamada
-                    </span>
-                  )}
-                </div>
-              </div>
-              {/* Checkbox / Disabled Indicator */}
-              {isConfirmedExit ? (
-                <div 
-                  title="Aluno já retirado hoje"
-                  style={{ 
-                    width: 24, height: 24, borderRadius: 8, flexShrink: 0,
-                    border: '1px solid rgba(0,0,0,0.1)',
-                    background: 'rgba(0,0,0,0.04)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}
-                >
-                  <X size={14} color="#94a3b8" strokeWidth={2.5} />
-                </div>
-              ) : (
-                <div style={{ 
-                  width: 24, height: 24, borderRadius: 8, flexShrink: 0,
-                  border: `2px solid ${isSelected ? '#6366f1' : 'rgba(0,0,0,0.15)'}`,
-                  background: isSelected ? '#6366f1' : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all 0.2s'
-                }}>
-                  {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Primary Action: Normal Call */}
-      <div style={{ position: 'relative', zIndex: 1, marginBottom: 24 }}>
-        <button
-          onClick={handleNormalCallConfirm}
-          disabled={specialAuthSending || specialAuthSent || selectedAlunos.length === 0}
-          style={{
-            width: '100%', height: 56, borderRadius: 16, border: 'none',
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            color: '#fff', fontSize: 16, fontWeight: 800, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            fontFamily: 'Outfit, sans-serif', transition: 'all 0.3s',
-            boxShadow: '0 8px 24px rgba(16,185,129,0.25)',
-          }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-        >
-          <Megaphone size={18} strokeWidth={2.5} />
-          <span>{selectedAlunos.length > 1 ? 'Eu vim buscar (Chamar Alunos)' : 'Eu vim buscar (Chamar Aluno)'}</span>
-        </button>
-      </div>
-
-      {/* Divider */}
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
-        <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ou Outra Pessoa</span>
-        <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
-      </div>
-
-      {/* Text Field */}
-      <div style={{ position: 'relative', zIndex: 1, marginBottom: 20 }}>
-        <label style={{
-          display: 'block', fontSize: 11, fontWeight: 800, color: '#64748b',
-          textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8,
-        }}>
-          Quem irá buscar + Observação <span style={{ color: '#ef4444' }}>*</span>
-        </label>
-        <textarea
-          ref={specialAuthTextRef}
-          value={specialAuthText}
-          onChange={e => setSpecialAuthText(e.target.value)}
-          placeholder="Ex: Avó Maria Silva — irá buscar às 17h30, carro prata..."
-          rows={3}
-          disabled={specialAuthSending || specialAuthSent}
-          style={{
-            width: '100%', padding: '12px 14px', borderRadius: 14,
-            border: `1.5px solid ${specialAuthText.trim() ? 'rgba(245,158,11,0.5)' : 'rgba(0,0,0,0.08)'}`,
-            background: 'rgba(0,0,0,0.02)', fontSize: 13, color: '#0f172a',
-            outline: 'none', resize: 'none', fontFamily: 'Outfit, sans-serif',
-            lineHeight: 1.5, boxSizing: 'border-box', transition: 'border-color 0.2s',
-          }}
-        />
-        {!specialAuthText.trim() && (
-          <p style={{ fontSize: 10, color: '#f87171', margin: '5px 0 0', fontWeight: 600 }}>
-            Campo obrigatório caso vá usar autorização especial.
-          </p>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: 10, position: 'relative', zIndex: 1 }}>
-        <button
-          onClick={handleSpecialAuthConfirm}
-          disabled={!specialAuthText.trim() || specialAuthSending || specialAuthSent || selectedAlunos.length === 0}
-          style={{
-            width: '100%', height: 46, borderRadius: 14, border: 'none',
-            background: specialAuthSent
-              ? 'linear-gradient(135deg, #10b981, #059669)'
-              : !specialAuthText.trim() || specialAuthSending
-                ? 'rgba(0,0,0,0.04)'
-                : 'linear-gradient(135deg, #f59e0b, #d97706)',
-            color: !specialAuthText.trim() && !specialAuthSent ? '#94a3b8' : '#fff',
-            fontSize: 13, fontWeight: 800, cursor: specialAuthText.trim() && !specialAuthSending && !specialAuthSent ? 'pointer' : 'not-allowed',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            fontFamily: 'Outfit, sans-serif', transition: 'all 0.3s',
-            boxShadow: specialAuthText.trim() && !specialAuthSending && !specialAuthSent
-              ? '0 8px 24px rgba(245,158,11,0.35)'
-              : 'none',
-          }}
-        >
-          {specialAuthSent ? (
-            <><CheckCircle2 size={16} /> Autorização Enviada!</>
-          ) : specialAuthSending ? (
-            <><Loader2 size={16} className="spin-anim" /> Enviando...</>
-          ) : (
-            <><Send size={15} /> Confirmar Autorização Especial</>
-          )}
-        </button>
-      </div>
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes spin-anim { 100% { transform: rotate(360deg); } }
-        .spin-anim { animation: spin-anim 0.9s linear infinite; }
-      `}} />
-    </motion.div>
-  </motion.div>
-    )}
-  </AnimatePresence>
-</PortalWrapper>
-
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
-      {isMirrorMode && (
-        <div style={{ 
-          background: 'linear-gradient(135deg, #FF0080, #7928CA)', color: 'white', 
-          padding: '12px 24px', borderRadius: 16, display: 'flex', justifyContent: 'space-between', 
-          alignItems: 'center', fontWeight: 'bold', boxShadow: '0 4px 20px rgba(255, 0, 128, 0.3)', 
-          marginBottom: -10, zIndex: 50, position: 'relative' 
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-             <MonitorSmartphone size={20} />
-             <span>Modo Visualização: {resolvedParams?.slug === 'colaborador' ? 'Visão de Colaborador' : `Agenda de ${aluno?.nome || 'Aluno'}`}</span>
-          </div>
-          <button onClick={() => router.push('/agenda-digital/admin/espelhar')} style={{ background: 'rgba(255,255,255,0.2)', padding: '6px 14px', borderRadius: 10, color: 'white', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-             Sair do Espelhamento
-          </button>
+          <Link 
+            href="/agenda-digital/admin/espelhar" 
+            style={{
+              background: '#fff', color: '#ef4444', padding: '8px 16px', borderRadius: 8, 
+              fontSize: 13, fontWeight: 800, textDecoration: 'none', transition: 'all 0.2s', 
+              display: 'flex', alignItems: 'center', gap: 6
+            }}
+          >
+            <LogOut size={16} strokeWidth={2.5} />
+            Voltar para Espelhar
+          </Link>
         </div>
       )}
-      <style dangerouslySetInnerHTML={{__html: `
-        .ad-main-grid {
-          display: grid;
-          grid-template-columns: 1fr;
-          gap: 0px;
-          align-items: start;
-          position: relative;
-          z-index: 2;
-        }
 
-        @keyframes twinkle {
-          0%, 100% { opacity: 0.25; transform: scale(0.9); }
-          50% { opacity: 0.95; transform: scale(1.15); }
-        }
-        @keyframes floatPlanet1 {
-          0%, 100% { transform: translate(0, 0) rotate(0deg); }
-          50% { transform: translate(-10px, -15px) rotate(12deg); }
-        }
-        @keyframes floatPlanet2 {
-          0%, 100% { transform: translate(0, 0) rotate(0deg); }
-          50% { transform: translate(12px, 10px) rotate(-8deg); }
-        }
-
-        .ad-premium-card-wrapper {
-          margin-top: 0px;
-          position: relative;
-          z-index: 1;
-          width: 100%;
-        }
-
-        .ad-premium-card {
-          background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
-          border-radius: 24px;
-          box-shadow: 
-            0 18px 38px -6px rgba(15, 23, 42, 0.12),
-            0 0 28px rgba(99, 102, 241, 0.08),
-            0 4px 12px rgba(0, 0, 0, 0.04),
-            inset 0 1.5px 1px #ffffff,
-            inset 0 -1px 1px rgba(0, 0, 0, 0.02);
-          border: 1.5px solid rgba(226, 232, 240, 0.85);
-          padding: 22px 26px 18px 26px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          position: relative;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .ad-premium-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 
-            0 24px 48px -6px rgba(15, 23, 42, 0.16),
-            0 0 36px rgba(99, 102, 241, 0.14),
-            0 8px 18px rgba(0, 0, 0, 0.05),
-            inset 0 1.5px 1px #ffffff;
-          border-color: rgba(199, 210, 254, 0.9);
-        }
-
-        .ad-premium-card::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 4px;
-          background: linear-gradient(90deg, #6366f1, #a855f7, #3b82f6);
-          border-top-left-radius: 24px;
-          border-top-right-radius: 24px;
-        }
-
-        /* Modern Badges (Turma, Turno, Responsável - Estilo Imagem 2 Compacto e Alinhado) */
-        .ad-modern-badges-container {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-          margin-top: 1px;
-          width: 100%;
-        }
-
-        .ad-modern-badges-top-row {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          width: 100%;
-        }
-
-        .ad-modern-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 2px 8px 2px 3px;
-          border-radius: 10px;
-          font-family: 'Outfit', sans-serif;
-          letter-spacing: -0.01em;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-          cursor: default;
-          user-select: none;
-          box-sizing: border-box;
-          height: 28px;
-        }
-
-        .ad-modern-badges-top-row .ad-modern-badge {
-          flex: 1;
-          min-width: 0;
-          height: 28px;
-        }
-
-        .ad-modern-badge.badge-turma {
-          background: #ffffff;
-          border: 1.2px solid #dcdffe;
-          color: #1e1b4b;
-        }
-        .ad-modern-badge.badge-turma:hover {
-          border-color: #c7d2fe;
-          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08);
-        }
-
-        .ad-modern-badge.badge-turno {
-          background: #ffffff;
-          border: 1.2px solid #ebd5ff;
-          color: #4a044e;
-        }
-        .ad-modern-badge.badge-turno:hover {
-          border-color: #d8b4fe;
-          box-shadow: 0 2px 8px rgba(168, 85, 247, 0.08);
-        }
-
-        .ad-modern-badge.badge-resp {
-          width: 100%;
-          height: 28px;
-          min-height: 28px;
-          background: #ffffff;
-          border: 1.2px solid #bbf7d0;
-          padding: 2px 8px 2px 3px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 5px;
-        }
-        .ad-modern-badge.badge-resp:hover {
-          border-color: #86efac;
-          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
-        }
-
-        .ad-badge-resp-left {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          min-width: 0;
-          flex: 1;
-        }
-
-        .ad-badge-resp-info {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-          justify-content: center;
-          min-width: 0;
-          line-height: 1;
-          gap: 1px;
-        }
-
-        .ad-badge-resp-label {
-          font-size: 7.5px;
-          font-weight: 700;
-          color: #047857;
-          letter-spacing: 0.15px;
-          text-transform: uppercase;
-          line-height: 1;
-        }
-
-        .ad-badge-icon-box {
-          width: 22px;
-          height: 22px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-
-        .turma-icon {
-          background: #e0e7ff;
-          color: #4338ca;
-        }
-        .turno-icon {
-          background: #f3e8ff;
-          color: #9333ea;
-        }
-        .resp-icon {
-          background: #d1fae5;
-          color: #059669;
-        }
-
-        .ad-badge-text {
-          font-size: 11.5px;
-          font-weight: 800;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          letter-spacing: -0.01em;
-          line-height: 1.1;
-        }
-
-        .ad-badge-text.resp-name {
-          color: #064e3b;
-          font-size: 11.5px;
-        }
-
-        .ad-badge-resp-tags {
-          display: flex;
-          align-items: center;
-          gap: 3px;
-          flex-shrink: 0;
-          margin-left: 3px;
-        }
-
-        .ad-badge-icon-tag {
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .tag-fin {
-          background: #10b981;
-          color: #ffffff;
-          box-shadow: 0 1px 3px rgba(16, 185, 129, 0.3);
-        }
-
-        .tag-ped {
-          background: #6366f1;
-          color: #ffffff;
-          box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
-        }
-
-        /* Actions Layout: Linha 1 Isolada (Hero Call) + Linha 2 Secundária Discreta */
-        .ad-actions-container {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          width: 100%;
-          margin-top: 6px;
-        }
-
-        .ad-hero-call-row {
-          width: 100%;
-          display: flex;
-        }
-
-        .ad-hero-call-row > * {
-          width: 100% !important;
-        }
-
-        .ad-premium-cta-btn {
-          height: 56px;
-          border-radius: 20px;
-          background: linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #4f46e5 100%);
-          color: #ffffff;
-          box-shadow: 0 6px 18px rgba(37, 99, 235, 0.28);
-          border: none;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          gap: 12px;
-          width: 100%;
-          padding: 0 18px;
-          font-family: 'Outfit', sans-serif;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          box-sizing: border-box;
-          user-select: none;
-        }
-
-        .ad-premium-cta-btn:hover {
-          transform: translateY(-1.5px);
-          box-shadow: 0 10px 24px rgba(37, 99, 235, 0.38);
-        }
-
-        .ad-premium-cta-btn:active {
-          transform: scale(0.98);
-        }
-
-        .ad-call-icon-box {
-          width: 38px;
-          height: 38px;
-          border-radius: 12px;
-          background: rgba(255, 255, 255, 0.2);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-shrink: 0;
-        }
-
-        .ad-call-divider {
-          width: 1.5px;
-          height: 26px;
-          background: rgba(255, 255, 255, 0.28);
-          flex-shrink: 0;
-          margin: 0 2px;
-        }
-
-        .ad-call-btn-label {
-          font-size: 16.5px;
-          font-weight: 800;
-          letter-spacing: -0.2px;
-          line-height: 1.2;
-          color: #ffffff;
-          font-family: 'Outfit', sans-serif;
-        }
-
-        /* Linha 2: Botões Secundários Ultra Modernos e Discretos */
-        .ad-secondary-actions-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 8px;
-          width: 100%;
-        }
-
-        .ad-discreet-btn {
-          height: 40px;
-          border-radius: 14px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          font-size: 12px;
-          font-weight: 700;
-          cursor: pointer;
-          text-decoration: none;
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-          user-select: none;
-          box-sizing: border-box;
-          font-family: 'Outfit', sans-serif;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-        }
-
-        .ad-discreet-switch {
-          background: rgba(241, 245, 249, 0.85);
-          border: 1px solid rgba(226, 232, 240, 0.95);
-          color: #475569;
-        }
-
-        .ad-discreet-switch:hover {
-          background: rgba(238, 242, 255, 0.9);
-          border-color: rgba(199, 210, 254, 0.9);
-          color: #4f46e5;
-          transform: translateY(-1px);
-        }
-
-        .ad-discreet-switch:active {
-          transform: scale(0.98);
-        }
-
-        .ad-discreet-logout {
-          background: rgba(254, 242, 242, 0.6);
-          border: 1px solid rgba(254, 202, 202, 0.7);
-          color: #64748b;
-        }
-
-        .ad-discreet-logout:hover {
-          background: rgba(254, 242, 242, 0.95);
-          border-color: rgba(252, 165, 165, 0.85);
-          color: #ef4444;
-          transform: translateY(-1px);
-        }
-
-        .ad-discreet-logout:active {
-          transform: scale(0.98);
-        }
-
-        @media (max-width: 1200px) {
-          .ad-middle-section {
-            border-left: none !important;
-            border-top: 1px solid rgba(0, 0, 0, 0.06);
-            padding-left: 0 !important;
-            padding-top: 28px;
-          }
-        }
-        
-        @media (max-width: 640px) {
-          .ad-premium-card-wrapper {
-            margin-top: 0px !important;
-          }
-          .ad-main-grid {
-            margin-top: 8px !important;
-          }
-          .ad-premium-card {
-            padding: 14px 14px 12px 14px !important;
-            border-radius: 20px !important;
-            gap: 12px !important;
-            position: relative !important;
-            overflow: visible !important;
-            display: flex !important;
-            flex-direction: column !important;
-            box-shadow: 
-              0 14px 32px -4px rgba(15, 23, 42, 0.12),
-              0 0 20px rgba(99, 102, 241, 0.08),
-              0 4px 10px rgba(0, 0, 0, 0.03),
-              inset 0 1.5px 1px #ffffff !important;
-            border: 1.5px solid rgba(226, 232, 240, 0.85) !important;
-          }
-          .ad-premium-hero {
-            padding: 32px 16px 90px 16px;
-            border-radius: 24px;
-          }
-          .ad-premium-card-avatar {
-            width: 86px !important;
-            height: 86px !important;
-            border-radius: 18px !important;
-          }
-          .ad-premium-student-name {
-            font-size: 18px !important;
-            white-space: nowrap !important;
-            max-width: 100% !important;
-            display: flex !important;
-            align-items: center !important;
-            flex-wrap: nowrap !important;
-            gap: 7px !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
-          }
-          .ad-premium-card-header-flex {
-            gap: 12px !important;
-          }
-          .ad-modern-badges-container {
-            gap: 4px !important;
-            margin-top: 1px !important;
-          }
-          .ad-modern-badges-top-row {
-            gap: 5px !important;
-          }
-          .ad-modern-badges-top-row .ad-modern-badge {
-            height: 27px !important;
-            padding: 2px 6px 2px 3px !important;
-            gap: 5px !important;
-            border-radius: 9px !important;
-          }
-          .ad-badge-icon-box {
-            width: 21px !important;
-            height: 21px !important;
-          }
-          .ad-badge-icon-box svg {
-            width: 11px !important;
-            height: 11px !important;
-          }
-          .ad-badge-text {
-            font-size: 11px !important;
-          }
-          .ad-modern-badge.badge-resp {
-            height: 27px !important;
-            min-height: 27px !important;
-            padding: 2px 6px 2px 3px !important;
-            border-radius: 9px !important;
-            gap: 5px !important;
-          }
-          .ad-badge-resp-left {
-            gap: 5px !important;
-          }
-          .ad-badge-resp-label {
-            font-size: 7px !important;
-          }
-          .ad-badge-text.resp-name {
-            font-size: 11px !important;
-            max-width: 140px !important;
-          }
-          .ad-badge-icon-tag {
-            width: 18px !important;
-            height: 18px !important;
-          }
-          .ad-badge-icon-tag svg {
-            width: 10px !important;
-            height: 10px !important;
-          }
-          .ad-actions-container {
-            gap: 8px !important;
-          }
-          .ad-premium-cta-btn {
-            height: 56px !important;
-            padding: 0 14px !important;
-            border-radius: 18px !important;
-            justify-content: flex-start !important;
-            gap: 10px !important;
-          }
-          .ad-call-icon-box {
-            width: 36px !important;
-            height: 36px !important;
-            border-radius: 11px !important;
-          }
-          .ad-call-icon-box svg {
-            width: 18px !important;
-            height: 18px !important;
-          }
-          .ad-call-btn-label {
-            font-size: 15.5px !important;
-          }
-          .ad-secondary-actions-grid {
-            gap: 8px !important;
-          }
-          .ad-discreet-btn {
-            height: 38px !important;
-            font-size: 11.5px !important;
-            border-radius: 12px !important;
-          }
-          .ad-call-btn-arrow {
-            display: none !important;
-          }
-          .ad-com-actions-deprecated {
-            display: none !important;
-          }
-          .ad-text-hide-mobile {
-            display: none !important;
-          }
-          .ad-call-btn-label {
-            font-size: 14px !important;
-            font-weight: 700 !important;
-            white-space: nowrap !important;
-          }
-          .ad-special-auth-btn {
-            height: 40px !important;
-            border-radius: 14px !important;
-            font-size: 12px !important;
-          }
-        }
-        .ad-student-banner {
-          background: hsl(var(--bg-surface));
-          border: 1px solid hsl(var(--border-subtle));
-          border-radius: 16px;
-          padding: 24px 32px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 24px;
-        }
-        .ad-banner-actions {
-          display: flex;
-          align-items: center;
-          gap: 24px;
-          flex-wrap: wrap;
-        }
-        .ad-mobile-nav {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-        .ad-desktop-sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-        .ad-mobile-nav-bar {
-          display: none;
-        }
-
-        /* iOS App Store Compliance for Agenda Digital */
-        .ad-mobile-nav-bar, .ad-premium-card, .ad-switcher-item, .ad-btn-side, .ad-mini-card, .ad-mobile-nav-item {
-          user-select: none !important;
-          -webkit-user-select: none !important;
-          -webkit-touch-callout: none !important;
-        }
-
-        /* Somente Modificacoes Mobile, intocavel no Desktop */
-        @media (max-width: 768px) {
-          .ad-desktop-sidebar {
-            display: none !important;
-          }
-          .ad-mobile-nav-bar {
-            display: flex !important;
-            background: linear-gradient(135deg, #07060f 0%, #15092a 50%, #020106 100%) !important;
-            background-size: 200% 200% !important;
-            animation: gradientShiftNav 6s ease infinite !important;
-            backdrop-filter: blur(20px) !important;
-            -webkit-backdrop-filter: blur(20px) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-            box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
-          }
-          
-          .ad-mobile-nav-bar::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: linear-gradient(90deg, #00d2ff, #a855f7, #ff0080, #00d2ff);
-            background-size: 200% 100%;
-            animation: neonSlide 3s linear infinite;
-            box-shadow: 0 0 12px rgba(0, 210, 255, 0.8), 0 0 4px rgba(255, 0, 128, 0.5);
-            z-index: 10000;
-          }
-
-          @keyframes gradientShiftNav {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-          }
-          .ad-content-page-area {
-            padding-bottom: 80px !important;
-            width: 100% !important;
-            max-width: 100vw !important;
-            min-width: 0 !important;
-            overflow-x: hidden !important;
-            box-sizing: border-box !important;
-          }
-          .ad-main-grid {
-            grid-template-columns: 1fr !important;
-            gap: 0px !important;
-            width: 100% !important;
-            max-width: 100vw !important;
-            min-width: 0 !important;
-            overflow-x: hidden !important;
-          }
-          .ad-premium-card-wrapper {
-            width: 100% !important;
-            max-width: 100vw !important;
-            min-width: 0 !important;
-            overflow: visible !important;
-          }
-          .ad-banner {
-            height: 250px !important;
-          }
-          .agenda-digital-wrapper {
-            padding-bottom: 80px !important;
-            width: 100% !important;
-            max-width: 100vw !important;
-            min-width: 0 !important;
-            overflow-x: hidden !important;
-          }
-          .ad-student-banner {
-            flex-direction: column !important;
-            align-items: center !important;
-            padding: 0 16px 0 16px !important;
-            gap: 4px !important;
-            border: none !important;
-            border-radius: 0 !important;
-            border-bottom: none !important;
-            background: transparent !important;
-            margin-top: 0 !important;
-            box-shadow: none !important;
-            position: relative;
-            z-index: 20;
-          }
-          @keyframes popUpPulseAvatar {
-            0% { transform: scale(0.5) translateY(20px); opacity: 0; box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4); }
-            70% { transform: scale(1.05) translateY(-2px); opacity: 1; }
-            100% { transform: scale(1) translateY(0); opacity: 1; box-shadow: 0 0 0 12px rgba(79, 70, 229, 0); }
-          }
-          @keyframes premiumFloat {
-            0% { transform: translateY(0px); box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 0 0 rgba(79, 70, 229, 0.3); }
-            50% { transform: translateY(-4px); box-shadow: 0 8px 16px rgba(0,0,0,0.15), 0 0 0 8px rgba(79, 70, 229, 0); }
-            100% { transform: translateY(0px); box-shadow: 0 4px 12px rgba(0,0,0,0.1), 0 0 0 0 rgba(79, 70, 229, 0); }
-          }
-          .ad-banner-avatar-wrapper {
-            margin-top: -40px !important;
-            border: 3px solid #ffffff !important;
-            width: 64px !important;
-            height: 64px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-            background: #ffffff !important;
-            animation: popUpPulseAvatar 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards, premiumFloat 4s ease-in-out infinite 0.8s !important;
-          }
-          .ad-banner-left {
-            width: 100% !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            text-align: center !important;
-            gap: 4px !important;
-          }
-          .ad-student-name {
-            font-size: 16px !important;
-            line-height: 1.2 !important;
-            white-space: normal !important;
-            font-weight: 800 !important;
-          }
-          .ad-student-details {
-            font-size: 11px !important;
-            line-height: 1.2 !important;
-          }
-          .ad-banner-actions {
-            width: 100% !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            border: 1px solid rgba(0,0,0,0.06) !important;
-            border-radius: 12px !important;
-            background: linear-gradient(180deg, #ffffff, rgba(99,102,241,0.04)) !important;
-            padding: 12px 14px !important;
-            margin-top: 4px !important;
-            gap: 10px !important;
-            text-align: center !important;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.03) !important;
-          }
-          .ad-banner-actions .btn {
-            height: 26px !important;
-            min-height: 26px !important;
-            font-size: 10px !important;
-            border-radius: 6px !important;
-            padding: 0 12px !important;
-          }
-          .ad-banner-actions .btn svg {
-            width: 14px !important;
-            height: 14px !important;
-          }
-          .ad-banner-actions-right {
-            align-items: center !important;
-            text-align: center !important;
-          }
-          .ad-banner-actions-right > div:first-child {
-            font-size: 8px !important;
-            margin-bottom: 0 !important;
-            letter-spacing: 0.5px !important;
-          }
-          .ad-banner-actions-right > div:nth-child(2) {
-            font-size: 11px !important;
-            margin-bottom: 4px !important;
-          }
-          .ad-banner-actions-right span {
-            font-size: 9px !important;
-            padding: 2px 6px !important;
-          }
-          .ad-banner-btn-group {
-            flex-direction: row !important;
-            justify-content: center !important;
-            align-items: center !important;
-            gap: 10px !important;
-            margin-top: 0 !important;
-            width: 100% !important;
-          }
-          .ad-banner-btn-group button {
-            height: 24px !important;
-            min-height: 24px !important;
-            font-size: 10px !important;
-            padding: 0 8px !important;
-            flex: 1;
-            border-radius: 6px !important;
-          }
-          .ad-banner-btn-group button svg {
-            width: 12px !important;
-            height: 12px !important;
-          }
-          .ad-chamar-btn {
-            height: 38px !important;
-            min-height: 38px !important;
-            font-size: 13px !important;
-            padding: 0 16px !important;
-            white-space: normal !important;
-            text-align: center !important;
-            line-height: 1.2 !important;
-            border-radius: 12px !important;
-          }
-          .ad-chamar-btn svg {
-            width: 16px !important;
-            height: 16px !important;
-          }
-          .ad-page-header h2 {
-            font-size: 18px !important;
-            margin-bottom: 0px !important;
-          }
-          .ad-page-header .form-input, .ad-page-header .btn {
-            height: 40px !important;
-            min-height: 40px !important;
-            font-size: 14px !important;
-            padding: 0 14px !important;
-          }
-          .ad-page-header .form-input {
-            width: 200px !important;
-            padding-left: 36px !important;
-          }
-          .ad-modal-container {
-            padding: 20px !important;
-            border-radius: 16px !important;
-            width: 95% !important;
-          }
-          .ad-modal-container h2, .ad-modal-container h3 {
-            font-size: 18px !important;
-            margin-bottom: 12px !important;
-            line-height: 1.2 !important;
-          }
-          .ad-modal-container h4 {
-            font-size: 11px !important;
-            margin-bottom: 10px !important;
-          }
-          .ad-modal-container .ad-body-text {
-            font-size: 13px !important;
-            line-height: 1.5 !important;
-          }
-          .ad-switcher-item {
-            padding: 12px !important;
-            gap: 12px !important;
-          }
-          .ad-switcher-item .avatar {
-            width: 36px !important;
-            height: 36px !important;
-            font-size: 14px !important;
-          }
-          .ad-switcher-item-name {
-            font-size: 14px !important;
-          }
-          .ad-switcher-item-desc {
-            font-size: 11px !important;
-          }
-          .ad-attachment-item {
-            padding: 10px 12px !important;
-          }
-          .ad-attachment-item .avatar {
-            width: 32px !important;
-            height: 32px !important;
-          }
-          .ad-attachment-item .avatar svg {
-            width: 16px !important;
-            height: 16px !important;
-          }
-          .ad-modal-container .btn {
-            font-size: 11px !important;
-            padding: 6px 12px !important;
-            height: 32px !important;
-          }
-          .ad-event-datebox {
-            width: 70px !important;
-            padding: 12px 8px !important;
-          }
-          .ad-event-month {
-            font-size: 11px !important;
-          }
-          .ad-event-day {
-            font-size: 24px !important;
-          }
-          .ad-event-details {
-            padding: 12px 14px !important;
-          }
-          .ad-event-title {
-            font-size: 14px !important;
-            line-height: 1.2 !important;
-          }
-          .ad-event-type {
-            font-size: 9px !important;
-            padding: 2px 6px !important;
-          }
-          .ad-event-meta {
-            gap: 12px !important;
-            font-size: 11px !important;
-            margin-top: 8px !important;
-          }
-          .ad-event-meta svg {
-            width: 12px !important;
-            height: 12px !important;
-          }
-          .ad-event-header-row {
-            gap: 8px !important;
-          }
-          .ad-calendar-header {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 8px !important;
-            margin-bottom: 16px !important;
-            padding-left: 12px !important;
-          }
-          .ad-calendar-header h2 {
-            font-size: 28px !important;
-            line-height: 1.2 !important;
-          }
-          .ad-calendar-badge {
-            font-size: 13px !important;
-            padding: 4px 12px !important;
-            border-radius: 12px !important;
-          }
-          .ad-chat-container {
-            height: calc(100vh - 120px) !important;
-            flex-direction: column !important;
-            position: relative !important;
-          }
-          .ad-chat-sidebar {
-            width: 100% !important;
-            border-right: none !important;
-            padding: 0 !important;
-          }
-          .ad-chat-main {
-            width: 100% !important;
-            border-right: none !important;
-          }
-          .ad-chat-sidebar.mobile-hidden, .ad-chat-main.mobile-hidden {
-            display: none !important;
-          }
-          .mobile-back-btn {
-            display: flex !important;
-          }
-          .ad-chat-sidebar > div:first-child {
-            padding: 16px !important;
-          }
-          .ad-chat-sidebar h2 {
-            font-size: 20px !important;
-          }
-          .ad-chat-sidebar .form-input {
-            height: 36px !important;
-          }
-          .ad-nova-conversa-wrapper {
-            padding: 16px !important;
-          }
-          .ad-nova-conversa-header {
-            padding: 0px !important;
-            margin-bottom: 20px !important;
-          }
-          .ad-nova-conversa-titlebox h2 {
-            font-size: 20px !important;
-          }
-          .ad-chat-header {
-            padding: 12px 16px !important;
-          }
-          .ad-chat-header .ad-chat-header-avatar {
-            width: 40px !important;
-            height: 40px !important;
-            font-size: 16px !important;
-          }
-          .ad-chat-header h2, .ad-chat-header div[style*="fontWeight: 800"] {
-            font-size: 16px !important;
-          }
-          .ad-chat-bubble {
-            padding: 12px 16px !important;
-          }
-          .ad-chat-bubble-text {
-            font-size: 14px !important;
-          }
-          .ad-chat-input-area {
-            padding: 12px 16px !important;
-          }
-          .ad-chat-input-area .form-input {
-            height: 44px !important;
-            font-size: 14px !important;
-          }
-          .ad-chat-input-area .btn {
-            width: 44px !important;
-            height: 44px !important;
-          }
-          .ad-frequencia-header {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 16px !important;
-            padding-left: 12px !important;
-          }
-          .ad-freq-card {
-            padding: 16px !important;
-          }
-          .ad-freq-label {
-            font-size: 11px !important;
-            margin-bottom: 4px !important;
-          }
-          .ad-freq-number {
-            font-size: 32px !important;
-          }
-          .ad-freq-desc {
-            font-size: 11px !important;
-            margin-top: 0px !important;
-          }
-          .ad-freq-chart-card {
-            padding: 16px !important;
-            margin-bottom: 20px !important;
-          }
-          .ad-freq-hist-header {
-            padding: 16px !important;
-          }
-          .ad-freq-hist-item {
-            padding: 12px 16px !important;
-            flex-wrap: wrap !important;
-            gap: 12px !important;
-          }
-          .ad-freq-hist-item .avatar {
-            padding: 6px !important;
-          }
-          .ad-freq-hist-item .avatar svg {
-            width: 16px !important;
-            height: 16px !important;
-          }
-          .ad-freq-hist-title {
-            font-size: 14px !important;
-          }
-          .ad-freq-hist-desc {
-            font-size: 11px !important;
-          }
-          .ad-ocorrencias-header {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 16px !important;
-            padding-left: 12px !important;
-          }
-          .ad-oco-list {
-            gap: 16px !important;
-          }
-          .ad-oco-card {
-            padding: 16px !important;
-            gap: 12px !important;
-          }
-          .ad-oco-icon {
-            width: 36px !important;
-            height: 36px !important;
-          }
-          .ad-oco-icon svg {
-            width: 18px !important;
-            height: 18px !important;
-          }
-          .ad-oco-title-box {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 4px !important;
-          }
-          .ad-oco-title {
-            font-size: 15px !important;
-            line-height: 1.3 !important;
-          }
-          .ad-oco-desc {
-            font-size: 13px !important;
-          }
-          .ad-oco-assinatura-box {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 12px !important;
-            padding: 12px !important;
-          }
-          .ad-oco-assinatura-btn {
-            width: 100% !important;
-          }
-          .ad-notas-header {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 12px !important;
-            padding-left: 12px !important;
-            margin-bottom: 16px !important;
-          }
-          .ad-notas-media-number {
-            font-size: 36px !important; /* Was 48px */
-          }
-          .ad-notas-grid {
-            grid-template-columns: 1fr !important;
-            width: 100% !important;
-            min-width: 0 !important;
-            gap: 12px !important;
-            margin-bottom: 16px !important;
-          }
-          .ad-notas-global-card, .ad-notas-avalia-card, .ad-notas-table-card {
-            padding: 12px !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            min-width: 0 !important;
-            box-sizing: border-box !important;
-          }
-          .ad-notas-ava-item {
-            padding: 10px !important;
-            gap: 8px !important;
-          }
-          .ad-notas-ava-date {
-            width: 36px !important;
-            height: 36px !important;
-          }
-          .ad-notas-ava-date span:first-child {
-            font-size: 10px !important;
-          }
-          .ad-notas-ava-date span:last-child {
-            font-size: 15px !important;
-          }
-          .ad-notas-ava-title {
-            font-size: 13px !important;
-          }
-          .ad-notas-ava-desc {
-            font-size: 11px !important;
-          }
-          .ad-notas-ava-badge {
-            font-size: 9px !important;
-            padding: 2px 4px !important;
-            height: auto !important;
-            align-self: flex-start !important;
-          }
-          .ad-notas-table-title {
-            padding: 12px !important;
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 12px !important;
-          }
-          .ad-notas-table-title h3 {
-            font-size: 14px !important;
-          }
-          .ad-notas-table-title select {
-            width: 100% !important;
-          }
-          .ad-notas-table-wrapper {
-            max-width: 100vw !important;
-            width: 100% !important;
-            display: block !important;
-          }
-          .ad-notas-avalia-header {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 12px !important;
-            margin-bottom: 12px !important;
-          }
-          .ad-notas-avalia-header h3 {
-            font-size: 15px !important;
-          }
-          .ad-notas-th {
-            padding: 8px 12px !important;
-            font-size: 10px !important;
-            white-space: nowrap !important;
-          }
-          .ad-notas-td {
-            padding: 10px 12px !important;
-          }
-          .ad-notas-td-title {
-            font-size: 13px !important;
-            white-space: nowrap !important;
-          }
-          .ad-notas-td-grade {
-            width: 32px !important;
-            height: 32px !important;
-            font-size: 13px !important;
-            border-radius: 8px !important;
-          }
-          .ad-notas-prog-box {
-            gap: 8px !important;
-          }
-          .ad-notas-status {
-            font-size: 10px !important;
-            width: auto !important;
-          }
-          /* FINANCEIRO */
-          .ad-fin-hero {
-            padding: 20px !important;
-          }
-          .ad-fin-hero-title {
-            font-size: 18px !important;
-          }
-          .ad-fin-hero-grid {
-            grid-template-columns: 1fr !important;
-            gap: 12px !important;
-          }
-          .ad-fin-tabs-wrapper {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            margin-bottom: 16px !important;
-          }
-          .ad-fin-tabs {
-            gap: 16px !important;
-            overflow-x: auto !important;
-            max-width: 100% !important;
-            padding-bottom: 4px !important;
-          }
-          .ad-fin-tabs::-webkit-scrollbar {
-            display: none !important;
-          }
-          .ad-fin-card {
-            padding: 16px !important;
-          }
-          .ad-fin-card-header {
-            flex-direction: column !important;
-            gap: 12px !important;
-          }
-          .ad-fin-card-title-box {
-            width: 100% !important;
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 4px !important;
-          }
-          /* PERFIL */
-          .ad-perfil-grid {
-            grid-template-columns: 1fr !important;
-          }
-          .ad-perfil-card {
-            padding: 16px !important;
-          }
-          .ad-perfil-card-header {
-            margin-bottom: 12px !important;
-          }
-          .ad-perfil-resp-card {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 12px !important;
-          }
-          .ad-perfil-resp-info {
-            width: 100% !important;
-          }
-          .ad-mobile-nav {
-            position: fixed !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            flex-direction: row !important;
-            justify-content: flex-start !important;
-            overflow-x: auto !important;
-            background: rgba(255, 255, 255, 0.95) !important;
-            backdrop-filter: blur(10px) !important;
-            box-shadow: 0 -4px 20px rgba(0,0,0,0.06) !important;
-            border-top: 1px solid rgba(0,0,0,0.05) !important;
-            padding: 8px 16px 24px 16px !important;
-            margin: 0 !important;
-            height: 76px !important;
-            z-index: 9999 !important;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
-          }
-          .ad-mobile-nav::-webkit-scrollbar {
-            display: none;
-          }
-          .ad-mobile-nav-item {
-            flex-direction: column !important;
-            justify-content: center !important;
-            align-items: center !important;
-            gap: 4px !important;
-            padding: 4px !important;
-            font-size: 10px !important;
-            font-weight: 600 !important;
-            background: transparent !important;
-            min-width: 72px !important;
-            white-space: nowrap !important;
-            flex-shrink: 0 !important;
-          }
-          .ad-mobile-nav-item svg {
-            width: 24px !important;
-            height: 24px !important;
-            stroke-width: 1.5 !important;
-          }
-          .ad-page-header {
-            flex-direction: column !important;
-            align-items: flex-start !important;
-            gap: 16px !important;
-            padding: 0 16px !important;
-            margin-top: 0px !important;
-          }
-          .agenda-digital-content {
-             margin-top: 8px !important;
-          }
-          .ad-page-header > div {
-            width: 100% !important;
-          }
-          .ad-page-header input {
-            width: 100% !important;
-          }
-          .ad-modal-container {
-            padding: 24px !important;
-            border-radius: 16px !important;
-            width: 95% !important;
-          }
-          .ad-feed-list {
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 0 !important;
-            padding: 0 !important;
-          }
-          .ad-feed-card {
-            box-shadow: none !important;
-            border: none !important;
-            border-radius: 0 !important;
-            border-bottom: 1px solid hsl(var(--border-subtle)) !important;
-            background: transparent !important;
-            padding: 16px !important;
-            margin: 0 !important;
-          }
-          .ad-card-flex-row {
-            flex-direction: row !important;
-            align-items: flex-start !important;
-            justify-content: space-between !important;
-            gap: 12px !important;
-          }
-        }
-      `}} />
-
-
-
-      {/* Dynamic Header floating profile card */}
-
-      <div className="ad-premium-card-wrapper">
-        <div className="ad-premium-card">
-          {/* AREA 1: PERFIL ALUNO (Avatar + Nome + Badges Modernos) */}
-          <div className="ad-premium-card-header-flex" style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%' }}>
-            <div className="ad-premium-card-avatar" style={{ 
-              width: 90, 
-              height: 90, 
-              borderRadius: 20, 
-              background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)', 
-              boxShadow: '0 8px 24px rgba(168,85,247,0.3)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              color: 'white', 
-              fontWeight: 900, 
-              fontSize: 28, 
-              fontFamily: 'Outfit, sans-serif',
-              flexShrink: 0,
-              position: 'relative',
-              overflow: 'hidden'
-            }}>
-              {aluno?.foto ? (
-                 // eslint-disable-next-line @next/next/no-img-element
-                 <img src={aluno.foto} alt={aluno?.nome || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                 getInitials(aluno?.nome || '')
-              )}
-              {/* Soft gradient glass reflection gloss */}
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0,
-        width: '100vw', height: '50%', background: 'linear-gradient(to bottom, rgba(255,255,255,0.15), rgba(255,255,255,0))' }} />
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5, minWidth: 0, flex: 1, maxWidth: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%' }}>
-                <h2 className="ad-premium-student-name" style={{ fontSize: 21, fontWeight: 800, color: '#0f172a', margin: 0, fontFamily: 'Outfit, sans-serif', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', minWidth: 0, lineHeight: 1.15 }}>
-                  <span style={{ whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{abbreviateName(aluno?.nome || 'Carregando...')}</span>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#6366f1" style={{ flexShrink: 0 }}><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                </h2>
-                {currentUser?.cargo === 'Aluno' && (
-                  <button 
-                    onClick={async () => {
-                        setLoadingPath('logout')
-                        await performLogout();
-                      }}
-                      title="Sair da Conta"
-                      style={{
-                        background: 'rgba(239, 68, 68, 0.08)',
-                        color: '#ef4444',
-                        border: '1.5px solid rgba(239, 68, 68, 0.2)',
-                        borderRadius: '12px',
-                        padding: '6px 14px',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                        fontFamily: 'Outfit, sans-serif'
-                      }}
-                  >
-                    <LogOut size={13} strokeWidth={2.4} /> <span className="ad-desktop-only">Sair</span>
+      {/* Switcher de Aluno Overlay (Famílias com mais de 1 filho) */}
+      <PortalWrapper>
+        <AnimatePresence>
+          {switcherOpen && (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              style={{ 
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(15, 23, 42, 0.85)', zIndex: 9999, 
+                display: 'flex', alignItems: 'center', justifyContent: 'center' 
+              }} 
+              onClick={() => setSwitcherOpen(false)}
+            >
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0, y: 20 }} 
+                animate={{ scale: 1, opacity: 1, y: 0 }} 
+                exit={{ scale: 0.95, opacity: 0, y: 20 }} 
+                transition={{ type: "spring", stiffness: 300, damping: 25 }} 
+                className="ad-modal-container" 
+                style={{ background: 'hsl(var(--bg-surface))', borderRadius: 24, padding: 32, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }} 
+                onClick={e => e.stopPropagation()}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                  <h3 style={{ fontSize: 20, fontWeight: 800 }}>Trocar de Aluno</h3>
+                  <button onClick={() => setSwitcherOpen(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}>
+                    <X size={24} />
                   </button>
-                )}
-              </div>
-
-              {/* Badges Ultra Modernos (Estilo Imagem 2 Compacto): Turma + Turno no topo, Responsável abaixo em largura total */}
-              <div className="ad-modern-badges-container">
-                <div className="ad-modern-badges-top-row">
-                  {/* Badge 1: Turma */}
-                  <div className="ad-modern-badge badge-turma" title={`Turma: ${cleanTurma}`}>
-                    <div className="ad-badge-icon-box turma-icon">
-                      <GraduationCap size={12} strokeWidth={2.4} />
-                    </div>
-                    <span className="ad-badge-text">{cleanTurma}</span>
-                  </div>
-
-                  {/* Badge 2: Turno */}
-                  <div className="ad-modern-badge badge-turno" title={`Turno: ${cleanTurno}`}>
-                    <div className="ad-badge-icon-box turno-icon">
-                      <Calendar size={12} strokeWidth={2.4} />
-                    </div>
-                    <span className="ad-badge-text">{cleanTurno}</span>
-                  </div>
                 </div>
-
-                {/* Badge 3: Responsável */}
-                {(currentUser?.cargo !== 'Aluno' && !isMirroringAluno) && (() => {
-                  const mirroredResp = espelharRespId && profileData?.aluno?.responsaveis 
-                    ? profileData.aluno.responsaveis.find((r: any) => String(r.id) === String(espelharRespId)) 
-                    : null;
-                  const rawName = mirroredResp?.nome || currentUser?.nome || (aluno as any)?.responsavel || 'Responsável';
-                  const respFullName = abbreviateName(rawName);
-
-                  return (
-                    <div className="ad-modern-badge badge-resp" title={`Responsável: ${rawName}`}>
-                      <div className="ad-badge-resp-left">
-                        <div className="ad-badge-icon-box resp-icon">
-                          <Users size={12} strokeWidth={2.4} />
-                        </div>
-                        <div className="ad-badge-resp-info">
-                          <span className="ad-badge-resp-label">Responsável</span>
-                          <span className="ad-badge-text resp-name">{respFullName}</span>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {meusAlunos.map((a: any) => (
+                    <div 
+                      key={a.id} 
+                      className="ad-switcher-item" 
+                      onClick={() => {
+                        const newPath = pathname.replace(aluno?.id || '', a.id)
+                        router.push(newPath)
+                        setSwitcherOpen(false)
+                      }} 
+                      style={{ 
+                        display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 12, 
+                        border: `1px solid ${a.id === aluno?.id ? 'hsl(var(--primary))' : 'hsl(var(--border-subtle))'}`, 
+                        background: a.id === aluno?.id ? 'rgba(99,102,241,0.05)' : 'transparent', 
+                        cursor: 'pointer', transition: 'all 0.2s' 
+                      }}
+                    >
+                      <div className="avatar" style={{ width: 48, height: 48, fontSize: 18, background: 'var(--gradient-purple)', color: 'white' }}>
+                        {getInitials(a.nome)}
+                      </div>
+                      <div>
+                        <div className="ad-switcher-item-name" style={{ fontWeight: 700, color: 'hsl(var(--text-main))' }}>{a.nome}</div>
+                        <div className="ad-switcher-item-desc" style={{ fontSize: 13, color: 'hsl(var(--text-muted))' }}>
+                          Turma {a.turma_nome || a.turma || 'S/T'}
                         </div>
                       </div>
-
-                      <div className="ad-badge-resp-tags">
-                        {userAccessRole.isFin && (
-                          <span className="ad-badge-icon-tag tag-fin" title="Responsável Financeiro">
-                            <DollarSign size={10} strokeWidth={2.8} />
-                          </span>
-                        )}
-                        {userAccessRole.isPed && (
-                          <span className="ad-badge-icon-tag tag-ped" title="Responsável Pedagógico">
-                            <BookOpen size={9.5} strokeWidth={2.4} />
-                          </span>
-                        )}
-                      </div>
                     </div>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
-
-          {/* AREA 2: AÇÕES DO CARD - Linha 1: Botão Chamar Aluno Isolado; Linha 2: Trocar Aluno e Sair Discretos */}
-          {currentUser && currentUser.cargo !== 'Aluno' && (
-            <div className="ad-actions-container">
-              {adConfig?.permissoes?.chamadaAlunoPortaria !== false && (
-                <div className="ad-hero-call-row">
-                  <StudentCallButton 
-                    aluno={aluno} 
-                    currentUser={currentUser} 
-                    vinculo={profileData?.vinculo} 
-                    onOpenModal={() => { 
-                      setIsSpecialAuthModalOpen(true); 
-                      const all = profileData?.meusAlunos && profileData.meusAlunos.length > 0 ? profileData.meusAlunos : (aluno ? [aluno] : []);
-                      const isConfirmed = (sId: string) => {
-                        if (activeCalls.some(c => String(c.studentId) === String(sId) && c.status === 'confirmed')) return true;
-                        try {
-                          const stored = localStorage.getItem(`edu-confirmed-exit-${sId}`);
-                          if (stored) {
-                            const parsed = JSON.parse(stored);
-                            if (parsed.time && new Date(parsed.time).toDateString() === new Date().toDateString()) return true;
-                          }
-                        } catch(e) {}
-                        return false;
-                      };
-                      const unconfirmedIds = all.filter((a: any) => !isConfirmed(a.id)).map((a: any) => a.id);
-                      if (unconfirmedIds.length > 0) {
-                        setSelectedAlunos(unconfirmedIds);
-                      } else if (aluno?.id) {
-                        setSelectedAlunos([aluno.id]);
-                      } else {
-                        setSelectedAlunos([]);
-                      }
-                    }} 
-                    meusAlunos={profileData?.meusAlunos || []}
-                  />
+                  ))}
                 </div>
-              )}
-              
-              <div className="ad-secondary-actions-grid">
-                <Link 
-                  href="/agenda-digital/selecionar-aluno"
-                  title="Trocar de Aluno"
-                  className="ad-discreet-btn ad-discreet-switch"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="8.5" cy="7" r="3.5" />
-                    <path d="M2.5 19.5c0-3.3 2.7-6 6-6h2" />
-                    <path d="M17 5a3.5 3.5 0 0 1 3.5 3.5" />
-                    <polyline points="18 10 20.5 8.5 23 10" />
-                    <path d="M20.5 14.5a3.5 3.5 0 0 1-3.5 3.5" />
-                    <polyline points="15 17 17 19 19 17" />
-                  </svg>
-                  <span>Trocar aluno</span>
-                </Link>
-
-                <button 
-                  onClick={async () => {
-                    setLoadingPath('logout')
-                    await performLogout();
-                  }}
-                  title="Sair da Conta"
-                  className="ad-discreet-btn ad-discreet-logout"
-                >
-                  <LogOut size={15} strokeWidth={2.2} />
-                  <span>Sair</span>
-                </button>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           )}
+        </AnimatePresence>
+      </PortalWrapper>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, height: '100%' }}>
+        {/* Card Hero Modularizado do Aluno e Chamadas */}
+        <div className="ad-premium-card-wrapper">
+          <div className="ad-premium-card">
+            {/* 1. Cabeçalho de Identificação do Aluno */}
+            <StudentHeaderCard
+              aluno={aluno}
+              cleanTurma={cleanTurma}
+              cleanTurno={cleanTurno}
+              currentUser={currentUser}
+              isMirroringAluno={isMirroringAluno}
+              espelharRespId={espelharRespId}
+              profileData={profileData}
+              userAccessRole={userAccessRole}
+              onLogout={handleLogout}
+            />
+
+            {/* 2. Controlador de Chamada e Ações Secundárias */}
+            <StudentCallController
+              aluno={aluno}
+              currentUser={currentUser}
+              vinculo={vinculo}
+              meusAlunos={meusAlunos}
+              turmas={turmas}
+              adConfig={adConfig}
+              isMirrorModeActive={isMirrorModeActive}
+              onLogout={handleLogout}
+            />
+          </div>
         </div>
-      </div>
 
+        {/* 3. Barra de Navegação Rápida (Memoizada) */}
+        {aluno?.id && (
+          <AgendaNavigationTabBar
+            alunoId={aluno.id}
+            adConfig={adConfig}
+            userAccessRole={userAccessRole}
+          />
+        )}
 
-
-      {/* Main Grid containing Page Content */}
-      <div className="ad-main-grid" style={{ marginTop: 12 }}>
-
-        {/* Page Content Area */}
-        <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
-          <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole, meusAlunos }}>
+        {/* 4. Área de Conteúdo da Página com Contexto de Aluno Selecionado */}
+        <div className="ad-main-grid" style={{ marginTop: 12 }}>
+          <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
+            <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole, meusAlunos }}>
               {children}
-          </SelectedStudentProvider>
+            </SelectedStudentProvider>
+          </div>
         </div>
       </div>
-
-
-
-      <style dangerouslySetInnerHTML={{__html: `
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}} />
-    </div>
     </>
   )
 }

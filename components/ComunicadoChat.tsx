@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Paperclip, Send, Loader2, X, FileText } from 'lucide-react'
+import { Paperclip, Send, Loader2, X, FileText, Clock, CheckCheck } from 'lucide-react'
 import { uploadFileToSupabase } from '@/lib/upload/uploadClient'
+import { supabase } from '@/lib/supabase'
+import { triggerHaptic } from '@/lib/utils/haptics'
 
 interface ChatMessage {
   id: string
@@ -13,6 +15,7 @@ interface ChatMessage {
   anexos: string[]
   is_admin: boolean
   created_at: string
+  is_pending?: boolean
 }
 
 interface ComunicadoChatProps {
@@ -68,23 +71,95 @@ export function ComunicadoChat({ comunicadoId, remetenteId, remetenteNome, remet
     }
   }
 
+  // 100% Realtime via canais do Supabase (Zero Polling)
   useEffect(() => {
     fetchMessages()
-    const interval = setInterval(fetchMessages, 10000)
-    return () => clearInterval(interval)
+
+    if (!comunicadoId) return
+
+    const channelName = `chat_comunicado_${comunicadoId}`
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'comunicados_respostas',
+          filter: `comunicado_id=eq.${comunicadoId}`
+        },
+        (payload: any) => {
+          const newRow = payload.new as ChatMessage
+          if (!newRow) return
+
+          // Filtro de privacidade para não-admins
+          if (!isAdmin && newRow.remetente_id !== remetenteId && !newRow.is_admin) {
+            return
+          }
+
+          setMessages(prev => {
+            // Se já tiver a mensagem id real, não duplica
+            if (prev.some(m => m.id === newRow.id)) return prev
+            
+            // Reconciliação com Optimistic UI
+            const pendingMatchIndex = prev.findIndex(
+              m => m.is_pending && 
+                   m.conteudo === newRow.conteudo && 
+                   m.remetente_id === newRow.remetente_id
+            )
+            if (pendingMatchIndex !== -1) {
+              const clone = [...prev]
+              clone[pendingMatchIndex] = newRow
+              return clone
+            }
+
+            // Nova mensagem de outro participante
+            triggerHaptic('impactLight')
+            return [...prev, newRow]
+          })
+
+          setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [comunicadoId, remetenteId, isAdmin])
 
   const handleSend = async () => {
-    if (!newMessage.trim() && pendingAnexos.length === 0) return
+    const textToSend = newMessage.trim()
+    if (!textToSend && pendingAnexos.length === 0) return
     setIsSending(true)
+    triggerHaptic('impactLight')
+
+    // Optimistic UI: exibe instantaneamente na tela
+    const tempId = `optimistic-${Date.now()}`
+    const optimisticMessage: ChatMessage = {
+      id: tempId,
+      comunicado_id: comunicadoId,
+      remetente_id: remetenteId,
+      remetente_nome: remetenteNome,
+      conteudo: textToSend,
+      anexos: [...pendingAnexos],
+      is_admin: isAdmin,
+      created_at: new Date().toISOString(),
+      is_pending: true
+    }
+
+    setMessages(prev => [...prev, optimisticMessage])
+    setNewMessage('')
+    setPendingAnexos([])
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     
     try {
       const payload = {
         comunicado_id: comunicadoId,
         remetente_id: remetenteId,
         remetente_nome: remetenteNome,
-        conteudo: newMessage.trim(),
-        anexos: pendingAnexos,
+        conteudo: textToSend,
+        anexos: optimisticMessage.anexos,
         is_admin: isAdmin
       }
 
@@ -96,13 +171,18 @@ export function ComunicadoChat({ comunicadoId, remetenteId, remetenteNome, remet
 
       if (res.ok) {
         const data = await res.json()
-        setMessages(prev => [...prev, data])
-        setNewMessage('')
-        setPendingAnexos([])
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+        triggerHaptic('success')
+        // Substitui a mensagem otimista pelo registro definitivo salvo no banco
+        setMessages(prev => prev.map(m => m.id === tempId ? data : m))
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+      } else {
+        // Marca falha na mensagem otimista
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, is_pending: false, conteudo: `${m.conteudo} (Falha no envio)` } : m))
+        triggerHaptic('error')
       }
     } catch (e) {
       console.error('Error sending message', e)
+      triggerHaptic('error')
     } finally {
       setIsSending(false)
     }
@@ -185,8 +265,17 @@ export function ComunicadoChat({ comunicadoId, remetenteId, remetenteNome, remet
                       <span style={{ fontSize: 12, color: '#64748b' }}>
                         • {isMe ? 'Você' : (msg.is_admin ? 'Escola' : 'Familiar')}
                       </span>
-                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>
-                        {timeAgoShort(msg.created_at)}
+                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {msg.is_pending ? (
+                          <span style={{ color: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <Clock size={11} /> enviando...
+                          </span>
+                        ) : (
+                          <>
+                            {timeAgoShort(msg.created_at)}
+                            {isMe && <CheckCheck size={12} color="#3b82f6" />}
+                          </>
+                        )}
                       </span>
                     </div>
                     
