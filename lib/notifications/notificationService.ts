@@ -669,6 +669,9 @@ class NotificationService {
         aliasesToRegister.push({ label: 'email', id: String(user.email).toLowerCase().trim() })
       }
 
+      // Identifica se o usuário é colaborador puro sem alunos vinculados
+      const isPureStaff = !user.aluno_id && !extraData?.alunoId && (!Array.isArray(extraData?.meusAlunos) || extraData.meusAlunos.length === 0)
+
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
 
@@ -730,7 +733,6 @@ class NotificationService {
         }
 
         // Limpeza de tags residuais entre papéis no hardware
-        const isPureStaff = !user.aluno_id && !extraData?.alunoId && (!Array.isArray(extraData?.meusAlunos) || extraData.meusAlunos.length === 0)
         if (isPureStaff) {
           const studentTags = ['aluno_id', 'responsavel_id', 'turma', 'aluno_db_id']
           if (typeof OneSignalNative.User?.removeTags === 'function') {
