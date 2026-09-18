@@ -32,10 +32,14 @@ export async function GET(request: Request) {
     if (authFoto) return NextResponse.json({ foto: authFoto });
 
     // 2. Busca na tabela system_users (por id, auth_id ou email)
+    const isIdUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const sysUserFilter = isIdUuid
+      ? `id.eq.${id},auth_id.eq.${id},email.eq.${id}`
+      : `id.eq.${id},email.eq.${id}`;
     const { data: sysUser } = await supabaseAdmin
       .from('system_users')
       .select('dados')
-      .or(`id.eq.${id},auth_id.eq.${id},email.eq.${id}`)
+      .or(sysUserFilter)
       .maybeSingle();
 
     if (sysUser?.dados?.foto) {
@@ -97,14 +101,18 @@ export async function POST(request: Request) {
     const supabaseAdmin = getAdminClient();
 
     // 1. Localizar registro correspondente em system_users (por id, auth_id ou email)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+    const postFilter = isUuid
+      ? `id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`
+      : `id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`;
+
     const { data: currentSysUser } = await supabaseAdmin
       .from('system_users')
       .select('id, auth_id, email, dados')
-      .or(`id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`)
+      .or(postFilter)
       .maybeSingle();
 
     // 2. Determinar o authId correto para atualizar auth metadata
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
     const targetAuthId = isUuid ? userId : (currentSysUser?.auth_id || loggedUser.id);
 
     if (targetAuthId) {

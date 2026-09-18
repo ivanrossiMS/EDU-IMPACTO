@@ -21,6 +21,8 @@ export async function POST(request: NextRequest) {
       userId,
       responsavelId,
       alunoId,
+      colaboradorId,
+      systemUserId,
       email,
       tags = {},
     } = body
@@ -44,6 +46,7 @@ export async function POST(request: NextRequest) {
 
     const cleanUserId = String(userId).trim()
     const cleanSubId = String(subscriptionId).trim()
+    const colabIdent = colaboradorId || systemUserId
     const authHeader = `Basic ${apiKey}`
 
     // 0. Verifica o estado atual do player para detectar external_user_id ausente
@@ -63,6 +66,7 @@ export async function POST(request: NextRequest) {
       ...tags,
       ...(responsavelId ? { responsavel_id: String(responsavelId) } : {}),
       ...(alunoId ? { aluno_id: String(alunoId) } : {}),
+      ...(colabIdent ? { colaborador_id: String(colabIdent) } : {}),
     }
 
     // 1. Atualizar o player no OneSignal diretamente com external_user_id e tags
@@ -91,6 +95,10 @@ export async function POST(request: NextRequest) {
     }
     if (responsavelId) aliases['responsavel_id'] = String(responsavelId).trim()
     if (alunoId) aliases['aluno_id'] = String(alunoId).trim()
+    if (colabIdent) {
+      aliases['colaborador_id'] = String(colabIdent).trim()
+      aliases['system_user_id'] = String(colabIdent).trim()
+    }
     if (email) aliases['email'] = String(email).toLowerCase().trim()
 
     // 2a. PATCH na identidade do usuário OneSignal pelo external_id

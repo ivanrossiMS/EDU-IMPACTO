@@ -833,6 +833,7 @@ export default function ADAdminPushTestPage() {
       const payload = {
         alunoId: selectedAluno?.id || null,
         colaboradorId: selectedColaborador?.id || null,
+        authId: selectedColaborador?.auth_id || null,
         targetType: selectedColaborador ? 'colaborador' : 'aluno',
         responsavelIds: selectedAluno ? selectedRespIds : [],
         includeAlunoDirect: selectedAluno ? includeAlunoDirect : false,

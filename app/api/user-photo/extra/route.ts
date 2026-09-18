@@ -41,10 +41,15 @@ export async function POST(request: Request) {
       }
     );
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+    const filter = isUuid
+      ? `id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`
+      : `id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`;
+
     const { data: current } = await supabaseAdmin
       .from('system_users')
       .select('id, dados')
-      .or(`id.eq.${userId},auth_id.eq.${userId},auth_id.eq.${loggedUser.id},email.eq.${loggedUser.email}`)
+      .or(filter)
       .maybeSingle();
 
     if (current) {

@@ -38,11 +38,16 @@ async function fetchLoggedUserAccessStartDate(user: any, strictMomentos: boolean
     const email = user.email || ''
     const userId = user.id
 
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId || '').trim())
+    const visFilter = isUuid
+      ? `id.eq."${userId}",auth_id.eq."${userId}",email.eq."${email}"`
+      : `id.eq."${userId}",email.eq."${email}"`
+
     const adminClient = getAdminClient()
     const { data: dbUser } = await adminClient
       .from('system_users')
       .select('perfil, cargo, created_at, dados')
-      .or(`id.eq."${userId}",auth_id.eq."${userId}",email.eq."${email}"`)
+      .or(visFilter)
       .maybeSingle()
 
     const perfil = dbUser?.perfil || user.user_metadata?.perfil || ''

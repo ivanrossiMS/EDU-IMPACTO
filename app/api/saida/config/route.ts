@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
-import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 
 export const dynamic = 'force-dynamic'
@@ -11,9 +10,6 @@ let memoryCache: any = null;
 let cacheTime: number = 0;
 
 export async function GET(request: Request) {
-  const { user, errorResponse } = await requireAuth()
-  if (errorResponse) return errorResponse
-
   try {
     // Return from cache if less than 60s old
     if (memoryCache && (Date.now() - cacheTime < 60000)) {
@@ -25,9 +21,9 @@ export async function GET(request: Request) {
       })
     }
 
-    const supabase = await createProtectedClient()
+    const adminSupabase = getAdminClient()
 
-    const { data, error } = await supabase.from('saida_config').select('id, dados')
+    const { data, error } = await adminSupabase.from('saida_config').select('id, dados')
     if (error) {
       console.error('[saida_config GET] Fetch error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -53,7 +49,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { user, errorResponse } = await requireAuth()
+  const { user, errorResponse } = await requireAuth(request)
   if (errorResponse) return errorResponse
 
   try {

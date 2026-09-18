@@ -176,6 +176,9 @@ async function fetchOneSignalUserDevices(
   }
 }
 
+const isUUID = (str: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim())
+
 async function fetchDevicesForGuardian(r: {
   authId?: string | null
   responsavel_id?: string | null
@@ -191,20 +194,24 @@ async function fetchDevicesForGuardian(r: {
     devs.forEach((d: any) => deviceMap.set(d.id, d))
   }
 
-  // 2. Tenta por responsavel_id (alias customizado associado ao responsável no OneSignal)
+  // 2. Tenta por responsavel_id (alias customizado e como external_id)
   if (r.responsavel_id) {
     const devs = await fetchOneSignalUserDevices(r.responsavel_id, 'responsavel_id')
     devs.forEach((d: any) => deviceMap.set(d.id, d))
+    const devsExt = await fetchOneSignalUserDevices(r.responsavel_id, 'external_id')
+    devsExt.forEach((d: any) => deviceMap.set(d.id, d))
   }
 
-  // 3. Tenta por colaborador_id
+  // 3. Tenta por colaborador_id (tanto como alias quanto como external_id)
   if (r.colaborador_id) {
     const devs = await fetchOneSignalUserDevices(r.colaborador_id, 'colaborador_id')
     devs.forEach((d: any) => deviceMap.set(d.id, d))
+    const devsExt = await fetchOneSignalUserDevices(r.colaborador_id, 'external_id')
+    devsExt.forEach((d: any) => deviceMap.set(d.id, d))
   }
 
   // 4. Tenta por system_user_id
-  if (r.system_user_id) {
+  if (r.system_user_id && r.system_user_id !== r.colaborador_id) {
     const devs = await fetchOneSignalUserDevices(r.system_user_id, 'system_user_id')
     devs.forEach((d: any) => deviceMap.set(d.id, d))
   }
@@ -341,14 +348,28 @@ export async function GET(request: Request) {
     // 2.3 Inspeção detalhada de um Colaborador / Administrador e seus aparelhos no OneSignal
     if (colaboradorId) {
       const cleanColabId = colaboradorId.trim()
+      const colabIsUuid = isUUID(cleanColabId)
+      const colabFilter = colabIsUuid
+        ? `id.eq.${cleanColabId},auth_id.eq.${cleanColabId},email.eq.${cleanColabId}`
+        : `id.eq.${cleanColabId},email.eq.${cleanColabId}`
 
-      const { data: userRow, error: uErr } = await supabase
+      let { data: userRow } = await supabase
         .from('system_users')
         .select('id, nome, email, cargo, perfil, status, dados, auth_id')
-        .or(`id.eq.${cleanColabId},auth_id.eq.${cleanColabId},email.eq.${cleanColabId}`)
+        .or(colabFilter)
         .maybeSingle()
 
-      if (uErr || !userRow) {
+      // Fallback: se não encontrou e tem @, busca por email
+      if (!userRow && cleanColabId.includes('@')) {
+        const { data: rowByEmail } = await supabase
+          .from('system_users')
+          .select('id, nome, email, cargo, perfil, status, dados, auth_id')
+          .ilike('email', cleanColabId)
+          .maybeSingle()
+        if (rowByEmail) userRow = rowByEmail
+      }
+
+      if (!userRow) {
         return NextResponse.json({ error: 'Colaborador / Usuário não encontrado no banco de dados.' }, { status: 404 })
       }
 
@@ -359,7 +380,7 @@ export async function GET(request: Request) {
       const isInstitucional = isMaster || ['Direção', 'Diretor Geral', 'Administrador'].includes(userRow.perfil)
 
       const devices = await fetchDevicesForGuardian({
-        authId: userRow.auth_id || (String(userRow.id).length > 20 ? userRow.id : null),
+        authId: userRow.auth_id || (colabIsUuid ? cleanColabId : null),
         system_user_id: String(userRow.id),
         colaborador_id: String(userRow.id),
         email: userRow.email,
@@ -691,12 +712,32 @@ export async function POST(request: Request) {
     const targetDetails: any[] = []
 
     // 0. Resolução de Colaborador / Administrador se fornecido
-    if (colaboradorId) {
-      const { data: colab } = await supabase
+    const effectiveColabId = colaboradorId || body.authId
+    if (effectiveColabId) {
+      const cleanColab = String(effectiveColabId).trim()
+      const colabIsUuid = isUUID(cleanColab)
+      const colabFilter = colabIsUuid
+        ? `id.eq.${cleanColab},auth_id.eq.${cleanColab},email.eq.${cleanColab}`
+        : `id.eq.${cleanColab},email.eq.${cleanColab}`
+
+      let { data: colab } = await supabase
         .from('system_users')
         .select('id, nome, email, cargo, perfil, auth_id')
-        .or(`id.eq.${String(colaboradorId).trim()},auth_id.eq.${String(colaboradorId).trim()},email.eq.${String(colaboradorId).trim()}`)
+        .or(colabFilter)
         .maybeSingle()
+
+      if (!colab && cleanColab.includes('@')) {
+        const { data: colabByEmail } = await supabase
+          .from('system_users')
+          .select('id, nome, email, cargo, perfil, auth_id')
+          .ilike('email', cleanColab)
+          .maybeSingle()
+        if (colabByEmail) colab = colabByEmail
+      }
+
+      if (body.authId && isUUID(String(body.authId))) {
+        targetUserIdsSet.add(String(body.authId).trim())
+      }
 
       if (colab) {
         colabData = colab

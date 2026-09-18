@@ -506,6 +506,8 @@ class NotificationService {
     userId: string
     responsavelId?: string
     alunoId?: string
+    colaboradorId?: string
+    systemUserId?: string
     email?: string
     tags?: Record<string, string>
   }): Promise<void> {
@@ -727,6 +729,26 @@ class NotificationService {
           await OneSignalNative.User.addTags(tags).catch(() => {})
         }
 
+        // Limpeza de tags residuais entre papéis no hardware
+        const isPureStaff = !user.aluno_id && !extraData?.alunoId && (!Array.isArray(extraData?.meusAlunos) || extraData.meusAlunos.length === 0)
+        if (isPureStaff) {
+          const studentTags = ['aluno_id', 'responsavel_id', 'turma', 'aluno_db_id']
+          if (typeof OneSignalNative.User?.removeTags === 'function') {
+            await OneSignalNative.User.removeTags(studentTags).catch(() => {})
+          }
+          if (typeof OneSignalNative.User?.removeAliases === 'function') {
+            await OneSignalNative.User.removeAliases(['responsavel_id', 'aluno_id']).catch(() => {})
+          }
+        } else if (!colabId && !isMaster) {
+          const staffTags = ['colaborador_id', 'system_user_id', 'isMasterAdmin']
+          if (typeof OneSignalNative.User?.removeTags === 'function') {
+            await OneSignalNative.User.removeTags(staffTags).catch(() => {})
+          }
+          if (typeof OneSignalNative.User?.removeAliases === 'function') {
+            await OneSignalNative.User.removeAliases(['colaborador_id', 'system_user_id']).catch(() => {})
+          }
+        }
+
         // Garantia dupla (Dual-Layer): envia a subscrição para o backend sincronizar via REST API
         // Sempre envia, independentemente de loginOk — garante que o backend corrija um estado inconsistente
         const subId = await OneSignalNative.User?.pushSubscription?.getIdAsync().catch(() => null)
@@ -738,6 +760,8 @@ class NotificationService {
             userId,
             responsavelId: rId ? String(rId) : undefined,
             alunoId: user.aluno_id ? String(user.aluno_id) : (extraData?.alunoId ? String(extraData.alunoId) : undefined),
+            colaboradorId: colabId ? String(colabId) : undefined,
+            systemUserId: colabId ? String(colabId) : undefined,
             email: user.email ? String(user.email).toLowerCase().trim() : undefined,
             tags,
           }).catch(() => {})
@@ -786,6 +810,24 @@ class NotificationService {
             await OS.User.addTags(tags).catch(() => {})
           }
 
+          if (isPureStaff) {
+            const studentTags = ['aluno_id', 'responsavel_id', 'turma', 'aluno_db_id']
+            if (OS.User?.removeTags) {
+              await OS.User.removeTags(studentTags).catch(() => {})
+            }
+            if (OS.User?.removeAliases) {
+              await OS.User.removeAliases(['responsavel_id', 'aluno_id']).catch(() => {})
+            }
+          } else if (!colabId && !isMaster) {
+            const staffTags = ['colaborador_id', 'system_user_id', 'isMasterAdmin']
+            if (OS.User?.removeTags) {
+              await OS.User.removeTags(staffTags).catch(() => {})
+            }
+            if (OS.User?.removeAliases) {
+              await OS.User.removeAliases(['colaborador_id', 'system_user_id']).catch(() => {})
+            }
+          }
+
           const pushSub = OS.User?.PushSubscription || OS.User?.pushSubscription
           const subId = pushSub?.id
           if (subId) {
@@ -795,6 +837,8 @@ class NotificationService {
               userId,
               responsavelId: rId ? String(rId) : undefined,
               alunoId: user.aluno_id ? String(user.aluno_id) : (extraData?.alunoId ? String(extraData.alunoId) : undefined),
+              colaboradorId: colabId ? String(colabId) : undefined,
+              systemUserId: colabId ? String(colabId) : undefined,
               email: user.email ? String(user.email).toLowerCase().trim() : undefined,
               tags,
             }).catch(() => {})
@@ -844,15 +888,34 @@ class NotificationService {
 
     const isNative = Capacitor.isNativePlatform()
 
+    const tagsToRemove = [
+      'aluno_id', 'responsavel_id', 'turma', 'aluno_db_id',
+      'colaborador_id', 'system_user_id', 'cargo', 'perfil',
+      'isMasterAdmin', 'acesso', 'has_dual_role'
+    ]
+    const aliasesToRemove = ['responsavel_id', 'aluno_id', 'colaborador_id', 'system_user_id', 'codigo']
+
     try {
       if (isNative) {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
+        if (typeof OneSignalNative.User?.removeTags === 'function') {
+          await OneSignalNative.User.removeTags(tagsToRemove).catch(() => {})
+        }
+        if (typeof OneSignalNative.User?.removeAliases === 'function') {
+          await OneSignalNative.User.removeAliases(aliasesToRemove).catch(() => {})
+        }
         if (typeof OneSignalNative.logout === 'function') {
           await OneSignalNative.logout()
           console.log('🚪 [NotificationService] Usuário deslogado do OneSignal.')
         }
       } else {
         const OS = (window as any).OneSignal
+        if (OS?.User?.removeTags) {
+          await OS.User.removeTags(tagsToRemove).catch(() => {})
+        }
+        if (OS?.User?.removeAliases) {
+          await OS.User.removeAliases(aliasesToRemove).catch(() => {})
+        }
         if (OS && typeof OS.logout === 'function') {
           await OS.logout().catch(() => {})
         }
