@@ -233,7 +233,6 @@ export function ADSidebar() {
 
         if (item.label === 'Financeiro') {
            if (adConfig?.permissoes?.visualizarFinanceiro === false) return false;
-           if (!isFin) return false;
         }
         if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
         if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false
@@ -567,7 +566,6 @@ export function ADSidebar() {
 
                     if (item.label === 'Financeiro') {
                        if (adConfig?.permissoes?.visualizarFinanceiro === false) return false;
-                       if (!isFin) return false;
                     }
                     if (item.label === 'Frequência' && adConfig?.permissoes?.visualizarFrequencia === false) return false
                     if (item.label === 'Ocorrências' && adConfig?.permissoes?.visualizarOcorrencias === false) return false

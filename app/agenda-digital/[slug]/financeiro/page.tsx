@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Wallet,
@@ -30,12 +30,17 @@ import {
   AlertCircle,
   User,
   Users,
-  FileText
+  FileText,
+  Lock,
+  HelpCircle,
+  MessageCircle,
+  ArrowLeft
 } from 'lucide-react'
 
 import dynamic from 'next/dynamic'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { useSelectedStudent } from '@/lib/selectedStudentContext'
+import { triggerHaptic } from '@/lib/utils/haptics'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { PixBottomSheet } from '../../components/PixBottomSheet'
 
@@ -534,11 +539,667 @@ function MobileInvoiceCard({
   )
 }
 
+// ─── Componente de Acesso Restrito (Ultra Moderno) ───────────────────────────
+
+interface RestrictedFinancialAccessViewProps {
+  currentStudent: any
+  userAccessRole: { isFin: boolean; isPed: boolean; parentesco: string }
+  adConfig: any
+  studentRef: string
+  router: any
+}
+
+function RestrictedFinancialAccessView({
+  currentStudent,
+  userAccessRole,
+  adConfig,
+  studentRef,
+  router,
+}: RestrictedFinancialAccessViewProps) {
+  const respFinanceiroNome = useMemo(() => {
+    if (!currentStudent) return 'Cadastrado no contrato'
+    const list = currentStudent.responsaveis || []
+    const found = list.find((r: any) => r.resp_financeiro === true)
+    if (found?.nome) return found.nome
+    if (currentStudent.responsavel_financeiro) return currentStudent.responsavel_financeiro
+    return 'Cadastrado no contrato escolar'
+  }, [currentStudent])
+
+  const handleContactSecretary = useCallback(() => {
+    triggerHaptic('impactMedium')
+    const list = (adConfig?.contatosWhatsapp || []).filter((c: any) => c.ativo)
+    const contact =
+      list.find((c: any) => c.setor?.toLowerCase().includes('finan') || c.nome?.toLowerCase().includes('finan')) ||
+      list.find((c: any) => c.setor?.toLowerCase().includes('secr') || c.nome?.toLowerCase().includes('secr')) ||
+      list[0]
+
+    if (contact?.telefone) {
+      let num = contact.telefone.replace(/\D/g, '')
+      if (!num.startsWith('55') && num.length >= 10) num = '55' + num
+      const msg = encodeURIComponent(
+        `Olá! Estou na Agenda Digital do(a) aluno(a) ${currentStudent?.nome || ''} e gostaria de informações sobre o setor financeiro.`
+      )
+      window.open(`https://wa.me/${num}?text=${msg}`, '_blank')
+    } else {
+      router.push(`/agenda-digital/${studentRef}/comunicados`)
+    }
+  }, [adConfig?.contatosWhatsapp, currentStudent?.nome, router, studentRef])
+
+  return (
+    <div
+      style={{
+        maxWidth: 780,
+        margin: '0 auto',
+        padding: '10px 14px 120px',
+        fontFamily: 'Outfit, Inter, system-ui, sans-serif',
+      }}
+    >
+      {/* ── HEADER CARD UNIFICADO ── */}
+      <div
+        style={{
+          background: '#ffffff',
+          borderRadius: 22,
+          border: '1.5px solid #edf2f7',
+          padding: '16px 18px',
+          marginBottom: 16,
+          boxShadow: '0 4px 18px rgba(0, 0, 0, 0.03)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 14,
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 6px 14px rgba(79, 70, 229, 0.22)',
+              color: '#ffffff',
+              flexShrink: 0,
+            }}
+          >
+            <Wallet size={22} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 20,
+                  fontWeight: 900,
+                  color: '#0f172a',
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.2,
+                }}
+              >
+                Financeiro
+              </h1>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 20,
+                  background: 'rgba(79, 70, 229, 0.08)',
+                  color: '#4338ca',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                Agenda Digital
+              </span>
+            </div>
+            <p
+              style={{
+                margin: '3px 0 0',
+                fontSize: 12,
+                color: '#64748b',
+                fontWeight: 500,
+              }}
+            >
+              Faturas, boletos e pagamentos via Pix
+            </p>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            borderRadius: 12,
+            background: '#fef2f2',
+            border: '1px solid #fee2e2',
+            color: '#dc2626',
+            fontSize: 12,
+            fontWeight: 800,
+          }}
+        >
+          <Lock size={13} strokeWidth={2.5} />
+          <span>Acesso Restrito</span>
+        </div>
+      </div>
+
+      {/* ── CARD ULTRA MODERNO DE RESTRIÇÃO DE ACESSO ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+        style={{
+          background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+          borderRadius: 28,
+          border: '1.5px solid #e2e8f0',
+          padding: '36px 22px',
+          boxShadow: '0 20px 45px -15px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.9) inset',
+          position: 'relative',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+          gap: 20,
+        }}
+      >
+        {/* Glow de fundo estético */}
+        <div
+          style={{
+            position: 'absolute',
+            top: -70,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 320,
+            height: 200,
+            background: 'radial-gradient(circle, rgba(99, 102, 241, 0.14) 0%, rgba(139, 92, 246, 0.04) 50%, transparent 80%)',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
+
+        {/* Emblema Central em Camadas */}
+        <div style={{ position: 'relative', zIndex: 1, marginTop: 4 }}>
+          <div
+            style={{
+              width: 90,
+              height: 90,
+              borderRadius: '50%',
+              background: 'rgba(99, 102, 241, 0.08)',
+              border: '1px solid rgba(99, 102, 241, 0.18)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 24px rgba(99, 102, 241, 0.12)',
+            }}
+          >
+            <div
+              style={{
+                width: 66,
+                height: 66,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                boxShadow: '0 10px 20px rgba(79, 70, 229, 0.35)',
+              }}
+            >
+              <ShieldCheck size={34} strokeWidth={2.2} />
+            </div>
+          </div>
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              background: '#10b981',
+              border: '3px solid #ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+            }}
+          >
+            <Lock size={13} strokeWidth={2.6} />
+          </div>
+        </div>
+
+        {/* Tag Pill LGPD */}
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 14px',
+            borderRadius: 30,
+            background: 'rgba(79, 70, 229, 0.07)',
+            border: '1px solid rgba(79, 70, 229, 0.2)',
+            color: '#4338ca',
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: '0.03em',
+            zIndex: 1,
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: '#4f46e5',
+              display: 'inline-block',
+            }}
+          />
+          ACESSO RESTRITO • PRIVACIDADE & LGPD
+        </div>
+
+        {/* Textos Principais */}
+        <div style={{ maxWidth: 580, zIndex: 1 }}>
+          <h2
+            style={{
+              margin: '0 0 10px',
+              fontSize: 22,
+              fontWeight: 900,
+              color: '#0f172a',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.25,
+            }}
+          >
+            Dados Financeiros Protegidos
+          </h2>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 14,
+              color: '#64748b',
+              lineHeight: 1.6,
+            }}
+          >
+            Por diretrizes de segurança da instituição e em conformidade com a{' '}
+            <strong style={{ color: '#334155' }}>Lei Geral de Proteção de Dados (LGPD)</strong>, as informações de
+            mensalidades, contratos, faturas em aberto, boletos e pagamentos via Pix são restritas exclusivamente ao{' '}
+            <strong style={{ color: '#4f46e5' }}>responsável financeiro</strong> cadastrado no contrato do aluno.
+          </p>
+        </div>
+
+        {/* Grid com Informações de Contexto dos Perfis */}
+        <div
+          style={{
+            width: '100%',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 12,
+            marginTop: 4,
+            zIndex: 1,
+            textAlign: 'left',
+          }}
+        >
+          {/* Card 1: Aluno Vinculado */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 18,
+              padding: '16px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  background: '#e0e7ff',
+                  color: '#4f46e5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <GraduationCap size={15} />
+              </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: '#94a3b8',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Aluno(a)
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: '#1e293b',
+                marginTop: 4,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+              title={currentStudent?.nome}
+            >
+              {currentStudent?.nome || 'Aluno Selecionado'}
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              Turma {currentStudent?.turma_nome || currentStudent?.turma || 'S/T'}
+            </div>
+          </div>
+
+          {/* Card 2: Seu Perfil Atual */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 18,
+              padding: '16px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  background: '#dbeafe',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <User size={15} />
+              </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: '#94a3b8',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Seu Perfil Atual
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: '#1e293b',
+                marginTop: 4,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {userAccessRole?.parentesco || 'Responsável'}
+            </div>
+            <div>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  background: '#f1f5f9',
+                  color: '#475569',
+                  border: '1px solid #e2e8f0',
+                  display: 'inline-block',
+                }}
+              >
+                Acesso Pedagógico
+              </span>
+            </div>
+          </div>
+
+          {/* Card 3: Responsável Financeiro Cadastrado */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 18,
+              padding: '16px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 8,
+                  background: '#dcfce7',
+                  color: '#16a34a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Wallet size={15} />
+              </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: '#94a3b8',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Resp. Financeiro
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: '#1e293b',
+                marginTop: 4,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+              title={respFinanceiroNome}
+            >
+              {respFinanceiroNome}
+            </div>
+            <div>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  background: '#ecfdf5',
+                  color: '#047857',
+                  border: '1px solid #a7f3d0',
+                  display: 'inline-block',
+                }}
+              >
+                Titular do Contrato
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Box de Orientações Práticas */}
+        <div
+          style={{
+            width: '100%',
+            background: '#f8fafc',
+            borderRadius: 20,
+            border: '1px solid #e2e8f0',
+            padding: '18px 20px',
+            textAlign: 'left',
+            zIndex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 800,
+              color: '#334155',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <HelpCircle size={16} style={{ color: '#4f46e5' }} /> Orientações e Dúvidas Frequentes
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: '#4f46e5',
+                marginTop: 7,
+                flexShrink: 0,
+              }}
+            />
+            <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.55 }}>
+              <strong style={{ color: '#1e293b' }}>Precisa de 2ª via ou código Pix?</strong> O(A) responsável
+              financeiro cadastrado pode entrar neste mesmo menu pelo aplicativo dele(a) para visualizar as parcelas,
+              copiar o código Pix ou baixar o boleto bancário instantaneamente.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: '#10b981',
+                marginTop: 7,
+                flexShrink: 0,
+              }}
+            />
+            <p style={{ margin: 0, fontSize: 13, color: '#475569', lineHeight: 1.55 }}>
+              <strong style={{ color: '#1e293b' }}>Deseja assumir o vínculo financeiro?</strong> Caso você precise
+              alterar a titularidade financeira do contrato ou incluir seus dados para faturamento, solicite a
+              atualização diretamente junto à secretaria escolar.
+            </p>
+          </div>
+        </div>
+
+        {/* Botões de Ação */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            width: '100%',
+            zIndex: 1,
+            marginTop: 4,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleContactSecretary}
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 14,
+              padding: '12px 22px',
+              fontSize: 13,
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              boxShadow: '0 6px 16px rgba(16, 185, 129, 0.25)',
+              transition: 'all 0.2s',
+            }}
+          >
+            <MessageCircle size={16} /> Falar com a Secretaria
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('selection')
+              router.push(`/agenda-digital/${studentRef}/comunicados`)
+            }}
+            style={{
+              background: '#ffffff',
+              color: '#475569',
+              border: '1.5px solid #cbd5e1',
+              borderRadius: 14,
+              padding: '12px 20px',
+              fontSize: 13,
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)',
+              transition: 'all 0.2s',
+            }}
+          >
+            <ArrowLeft size={16} /> Voltar para Comunicados
+          </button>
+        </div>
+
+        {/* Rodapé de Segurança e LGPD */}
+        <div
+          style={{
+            fontSize: 11,
+            color: '#94a3b8',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            zIndex: 1,
+            marginTop: 4,
+          }}
+        >
+          <ShieldCheck size={14} style={{ color: '#10b981' }} />
+          <span>Ambiente protegido com criptografia de ponta a ponta • LGPD (Lei nº 13.709/2018)</span>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 // ─── Componente Principal ────────────────────────────────────────────────────
 
 export default function ADFinanceiroPage() {
   const { adConfig } = useAgendaDigital()
-  const { aluno: currentStudent, meusAlunos } = useSelectedStudent()
+  const { aluno: currentStudent, meusAlunos, userAccessRole, isLoadingProfile } = useSelectedStudent()
+  const router = useRouter()
   const params = useParams() as { slug?: string }
   const studentRef = currentStudent?.id ? String(currentStudent.id) : (params?.slug || '')
 
@@ -630,13 +1291,18 @@ export default function ADFinanceiroPage() {
   }, [studentRef])
 
   useEffect(() => {
+    if (!userAccessRole?.isFin) {
+      setLoading(false)
+      return
+    }
+
     fetchFinanceiro(selectedAno)
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
     }
-  }, [fetchFinanceiro, selectedAno])
+  }, [fetchFinanceiro, selectedAno, userAccessRole?.isFin])
 
   // Fecha dropdown do ano ao clicar fora
   useEffect(() => {
@@ -764,7 +1430,7 @@ export default function ADFinanceiroPage() {
     )
   }, [data])
 
-  // ── Permissão ──────────────────────────────────────────────────────────────
+  // ── Permissão Geral da Instituição ──────────────────────────────────────────
   if (adConfig?.permissoes?.visualizarFinanceiro === false) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
@@ -774,6 +1440,58 @@ export default function ADFinanceiroPage() {
           icon={<CircleAlert size={48} style={{ color: '#ef4444', opacity: 0.8 }} />}
         />
       </div>
+    )
+  }
+
+  // ── Carregamento do Perfil do Aluno e Vínculos ──────────────────────────────
+  if (isLoadingProfile || (!currentStudent && !notFound)) {
+    return (
+      <div
+        style={{
+          maxWidth: 780,
+          margin: '0 auto',
+          padding: '40px 14px 120px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '45vh',
+          gap: 16,
+          fontFamily: 'Outfit, Inter, system-ui, sans-serif',
+        }}
+      >
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+        <div
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: '50%',
+            border: '3px solid #e2e8f0',
+            borderTopColor: '#4f46e5',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#64748b' }}>
+          Carregando informações financeiras...
+        </p>
+      </div>
+    )
+  }
+
+  // ── Acesso Restrito: Usuário Não é Responsável Financeiro ───────────────────
+  if (userAccessRole && !userAccessRole.isFin) {
+    return (
+      <RestrictedFinancialAccessView
+        currentStudent={currentStudent}
+        userAccessRole={userAccessRole}
+        adConfig={adConfig}
+        studentRef={studentRef}
+        router={router}
+      />
     )
   }
 

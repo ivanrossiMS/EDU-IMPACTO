@@ -6,13 +6,15 @@ export interface SelectedStudentContextData {
   vinculo: any | null
   userAccessRole: { isFin: boolean; isPed: boolean; parentesco: string }
   meusAlunos?: any[]
+  isLoadingProfile?: boolean
 }
 
 const SelectedStudentContext = createContext<SelectedStudentContextData>({
   aluno: null,
   vinculo: null,
   userAccessRole: { isFin: false, isPed: false, parentesco: 'Responsável' },
-  meusAlunos: []
+  meusAlunos: [],
+  isLoadingProfile: false
 })
 
 export function SelectedStudentProvider({ 

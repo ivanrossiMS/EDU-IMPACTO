@@ -14,6 +14,7 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { createProtectedClient } from '@/lib/server/supabaseAuthFactory'
+import { checkResponsavelRelationship } from '@/lib/server/notificationHelper'
 import {
   formatIsaacAmount,
   getEffectiveAmount,
@@ -40,6 +41,67 @@ export async function GET(request: Request) {
   const guardianTaxIds = new Set<string>()
 
   try {
+    // ── 0. Blindagem de Segurança (IDOR / Controle de Acesso) ─────────────────
+    const userRole = user?.user_metadata?.perfil || user?.user_metadata?.cargo || ''
+    const ADMIN_FIN_ROLES = [
+      'Direção',
+      'Diretor Geral',
+      'Administrador',
+      'Administrador Master',
+      'Admin',
+      'Financeiro',
+      'Secretaria',
+    ]
+
+    let isAuthorizedStaff = ADMIN_FIN_ROLES.includes(userRole)
+    if (!isAuthorizedStaff && user?.id) {
+      const { data: dbUser } = await supabase
+        .from('system_users')
+        .select('perfil, cargo')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (dbUser && (ADMIN_FIN_ROLES.includes(dbUser.perfil) || ADMIN_FIN_ROLES.includes(dbUser.cargo))) {
+        isAuthorizedStaff = true
+      }
+    }
+
+    if (!isAuthorizedStaff) {
+      if (alunoIdParam) {
+        const checkId = user?.user_metadata?.responsavel_id || user?.user_metadata?.aluno_id || user?.id
+        const isAuthorized = await checkResponsavelRelationship(checkId, String(alunoIdParam).trim())
+        if (!isAuthorized) {
+          return NextResponse.json(
+            { error: 'Acesso negado: Você não possui autorização para visualizar os dados financeiros deste aluno.' },
+            { status: 403 }
+          )
+        }
+      }
+
+      if (responsavelIdParam) {
+        const ownMetaRespId = user?.user_metadata?.responsavel_id
+        let isOwnResp = ownMetaRespId && String(ownMetaRespId).trim() === String(responsavelIdParam).trim()
+
+        if (!isOwnResp && user?.email) {
+          const { data: ownResp } = await supabase
+            .from('responsaveis')
+            .select('id')
+            .eq('email', user.email)
+            .maybeSingle()
+
+          if (ownResp?.id && String(ownResp.id).trim() === String(responsavelIdParam).trim()) {
+            isOwnResp = true
+          }
+        }
+
+        if (!isOwnResp) {
+          return NextResponse.json(
+            { error: 'Acesso negado: Você não possui autorização para visualizar cobranças deste responsável.' },
+            { status: 403 }
+          )
+        }
+      }
+    }
     // ── 1. Resolução por Aluno (se alunoIdParam fornecido) ────────────────────
     if (alunoIdParam) {
       const cleanAlunoId = String(alunoIdParam).trim()

@@ -321,7 +321,7 @@ export default function ADInnerLayout({
         {/* 4. Área de Conteúdo da Página com Contexto de Aluno Selecionado */}
         <div className="ad-main-grid" style={{ marginTop: 12 }}>
           <div className="ad-content-page-area" style={{ flex: 1, minWidth: 0 }}>
-            <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole, meusAlunos }}>
+            <SelectedStudentProvider value={{ aluno, vinculo, userAccessRole, meusAlunos, isLoadingProfile: isLoading }}>
               {children}
             </SelectedStudentProvider>
           </div>

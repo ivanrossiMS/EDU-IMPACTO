@@ -142,7 +142,7 @@ function AgendaDigitalIndexContent() {
 
       fetchSecureStudents();
     });
-  }, [currentUserPerfil, currentUser, router, searchParams])
+  }, [currentUserPerfil, currentUser, router, searchParams, hydrated])
 
   return <LoadingGlass />
 }

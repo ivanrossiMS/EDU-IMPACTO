@@ -39,7 +39,6 @@ export const AgendaNavigationTabBar = React.memo(function AgendaNavigationTabBar
     if (item.label === 'Notas' && adConfig?.permissoes?.visualizarNotas === false) return false
     if (item.label === 'Financeiro') {
       if (adConfig?.permissoes?.visualizarFinanceiro === false) return false
-      if (!userAccessRole?.isFin) return false
     }
     return true
   })

@@ -132,11 +132,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, count: rows.length })
     }
     const row = buildRow(body)
+    const isCienciaAction = Boolean(body.ciencia_responsavel || body.dados?.ciencia_responsavel) && Boolean(body.id)
     const { data, error } = await supabase.from('ocorrencias').upsert(row).select().single()
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
     // Disparar push em background para não bloquear o response (single)
     after(async () => {
+      // Se for apenas registro de ciência da família, não assusta os pais com novo aviso
+      if (isCienciaAction) {
+        const masterAdminIds = await getInstitutionalMasterAdminIds()
+        if (masterAdminIds.length > 0) {
+          const { data: aluno } = await supabase.from('alunos').select('nome').eq('id', data.aluno_id).single()
+          const nomeAluno = aluno?.nome ? aluno.nome : 'o aluno'
+          await sendAgendaPushNotification({
+            type: 'ocorrencias',
+            itemId: String(data.id),
+            title: '✍️ Ciência de Ocorrência Confirmada',
+            message: `A família de ${nomeAluno} confirmou ciência da ocorrência.`,
+            targetUserIds: masterAdminIds,
+            targetUrl: `/agenda-digital/admin/ocorrencias?id=${data.id}`,
+            metadata: { aluno_id: String(data.aluno_id), item_id: String(data.id), rota: 'ocorrencias' }
+          }).catch(err => console.error('Ciencia Push Error:', err))
+        }
+        return
+      }
+
       const parentIds = await getResponsavelIdsForTargets({ targetStudents: [data.aluno_id] })
       const masterAdminIds = await getInstitutionalMasterAdminIds()
       const targetIds = Array.from(new Set([...parentIds, ...masterAdminIds])).filter(Boolean)
