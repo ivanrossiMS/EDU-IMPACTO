@@ -341,6 +341,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const handleLogoutStart = () => {
       setCurrentUserState(null)
       setCurrentUserPerfilState('')
+      setLoadingPathState('logout')
     }
     window.addEventListener('edu:logout-start', handleLogoutStart)
     return () => {

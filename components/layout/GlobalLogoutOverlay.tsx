@@ -1,16 +1,14 @@
 'use client'
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
-import { AppLoadingScreen } from '@/components/AppLoadingScreen'
+import { AgendaLuxuryLoader } from '@/components/agenda/AgendaLuxuryLoader'
 import { useApp } from '@/lib/context'
-import { useIsMobileVersion } from '@/lib/utils/isMobileVersion'
 
 export function GlobalLogoutOverlay() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [isCleanupDone, setIsCleanupDone] = useState(false)
-  const { loadingPath, setLoadingPath } = useApp()
+  const { loadingPath } = useApp()
   const isNavigatingRef = useRef(false)
-  const isMobile = useIsMobileVersion()
 
   const logoutStartTimeRef = useRef<number>(0)
 
@@ -80,12 +78,8 @@ export function GlobalLogoutOverlay() {
       } catch (_) {}
     }
 
-    // ATENÇÃO CRÍTICA: NÃO chamar setIsLoggingOut(false) ou setLoadingPath(null) aqui!
-    // O overlay DEVE permanecer ativo cobrindo 100% da tela (#0A0F24) até que
+    // ATENÇÃO: O overlay deve permanecer ativo desfocando a tela até que
     // o navegador conclua o carregamento da rota /login e desmonte o DOM atual.
-    // Chamar setIsLoggingOut(false) antes da navegação do browser fazia o overlay sumir
-    // e o dashboard antigo (imagem2) reaparecer temporariamente antes de ir para o login.
-
     if (typeof window !== 'undefined') {
       if (window.location.pathname !== '/login') {
         window.location.replace('/login')
@@ -95,12 +89,12 @@ export function GlobalLogoutOverlay() {
     }
   }, [])
 
-  // No desktop: assim que o cleanup for concluído, redireciona imediatamente
+  // Assim que o cleanup for concluído, redireciona imediatamente para o login
   useEffect(() => {
-    if (!isMobile && (isLoggingOut || loadingPath === 'logout') && isCleanupDone) {
+    if ((isLoggingOut || loadingPath === 'logout') && isCleanupDone) {
       handleLogoutFinished()
     }
-  }, [isMobile, isLoggingOut, loadingPath, isCleanupDone, handleLogoutFinished])
+  }, [isLoggingOut, loadingPath, isCleanupDone, handleLogoutFinished])
 
   const isActive = isLoggingOut || loadingPath === 'logout'
 
@@ -108,63 +102,14 @@ export function GlobalLogoutOverlay() {
     return null
   }
 
-  // Versão Mobile (Capacitor iOS/Android ou PWA):
-  // Exibe a tela de carregamento do app com transição suave
-  if (isMobile) {
-    return (
-      <AppLoadingScreen
-        mode="app"
-        isReady={isCleanupDone}
-        onReadyComplete={handleLogoutFinished}
-        statusText="Encerrando sessão com segurança..."
-        subtitle="Conectando escola e família"
-      />
-    )
-  }
-
-  // Versão Desktop:
-  // Overlay protetor instantâneo em tela cheia (#0A0F24) com spinner moderno e sutil.
-  // Garante que o usuário nunca visualize desmonte de layout, sidebars isoladas ou spinners de página.
+  // Animação padrão de carregamento da logo no meio embaçando o fundo (frosted glass blur),
+  // sem tela escura opaca, com transição de saída protegida até o carregamento do login.
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 999999,
-        background: '#0A0F24',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 16,
-        animation: 'eduFadeIn 0.15s ease-out forwards',
-      }}
-    >
-      <div
-        style={{
-          width: 42,
-          height: 42,
-          borderRadius: '50%',
-          border: '3px solid rgba(255, 255, 255, 0.12)',
-          borderTopColor: '#3b82f6',
-          animation: 'eduSpin 0.75s linear infinite',
-        }}
-      />
-      <div
-        style={{
-          color: '#e2e8f0',
-          fontSize: 14,
-          fontWeight: 600,
-          fontFamily: 'Outfit, sans-serif',
-          letterSpacing: '0.01em',
-        }}
-      >
-        Encerrando sessão com segurança...
-      </div>
-      <style>{`
-        @keyframes eduSpin { 100% { transform: rotate(360deg); } }
-        @keyframes eduFadeIn { from { opacity: 0; } to { opacity: 1; } }
-      `}</style>
-    </div>
+    <AgendaLuxuryLoader
+      isLoading={true}
+      statusText="Encerrando sessão com segurança..."
+      preventExit={true}
+    />
   )
 }
+

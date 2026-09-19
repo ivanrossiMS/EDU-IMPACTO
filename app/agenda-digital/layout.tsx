@@ -22,10 +22,10 @@ import { useIsFetching } from '@tanstack/react-query'
 
 
 export default function AgendaDigitalLayout({ children }: { children: React.ReactNode }) {
-  const { currentUser, hydrated } = useApp()
+  const { currentUser, hydrated, loadingPath } = useApp()
   const isFamily = currentUser?.perfil === 'Família' || currentUser?.cargo === 'Aluno' || currentUser?.cargo === 'Responsável'
 
-  if (!hydrated) {
+  if (!hydrated && loadingPath !== 'logout') {
     return <AgendaLuxuryLoader isLoading={true} statusText="Iniciando Agenda Digital..." />
   }
 
@@ -90,8 +90,10 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   }, [])
 
   React.useEffect(() => {
-    setLoadingPath(null)
-  }, [pathname, setLoadingPath])
+    if (loadingPath !== 'logout') {
+      setLoadingPath(null)
+    }
+  }, [pathname, loadingPath, setLoadingPath])
 
   // 1. Interceptar cliques em links da Agenda Digital para saltar o loader na tela imediatamente (0ms de latência)
   React.useEffect(() => {
@@ -217,7 +219,9 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
 
     if (!currentUser) {
       clearTimeout(emergencyTimer)
-      router.replace('/login')
+      if (loadingPath !== 'logout') {
+        router.replace('/login')
+      }
       return
     }
 
@@ -250,7 +254,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
 
     clearTimeout(emergencyTimer)
     return () => clearTimeout(emergencyTimer)
-  }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis])
+  }, [hydrated, currentUser, isFamily, pathname, perfisLoading, perfis, loadingPath])
 
   React.useEffect(() => {
     if (accessState === 'allowed') {
@@ -259,7 +263,7 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   }, [accessState])
 
   // Acesso negado — somente após verificação completa com dados reais
-  if (accessState === 'denied') {
+  if (accessState === 'denied' && loadingPath !== 'logout') {
     return (
       <div style={{
         position: 'fixed', inset: 0, zIndex: 9999,
@@ -281,13 +285,15 @@ function AgendaDigitalLayoutInner({ children }: { children: React.ReactNode }) {
   }
 
   const isMasterLoading =
-    !mounted ||
-    !hydrated ||
-    accessState === 'checking' ||
-    !initialReady ||
-    routeNavigating ||
-    Boolean(pageLoading) ||
-    Boolean(adLoading)
+    loadingPath !== 'logout' && (
+      !mounted ||
+      !hydrated ||
+      accessState === 'checking' ||
+      !initialReady ||
+      routeNavigating ||
+      Boolean(pageLoading) ||
+      Boolean(adLoading)
+    )
 
   const currentStatusText =
     !hydrated || !mounted ? 'Iniciando Agenda Digital...' :

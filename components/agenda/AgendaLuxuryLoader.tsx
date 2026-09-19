@@ -7,6 +7,7 @@ import { IMPACTO_LOGO_DATA_URI } from '@/components/ui/impactoLogoBase64'
 export interface AgendaLuxuryLoaderProps {
   isLoading?: boolean
   statusText?: string
+  subtitle?: string
   minDisplayTimeMs?: number
   onFinished?: () => void
   preventExit?: boolean
@@ -18,6 +19,7 @@ export interface AgendaLuxuryLoaderProps {
 export function AgendaLuxuryLoader({
   isLoading = true,
   statusText = 'Carregando página e dados...',
+  subtitle = 'AGENDA DIGITAL',
   minDisplayTimeMs = 650,
   onFinished,
   preventExit = false,
@@ -144,9 +146,11 @@ export function AgendaLuxuryLoader({
         {/* ── 4. Tipografia e Identidade Visual ── */}
         <div className={styles.titleWrapper}>
           <h2 className={styles.brandTitle}>IMPACTO</h2>
-          <div className={styles.brandSubtitle}>
-            <span>AGENDA DIGITAL</span>
-          </div>
+          {subtitle ? (
+            <div className={styles.brandSubtitle}>
+              <span>{subtitle}</span>
+            </div>
+          ) : null}
         </div>
 
         {/* ── 5. Barra Líquida Fina de Carregamento ── */}

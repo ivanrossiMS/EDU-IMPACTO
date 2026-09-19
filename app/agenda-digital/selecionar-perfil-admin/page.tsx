@@ -46,7 +46,7 @@ function formatShortName(name: string): string {
 }
 
 function SelecionarPerfilAdminContent() {
-  const { currentUser, setCurrentUser } = useApp()
+  const { currentUser, setCurrentUser, setLoadingPath } = useApp()
   const searchParams = useSearchParams()
   const redirectTarget = searchParams.get('redirect') || 'comunicados'
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -646,6 +646,7 @@ function SelecionarPerfilAdminContent() {
           <button
             onClick={async () => {
               setIsLoggingOut(true);
+              setLoadingPath('logout');
               try {
                 const { removeSettingAsync } = await import('@/lib/context');
                 await removeSettingAsync('currentUser');

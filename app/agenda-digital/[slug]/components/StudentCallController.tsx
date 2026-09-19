@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Megaphone, Users, CheckCircle2, Loader2, Send, AlertTriangle, 
-  X, Check, LogOut, ShieldCheck, Calendar 
+  X, Check, LogOut, ShieldCheck, Calendar, ChevronRight 
 } from 'lucide-react'
 import { useSaida } from '@/lib/saidaContext'
 import { triggerHaptic } from '@/lib/utils/haptics'
@@ -813,12 +813,13 @@ export function StudentCallButton({
       </div>
       <div className="ad-call-divider" style={{ width: 1.5, height: 26, background: 'rgba(255, 255, 255, 0.28)', flexShrink: 0, margin: '0 2px' }} />
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-        <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 16.5, fontWeight: 800, letterSpacing: '-0.2px' }}>Chamar aluno</span>
-        {otherStudentsSummary && (
-          <span style={{ fontSize: 10.5, opacity: 0.9, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600 }}>
-            {otherStudentsSummary}
-          </span>
-        )}
+        <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 16, fontWeight: 800, letterSpacing: '-0.2px' }}>Chamar aluno</span>
+        <span style={{ fontSize: 10.5, opacity: 0.92, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600, color: 'rgba(238, 242, 255, 0.95)' }}>
+          {otherStudentsSummary || 'Avisa o painel da portaria'}
+        </span>
+      </div>
+      <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 4 }}>
+        <ChevronRight size={14} color="#ffffff" strokeWidth={2.8} />
       </div>
     </button>
   )

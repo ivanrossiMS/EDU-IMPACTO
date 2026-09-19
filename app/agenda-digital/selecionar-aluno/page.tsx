@@ -997,7 +997,7 @@ const StudentCard = memo(({ student, loadingCardId, redirectTarget, getForwardPa
 
 function SelecionarAlunoContent() {
   const { turmas = [] } = useData();
-  const { currentUser, setCurrentUser, hydrated } = useApp()
+  const { currentUser, setCurrentUser, hydrated, setLoadingPath } = useApp()
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTarget = searchParams.get('redirect') || 'comunicados'
@@ -1463,6 +1463,7 @@ function SelecionarAlunoContent() {
         <button 
           onClick={async () => {
             setIsLoggingOut(true);
+            setLoadingPath('logout');
             try {
               await performLogout();
             } catch (err) {
