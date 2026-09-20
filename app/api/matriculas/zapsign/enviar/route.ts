@@ -7,6 +7,7 @@ import {
   criarDocumentoZapSign,
   formatPhoneForZapSign,
   formatarMensagemZapSign,
+  sanitizarMensagemZapSign,
   DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
   DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO
 } from '@/lib/zapsign'
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
       escolaInfo,
       assinarPelaEscola = false,
       escolaSignatario,
+      customMessage,
     } = body
 
     const effectiveAuthModeContratante = authModeContratante || authMode || 'tokenWhatsapp'
@@ -245,6 +247,17 @@ export async function POST(request: Request) {
     const templateContratado = config.mensagemWhatsappContratado || DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO
 
     // 4. Chamar API do ZapSign
+    // Nota: customMessage no ZapSign é opcional.
+    // Quando o envio por WhatsApp está ativo para qualquer signatário, a ZapSign (e a Meta)
+    // proíbem expressamente quebras de linha (\n, \r) ou tabs (\t), retornando erro 406.
+    // O template completo com quebras de linha (templateContratante) é utilizado no link direto (whatsappLink) no passo 6.
+    const hasWhatsappSigner = signers.some(
+      s => s.sendAutomaticWhatsapp === true || s.authMode === 'tokenWhatsapp'
+    )
+    const customMessageParam = customMessage
+      ? sanitizarMensagemZapSign(customMessage, hasWhatsappSigner)
+      : undefined
+
     const zapSignResponse = await criarDocumentoZapSign({
       name: docTitle,
       base64Pdf: finalBase64,
@@ -252,14 +265,7 @@ export async function POST(request: Request) {
       sandbox: isSandbox,
       apiToken,
       externalId: aluno?.id ? `aluno_${aluno.id}_${Date.now()}` : `doc_${Date.now()}`,
-      customMessage: formatarMensagemZapSign(templateContratante, {
-        nomeResponsavel: responsavel.nome,
-        nomeAluno: alunoNome,
-        turmaAluno: aluno?.turma_nome || aluno?.turma || aluno?.serie || '',
-        linkAssinatura: '',
-        nomeEscola: escolaInfo?.nomeFantasia || 'Colégio Impacto',
-        nomeDocumento: docTitle,
-      }),
+      customMessage: customMessageParam,
     })
 
     const signersResp = Array.isArray(zapSignResponse.signers) ? zapSignResponse.signers : []

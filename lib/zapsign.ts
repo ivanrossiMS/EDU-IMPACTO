@@ -110,6 +110,27 @@ export function formatarMensagemZapSign(template?: string | null, vars: ZapSignT
   }).replace(/[ \t]{2,}/g, ' ')
 }
 
+/**
+ * Sanitiza a mensagem personalizada para a API da ZapSign.
+ * Quando o envio automático por WhatsApp está ativo para qualquer signatário,
+ * a ZapSign (e a Meta WhatsApp Cloud API) rejeita estritamente quebras de linha (\r, \n),
+ * tabs (\t) e sequências com múltiplos espaços consecutivos, retornando erro HTTP 406.
+ */
+export function sanitizarMensagemZapSign(msg?: string | null, isWhatsapp = false): string | undefined {
+  if (!msg || typeof msg !== 'string') return undefined
+  let clean = msg.trim()
+  if (!clean) return undefined
+
+  if (isWhatsapp) {
+    clean = clean
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+  }
+
+  return clean || undefined
+}
+
 export interface ZapSignDocResponse {
   token: string
   name: string
@@ -224,7 +245,13 @@ export async function criarDocumentoZapSign(params: ZapSignCreateDocParams): Pro
     payload.brand_logo = params.brandLogo
   }
   if (params.customMessage) {
-    payload.custom_message = params.customMessage
+    const hasWhatsappSigner = signersPayload.some(
+      s => s.send_automatic_whatsapp === true || s.auth_mode === 'tokenWhatsapp'
+    )
+    const cleanMsg = sanitizarMensagemZapSign(params.customMessage, hasWhatsappSigner)
+    if (cleanMsg) {
+      payload.custom_message = cleanMsg
+    }
   }
 
   const response = await fetch(`${baseUrl}/docs/`, {
@@ -250,7 +277,23 @@ export async function criarDocumentoZapSign(params: ZapSignCreateDocParams): Pro
         'A sua conta da ZapSign requer a contratação ou ativação de um "Plano de API" para envio em Produção. Acesse o painel da ZapSign (Configurações > Integrações > API ZapSign) e clique no botão "Planos de API" para ativar.'
       )
     }
-    const errorDetail = data?.message || data?.detail || rawText || `Erro HTTP ${response.status}`
+    let errorDetail = data?.message || data?.detail
+    if (!errorDetail && typeof data === 'object' && data !== null) {
+      const parts: string[] = []
+      for (const [k, v] of Object.entries(data)) {
+        if (Array.isArray(v)) {
+          parts.push(`${k}: ${v.join(', ')}`)
+        } else if (typeof v === 'string') {
+          parts.push(`${k}: ${v}`)
+        }
+      }
+      if (parts.length > 0) {
+        errorDetail = parts.join('; ')
+      }
+    }
+    if (!errorDetail) {
+      errorDetail = rawText || `Erro HTTP ${response.status}`
+    }
     throw new Error(`Erro na API do ZapSign (${response.status}): ${errorDetail}`)
   }
 
