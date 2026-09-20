@@ -790,14 +790,6 @@ class NotificationService {
             tags,
           }).catch(() => {})
         }
-
-        // Se a permissão nativa ainda não estiver autorizada, solicita ao SO de forma não-bloqueante
-        // (fallbackToSettings: false) para registrar o APNs token sem atrasar o retorno do syncUser
-        if (this.state.permissionStatus !== 'authorized' && this.state.permissionStatus !== 'provisional') {
-          this.requestNotificationPermission().catch(err => {
-            console.warn('[NotificationService] Aviso ao solicitar permissão nativa pós-login:', err)
-          })
-        }
       } else {
         // Web User Sync
         const performWebSync = async (OS: any) => {

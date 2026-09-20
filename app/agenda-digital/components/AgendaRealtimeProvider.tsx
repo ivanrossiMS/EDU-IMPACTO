@@ -33,6 +33,7 @@ import { useData } from '@/lib/dataContext'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 import { PushPermissionBanner } from '@/components/agenda/PushPermissionBanner'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { Capacitor } from '@capacitor/core'
 
 interface RealtimeProviderProps {
   children?: React.ReactNode
@@ -297,6 +298,19 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, responsavelId, alunoId, turmaNome, meusAlunos.length])
+
+  // No aplicativo nativo (iOS / Android), solicita permissão de notificações push
+  // EXCLUSIVAMENTE quando o usuário entra no módulo Agenda Digital.
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      const state = notificationService.getDiagnosticState()
+      if (state.permissionStatus === 'notDetermined' || state.canRequest) {
+        notificationService.requestNotificationPermission().catch(err => {
+          console.warn('[AgendaRealtime] Aviso ao solicitar permissão nativa:', err)
+        })
+      }
+    }
+  }, [])
 
   interface EventMatchResult {
     isTarget: boolean

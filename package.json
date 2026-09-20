@@ -9,7 +9,9 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "test:auth": "node --experimental-strip-types --test test/auth-resilience.test.mjs",
-    "test:matricula": "npx tsx test/matricula-digital-flow.test.mjs"
+    "test:notifications": "node --test test/notification-module-guard.test.mjs",
+    "test:matricula": "npx tsx test/matricula-digital-flow.test.mjs",
+    "test": "npm run test:auth && npm run test:notifications"
   },
   "dependencies": {
     "@capacitor-community/privacy-screen": "^8.0.0",

@@ -16,6 +16,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { BellRing, Settings2, X } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { Capacitor } from '@capacitor/core'
+import { toast } from 'sonner'
 
 const DISMISS_SESSION_KEY = 'edu_push_blocked_dismissed_session'
 
@@ -53,12 +55,21 @@ export function NotificationPermissionModal() {
 
   const handleOpenSettings = async () => {
     handleDismiss()
+    if (!Capacitor.isNativePlatform()) {
+      toast.info('Para ativar notificações neste navegador, clique no ícone de cadeado/ajustes ao lado do endereço do site e permita as notificações.')
+    }
     await openSettings()
   }
 
-  // Apenas renderiza se o status for estritamente 'denied', não estiver carregando, não foi dispensado e não está na tela de login
-  const isLoginPage = pathname === '/login' || pathname?.startsWith('/login')
-  const shouldShow = isDenied && !isLoading && !dismissed && !isLoginPage
+  // REGRA DE NEGÓCIO:
+  // Este aviso de notificação DEVE aparecer EXCLUSIVAMENTE dentro do módulo Agenda Digital.
+  // NÃO deve aparecer na Gestão Escolar (/dashboard, /alunos, /turmas, etc.),
+  // nem na Gestão de Pessoas (/gestao-pessoas), nem em Provas/Simulados (/simulados),
+  // nem em telas de login ou páginas públicas.
+  const isAgendaDigitalModule = Boolean(
+    pathname && (pathname === '/agenda-digital' || pathname.startsWith('/agenda-digital/'))
+  )
+  const shouldShow = isDenied && !isLoading && !dismissed && isAgendaDigitalModule
 
   return (
     <AnimatePresence>
