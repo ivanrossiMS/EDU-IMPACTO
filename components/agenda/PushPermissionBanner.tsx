@@ -3,25 +3,42 @@
 /**
  * PushPermissionBanner.tsx
  *
- * Banner inteligente de solicitação de permissão de notificações do Impacto Edu.
+ * Banner flutuante inteligente e elegante para ativação de notificações push do Impacto Edu.
+ * Exibido exclusivamente na Agenda Digital.
  *
- * - Consome o hook usePushNotifications como fonte única de verdade.
+ * - Fonte única de verdade: hook usePushNotifications().
  * - Não duplica chamadas nem listeners.
- * - NUNCA invoca requestPermission(true) (evitando o popup em inglês do OneSignal).
- * - No iOS Nativo, se autorizado, nunca exibe nada.
- * - Se negado no nativo, direciona para os Ajustes via ponte nativa.
- * - Compatível com iOS PWA (mostra instrução de Adicionar à Tela de Início).
+ * - Suporte completo multiplataforma:
+ *   1. iOS Nativo (Capacitor): Dispara diálogo nativo do sistema ou abre Ajustes do app via ponte Swift.
+ *   2. Android Nativo (Capacitor): Dispara permissão de runtime ou abre Ajustes de notificação via Intent Android.
+ *   3. Navegador Web (Chrome/Safari/Edge/Firefox): Aciona permissão nativa web com feedback visual de ativação,
+ *      ou guia interativo ilustrado passo a passo caso as notificações estejam bloqueadas pelo usuário.
+ *   4. iOS Safari (PWA): Instrução para "Adicionar à Tela de Início".
+ * - Detecção automática ao focar a aba/retornar do background (revalidação imediata).
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { BellRing, BellOff, X, Smartphone, Settings, Shield } from 'lucide-react'
+import {
+  BellRing,
+  BellOff,
+  X,
+  Smartphone,
+  Settings,
+  Shield,
+  Loader2,
+  RefreshCw,
+  HelpCircle,
+  Lock,
+} from 'lucide-react'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { Capacitor } from '@capacitor/core'
+import { toast } from 'sonner'
 
 type BannerState = 'hidden' | 'prompt' | 'blocked' | 'ios-install' | 'unsupported'
 
 const DISMISSED_BANNER_KEY = 'edu_push_dismissed_v2'
+const DISMISSED_SESSION_KEY = 'edu_push_dismissed_session'
 
 export function PushPermissionBanner() {
   const {
@@ -31,24 +48,52 @@ export function PushPermissionBanner() {
     isLoading,
     requestPermission,
     openSettings,
+    refresh,
   } = usePushNotifications()
 
   const [bannerState, setBannerState] = useState<BannerState>('hidden')
   const [userDismissed, setUserDismissed] = useState(true)
+  const [isActivating, setIsActivating] = useState(false)
+  const [showWebGuide, setShowWebGuide] = useState(false)
 
+  // Inicialização de estado de dispensa
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const dismissed = localStorage.getItem(DISMISSED_BANNER_KEY) === 'true'
-    setUserDismissed(dismissed)
+    const dismissedSession = sessionStorage.getItem(DISMISSED_SESSION_KEY) === 'true'
+    const dismissedLocal = localStorage.getItem(DISMISSED_BANNER_KEY) === 'true'
+    setUserDismissed(dismissedSession || dismissedLocal)
 
     const handleReset = () => {
       setUserDismissed(false)
-      try { localStorage.removeItem(DISMISSED_BANNER_KEY) } catch {}
+      setShowWebGuide(false)
+      try {
+        localStorage.removeItem(DISMISSED_BANNER_KEY)
+        sessionStorage.removeItem(DISMISSED_SESSION_KEY)
+      } catch {}
     }
     window.addEventListener('edu:reset-push-permission', handleReset)
     return () => window.removeEventListener('edu:reset-push-permission', handleReset)
   }, [])
 
+  // Revalidação em foco/visibilidade (detecta quando o usuário volta dos Ajustes ou das configurações do site)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleRecheck = () => {
+      refresh().catch(() => {})
+    }
+    window.addEventListener('focus', handleRecheck)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        handleRecheck()
+      }
+    })
+    return () => {
+      window.removeEventListener('focus', handleRecheck)
+      document.removeEventListener('visibilitychange', handleRecheck)
+    }
+  }, [refresh])
+
+  // Avaliação de exibição do banner
   useEffect(() => {
     if (userDismissed || isLoading) {
       setBannerState('hidden')
@@ -73,7 +118,7 @@ export function PushPermissionBanner() {
       return
     }
 
-    // ── Web / PWA Logic ─────────────────────────────────────────────────────
+    // ── Lógica Web / PWA ──────────────────────────────────────────────────
     if (!('Notification' in window)) {
       setBannerState('unsupported')
       return
@@ -85,7 +130,7 @@ export function PushPermissionBanner() {
       window.matchMedia('(display-mode: standalone)').matches
 
     if (isIOS && !isInStandaloneMode) {
-      // iOS Safari não-PWA
+      // iOS Safari não-PWA requer Adicionar à Tela de Início
       setBannerState('ios-install')
       return
     }
@@ -104,11 +149,19 @@ export function PushPermissionBanner() {
   }, [userDismissed, isLoading, isAuthorized, isDenied, isNotDetermined])
 
   const handleActivate = async () => {
-    setBannerState('hidden')
+    setIsActivating(true)
     try {
-      await requestPermission()
+      const accepted = await requestPermission()
+      if (accepted) {
+        toast.success('Notificações ativadas com sucesso!')
+        setBannerState('hidden')
+      } else {
+        await refresh()
+      }
     } catch (e: any) {
       console.error('[PushBanner] Erro ao solicitar permissão:', e?.message)
+    } finally {
+      setIsActivating(false)
     }
   }
 
@@ -117,17 +170,23 @@ export function PushPermissionBanner() {
     setUserDismissed(true)
     try {
       localStorage.setItem(DISMISSED_BANNER_KEY, 'true')
+      sessionStorage.setItem(DISMISSED_SESSION_KEY, 'true')
     } catch {}
   }
 
   const handleOpenSettings = async () => {
-    handleDismiss()
     if (Capacitor.isNativePlatform()) {
+      handleDismiss()
       await openSettings()
+    } else {
+      setShowWebGuide(prev => !prev)
+      toast.info('Para ativar: clique no cadeado ao lado do endereço do site e permita as notificações.')
     }
   }
 
   if (bannerState === 'hidden') return null
+
+  const isNative = Capacitor.isNativePlatform()
 
   return (
     <AnimatePresence>
@@ -147,11 +206,11 @@ export function PushPermissionBanner() {
           maxWidth: 440,
         }}
       >
-        {/* ── Prompt: Pedir permissão ─────────────────────────────────── */}
+        {/* ── Prompt: Pedir permissão inicial ─────────────────────────── */}
         {bannerState === 'prompt' && (
           <div
             style={{
-              background: 'rgba(255,255,255,0.95)',
+              background: 'rgba(255,255,255,0.96)',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
               border: '1px solid rgba(79,70,229,0.15)',
@@ -221,7 +280,7 @@ export function PushPermissionBanner() {
                   Ativar notificações
                 </div>
                 <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.5 }}>
-                  Receba comunicados, avisos de entrada e saída, notas e comunicados escolares importantes.
+                  Receba comunicados, avisos de entrada e saída, notas e informativos escolares importantes.
                 </div>
               </div>
             </div>
@@ -229,6 +288,7 @@ export function PushPermissionBanner() {
             <div style={{ display: 'flex', gap: 10, zIndex: 1, position: 'relative' }}>
               <button
                 onClick={handleDismiss}
+                disabled={isActivating}
                 style={{
                   flex: 1,
                   padding: '10px 16px',
@@ -238,7 +298,7 @@ export function PushPermissionBanner() {
                   color: '#475569',
                   fontSize: 13,
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: isActivating ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s',
                 }}
               >
@@ -246,8 +306,13 @@ export function PushPermissionBanner() {
               </button>
               <button
                 onClick={handleActivate}
+                disabled={isActivating}
                 style={{
                   flex: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
                   padding: '10px 16px',
                   borderRadius: 12,
                   border: 'none',
@@ -255,22 +320,30 @@ export function PushPermissionBanner() {
                   color: 'white',
                   fontSize: 13,
                   fontWeight: 700,
-                  cursor: 'pointer',
+                  cursor: isActivating ? 'not-allowed' : 'pointer',
                   boxShadow: '0 4px 12px rgba(79,70,229,0.35)',
                   transition: 'all 0.2s',
+                  opacity: isActivating ? 0.8 : 1,
                 }}
               >
-                Ativar agora
+                {isActivating ? (
+                  <>
+                    <Loader2 size={15} className="animate-spin" />
+                    Ativando...
+                  </>
+                ) : (
+                  'Ativar agora'
+                )}
               </button>
             </div>
           </div>
         )}
 
-        {/* ── Bloqueado: Orientação em português ───────────────────────── */}
+        {/* ── Bloqueado: Orientação Multiplataforma (Nativo vs Navegador) ── */}
         {bannerState === 'blocked' && (
           <div
             style={{
-              background: 'rgba(255,255,255,0.95)',
+              background: 'rgba(255,255,255,0.96)',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
               border: '1px solid rgba(239,68,68,0.2)',
@@ -320,10 +393,77 @@ export function PushPermissionBanner() {
                   Ativar notificações
                 </div>
                 <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>
-                  As notificações do Impacto Edu estão desativadas neste aparelho. Ative-as nos Ajustes para receber comunicados e avisos.
+                  {isNative
+                    ? 'As notificações do Impacto Edu estão desativadas neste aparelho. Ative-as nos Ajustes para receber comunicados e avisos.'
+                    : 'As notificações estão desativadas neste navegador. Ative as permissões deste site para receber comunicados e avisos.'}
                 </div>
               </div>
             </div>
+
+            {/* Passo a passo visual quando no navegador web */}
+            {!isNative && showWebGuide && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                style={{
+                  backgroundColor: '#f8fafc',
+                  borderRadius: 14,
+                  padding: '12px 14px',
+                  border: '1px solid #e2e8f0',
+                  fontSize: 12,
+                  color: '#334155',
+                  lineHeight: 1.6,
+                }}
+              >
+                <div
+                  style={{
+                    fontWeight: 600,
+                    color: '#0f172a',
+                    marginBottom: 6,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <Lock size={14} color="#ef4444" /> Como ativar no navegador:
+                </div>
+                <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <li>
+                    Clique no ícone de <strong>ajustes ou cadeado</strong> (🔒) ao lado da barra de endereço acima.
+                  </li>
+                  <li>
+                    Altere a permissão de <strong>Notificações</strong> para <strong>Permitir</strong>.
+                  </li>
+                  <li>
+                    Clique em <strong>Recarregar página</strong> abaixo para concluir.
+                  </li>
+                </ol>
+                <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => window.location.reload()}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      padding: '8px 12px',
+                      borderRadius: 10,
+                      border: 'none',
+                      background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                      color: '#ffffff',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <RefreshCw size={13} />
+                    Recarregar página
+                  </button>
+                </div>
+              </motion.div>
+            )}
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button
@@ -361,8 +501,17 @@ export function PushPermissionBanner() {
                   boxShadow: '0 4px 12px rgba(239,68,68,0.3)',
                 }}
               >
-                <Settings size={14} />
-                Abrir Ajustes
+                {isNative ? (
+                  <>
+                    <Settings size={14} />
+                    Abrir Ajustes
+                  </>
+                ) : (
+                  <>
+                    <HelpCircle size={14} />
+                    {showWebGuide ? 'Fechar ajuda' : 'Como ativar'}
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -372,7 +521,7 @@ export function PushPermissionBanner() {
         {bannerState === 'ios-install' && (
           <div
             style={{
-              background: 'rgba(255,255,255,0.95)',
+              background: 'rgba(255,255,255,0.96)',
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(59,130,246,0.2)',
               boxShadow: '0 20px 60px rgba(59,130,246,0.08)',
@@ -449,7 +598,7 @@ export function PushPermissionBanner() {
         {bannerState === 'unsupported' && (
           <div
             style={{
-              background: 'rgba(255,255,255,0.95)',
+              background: 'rgba(255,255,255,0.96)',
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(100,116,139,0.2)',
               boxShadow: '0 8px 24px rgba(0,0,0,0.06)',

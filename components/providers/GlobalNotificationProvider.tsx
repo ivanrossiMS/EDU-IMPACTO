@@ -21,7 +21,6 @@ import { useApp } from '@/lib/context'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { notificationService } from '@/lib/notifications/notificationService'
-import { NotificationPermissionModal } from '@/components/notifications/NotificationPermissionModal'
 
 export const PENDING_PUSH_ROUTE_KEY = 'edu_pending_push_route'
 
@@ -443,6 +442,6 @@ export function GlobalNotificationProvider() {
     }
   }, [hydrated, currentUser?.id, currentUser?.perfil, currentUser?.cargo])
 
-  return <NotificationPermissionModal />
+  return null
 }
 

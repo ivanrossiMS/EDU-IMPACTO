@@ -14,7 +14,6 @@ import { ImpactoLoader } from '@/components/ui/ImpactoLoader'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { useAgendaNotifications } from '../hooks/useAgendaNotifications'
 import { apiFetch } from '@/lib/api/apiClient'
-import { PushPermissionBanner } from '@/components/agenda/PushPermissionBanner'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
 
 // Helper function to abbreviate Portuguese surnames to fit single line
@@ -1306,7 +1305,6 @@ function SelecionarAlunoContent() {
 
   return (
     <>
-      <PushPermissionBanner />
       <div className="premium-selector-container">
         {/* Dynamic styles block for modern theme design */}
       <style dangerouslySetInnerHTML={{__html: SELECTOR_STYLES}} />
