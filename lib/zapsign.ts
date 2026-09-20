@@ -63,6 +63,11 @@ export const DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO =
 export function formatarMensagemZapSign(template?: string | null, vars: ZapSignTemplateVars = {}): string {
   let text = (template && template.trim()) ? template : DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE
 
+  // Substitui qualquer caractere corrompido (replacement character U+FFFD) pelo emoji ✍️
+  if (text.includes('\uFFFD')) {
+    text = text.replace(/\uFFFD/g, '✍️')
+  }
+
   const nomeAluno = vars.nomeAluno?.trim() || ''
   const nomeResp = vars.nomeResponsavel?.trim() || 'Responsável'
   const link = vars.linkAssinatura?.trim() || ''
@@ -130,6 +135,8 @@ export function sanitizarMensagemZapSign(msg?: string | null, isWhatsapp = false
 
   return clean || undefined
 }
+
+export { getWhatsAppShareUrl } from './whatsapp'
 
 export interface ZapSignDocResponse {
   token: string

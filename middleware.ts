@@ -39,6 +39,14 @@ const PUBLIC_PATHS = [
   '/api/saida/config',  // TV e tablet precisam acessar sem redirect
   '/api/saida/calls',   // TV e tablet precisam acessar sem redirect
   '/recibo',            // recibos públicos
+  '/assinar',           // Portal público de assinatura eletrônica de contratos
+  '/validar-assinatura',// Consulta pública de autenticidade e validade jurídica de documentos
+  '/api/matriculas/digital/validar', // Validação pública de protocolo/hash
+  '/api/matriculas/digital/enviar-otp', // Envio de OTP para assinatura pública
+  '/api/matriculas/digital/verificar-otp', // Verificação de OTP para assinatura pública
+  '/api/matriculas/digital/assinar', // Assinatura pública selada com certificado
+  '/api/matriculas/digital/reenviar-email', // Reenvio público com token ou protocolo
+  '/api/matriculas/digital/pdf', // Visualização do PDF no portal de assinatura
   '/_next',             // assets Next.js
   '/favicon.ico',
   '/manifest.webmanifest',
@@ -276,6 +284,9 @@ export async function middleware(request: NextRequest) {
   if (isFamilyOrStudent) {
     const allowedForFamily = [
       '/agenda-digital',
+      '/assinar',
+      '/validar-assinatura',
+      '/recibo',
       '/api/alunos',
       '/api/comunicados',
       '/api/agenda',

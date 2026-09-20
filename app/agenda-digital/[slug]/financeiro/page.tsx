@@ -43,6 +43,7 @@ import { useSelectedStudent } from '@/lib/selectedStudentContext'
 import { triggerHaptic } from '@/lib/utils/haptics'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { PixBottomSheet } from '../../components/PixBottomSheet'
+import { getWhatsAppShareUrl } from '@/lib/whatsapp'
 
 const DeclaracaoIrpfModal = dynamic(
   () => import('../../components/DeclaracaoIrpfModal').then(mod => mod.DeclaracaoIrpfModal),
@@ -574,12 +575,8 @@ function RestrictedFinancialAccessView({
       list[0]
 
     if (contact?.telefone) {
-      let num = contact.telefone.replace(/\D/g, '')
-      if (!num.startsWith('55') && num.length >= 10) num = '55' + num
-      const msg = encodeURIComponent(
-        `Olá! Estou na Agenda Digital do(a) aluno(a) ${currentStudent?.nome || ''} e gostaria de informações sobre o setor financeiro.`
-      )
-      window.open(`https://wa.me/${num}?text=${msg}`, '_blank')
+      const msg = `Olá! Estou na Agenda Digital do(a) aluno(a) ${currentStudent?.nome || ''} e gostaria de informações sobre o setor financeiro.`
+      window.open(getWhatsAppShareUrl(contact.telefone, msg), '_blank')
     } else {
       router.push(`/agenda-digital/${studentRef}/comunicados`)
     }

@@ -39,8 +39,8 @@ export interface ZapSignConfig {
 const DEFAULT_SIGNATARIOS_ESCOLA: SignatarioEscola[] = [
   {
     id: 'escola-default-1',
-    cnpj: '00.000.000/0001-00',
-    razaoSocial: 'Colégio Impacto Ltda',
+    cnpj: '04.395.789/0001-88',
+    razaoSocial: 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
     nomeRepresentante: 'Direção Geral',
     cargo: 'Diretor Geral / Representante Legal',
     email: 'secretaria@colegioimpacto.com.br',
@@ -81,8 +81,8 @@ export async function GET() {
       apiToken: savedVal.apiToken || process.env.ZAPSIGN_API_TOKEN || '',
       authModeContratantePadrao: savedVal.authModeContratantePadrao || savedVal.authModePadrao || 'tokenWhatsapp',
       authModeContratadoPadrao: savedVal.authModeContratadoPadrao || savedVal.authModePadrao || 'tokenWhatsapp',
-      mensagemWhatsappContratante: savedVal.mensagemWhatsappContratante || DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
-      mensagemWhatsappContratado: savedVal.mensagemWhatsappContratado || DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO,
+      mensagemWhatsappContratante: String(savedVal.mensagemWhatsappContratante || DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE).replace(/\uFFFD/g, '✍️'),
+      mensagemWhatsappContratado: String(savedVal.mensagemWhatsappContratado || DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO).replace(/\uFFFD/g, '✍️'),
       signatariosEscola: Array.isArray(savedVal.signatariosEscola) && savedVal.signatariosEscola.length > 0
         ? savedVal.signatariosEscola
         : DEFAULT_SIGNATARIOS_ESCOLA,
@@ -169,11 +169,11 @@ export async function POST(request: Request) {
         ? signatariosEscola
         : (currentVal.signatariosEscola || DEFAULT_SIGNATARIOS_ESCOLA),
       mensagemWhatsappContratante: mensagemWhatsappContratante !== undefined
-        ? String(mensagemWhatsappContratante)
-        : (currentVal.mensagemWhatsappContratante || DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE),
+        ? String(mensagemWhatsappContratante).replace(/\uFFFD/g, '✍️')
+        : String(currentVal.mensagemWhatsappContratante || DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE).replace(/\uFFFD/g, '✍️'),
       mensagemWhatsappContratado: mensagemWhatsappContratado !== undefined
-        ? String(mensagemWhatsappContratado)
-        : (currentVal.mensagemWhatsappContratado || DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO),
+        ? String(mensagemWhatsappContratado).replace(/\uFFFD/g, '✍️')
+        : String(currentVal.mensagemWhatsappContratado || DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO).replace(/\uFFFD/g, '✍️'),
       updatedAt: new Date().toISOString(),
     }
 

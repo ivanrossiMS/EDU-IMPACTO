@@ -382,7 +382,11 @@ export default function LoginPage() {
 
           if (pendingRoute) {
             console.log('[Login] Usuário já logado e rota pendente detectada:', pendingRoute)
-            if (isFamilyOrStudent(storedUser) && !pendingRoute.startsWith('/agenda-digital')) {
+            const isPublicDocRoute =
+              pendingRoute.startsWith('/assinar') ||
+              pendingRoute.startsWith('/validar-assinatura') ||
+              pendingRoute.startsWith('/recibo')
+            if (isFamilyOrStudent(storedUser) && !pendingRoute.startsWith('/agenda-digital') && !isPublicDocRoute) {
               pendingRoute = getAgendaDigitalDestination(storedUser)
             }
             finishSessionCheck(pendingRoute)
@@ -649,7 +653,11 @@ export default function LoginPage() {
         } catch {}
 
         if (cargoReal === 'Aluno' || perfilReal === 'Família' || cargoReal === 'Responsável') {
-          if (!pendingRedirect.startsWith('/agenda-digital')) {
+          const isPublicDocRoute =
+            pendingRedirect.startsWith('/assinar') ||
+            pendingRedirect.startsWith('/validar-assinatura') ||
+            pendingRedirect.startsWith('/recibo')
+          if (!pendingRedirect.startsWith('/agenda-digital') && !isPublicDocRoute) {
             pendingRedirect = getAgendaDigitalDestination({
               perfil: perfilReal,
               cargo: cargoReal,

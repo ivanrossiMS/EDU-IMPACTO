@@ -23,6 +23,9 @@
 # misc
 .DS_Store
 *.pem
+*.p12
+*.pfx
+storage/
 
 # debug
 npm-debug.log*
@@ -98,4 +101,6 @@ __pycache__/
 sincronizados_*.txt
 .dre_historico_store.json
 task.md
-
+storage/certs/
+*.p12
+*.pem

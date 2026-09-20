@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import {
   formatarMensagemZapSign,
+  getWhatsAppShareUrl,
   DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
   DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO
 } from '@/lib/zapsign'
@@ -4303,19 +4304,20 @@ export default function MatriculasOnlinePage() {
 
                               {/* COLUNA 2: WhatsApp & Ações Rápidas (Sincronizar & Excluir) */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-                                {/* Botão Superior Coluna 2: WhatsApp */}
-                                {c.responsavel_telefone && c.zapsign_sign_url ? (
-                                  <a
-                                    href={`https://wa.me/55${c.responsavel_telefone.replace(/\D/g, '')}?text=${encodeURIComponent(
-                                      formatarMensagemZapSign(zapConfig.mensagemWhatsappContratante, {
-                                        nomeResponsavel: c.responsavel_nome,
-                                        nomeAluno: c.aluno_nome,
-                                        turmaAluno: c.aluno_turma || c.aluno_serie || '',
-                                        linkAssinatura: c.zapsign_sign_url,
-                                        nomeEscola: 'Colégio Impacto',
-                                        nomeDocumento: c.tipo_documento || 'Contrato Escolar',
-                                      })
-                                    )}`}
+                                 {/* Botão Superior Coluna 2: WhatsApp */}
+                                 {c.responsavel_telefone && c.zapsign_sign_url ? (
+                                   <a
+                                     href={getWhatsAppShareUrl(
+                                       c.responsavel_telefone,
+                                       formatarMensagemZapSign(zapConfig.mensagemWhatsappContratante, {
+                                         nomeResponsavel: c.responsavel_nome,
+                                         nomeAluno: c.aluno_nome,
+                                         turmaAluno: c.aluno_turma || c.aluno_serie || '',
+                                         linkAssinatura: c.zapsign_sign_url,
+                                         nomeEscola: 'Colégio Impacto',
+                                         nomeDocumento: c.tipo_documento || 'Contrato Escolar',
+                                       })
+                                     )}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     title="Enviar no WhatsApp para o Contratante"
@@ -5303,7 +5305,7 @@ export default function MatriculasOnlinePage() {
                         : {
                             nomeRepresentante: escolaSignatarioAtual?.nomeRepresentante || 'Direção Geral',
                             cargo: escolaSignatarioAtual?.cargo || 'Representante Legal',
-                            razaoSocial: escolaSignatarioAtual?.razaoSocial || 'Colégio Impacto Ltda',
+                            razaoSocial: escolaSignatarioAtual?.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
                             nomeAluno: 'José Fernando Alves Ortiz',
                             linkAssinatura: 'https://sandbox.app.zapsign.com.br/verificar/c882a101-443b-47e2-a09c-982c7fdab750',
                             nomeEscola: escolaSignatarioAtual?.razaoSocial || 'Colégio Impacto',
@@ -6151,7 +6153,7 @@ export default function MatriculasOnlinePage() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: Colégio Impacto LTDA"
+                    placeholder="Ex: COLÉGIO IMPACTO CENTRO DE ENSINO LTDA"
                     value={formSignatario.razaoSocial}
                     onChange={e => setFormSignatario({ ...formSignatario, razaoSocial: e.target.value })}
                     className="mo-input"

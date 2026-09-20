@@ -31,6 +31,8 @@ import { GlobalLogoutOverlay } from '@/components/layout/GlobalLogoutOverlay'
 import { KeyboardProvider } from '@/components/providers/KeyboardProvider'
 import { CapacitorResumeGuard } from '@/components/providers/CapacitorResumeGuard'
 import { GlobalNotificationProvider } from '@/components/providers/GlobalNotificationProvider'
+import { GlobalButtonEffects } from '@/components/providers/GlobalButtonEffects'
+import { Toaster } from 'sonner'
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -46,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       </head>
       <body style={{ backgroundColor: '#0A0F24', color: '#ffffff', minHeight: '100vh', margin: 0 }}>
+        <GlobalButtonEffects />
         <Suspense fallback={null}>
           <GlobalNavigationLoader />
         </Suspense>
@@ -65,6 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
           strategy="afterInteractive"
         />
+        <Toaster position="top-right" richColors theme="dark" closeButton />
         <div id="global-overlay-root"></div>
       </body>
     </html>

@@ -25,7 +25,7 @@ const securityHeaders = [
       "media-src 'self' blob: https://*.supabase.co https://*.supabase.in capacitor:",
       "connect-src 'self' capacitor: http://localhost:* https://localhost:* https://*.supabase.co https://*.supabase.in wss://*.supabase.co https://viacep.com.br https://*.onesignal.com https://script.google.com https://*.googleusercontent.com https://www.googleapis.com https://*.google.com",
       "worker-src 'self' blob: capacitor: https://cdn.onesignal.com https://onesignal.com",
-      "frame-src 'self' capacitor: https://onesignal.com",
+      "frame-src 'self' data: blob: capacitor: https://onesignal.com",
       "frame-ancestors 'self' capacitor: http://localhost:* https://localhost:*",
     ].join('; '),
   },

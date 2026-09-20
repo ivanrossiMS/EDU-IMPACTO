@@ -13,6 +13,7 @@ import {
 import Link from 'next/link'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
 import { UserAvatar } from '@/components/UserAvatar'
+import { getWhatsAppShareUrl } from '@/lib/whatsapp'
 
 // Helper function to format any date into clean, human-readable Portuguese text
 function formatDatePtBr(rawDate: any): string {
@@ -1299,7 +1300,7 @@ export default function ADAdminPessoaDetail() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600, marginTop: 2 }}>
                     {selectedRespModal.telefone}
                     <a
-                      href={`https://wa.me/55${selectedRespModal.telefone.replace(/\D/g, '')}`}
+                      href={getWhatsAppShareUrl(selectedRespModal.telefone)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="btn btn-secondary btn-sm"

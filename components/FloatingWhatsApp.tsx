@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { MessageCircle, X, ChevronRight, Phone } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
+import { getWhatsAppShareUrl } from '@/lib/whatsapp'
 
 export function FloatingWhatsApp() {
   const { adConfig } = useAgendaDigital()
@@ -25,13 +26,7 @@ export function FloatingWhatsApp() {
   }
 
   const handleWhatsAppClick = (telefoneOriginal: string) => {
-    // Remove tudo que não for número
-    let numero = telefoneOriginal.replace(/\D/g, '')
-    // Adiciona código do Brasil se não tiver
-    if (!numero.startsWith('55') && numero.length >= 10) {
-      numero = '55' + numero
-    }
-    window.open(`https://wa.me/${numero}`, '_blank')
+    window.open(getWhatsAppShareUrl(telefoneOriginal), '_blank')
   }
 
   return (

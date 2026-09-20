@@ -55,6 +55,7 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     title: 'MATRÍCULAS',
     collapsible: true,
     items: [
+      { label: 'MATRÍCULA DIGITAL', href: '/matriculas/digital', icon: <FileCheck2 size={16} />, badge: 'NOVO', badgeColor: 'green' },
       { label: 'MATRÍCULAS ONLINE', href: '/matriculas/online', icon: <FileSignature size={16} />, badge: 'ZAPSIGN', badgeColor: 'blue' },
       { label: 'VALORES', href: '/matriculas/valores', icon: <Calculator size={16} />, badge: '2027', badgeColor: 'green' },
     ],

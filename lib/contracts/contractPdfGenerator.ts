@@ -1,17 +1,18 @@
 /**
  * lib/contracts/contractPdfGenerator.ts
  *
- * Gerador de PDF oficial vetorial em alta resolução para Contratos Educacionais
- * e Requerimentos de Matrícula do Colégio Impacto.
- * Utiliza pdf-lib para criar arquivos compactos, padronizados e 100% compatíveis com ZapSign.
+ * Gerador de PDF oficial vetorial em alta resolução para Termos de Ciência,
+ * Requerimentos de Matrícula e Documentos Escolares do Colégio Impacto.
+ * Não inclui valores/parcelas, focando na identificação das partes, ciência, autorizações e validade legal.
  */
 
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage } from 'pdf-lib'
+import fs from 'fs'
+import path from 'path'
 import {
   ContractDataModel,
-  getTextoContratoServicos,
   getTextoRequerimentoMatricula,
-  formatCurrencyBRL
+  getTextoTermoCienciaEAutorizacoes,
 } from './contractTemplates'
 
 /**
@@ -67,7 +68,7 @@ export interface GeneratedPdfResult {
 }
 
 /**
- * Gera o documento PDF completo para o contrato ou requerimento
+ * Gera o documento PDF oficial para o termo de ciência ou requerimento
  */
 export async function gerarContratoPdf(data: ContractDataModel): Promise<GeneratedPdfResult> {
   const pdfDoc = await PDFDocument.create()
@@ -75,7 +76,6 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
   // Fontes padrão de alta fidelidade
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica)
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-  const fontOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique)
 
   // Cores institucionais do Colégio Impacto
   const colorPrimary = rgb(0.08, 0.20, 0.45) // Azul marinho nobre
@@ -87,12 +87,32 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
   const pageWidth = 595.28 // A4 Width
   const pageHeight = 841.89 // A4 Height
   const marginX = 42
-  const marginTop = 48
   const marginBottom = 50
   const contentWidth = pageWidth - marginX * 2
 
   let pageIndex = 0
   const pages: PDFPage[] = []
+
+  let logoImg: any = null
+  try {
+    if (data.escolaLogoBytes && data.escolaLogoBytes.length > 0) {
+      const isJpeg = data.escolaLogoBytes[0] === 0xFF && data.escolaLogoBytes[1] === 0xD8
+      logoImg = isJpeg ? await pdfDoc.embedJpg(data.escolaLogoBytes) : await pdfDoc.embedPng(data.escolaLogoBytes)
+    } else if (data.escolaLogoBase64) {
+      const cleanB64 = data.escolaLogoBase64.replace(/^data:image\/\w+;base64,/, '')
+      const bytes = Buffer.from(cleanB64, 'base64')
+      const isJpeg = bytes[0] === 0xFF && bytes[1] === 0xD8
+      logoImg = isJpeg ? await pdfDoc.embedJpg(bytes) : await pdfDoc.embedPng(bytes)
+    }
+
+    if (!logoImg) {
+      const logoPath = path.join(process.cwd(), 'public', 'logo-impacto-clean.png')
+      if (fs.existsSync(logoPath)) {
+        const logoBytes = fs.readFileSync(logoPath)
+        logoImg = await pdfDoc.embedPng(logoBytes)
+      }
+    }
+  } catch {}
 
   const createPage = (): { page: PDFPage; startY: number } => {
     const page = pdfDoc.addPage([pageWidth, pageHeight])
@@ -100,7 +120,6 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
     pageIndex++
 
     // Cabeçalho institucional (em todas as páginas)
-    // Linha decorativa superior
     page.drawRectangle({
       x: marginX,
       y: pageHeight - 24,
@@ -109,27 +128,38 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
       color: colorPrimary,
     })
 
+    let headerX = marginX
+    if (logoImg) {
+      page.drawImage(logoImg, {
+        x: marginX,
+        y: pageHeight - 64,
+        width: 36,
+        height: 36,
+      })
+      headerX = marginX + 44
+    }
+
     // Nome da Instituição
     page.drawText(sanitize(data.escolaNome || 'COLÉGIO IMPACTO'), {
-      x: marginX,
+      x: headerX,
       y: pageHeight - 40,
       size: 13,
       font: fontBold,
       color: colorPrimary,
     })
 
-    const infoEscola = `${data.escolaRazaoSocial || 'Colégio Impacto Ltda'} • CNPJ: ${data.escolaCnpj || '00.000.000/0001-00'}`
+    const infoEscola = `${data.escolaRazaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA'} • CNPJ: ${data.escolaCnpj || '04.395.789/0001-88'}`
     page.drawText(sanitize(infoEscola), {
-      x: marginX,
+      x: headerX,
       y: pageHeight - 51,
       size: 7.5,
       font: fontRegular,
       color: colorSubtle,
     })
 
-    const enderecoEscola = `${data.escolaEndereco || 'Rua Principal, 100'} • ${data.escolaCidadeUf || 'Campo Grande - MS'} • Tel: ${data.escolaTelefone || '(67) 3000-0000'}`
+    const enderecoEscola = `${data.escolaEndereco || 'Rua da Divisão, 586, Parati'} • ${data.escolaCidadeUf || 'Campo Grande - MS'} • Tel: ${data.escolaTelefone || '(67) 99280-6464'}`
     page.drawText(sanitize(enderecoEscola), {
-      x: marginX,
+      x: headerX,
       y: pageHeight - 61,
       size: 7,
       font: fontRegular,
@@ -151,15 +181,14 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
   let { page: currentPage, startY: currentY } = createPage()
 
   // ── Bloco Título do Documento ──────────────────────────────────────────────
-  let tituloDoc = 'CONTRATO DE PRESTAÇÃO DE SERVIÇOS EDUCACIONAIS'
-  let subTituloDoc = `Ano Letivo ${data.anoLetivo} • Processo de Matrícula Online`
+  let tituloDoc = 'REQUERIMENTO DE MATRÍCULA E TERMO DE CIÊNCIA'
+  let subTituloDoc = `Ano Letivo ${data.anoLetivo} • Secretaria Escolar`
 
-  if (data.tipoDocumento === 'requerimento_matricula') {
-    tituloDoc = 'REQUERIMENTO DE MATRÍCULA E REMATRÍCULA'
-    subTituloDoc = `Ano Letivo ${data.anoLetivo} • Secretaria Escolar`
-  } else if (data.tipoDocumento === 'pacote_completo') {
-    tituloDoc = 'INSTRUMENTO CONTRATUAL E REQUERIMENTO DE MATRÍCULA'
-    subTituloDoc = `Ano Letivo ${data.anoLetivo} • Prestação de Serviços Educacionais`
+  if (data.tipoDocumento === 'termo_ciencia') {
+    tituloDoc = 'TERMO DE CIÊNCIA, AUTORIZAÇÕES E ADESÃO'
+    subTituloDoc = `Ano Letivo ${data.anoLetivo} • Diretrizes Pedagógicas`
+  } else if (data.tipoDocumento === 'personalizado') {
+    tituloDoc = 'INSTRUMENTO DE ADESÃO E CIÊNCIA ESCOLAR'
   }
 
   currentPage.drawText(tituloDoc, {
@@ -180,7 +209,7 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
   })
   currentY -= 18
 
-  // ── Quadro Resumo do Aluno e Responsável Financeiro ───────────────────────
+  // ── Quadro Resumo do Aluno e Responsável Legal ─────────────────────────────
   const boxHeight = 62
   currentPage.drawRectangle({
     x: marginX,
@@ -222,9 +251,9 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
     color: colorSubtle,
   })
 
-  // Coluna Direita: Responsável Financeiro e Condições
+  // Coluna Direita: Responsável Legal
   const colRightX = marginX + (contentWidth / 2) + 5
-  currentPage.drawText('RESPONSÁVEL FINANCEIRO / SIGNATÁRIO:', {
+  currentPage.drawText('RESPONSÁVEL LEGAL / SIGNATÁRIO(A):', {
     x: colRightX,
     y: currentY - 14,
     size: 7.5,
@@ -245,30 +274,29 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
     font: fontRegular,
     color: colorDark,
   })
-  currentPage.drawText(sanitize(`Anuidade: ${formatCurrencyBRL(data.valorAnuidade)} (${data.numParcelas}x ${formatCurrencyBRL(data.valorMensalidade)})`), {
+  currentPage.drawText(sanitize(`E-mail: ${data.respEmail || 'Cadastrado na secretaria'}`), {
     x: colRightX,
     y: currentY - 49,
-    size: 8,
-    font: fontBold,
-    color: colorPrimary,
+    size: 7.5,
+    font: fontRegular,
+    color: colorSubtle,
   })
 
   currentY -= (boxHeight + 20)
 
   // ── Montagem do Conteúdo Textual ──────────────────────────────────────────
   let textoCorpo = ''
-  if (data.tipoDocumento === 'requerimento_matricula') {
-    textoCorpo = getTextoRequerimentoMatricula(data)
-  } else if (data.tipoDocumento === 'pacote_completo') {
-    textoCorpo = `${getTextoContratoServicos(data)}\n\n------------------------------------------------------------\n\n${getTextoRequerimentoMatricula(data)}`
+  if (data.conteudoPersonalizado) {
+    textoCorpo = data.conteudoPersonalizado
+  } else if (data.tipoDocumento === 'termo_ciencia') {
+    textoCorpo = getTextoTermoCienciaEAutorizacoes(data)
   } else {
-    textoCorpo = getTextoContratoServicos(data)
+    textoCorpo = getTextoRequerimentoMatricula(data)
   }
 
   const lines = wrapText(textoCorpo, contentWidth, fontRegular, 8.5)
 
   for (const line of lines) {
-    // Se a linha passar do limite inferior da página, cria nova página
     if (currentY < marginBottom + 30) {
       const next = createPage()
       currentPage = next.page
@@ -280,12 +308,14 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
       continue
     }
 
-    // Se for cabeçalho de cláusula ou título interno, usa negrito
     const isHeader = line.startsWith('CLÁUSULA') ||
-      line.startsWith('I – DAS PARTES') ||
+      line.startsWith('I –') ||
+      line.startsWith('II –') ||
+      line.startsWith('III –') ||
+      line.startsWith('IV –') ||
+      line.startsWith('V –') ||
       line.startsWith('REQUERIMENTO DE MATRÍCULA') ||
-      line.startsWith('TERMO DE COMPROMISSO') ||
-      line.startsWith('CONTRATO DE PRESTAÇÃO')
+      line.startsWith('TERMO DE CIÊNCIA')
 
     if (isHeader) {
       currentY -= 4
@@ -310,8 +340,7 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
   }
 
   // ── Bloco Final de Assinatura Eletrônica ───────────────────────────────────
-  // Garantir que haja espaço para o box de assinatura (precisa de ~110pt)
-  if (currentY < marginBottom + 120) {
+  if (currentY < marginBottom + 110) {
     const next = createPage()
     currentPage = next.page
     currentY = next.startY
@@ -319,7 +348,6 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
 
   currentY -= 15
 
-  // Box de Assinatura ZapSign
   const signBoxHeight = 85
   currentPage.drawRectangle({
     x: marginX,
@@ -331,7 +359,7 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
     borderWidth: 1,
   })
 
-  currentPage.drawText('AUTENTICAÇÃO & ASSINATURA ELETRÔNICA ZAPSIGN', {
+  currentPage.drawText('AUTENTICAÇÃO & ASSINATURA ELETRÔNICA - SISTEMA IMPACTO EDU', {
     x: marginX + 12,
     y: currentY - 16,
     size: 8,
@@ -340,7 +368,7 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
   })
 
   currentPage.drawText(
-    sanitize('Este documento será assinado eletronicamente via plataforma certificada ZapSign, com validade jurídica assegurada pela MP 2.200-2/2001 e Lei Federal nº 14.063/2020.'),
+    sanitize('Este documento é assinado eletronicamente com ciência, confirmação por código OTP e validade jurídica assegurada pela MP 2.200-2/2001 e Lei Federal nº 14.063/2020.'),
     {
       x: marginX + 12,
       y: currentY - 29,
@@ -350,7 +378,6 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
     }
   )
 
-  // Linhas para o Signatário e a Escola
   const signWidth = (contentWidth - 40) / 2
 
   // Signatário (Responsável)
@@ -367,7 +394,7 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
     font: fontBold,
     color: colorDark,
   })
-  currentPage.drawText('CONTRATANTE / RESPONSÁVEL FINANCEIRO', {
+  currentPage.drawText('RESPONSÁVEL LEGAL (CIÊNCIA E ASSINATURA)', {
     x: marginX + 12,
     y: currentY - 79,
     size: 6.5,
@@ -377,20 +404,37 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
 
   // Representante Legal da Escola
   const repX = marginX + 28 + signWidth
+
+  try {
+    const repSigPath = path.join(process.cwd(), 'public', 'assinatura-representante.png')
+    if (fs.existsSync(repSigPath)) {
+      const repSigBytes = fs.readFileSync(repSigPath)
+      const repSigImg = await pdfDoc.embedPng(repSigBytes)
+      currentPage.drawImage(repSigImg, {
+        x: repX + 15,
+        y: currentY - 56,
+        width: signWidth - 30,
+        height: 38,
+      })
+    }
+  } catch (errSig) {
+    console.warn('[ContractGenerator] Assinatura rep não carregada:', errSig)
+  }
+
   currentPage.drawLine({
     start: { x: repX, y: currentY - 60 },
     end: { x: repX + signWidth, y: currentY - 60 },
     thickness: 0.8,
     color: colorDark,
   })
-  currentPage.drawText(sanitize(`${data.escolaRazaoSocial}`), {
+  currentPage.drawText(sanitize(`IVAN ROSSI SAMBRANA - ${data.escolaRazaoSocial}`), {
     x: repX,
     y: currentY - 70,
     size: 7.5,
     font: fontBold,
     color: colorDark,
   })
-  currentPage.drawText('CONTRATADA / DIREÇÃO ESCOLAR', {
+  currentPage.drawText('DIREÇÃO GERAL / REPRESENTANTE LEGAL', {
     x: repX,
     y: currentY - 79,
     size: 6.5,
@@ -409,7 +453,7 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
       color: colorBorder,
     })
 
-    const rodapeText = sanitize(`Colégio Impacto • Matrícula Online • Documento Gerado em ${new Date().toLocaleDateString('pt-BR')}`)
+    const rodapeText = sanitize(`Colégio Impacto • Matrícula Digital • Documento Gerado em ${new Date().toLocaleDateString('pt-BR')}`)
     p.drawText(rodapeText, {
       x: marginX,
       y: marginBottom - 12,
@@ -429,7 +473,6 @@ export async function gerarContratoPdf(data: ContractDataModel): Promise<Generat
     })
   }
 
-  // Gera os bytes e o Base64
   const pdfBytes = await pdfDoc.save()
   const base64Pdf = Buffer.from(pdfBytes).toString('base64')
 

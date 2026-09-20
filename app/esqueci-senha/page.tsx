@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Mail, ArrowLeft, Send, CheckCircle2, AlertCircle, Shield, Lock, HelpCircle, BookOpen } from 'lucide-react';
 import { BackgroundEffects } from '@/components/ui/LoginBackground';
+import { getWhatsAppShareUrl } from '@/lib/whatsapp';
 
 export default function EsqueciSenha() {
   const [email, setEmail] = useState('');
@@ -254,7 +255,7 @@ export default function EsqueciSenha() {
           </div>
           <button
             type="button"
-            onClick={() => window.open('https://wa.me/556730286316?text=Ol%C3%A1%2C%20preciso%20de%20ajuda%20para%20recuperar%20minha%20senha%20no%20IMPACTO-EDU', '_blank')}
+            onClick={() => window.open(getWhatsAppShareUrl('556730286316', 'Olá, preciso de ajuda para recuperar minha senha no IMPACTO-EDU'), '_blank')}
             style={{
               width: '100%',
               padding: '14px',

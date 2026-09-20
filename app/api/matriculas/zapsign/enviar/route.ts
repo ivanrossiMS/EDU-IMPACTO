@@ -8,6 +8,7 @@ import {
   formatPhoneForZapSign,
   formatarMensagemZapSign,
   sanitizarMensagemZapSign,
+  getWhatsAppShareUrl,
   DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
   DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO
 } from '@/lib/zapsign'
@@ -133,8 +134,8 @@ export async function POST(request: Request) {
       // Se não anexou arquivo, gera um modelo institucional simplificado
       const contractData: ContractDataModel = {
         escolaNome: escolaInfo?.nome || 'COLÉGIO IMPACTO',
-        escolaRazaoSocial: escolaInfo?.razaoSocial || 'Colégio Impacto Ltda',
-        escolaCnpj: escolaInfo?.cnpj || '00.000.000/0001-00',
+        escolaRazaoSocial: escolaInfo?.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
+        escolaCnpj: escolaInfo?.cnpj || '04.395.789/0001-88',
         escolaEndereco: escolaInfo?.endereco || 'Rua Principal, 100',
         escolaCidadeUf: escolaInfo?.cidadeUf || 'Campo Grande - MS',
         escolaTelefone: escolaInfo?.telefone || '(67) 3000-0000',
@@ -366,7 +367,7 @@ export async function POST(request: Request) {
         nomeEscola: escolaInfo?.nomeFantasia || 'Colégio Impacto',
         nomeDocumento: docTitle,
       })
-      whatsappLink = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(textoMensagem)}`
+      whatsappLink = getWhatsAppShareUrl(cleanPhone, textoMensagem)
     }
 
     let escolaWhatsappLink = ''
@@ -382,7 +383,7 @@ export async function POST(request: Request) {
           nomeEscola: escolaSignatario.razaoSocial || 'Colégio Impacto',
           nomeDocumento: docTitle,
         })
-        escolaWhatsappLink = `https://wa.me/55${cleanEscolaPhone}?text=${encodeURIComponent(textoEscola)}`
+        escolaWhatsappLink = getWhatsAppShareUrl(cleanEscolaPhone, textoEscola)
       }
     }
 
