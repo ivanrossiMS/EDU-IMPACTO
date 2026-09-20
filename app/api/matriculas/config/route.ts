@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
-import { testarConexaoZapSign } from '@/lib/zapsign'
+import {
+  testarConexaoZapSign,
+  DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
+  DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO
+} from '@/lib/zapsign'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +31,8 @@ export interface ZapSignConfig {
   envioAutomaticoWhatsapp: boolean
   envioAutomaticoEmail: boolean
   signatariosEscola?: SignatarioEscola[]
+  mensagemWhatsappContratante?: string
+  mensagemWhatsappContratado?: string
   updatedAt?: string
 }
 
@@ -52,6 +58,8 @@ const DEFAULT_CONFIG: ZapSignConfig = {
   envioAutomaticoWhatsapp: true,
   envioAutomaticoEmail: false,
   signatariosEscola: DEFAULT_SIGNATARIOS_ESCOLA,
+  mensagemWhatsappContratante: DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
+  mensagemWhatsappContratado: DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO,
 }
 
 export async function GET() {
@@ -73,6 +81,8 @@ export async function GET() {
       apiToken: savedVal.apiToken || process.env.ZAPSIGN_API_TOKEN || '',
       authModeContratantePadrao: savedVal.authModeContratantePadrao || savedVal.authModePadrao || 'tokenWhatsapp',
       authModeContratadoPadrao: savedVal.authModeContratadoPadrao || savedVal.authModePadrao || 'tokenWhatsapp',
+      mensagemWhatsappContratante: savedVal.mensagemWhatsappContratante || DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
+      mensagemWhatsappContratado: savedVal.mensagemWhatsappContratado || DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO,
       signatariosEscola: Array.isArray(savedVal.signatariosEscola) && savedVal.signatariosEscola.length > 0
         ? savedVal.signatariosEscola
         : DEFAULT_SIGNATARIOS_ESCOLA,
@@ -110,7 +120,9 @@ export async function POST(request: Request) {
       authModeContratadoPadrao,
       envioAutomaticoWhatsapp,
       envioAutomaticoEmail,
-      signatariosEscola
+      signatariosEscola,
+      mensagemWhatsappContratante,
+      mensagemWhatsappContratado
     } = body
 
     const supabase = getAdminClient()
@@ -156,6 +168,12 @@ export async function POST(request: Request) {
       signatariosEscola: Array.isArray(signatariosEscola)
         ? signatariosEscola
         : (currentVal.signatariosEscola || DEFAULT_SIGNATARIOS_ESCOLA),
+      mensagemWhatsappContratante: mensagemWhatsappContratante !== undefined
+        ? String(mensagemWhatsappContratante)
+        : (currentVal.mensagemWhatsappContratante || DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE),
+      mensagemWhatsappContratado: mensagemWhatsappContratado !== undefined
+        ? String(mensagemWhatsappContratado)
+        : (currentVal.mensagemWhatsappContratado || DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO),
       updatedAt: new Date().toISOString(),
     }
 

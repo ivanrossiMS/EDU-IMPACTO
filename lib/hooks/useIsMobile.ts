@@ -3,12 +3,7 @@ import { useEffect, useState } from 'react'
 
 /** Returns true when viewport width < 768px (mobile). Updates on resize. */
 export function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth < breakpoint
-    }
-    return false
-  })
+  const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null

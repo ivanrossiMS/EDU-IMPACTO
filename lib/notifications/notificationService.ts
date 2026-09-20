@@ -160,49 +160,63 @@ class NotificationService {
     } else {
       // ── Web Push ──────────────────────────────────────────────────────────
       try {
-        window.OneSignalDeferred = window.OneSignalDeferred || []
-        window.OneSignalDeferred.push(async (OneSignal: any) => {
-          try {
-            if (!OneSignal) return
-            await OneSignal.init({
-              appId,
-              allowLocalhostAsSecureOrigin: true,
-              serviceWorkerParam: { scope: '/' },
-            })
-            ;(window as any).__OS_INIT__ = true
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            console.warn('[NotificationService] Timeout aguardando OneSignal Web SDK.')
+            resolve()
+          }, 6000)
 
-            // Listeners para mudanças de permissão e subscrição na Web
-            if (OneSignal.Notifications?.addEventListener) {
-              OneSignal.Notifications.addEventListener('permissionChange', () => {
-                this.refresh().catch(() => {})
-              })
-            }
-            const pushSub = OneSignal.User?.PushSubscription || OneSignal.User?.pushSubscription
-            if (pushSub?.addEventListener) {
-              pushSub.addEventListener('change', () => {
-                this.refresh().catch(() => {})
-              })
-            }
-
-            await this.refresh()
-            console.log('🔔 [NotificationService] OneSignal Web inicializado!')
-          } catch (webErr: any) {
-            const msg = webErr?.message || ''
-            if (!msg.includes('already initialized')) {
-              const isLocalhostDomain =
-                typeof window !== 'undefined' &&
-                (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
-                msg.includes('Can only be used on')
-
-              if (isLocalhostDomain) {
-                console.info('ℹ️ [NotificationService] OneSignal Web Push inativo em localhost (configurado no dashboard para impacto-edu.net).')
-              } else {
-                console.warn('[NotificationService] Erro inicialização web:', webErr)
+          window.OneSignalDeferred = window.OneSignalDeferred || []
+          window.OneSignalDeferred.push(async (OneSignal: any) => {
+            try {
+              if (!OneSignal) {
+                clearTimeout(timeout)
+                resolve()
+                return
               }
-              this.state.error = msg
-              this.notifyListeners()
+              await OneSignal.init({
+                appId,
+                allowLocalhostAsSecureOrigin: true,
+                serviceWorkerParam: { scope: '/' },
+              })
+              ;(window as any).__OS_INIT__ = true
+
+              // Listeners para mudanças de permissão e subscrição na Web
+              if (OneSignal.Notifications?.addEventListener) {
+                OneSignal.Notifications.addEventListener('permissionChange', () => {
+                  this.refresh().catch(() => {})
+                })
+              }
+              const pushSub = OneSignal.User?.PushSubscription || OneSignal.User?.pushSubscription
+              if (pushSub?.addEventListener) {
+                pushSub.addEventListener('change', () => {
+                  this.refresh().catch(() => {})
+                })
+              }
+
+              await this.refresh()
+              console.log('🔔 [NotificationService] OneSignal Web inicializado!')
+            } catch (webErr: any) {
+              const msg = webErr?.message || ''
+              if (!msg.includes('already initialized')) {
+                const isLocalhostDomain =
+                  typeof window !== 'undefined' &&
+                  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') &&
+                  msg.includes('Can only be used on')
+
+                if (isLocalhostDomain) {
+                  console.info('ℹ️ [NotificationService] OneSignal Web Push inativo em localhost (configurado no dashboard para impacto-edu.net).')
+                } else {
+                  console.warn('[NotificationService] Erro inicialização web:', webErr)
+                }
+                this.state.error = msg
+                this.notifyListeners()
+              }
+            } finally {
+              clearTimeout(timeout)
+              resolve()
             }
-          }
+          })
         })
       } catch (e: any) {
         console.error('[NotificationService] Erro ao enfileirar inicialização web:', e)
@@ -714,17 +728,25 @@ class NotificationService {
           await OneSignalNative.User.pushSubscription.optIn().catch(() => {})
         }
 
-        // Aliases atômicos
-        const aliasMap: Record<string, string> = { external_id: userId }
+        // Aliases atômicos (external_id e onesignal_id são reservados no OneSignal e definidos via login)
+        const aliasMap: Record<string, string> = {}
         for (const a of aliasesToRegister) {
-          if (a.label && a.id) aliasMap[a.label] = String(a.id)
+          if (a.label && a.id && a.label !== 'external_id' && a.label !== 'onesignal_id') {
+            aliasMap[a.label] = String(a.id)
+          }
         }
 
-        if (OneSignalNative.User?.addAliases) {
-          await OneSignalNative.User.addAliases(aliasMap).catch(() => {})
-        } else if (OneSignalNative.User?.addAlias) {
-          for (const [k, v] of Object.entries(aliasMap)) {
-            OneSignalNative.User.addAlias(k, v).catch(() => {})
+        if (Object.keys(aliasMap).length > 0) {
+          try {
+            if (OneSignalNative.User?.addAliases) {
+              await OneSignalNative.User.addAliases(aliasMap)
+            } else if (OneSignalNative.User?.addAlias) {
+              for (const [k, v] of Object.entries(aliasMap)) {
+                await OneSignalNative.User.addAlias(k, v).catch(() => {})
+              }
+            }
+          } catch (aliasErr) {
+            console.warn('[NotificationService] Aviso ao adicionar aliases nativos:', aliasErr)
           }
         }
 
@@ -779,7 +801,7 @@ class NotificationService {
       } else {
         // Web User Sync
         const performWebSync = async (OS: any) => {
-          if (!OS || typeof OS.login !== 'function') return
+          if (!OS || typeof OS.login !== 'function' || !(window as any).__OS_INIT__) return
 
           try {
             await OS.login(userId)
@@ -790,26 +812,48 @@ class NotificationService {
             console.warn('[NotificationService] Aviso no OS.login web:', webLoginErr)
           }
 
-          const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
-          if (typeof optInFn === 'function') {
-            await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription).catch(() => {})
+          // Apenas tenta optIn se o navegador já concedeu permissão (granted).
+          // Se estiver 'denied' ou 'default', chamar optIn gera erro "Permission blocked" no console.
+          const isNotificationGranted =
+            typeof window !== 'undefined' &&
+            'Notification' in window &&
+            Notification.permission === 'granted'
+
+          if (isNotificationGranted) {
+            const optInFn = OS.User?.PushSubscription?.optIn || OS.User?.pushSubscription?.optIn
+            if (typeof optInFn === 'function') {
+              try {
+                await optInFn.call(OS.User?.PushSubscription || OS.User?.pushSubscription)
+              } catch {}
+            }
           }
 
-          const aliasMap: Record<string, string> = { external_id: userId }
+          // Aliases atômicos (external_id e onesignal_id são reservados no OneSignal e definidos via login)
+          const aliasMap: Record<string, string> = {}
           for (const a of aliasesToRegister) {
-            if (a.label && a.id) aliasMap[a.label] = String(a.id)
+            if (a.label && a.id && a.label !== 'external_id' && a.label !== 'onesignal_id') {
+              aliasMap[a.label] = String(a.id)
+            }
           }
 
-          if (OS.User?.addAliases) {
-            await OS.User.addAliases(aliasMap).catch(() => {})
-          } else if (OS.User?.addAlias) {
-            for (const [k, v] of Object.entries(aliasMap)) {
-              OS.User.addAlias(k, v).catch(() => {})
+          if (Object.keys(aliasMap).length > 0) {
+            try {
+              if (OS.User?.addAliases) {
+                await OS.User.addAliases(aliasMap)
+              } else if (OS.User?.addAlias) {
+                for (const [k, v] of Object.entries(aliasMap)) {
+                  await OS.User.addAlias(k, v).catch(() => {})
+                }
+              }
+            } catch (aliasErr) {
+              console.warn('[NotificationService] Aviso ao adicionar aliases web:', aliasErr)
             }
           }
 
           if (OS.User?.addTags) {
-            await OS.User.addTags(tags).catch(() => {})
+            try {
+              await OS.User.addTags(tags)
+            } catch {}
           }
 
           if (isPureStaff) {
@@ -848,12 +892,16 @@ class NotificationService {
         }
 
         const OS = (window as any).OneSignal
-        if (OS && typeof OS.login === 'function') {
+        const isReady = OS && typeof OS.login === 'function' && (window as any).__OS_INIT__
+
+        if (isReady) {
           await performWebSync(OS)
         } else if (typeof window !== 'undefined') {
           window.OneSignalDeferred = window.OneSignalDeferred || []
           window.OneSignalDeferred.push(async (OneSignal: any) => {
-            await performWebSync(OneSignal)
+            if ((window as any).__OS_INIT__) {
+              await performWebSync(OneSignal)
+            }
           })
         }
       }
@@ -912,14 +960,20 @@ class NotificationService {
         }
       } else {
         const OS = (window as any).OneSignal
-        if (OS?.User?.removeTags) {
-          await OS.User.removeTags(tagsToRemove).catch(() => {})
-        }
-        if (OS?.User?.removeAliases) {
-          await OS.User.removeAliases(aliasesToRemove).catch(() => {})
-        }
-        if (OS && typeof OS.logout === 'function') {
-          await OS.logout().catch(() => {})
+        if ((window as any).__OS_INIT__) {
+          try {
+            if (OS?.User?.removeTags) {
+              await OS.User.removeTags(tagsToRemove).catch(() => {})
+            }
+            if (OS?.User?.removeAliases) {
+              await OS.User.removeAliases(aliasesToRemove).catch(() => {})
+            }
+            if (OS && typeof OS.logout === 'function') {
+              await OS.logout().catch(() => {})
+            }
+          } catch (logoutErr) {
+            console.warn('[NotificationService] Aviso no logout web:', logoutErr)
+          }
         }
       }
     } catch (err) {
@@ -1260,13 +1314,15 @@ class NotificationService {
         const { default: OneSignalNative } = await import('@onesignal/capacitor-plugin')
         await OneSignalNative.login(userId)
         
-        const aliases: Record<string, string> = { external_id: userId }
+        const aliases: Record<string, string> = {}
         if (user.responsavel_id) aliases['responsavel_id'] = String(user.responsavel_id)
         if (user.aluno_id) aliases['aluno_id'] = String(user.aluno_id)
         if (user.email) aliases['email'] = String(user.email).toLowerCase().trim()
         
-        if (OneSignalNative.User?.addAliases) {
-          await OneSignalNative.User.addAliases(aliases).catch(() => {})
+        if (Object.keys(aliases).length > 0 && OneSignalNative.User?.addAliases) {
+          try {
+            await OneSignalNative.User.addAliases(aliases)
+          } catch {}
         }
 
         await new Promise(r => setTimeout(r, 400))
@@ -1290,8 +1346,12 @@ class NotificationService {
         return { success: true, externalIdFound: found }
       } else {
         const OS = (window as any).OneSignal
-        if (OS && typeof OS.login === 'function') {
-          await OS.login(userId)
+        if (OS && typeof OS.login === 'function' && (window as any).__OS_INIT__) {
+          try {
+            await OS.login(userId)
+          } catch (webLoginErr) {
+            console.warn('[NotificationService] Aviso no forceUserLogin web:', webLoginErr)
+          }
         }
         await this.refresh()
         return { success: true, externalIdFound: userId }

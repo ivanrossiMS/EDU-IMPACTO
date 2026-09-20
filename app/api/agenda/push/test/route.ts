@@ -276,6 +276,298 @@ export async function GET(request: Request) {
       return NextResponse.json({ logs: logs || [] })
     }
 
+    // 2.0.1 Consulta de estatísticas ao vivo do OneSignal para uma notificação
+    const notifStatsId = searchParams.get('notification_stats')
+    if (notifStatsId) {
+      const stats = await getNotificationStats(notifStatsId)
+      return NextResponse.json({ stats })
+    }
+
+    // 2.0.2 Busca unificada instantânea de usuários (Alunos, Responsáveis, Colaboradores)
+    const userSearch = searchParams.get('user_search')?.trim()
+    if (userSearch) {
+      const q = userSearch.toLowerCase()
+      const [alunosRes, usersRes, respsRes] = await Promise.all([
+        supabase.from('alunos').select('id, nome, matricula, turma, foto, status').or(`nome.ilike.%${q}%,matricula.ilike.%${q}%`).limit(12),
+        supabase.from('system_users').select('id, nome, email, cargo, perfil, status, auth_id, dados').or(`nome.ilike.%${q}%,email.ilike.%${q}%`).limit(12),
+        supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados').or(`nome.ilike.%${q}%,email.ilike.%${q}%`).limit(12)
+      ])
+
+      const results = [
+        ...(alunosRes.data || []).map((a: any) => ({
+          id: String(a.id),
+          nome: a.nome,
+          tipo: 'aluno' as const,
+          subtitulo: `Matrícula: ${a.matricula || a.id} • ${a.turma || 'Turma não informada'}`,
+          foto: a.foto || null,
+          status: a.status || 'ativo',
+          detalhe: a.turma || 'Aluno',
+        })),
+        ...(respsRes.data || []).map((r: any) => ({
+          id: String(r.id),
+          nome: r.nome || 'Responsável',
+          tipo: 'responsavel' as const,
+          subtitulo: r.email || r.telefone || r.celular || 'Responsável Legal',
+          foto: null,
+          status: 'ativo',
+          detalhe: r.email || 'Responsável',
+        })),
+        ...(usersRes.data || []).map((u: any) => ({
+          id: String(u.id),
+          authId: u.auth_id || null,
+          nome: u.nome || 'Colaborador',
+          tipo: 'colaborador' as const,
+          subtitulo: `${u.cargo || u.perfil || 'Equipe'} • ${u.email || ''}`,
+          foto: u.foto || u.dados?.foto || null,
+          status: u.status || 'ativo',
+          detalhe: u.cargo || u.perfil || 'Equipe',
+        })),
+      ]
+
+      return NextResponse.json({ users: results })
+    }
+
+    // 2.0.3 Histórico Completo com Paginação, Multi-Filtros e Detecção de Leitura
+    const wantHistory = searchParams.get('history') === 'true'
+    if (wantHistory) {
+      const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+      const limit = Math.min(100, Math.max(10, parseInt(searchParams.get('limit') || '25', 10)))
+      const from = (page - 1) * limit
+      const to = from + limit - 1
+
+      const filterUserType = searchParams.get('user_type') // 'aluno' | 'responsavel' | 'colaborador'
+      const filterUserId = searchParams.get('user_id')?.trim()
+      const filterSearch = searchParams.get('search')?.trim()
+      const filterCategory = searchParams.get('category')?.trim()
+      const filterStatus = searchParams.get('status')?.trim()
+      const filterDateRange = searchParams.get('date_range')?.trim() // 'today' | '7d' | '30d' | 'all'
+
+      let query = supabase.from('agenda_push_logs').select('*', { count: 'exact' })
+
+      // 1. Filtro por Data
+      if (filterDateRange === 'today') {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        query = query.gte('created_at', today.toISOString())
+      } else if (filterDateRange === '7d') {
+        const d7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        query = query.gte('created_at', d7.toISOString())
+      } else if (filterDateRange === '30d') {
+        const d30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+        query = query.gte('created_at', d30.toISOString())
+      }
+
+      // 2. Filtro por Categoria
+      if (filterCategory && filterCategory !== 'all') {
+        if (filterCategory === 'saida') {
+          query = query.or('type.eq.saida,item_id.ilike.saida_%,item_id.ilike.chamada_%')
+        } else {
+          query = query.eq('type', filterCategory)
+        }
+      }
+
+      // 3. Filtro por Status
+      if (filterStatus && filterStatus !== 'all') {
+        query = query.eq('status', filterStatus)
+      }
+
+      // 4. Filtro por Busca Textual
+      if (filterSearch) {
+        query = query.or(`title.ilike.%${filterSearch}%,message.ilike.%${filterSearch}%,item_id.ilike.%${filterSearch}%`)
+      }
+
+      // 5. Filtro por Usuário Específico
+      let userContext: any = null
+      let userDevices: any[] = []
+
+      if (filterUserId) {
+        if (filterUserType === 'aluno' || (!filterUserType && /^\d+$/.test(filterUserId))) {
+          const { data: aluno } = await supabase.from('alunos').select('id, nome, matricula, turma, foto, status').eq('id', filterUserId).maybeSingle()
+          if (aluno) {
+            userContext = {
+              id: String(aluno.id),
+              nome: aluno.nome,
+              tipo: 'aluno',
+              foto: aluno.foto,
+              matricula: aluno.matricula,
+              turma: aluno.turma,
+              status: aluno.status
+            }
+            const aid = String(aluno.id).trim()
+            const parts = aluno.nome.trim().split(/\s+/).filter(Boolean)
+            const friendlyName = (parts[0].length <= 3 && parts.length > 1) ? `${parts[0]} ${parts[1]}` : parts[0]
+            const fullName = aluno.nome.trim()
+
+            const studentOrConditions = [
+              `item_id.ilike.%aluno_${aid}%`,
+              `item_id.ilike.%-${aid}%`,
+              `item_id.ilike.%_${aid}%`,
+              `item_id.ilike.%FREQ-${aid}%`,
+              `item_id.ilike.%saida_%-${aid}%`,
+              `target_url.ilike.%/${aid}/%`,
+              `target_url.ilike.%/${aid}?%`,
+              `target_url.ilike.%/${aid}`,
+              `target_url.ilike.%aluno_id=${aid}%`,
+              `message.ilike.%${fullName}%`
+            ]
+
+            if (friendlyName.length >= 4) {
+              studentOrConditions.push(`message.ilike.% de ${friendlyName} %`)
+              studentOrConditions.push(`message.ilike.% para ${friendlyName} %`)
+              studentOrConditions.push(`message.ilike.% de ${friendlyName}.%`)
+              studentOrConditions.push(`message.ilike.% de ${friendlyName}:%`)
+              studentOrConditions.push(`message.ilike.% de ${friendlyName} foi%`)
+              studentOrConditions.push(`message.ilike.%turma de ${friendlyName}%`)
+            }
+
+            query = query.or(studentOrConditions.join(','))
+
+            // Buscar responsáveis do aluno para trazer os aparelhos vinculados
+            const { data: vinculos } = await supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', String(aluno.id))
+            const respIds = (vinculos || []).map((v: any) => String(v.responsavel_id)).filter(Boolean)
+            if (respIds.length > 0) {
+              const { data: rData } = await supabase.from('responsaveis').select('id, nome, email').in('id', respIds)
+              const devicesArr = await Promise.all(
+                (rData || []).map(r => fetchDevicesForGuardian({ responsavel_id: r.id, email: r.email }))
+              )
+              userDevices = devicesArr.flat()
+            }
+          }
+        } else if (filterUserType === 'colaborador') {
+          const isColabUuid = isUUID(filterUserId)
+          const colabFilter = isColabUuid ? `id.eq.${filterUserId},auth_id.eq.${filterUserId}` : `id.eq.${filterUserId}`
+          const { data: colab } = await supabase.from('system_users').select('id, nome, email, cargo, perfil, auth_id, dados').or(colabFilter).maybeSingle()
+          if (colab) {
+            userContext = {
+              id: String(colab.id),
+              authId: colab.auth_id,
+              nome: colab.nome,
+              tipo: 'colaborador',
+              cargo: colab.cargo,
+              perfil: colab.perfil,
+              email: colab.email,
+              foto: colab.dados?.foto || null
+            }
+            const colabId = String(colab.id).trim()
+            const colabAuth = colab.auth_id || colabId
+            const colabFullName = colab.nome.trim()
+            const colabParts = colabFullName.split(/\s+/).filter(Boolean)
+            const colabFriendly = colabParts.length > 1 ? `${colabParts[0]} ${colabParts[1]}` : colabParts[0]
+
+            const colabConditions = [
+              `item_id.ilike.%${colabId}%`,
+              `user_id.eq.${colabAuth}`,
+              `user_id.eq.${colabId}`,
+              `message.ilike.%${colabFullName}%`
+            ]
+            if (colabFriendly.length >= 4) {
+              colabConditions.push(`message.ilike.%${colabFriendly}%`)
+            }
+            query = query.or(colabConditions.join(','))
+
+            userDevices = await fetchDevicesForGuardian({
+              authId: colab.auth_id,
+              system_user_id: String(colab.id),
+              colaborador_id: String(colab.id),
+              email: colab.email
+            })
+          }
+        } else if (filterUserType === 'responsavel') {
+          const { data: resp } = await supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados').eq('id', filterUserId).maybeSingle()
+          if (resp) {
+            const { data: vinculos } = await supabase.from('aluno_responsavel').select('aluno_id').eq('responsavel_id', resp.id)
+            const alunoIds = (vinculos || []).map((v: any) => String(v.aluno_id)).filter(Boolean)
+            userContext = {
+              id: String(resp.id),
+              nome: resp.nome,
+              tipo: 'responsavel',
+              email: resp.email,
+              telefone: resp.telefone || resp.celular,
+              alunoIds
+            }
+            userDevices = await fetchDevicesForGuardian({
+              responsavel_id: resp.id,
+              email: resp.email
+            })
+
+            if (alunoIds.length > 0) {
+              const alunoOrConditions = alunoIds.flatMap(aid => [
+                `item_id.ilike.%aluno_${aid}%`,
+                `item_id.ilike.%-${aid}%`,
+                `item_id.ilike.%FREQ-${aid}%`,
+                `target_url.ilike.%/${aid}/%`,
+                `target_url.ilike.%/${aid}?%`,
+                `target_url.ilike.%/${aid}`
+              ]).join(',')
+              query = query.or(alunoOrConditions)
+            }
+          }
+        }
+      }
+
+      // Ordenar e Paginar
+      query = query.order('created_at', { ascending: false }).range(from, to)
+
+      const { data: logs, count: totalCount, error: logsError } = await query
+
+      if (logsError) {
+        return NextResponse.json({ error: logsError.message }, { status: 400 })
+      }
+
+      // Cruzar leituras (Notification Center) para os logs retornados nesta página
+      const logItemIds = (logs || []).map((l: any) => l.item_id).filter(Boolean)
+      const readsMap: Record<string, { read_at: string; usuario_id: string; perfil: string }> = {}
+
+      if (logItemIds.length > 0) {
+        const { data: reads } = await supabase.from('agenda_notification_reads')
+          .select('content_id, read_at, usuario_id, perfil')
+          .in('content_id', logItemIds)
+
+        if (reads) {
+          reads.forEach((r: any) => {
+            readsMap[r.content_id] = r
+          })
+        }
+      }
+
+      // Enriquecer logs com indicador de leitura e status de entrega no OneSignal
+      const enrichedLogs = (logs || []).map((log: any) => {
+        let oneSignalId = null
+        let oneSignalErrors = null
+        try {
+          if (log.onesignal_response) {
+            const parsed = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+            oneSignalId = parsed.id || null
+            oneSignalErrors = parsed.errors || null
+          }
+        } catch {}
+
+        const readInfo = readsMap[log.item_id] || null
+
+        return {
+          ...log,
+          oneSignalId,
+          oneSignalErrors,
+          isRead: Boolean(readInfo),
+          readAt: readInfo?.read_at || null,
+          readBy: readInfo?.usuario_id || null
+        }
+      })
+
+      const total = totalCount || 0
+      const totalPages = Math.ceil(total / limit)
+
+      return NextResponse.json({
+        logs: enrichedLogs,
+        total,
+        page,
+        limit,
+        totalPages,
+        userContext,
+        userDevices,
+      })
+    }
+
     // 2.1 Consulta de aparelhos conectados para um usuário específico
     const userForDevices = searchParams.get('devicesForUser')
     if (userForDevices) {

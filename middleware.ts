@@ -33,6 +33,8 @@ const PUBLIC_PATHS = [
   '/painel-tablet',     // tablet da portaria
   '/api/portaria/webhook', // catraca iDFace — recebe push dos dispositivos (auth por token próprio)
   '/api/portaria/sync-queue', // fila de sincronização para catracas/daemon local
+  '/api/portaria/cron-push', // cron job da portaria
+  '/api/cron',          // rotas de cron jobs agendados (auth interna via CRON_SECRET)
   '/api/academico/totem-frequencia', // catraca/totem — auth por token próprio (API_TOTEM_SECRET)
   '/api/saida/config',  // TV e tablet precisam acessar sem redirect
   '/api/saida/calls',   // TV e tablet precisam acessar sem redirect

@@ -574,16 +574,256 @@ export default function PedidosLivrosPage() {
           background-size: 200% 100%;
           animation: shimmer 1.5s infinite linear;
         }
+
+        /* ── Header Responsivo ── */
+        .pedidos-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 18px;
+          margin-bottom: 24px;
+        }
+        .pedidos-header-left {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+        .pedidos-header-icon {
+          width: 56px;
+          height: 56px;
+          border-radius: 16px;
+          background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+          box-shadow: 0 8px 16px -4px rgba(59, 130, 246, 0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 28px;
+          border: 2px solid rgba(255, 255, 255, 0.2);
+          flex-shrink: 0;
+        }
+        .pedidos-header-actions {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+
+        /* ── KPIs Grid ── */
+        .pedidos-kpi-grid {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          gap: 12px;
+        }
+
+        /* ── Filtros ── */
+        .pedidos-filter-box {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .pedidos-filter-row-top {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          align-items: center;
+        }
+        .pedidos-search-wrap {
+          position: relative;
+          flex: 1;
+          min-width: 220px;
+        }
+        .pedidos-status-scroll {
+          display: flex;
+          gap: 4px;
+          background: hsl(var(--bg-elevated));
+          padding: 3px;
+          border-radius: 10px;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+        }
+        .pedidos-status-scroll::-webkit-scrollbar {
+          display: none;
+        }
+        .pedidos-status-btn {
+          font-size: 11px;
+          padding: 4px 10px;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .pedidos-selects-grid {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          align-items: center;
+          width: 100%;
+        }
+        .pedidos-agrup-wrap {
+          display: flex;
+          gap: 4px;
+          background: hsl(var(--bg-elevated));
+          padding: 3px;
+          border-radius: 10px;
+        }
+
+        /* ── Cabeçalho do Grupo ── */
+        .pedidos-group-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 12px;
+          padding: 12px 16px;
+          background: hsl(var(--bg-elevated));
+          border-radius: 14px;
+          border: 1px solid hsl(var(--border-subtle));
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .pedidos-group-header-info {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex: 1;
+          min-width: 200px;
+        }
+
+        /* ── Visibilidade Desktop vs Mobile ── */
+        .pedidos-desktop-view {
+          display: block;
+        }
+        .pedidos-mobile-view {
+          display: none;
+        }
+
+        /* ── Modais Form Grids ── */
+        .pedidos-modal-form-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        /* ── Regras Responsivas Mobile (<= 768px) ── */
+        @media (max-width: 768px) {
+          .pedidos-header {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 14px;
+            margin-bottom: 18px;
+          }
+          .pedidos-header-left {
+            gap: 12px;
+          }
+          .pedidos-header-icon {
+            width: 44px;
+            height: 44px;
+            font-size: 22px;
+            border-radius: 12px;
+          }
+          .pedidos-header h1.page-title {
+            font-size: 20px !important;
+            line-height: 1.25 !important;
+          }
+          .pedidos-header p.page-subtitle {
+            font-size: 12px !important;
+            margin-top: 2px !important;
+          }
+          .pedidos-header-actions {
+            display: flex;
+            width: 100%;
+            gap: 8px;
+          }
+          .pedidos-header-actions > * {
+            flex: 1;
+            justify-content: center;
+            min-height: 42px;
+          }
+          .pedidos-header-actions .btn-primary {
+            flex: 1.3;
+          }
+
+          /* KPI Grid: 2 colunas no mobile com Total em destaque */
+          .pedidos-kpi-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 8px !important;
+          }
+          .pedidos-kpi-total {
+            grid-column: span 2 !important;
+          }
+
+          /* Filtros Mobile */
+          .pedidos-search-wrap {
+            width: 100%;
+            min-width: 100%;
+          }
+          .pedidos-status-scroll {
+            width: 100%;
+            padding: 4px;
+            gap: 6px;
+          }
+          .pedidos-status-btn {
+            padding: 7px 12px !important;
+            font-size: 12px !important;
+          }
+          .pedidos-selects-grid {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 8px !important;
+            width: 100% !important;
+          }
+          .pedidos-selects-grid select {
+            width: 100% !important;
+            font-size: 13px !important;
+            min-height: 42px !important;
+          }
+          .pedidos-agrup-wrap {
+            grid-column: span 2 !important;
+            width: 100% !important;
+            display: flex !important;
+          }
+          .pedidos-agrup-wrap button {
+            flex: 1;
+            justify-content: center;
+            min-height: 38px;
+            font-size: 12px;
+          }
+
+          /* Cabeçalho de Grupo Mobile */
+          .pedidos-group-header {
+            flex-direction: column;
+            align-items: stretch;
+            padding: 12px;
+            gap: 10px;
+          }
+          .pedidos-group-header-actions {
+            width: 100%;
+          }
+          .pedidos-group-header-actions button {
+            width: 100%;
+            justify-content: center;
+            min-height: 38px;
+          }
+
+          /* Alternar Desktop / Mobile */
+          .pedidos-desktop-view {
+            display: none !important;
+          }
+          .pedidos-mobile-view {
+            display: flex !important;
+            flex-direction: column;
+            gap: 12px;
+          }
+
+          /* Formulários em modais */
+          .pedidos-modal-form-grid {
+            grid-template-columns: 1fr !important;
+            gap: 10px !important;
+          }
+        }
       `}} />
-      <div className="page-header" style={{ marginBottom: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 16,
-            background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
-            boxShadow: '0 8px 16px -4px rgba(59, 130, 246, 0.4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
-            border: '2px solid rgba(255, 255, 255, 0.2)'
-          }}>📚</div>
+
+      {/* Cabeçalho da Página */}
+      <div className="pedidos-header">
+        <div className="pedidos-header-left">
+          <div className="pedidos-header-icon">📚</div>
           <div>
             <h1 className="page-title" style={{ fontSize: 28, fontWeight: 900, letterSpacing: '-0.02em' }}>Pedidos de Materiais</h1>
             <p className="page-subtitle" style={{ fontSize: 14, opacity: 0.8 }}>
@@ -591,11 +831,11 @@ export default function PedidosLivrosPage() {
             </p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div className="pedidos-header-actions">
           <motion.button 
-            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
             className="btn btn-primary" 
-            style={{ height: 44, padding: '0 20px', borderRadius: 12, boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}
+            style={{ height: 44, padding: '0 18px', borderRadius: 12, boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)' }}
             onClick={() => setModalNovoPedido(true)}
           >
             <Plus size={16} /> Novo Pedido Manual
@@ -644,7 +884,7 @@ export default function PedidosLivrosPage() {
       <>
       {/* KPIs com indicador de Ano Letivo e Interatividade */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '0 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '0 2px', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: 8 }}>
             <CalendarDays size={15} color="#6366f1" />
             <span>Ano Letivo: <strong style={{ color: 'hsl(var(--text-foreground))', fontSize: 13 }}>{filtroAno || 'Todos os Anos'}</strong></span>
@@ -662,7 +902,7 @@ export default function PedidosLivrosPage() {
             </button>
           )}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+        <div className="pedidos-kpi-grid">
           {[
             { label: 'Total de Materiais',  value: totalGrupos,    icon: '📋', color: '#60a5fa', view: 'todos' as FiltroView },
             { label: 'Pendentes',         value: pendenteCount,  icon: '⏳', color: '#f59e0b', view: 'pendentes' as FiltroView },
@@ -671,42 +911,45 @@ export default function PedidosLivrosPage() {
             { label: 'Entregues',         value: entreguesCount, icon: '📦', color: '#10b981', view: 'entregues' as FiltroView },
           ].map(k => {
             const isSelected = filtroView === k.view
+            const isTotal = k.view === 'todos'
             return (
               <motion.div
                 key={k.label}
-                whileHover={{ scale: 1.03, translateY: -2 }}
-                whileTap={{ scale: 0.97 }}
+                whileHover={{ scale: 1.02, translateY: -2 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => setFiltroView(k.view)}
-                className="kpi-card"
+                className={`kpi-card ${isTotal ? 'pedidos-kpi-total' : ''}`}
                 style={{
                   position: 'relative',
                   overflow: 'hidden',
                   cursor: 'pointer',
                   borderRadius: 14,
-                  padding: '14px 16px',
+                  padding: '12px 14px',
                   background: isSelected ? `${k.color}15` : 'hsl(var(--bg-surface))',
                   border: isSelected ? `2px solid ${k.color}` : '1px solid hsl(var(--border-subtle))',
                   boxShadow: isSelected ? `0 6px 16px -4px ${k.color}40` : 'none',
                   transition: 'all 0.2s ease-in-out',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 20 }}>{k.icon}</span>
-                    <span style={{ fontSize: 11, fontWeight: isSelected ? 800 : 600, color: isSelected ? k.color : 'hsl(var(--text-muted))' }}>{k.label}</span>
+                    <span style={{ fontSize: 18 }}>{k.icon}</span>
+                    <span style={{ fontSize: 11, fontWeight: isSelected ? 800 : 600, color: isSelected ? k.color : 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>
+                      {k.label}
+                    </span>
                   </div>
                   {isSelected && (
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: k.color, boxShadow: `0 0 8px ${k.color}` }} />
                   )}
                 </div>
                 <div style={{
-                  fontSize: 28,
+                  fontSize: 26,
                   fontWeight: 900, color: k.color, fontFamily: 'Outfit,sans-serif',
                   display: 'flex', alignItems: 'baseline', justifyContent: 'space-between'
                 }}>
                   <span>{k.value}</span>
                   {totalGrupos > 0 && k.view !== 'todos' && (
-                    <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, color: k.color }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, color: k.color }}>
                       {Math.round((k.value / totalGrupos) * 100)}%
                     </span>
                   )}
@@ -730,92 +973,108 @@ export default function PedidosLivrosPage() {
 
       {/* Barra de filtros */}
       <div className="card" style={{ padding: '14px 16px', marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Busca */}
-          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-            <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
-            <input
-              className="form-input"
-              style={{ paddingLeft: 32 }}
-              placeholder="Buscar aluno, turma ou evento..."
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-            />
+        <div className="pedidos-filter-box">
+          {/* Linha 1: Busca e Status */}
+          <div className="pedidos-filter-row-top">
+            {/* Busca */}
+            <div className="pedidos-search-wrap">
+              <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-muted))' }} />
+              <input
+                className="form-input"
+                style={{ paddingLeft: 36, width: '100%' }}
+                placeholder="Buscar aluno, turma ou evento..."
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+              />
+              {busca && (
+                <button
+                  type="button"
+                  onClick={() => setBusca('')}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'hsl(var(--text-muted))' }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Status Tabs */}
+            <div className="pedidos-status-scroll">
+              {([
+                { v: 'todos',     label: 'Todos' },
+                { v: 'pendentes', label: '⏳ Pendentes' },
+                { v: 'feitos',    label: '✅ Feitos' },
+                { v: 'chegou',    label: '🏢 Chegou' },
+                { v: 'entregues', label: '📦 Entregues' },
+              ] as { v: FiltroView; label: string }[]).map(opt => (
+                <button
+                  key={opt.v}
+                  onClick={() => setFiltroView(opt.v)}
+                  className={`btn btn-sm pedidos-status-btn ${filtroView === opt.v ? 'btn-primary' : 'btn-ghost'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Status */}
-          <div style={{ display: 'flex', gap: 4, background: 'hsl(var(--bg-elevated))', padding: 3, borderRadius: 8 }}>
-            {([
-              { v: 'todos',     label: 'Todos' },
-              { v: 'pendentes', label: '⏳ Pendentes' },
-              { v: 'feitos',    label: '✅ Feitos' },
-              { v: 'chegou',    label: '🏢 Chegou' },
-              { v: 'entregues', label: '📦 Entregues' },
-            ] as { v: FiltroView; label: string }[]).map(opt => (
+          {/* Linha 2: Dropdowns de Filtro e Agrupamento */}
+          <div className="pedidos-selects-grid">
+            {/* Ano Letivo */}
+            <select className="form-input" value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
+              <option value="">Todos os anos</option>
+              {anosDisponiveis.map(a => <option key={String(a)} value={a || ""}>{a}</option>)}
+            </select>
+
+            {/* Segmento */}
+            <select className="form-input" value={filtroSegmento} onChange={e => setFiltroSeg(e.target.value)}>
+              <option value="">Todos os segmentos</option>
+              {segmentos.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+
+            {/* Turma */}
+            <select className="form-input" value={filtroTurma} onChange={e => setFiltroTurma(e.target.value)}>
+              <option value="">Todas as turmas</option>
+              {turmas.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+
+            {/* Evento */}
+            <select className="form-input" value={filtroEvento} onChange={e => setFiltroEvento(e.target.value)}>
+              <option value="">Todos os eventos</option>
+              {eventosLista.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+
+            {/* Agrupamento */}
+            <div className="pedidos-agrup-wrap">
+              {([
+                { v: 'turma', icon: <Users size={12} />, label: 'Turma' },
+                { v: 'evento', icon: <BookOpen size={12} />, label: 'Evento' },
+                { v: 'escola', icon: <Building2 size={12} />, label: 'Escola' },
+              ] as { v: FiltroAgrup; icon: React.ReactNode; label: string }[]).map(opt => (
+                <button
+                  key={opt.v}
+                  onClick={() => setAgrupamento(opt.v)}
+                  className={`btn btn-sm ${agrupamento === opt.v ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ fontSize: 11, padding: '4px 10px', gap: 4, display: 'flex', alignItems: 'center' }}
+                >
+                  {opt.icon}{opt.label}
+                </button>
+              ))}
+            </div>
+
+            {(busca || filtroAno !== new Date().getFullYear().toString() || filtroTurma || filtroEvento || filtroSegmento || filtroView !== 'todos') && (
               <button
-                key={opt.v}
-                onClick={() => setFiltroView(opt.v)}
-                className={`btn btn-sm ${filtroView === opt.v ? 'btn-primary' : 'btn-ghost'}`}
-                style={{ fontSize: 11, padding: '4px 10px' }}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: 11, gap: 4 }}
+                onClick={() => { setBusca(''); setFiltroAno(new Date().getFullYear().toString()); setFiltroTurma(''); setFiltroEvento(''); setFiltroSeg(''); setFiltroView('todos') }}
               >
-                {opt.label}
+                <X size={12} /> Limpar
               </button>
-            ))}
+            )}
           </div>
 
-          {/* Ano Letivo */}
-          <select className="form-input" style={{ width: 120 }} value={filtroAno} onChange={e => setFiltroAno(e.target.value)}>
-            <option value="">Todos os anos</option>
-            {anosDisponiveis.map(a => <option key={String(a)} value={a || ""}>{a}</option>)}
-          </select>
-
-          {/* Segmento */}
-          <select className="form-input" style={{ width: 170 }} value={filtroSegmento} onChange={e => setFiltroSeg(e.target.value)}>
-            <option value="">Todos os segmentos</option>
-            {segmentos.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-
-          {/* Turma */}
-          <select className="form-input" style={{ width: 150 }} value={filtroTurma} onChange={e => setFiltroTurma(e.target.value)}>
-            <option value="">Todas as turmas</option>
-            {turmas.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-
-          {/* Evento */}
-          <select className="form-input" style={{ width: 170 }} value={filtroEvento} onChange={e => setFiltroEvento(e.target.value)}>
-            <option value="">Todos os eventos</option>
-            {eventosLista.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
-
-          {/* Agrupamento */}
-          <div style={{ display: 'flex', gap: 4, background: 'hsl(var(--bg-elevated))', padding: 3, borderRadius: 8 }}>
-            {([
-              { v: 'turma', icon: <Users size={12} />, label: 'Turma' },
-              { v: 'evento', icon: <BookOpen size={12} />, label: 'Evento' },
-              { v: 'escola', icon: <Building2 size={12} />, label: 'Escola' },
-            ] as { v: FiltroAgrup; icon: React.ReactNode; label: string }[]).map(opt => (
-              <button
-                key={opt.v}
-                onClick={() => setAgrupamento(opt.v)}
-                className={`btn btn-sm ${agrupamento === opt.v ? 'btn-primary' : 'btn-ghost'}`}
-                style={{ fontSize: 11, padding: '4px 10px', gap: 4, display: 'flex', alignItems: 'center' }}
-              >
-                {opt.icon}{opt.label}
-              </button>
-            ))}
+          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+            <span>{gruposFiltrados.length} materia{gruposFiltrados.length === 1 ? 'l' : 'is'} encontrado(s) de {totalGrupos} total</span>
           </div>
-
-          {(busca || filtroAno !== new Date().getFullYear().toString() || filtroTurma || filtroEvento || filtroSegmento || filtroView !== 'todos') && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => { setBusca(''); setFiltroAno(new Date().getFullYear().toString()); setFiltroTurma(''); setFiltroEvento(''); setFiltroSeg(''); setFiltroView('todos') }}
-            >
-              <X size={12} /> Limpar
-            </button>
-          )}
-        </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: 'hsl(var(--text-muted))' }}>
-          {gruposFiltrados.length} materia{gruposFiltrados.length === 1 ? 'l' : 'is'} encontrado(s) de {totalGrupos} total
         </div>
       </div>
 
@@ -849,16 +1108,11 @@ export default function PedidosLivrosPage() {
             return (
               <div key={chave}>
                 {/* Header do grupo */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  marginBottom: 10, padding: '10px 16px',
-                  background: 'hsl(var(--bg-elevated))',
-                  borderRadius: 12,
-                  border: '1px solid hsl(var(--border-subtle))',
+                <div className="pedidos-group-header" style={{
                   borderLeft: `4px solid ${agrupamento === 'evento' && corEvento ? corEvento.color : '#3b82f6'}`,
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 16 }}>
+                  <div className="pedidos-group-header-info">
+                    <span style={{ fontSize: 20 }}>
                       {agrupamento === 'turma' ? '🏫' : agrupamento === 'evento' ? '📖' : '🏛️'}
                     </span>
                     <div>
@@ -867,22 +1121,24 @@ export default function PedidosLivrosPage() {
                         {uniqueAlunosCount} aluno(s) · {gsChave.length} materia{gsChave.length === 1 ? 'l' : 'is'} · {feitosChave}/{gsChave.length} feitos
                       </div>
                     </div>
-                    {/* Barra de progresso inline */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-                      <div style={{ width: 80, height: 5, background: 'hsl(var(--bg-overlay))', borderRadius: 9999 }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${(feitosChave / gsChave.length) * 100}%`,
-                          background: todosFeitos ? '#10b981' : algumFeito ? '#f59e0b' : '#3b82f6',
-                          borderRadius: 9999, transition: 'width 0.4s',
-                        }} />
-                      </div>
-                      <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))' }}>
-                        {Math.round((feitosChave / gsChave.length) * 100)}%
-                      </span>
-                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+
+                  {/* Barra de progresso inline */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 130 }}>
+                    <div style={{ flex: 1, height: 6, background: 'hsl(var(--bg-overlay))', borderRadius: 9999, overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${(feitosChave / gsChave.length) * 100}%`,
+                        background: todosFeitos ? '#10b981' : algumFeito ? '#f59e0b' : '#3b82f6',
+                        borderRadius: 9999, transition: 'width 0.4s',
+                      }} />
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', minWidth: 32, textAlign: 'right' }}>
+                      {Math.round((feitosChave / gsChave.length) * 100)}%
+                    </span>
+                  </div>
+
+                  <div className="pedidos-group-header-actions">
                     <button
                       className="btn btn-secondary btn-sm"
                       style={{ gap: 5, fontSize: 11 }}
@@ -894,8 +1150,8 @@ export default function PedidosLivrosPage() {
                   </div>
                 </div>
 
-                {/* Tabela do grupo */}
-                <div className="table-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
+                {/* VISÃO 1: Tabela do grupo (Visível no Desktop) */}
+                <div className="table-container pedidos-desktop-view" style={{ borderRadius: 12, overflow: 'hidden' }}>
                   <table style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                     <thead>
                       <tr>
@@ -1238,6 +1494,322 @@ export default function PedidosLivrosPage() {
                     </tfoot>
                   </table>
                 </div>
+
+                {/* VISÃO 2: Cards Mobile do grupo (Visível apenas em Telas Pequenas) */}
+                <div className="pedidos-mobile-view">
+                  {Object.values(gsChave.reduce((acc, g) => {
+                    if (!acc[g.alunoNome]) acc[g.alunoNome] = { alunoNome: g.alunoNome, turma: g.turma, segmento: g.segmento, pedidos: [] };
+                    acc[g.alunoNome].pedidos.push(g);
+                    return acc;
+                  }, {} as Record<string, { alunoNome: string, turma: string, segmento: string, pedidos: typeof gsChave }>)).map((sg) => (
+                    <div
+                      key={sg.alunoNome}
+                      style={{
+                        background: 'hsl(var(--bg-surface))',
+                        borderRadius: 16,
+                        border: '1px solid hsl(var(--border-default))',
+                        padding: '14px',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.06)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 12
+                      }}
+                    >
+                      {/* Cabeçalho do Aluno */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid hsl(var(--border-subtle))', paddingBottom: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{
+                            width: 36, height: 36, borderRadius: 10,
+                            background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))',
+                            color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 14, fontWeight: 800, border: '1px solid rgba(59,130,246,0.3)',
+                            flexShrink: 0
+                          }}>
+                            {sg.alunoNome.charAt(0)}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))', lineHeight: 1.25 }}>
+                              {sg.alunoNome}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 600, display: 'flex', gap: 4, alignItems: 'center', marginTop: 2 }}>
+                              <Layers size={11} style={{ color: '#6366f1' }} />
+                              <span>{sg.turma}</span>
+                              <span>•</span>
+                              <span>{sg.segmento}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 700, background: 'hsl(var(--bg-elevated))', color: 'hsl(var(--text-muted))', padding: '3px 8px', borderRadius: 9999 }}>
+                          {sg.pedidos.length} {sg.pedidos.length === 1 ? 'material' : 'materiais'}
+                        </span>
+                      </div>
+
+                      {/* Lista de Pedidos/Materiais do Aluno */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {sg.pedidos.map((g) => {
+                          const pedido = getPedido(g.pedidoId)
+                          const feito = pedido?.feito ?? false
+                          const chegou = pedido?.chegou ?? false
+                          const entregue = pedido?.entregue ?? false
+                          const cor = getEventoCor(g.eventoDescricao)
+                          const currentStep = entregue ? 4 : chegou ? 3 : feito ? 2 : 1
+
+                          return (
+                            <div
+                              key={g.pedidoId}
+                              style={{
+                                background: feito ? 'rgba(59, 130, 246, 0.02)' : 'hsl(var(--bg-elevated))',
+                                borderRadius: 12,
+                                border: `1px solid ${entregue ? '#10b98130' : chegou ? '#a78bfa30' : feito ? '#f59e0b30' : 'hsl(var(--border-subtle))'}`,
+                                padding: '12px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 10
+                              }}
+                            >
+                              {/* Badge do Evento e Qtd */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                <span style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                                  fontSize: 12, fontWeight: 700,
+                                  background: cor.bg, color: cor.color,
+                                  borderRadius: 8, padding: '3px 10px',
+                                  border: `1px solid ${cor.color}40`
+                                }}>
+                                  <BookOpen size={12} />
+                                  {g.eventoDescricao}
+                                </span>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>
+                                    {g.parcelas.length} {g.parcelas.length === 1 ? 'parcela' : 'parcelas'}
+                                  </span>
+                                  {g.valorTotal > 0 && (
+                                    <span style={{ fontSize: 12, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                                      {fmt(g.valorTotal)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Rastreamento Mobile Stepper */}
+                              <div style={{ position: 'relative', padding: '8px 2px 4px', margin: '4px 0' }}>
+                                {/* Linha conectora de fundo */}
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '20px',
+                                  left: '12%',
+                                  right: '12%',
+                                  height: '2px',
+                                  background: 'hsl(var(--border-subtle))',
+                                  zIndex: 0
+                                }} />
+                                {/* Linha preenchida */}
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '20px',
+                                  left: '12%',
+                                  width: currentStep === 4 ? '76%' : currentStep === 3 ? '50%' : currentStep === 2 ? '25%' : '0%',
+                                  height: '2px',
+                                  background: currentStep === 4 ? '#10b981' : currentStep === 3 ? '#a78bfa' : '#f59e0b',
+                                  zIndex: 0,
+                                  transition: 'width 0.3s ease'
+                                }} />
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
+                                  {/* Step 1: Lançado */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '25%', gap: 3 }}>
+                                    <div style={{
+                                      width: 24, height: 24, borderRadius: '50%',
+                                      background: '#6366f1', color: '#fff',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      boxShadow: '0 0 0 2px hsl(var(--bg-surface))',
+                                      fontSize: 11
+                                    }}>
+                                      <Plus size={12} />
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      <div style={{ fontSize: 9, fontWeight: 800, color: '#6366f1' }}>LANÇADO</div>
+                                      <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))' }}>
+                                        {g.dataLancamento ? fmtData(g.dataLancamento) : '—'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Step 2: Pedido */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '25%', gap: 3, opacity: feito ? 1 : 0.45 }}>
+                                    <div style={{
+                                      width: 24, height: 24, borderRadius: '50%',
+                                      background: feito ? '#f59e0b' : 'hsl(var(--bg-overlay))',
+                                      color: feito ? '#fff' : 'hsl(var(--text-muted))',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      boxShadow: '0 0 0 2px hsl(var(--bg-surface))',
+                                      fontSize: 11
+                                    }}>
+                                      <Check size={12} />
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      <div style={{ fontSize: 9, fontWeight: 800, color: feito ? '#f59e0b' : 'hsl(var(--text-muted))' }}>PEDIDO</div>
+                                      <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))' }}>
+                                        {feito && pedido?.dataFeito ? fmtData(pedido.dataFeito) : 'Aguardando'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Step 3: Chegou */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '25%', gap: 3, opacity: chegou ? 1 : 0.45 }}>
+                                    <div style={{
+                                      width: 24, height: 24, borderRadius: '50%',
+                                      background: chegou ? '#a78bfa' : 'hsl(var(--bg-overlay))',
+                                      color: chegou ? '#fff' : 'hsl(var(--text-muted))',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      boxShadow: '0 0 0 2px hsl(var(--bg-surface))',
+                                      fontSize: 11
+                                    }}>
+                                      <PackageCheck size={12} />
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      <div style={{ fontSize: 9, fontWeight: 800, color: chegou ? '#a78bfa' : 'hsl(var(--text-muted))' }}>CHEGOU</div>
+                                      <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))' }}>
+                                        {chegou && pedido?.dataChegou ? fmtData(pedido.dataChegou) : 'Aguardando'}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Step 4: Entregue */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '25%', gap: 3, opacity: entregue ? 1 : 0.45 }}>
+                                    <div style={{
+                                      width: 24, height: 24, borderRadius: '50%',
+                                      background: entregue ? '#10b981' : 'hsl(var(--bg-overlay))',
+                                      color: entregue ? '#fff' : 'hsl(var(--text-muted))',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      boxShadow: '0 0 0 2px hsl(var(--bg-surface))',
+                                      fontSize: 11
+                                    }}>
+                                      <CheckCircle2 size={12} />
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                      <div style={{ fontSize: 9, fontWeight: 800, color: entregue ? '#10b981' : 'hsl(var(--text-muted))' }}>ENTREGUE</div>
+                                      <div style={{ fontSize: 8, color: 'hsl(var(--text-muted))' }}>
+                                        {entregue && pedido?.dataEntrega ? fmtData(pedido.dataEntrega) : 'Pendente'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Observação (se houver) */}
+                              {pedido?.obs ? (
+                                <div
+                                  onClick={() => abrirObs(g.pedidoId)}
+                                  style={{
+                                    fontSize: 11, color: 'hsl(var(--text-muted))',
+                                    cursor: 'pointer', background: 'rgba(59, 130, 246, 0.06)',
+                                    border: '1px dashed rgba(59, 130, 246, 0.3)',
+                                    borderRadius: 8, padding: '6px 10px',
+                                    display: 'flex', alignItems: 'center', gap: 6
+                                  }}
+                                >
+                                  <StickyNote size={13} color="#a78bfa" style={{ flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {pedido.obs}
+                                  </span>
+                                </div>
+                              ) : null}
+
+                              {/* Botões de Ação Mobile */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
+                                {/* CTA Principal de Avanço */}
+                                {!feito && (
+                                  <button
+                                    className="btn btn-primary"
+                                    style={{ width: '100%', minHeight: 40, fontSize: 12, borderRadius: 10, gap: 6, justifyContent: 'center' }}
+                                    onClick={() => marcarFeito([g.pedidoId], true)}
+                                  >
+                                    <Check size={14} /> Marcar Pedido Feito
+                                  </button>
+                                )}
+                                {feito && !chegou && (
+                                  <button
+                                    className="btn"
+                                    style={{ width: '100%', minHeight: 40, fontSize: 12, borderRadius: 10, background: '#8b5cf6', color: '#fff', border: 'none', gap: 6, justifyContent: 'center' }}
+                                    onClick={() => marcarChegou([g.pedidoId], true)}
+                                  >
+                                    <PackageCheck size={14} /> Marcar Chegada na Escola
+                                  </button>
+                                )}
+                                {chegou && !entregue && (
+                                  <button
+                                    className="btn btn-success"
+                                    style={{ width: '100%', minHeight: 40, fontSize: 12, borderRadius: 10, background: '#10b981', color: '#fff', border: 'none', gap: 6, justifyContent: 'center' }}
+                                    onClick={() => marcarEntregue([g.pedidoId], true)}
+                                  >
+                                    <CheckCircle2 size={14} /> Marcar Entrega ao Aluno
+                                  </button>
+                                )}
+                                {entregue && (
+                                  <div style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                    padding: '8px 12px', background: 'rgba(16, 185, 129, 0.1)',
+                                    borderRadius: 10, color: '#10b981', fontWeight: 700, fontSize: 12
+                                  }}>
+                                    <CheckCircle2 size={15} /> Pedido Entregue ao Aluno
+                                  </div>
+                                )}
+
+                                {/* Barra de Ações Rápidas */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid hsl(var(--border-subtle))', paddingTop: 8 }}>
+                                  <div style={{ display: 'flex', gap: 6 }}>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ height: 34, padding: '0 8px', fontSize: 11, gap: 4 }}
+                                      onClick={() => {
+                                        setModalEditar(g)
+                                        setEditForm({
+                                          eventoDescricao: g.eventoDescricao,
+                                          valor: String(g.valorTotal),
+                                          vencimento: g.vencimentos[0] || ''
+                                        })
+                                      }}
+                                    >
+                                      <Edit2 size={13} color="#3b82f6" /> Editar
+                                    </button>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ height: 34, padding: '0 8px', fontSize: 11, gap: 4 }}
+                                      onClick={() => abrirObs(g.pedidoId)}
+                                    >
+                                      <StickyNote size={13} color={pedido?.obs ? '#a78bfa' : 'hsl(var(--text-muted))'} />
+                                      {pedido?.obs ? 'Obs' : '+ Obs'}
+                                    </button>
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ height: 34, padding: '0 8px', fontSize: 11, gap: 4, color: '#ef4444' }}
+                                      onClick={() => handleDeleteLaunch(g)}
+                                    >
+                                      <Trash2 size={13} /> Excluir
+                                    </button>
+                                  </div>
+
+                                  {(feito || chegou || entregue) && (
+                                    <button
+                                      className="btn btn-ghost btn-sm"
+                                      style={{ height: 34, padding: '0 8px', fontSize: 11, gap: 4, color: '#f59e0b' }}
+                                      title="Desfazer etapa anterior"
+                                      onClick={() => entregue ? marcarEntregue([g.pedidoId], false) : chegou ? marcarChegou([g.pedidoId], false) : marcarFeito([g.pedidoId], false)}
+                                    >
+                                      <RotateCcw size={12} /> Desfazer
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )
           })}
@@ -1256,7 +1828,7 @@ export default function PedidosLivrosPage() {
         }}>
           <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{
             background: 'hsl(var(--bg-surface))', borderRadius: 18,
-            width: '100%', maxWidth: 480,
+            width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto',
             border: '1px solid hsl(var(--border-default))',
             boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
           }}>
@@ -1388,13 +1960,13 @@ export default function PedidosLivrosPage() {
       <AnimatePresence>
 {/* ════════════ MODAL NOVO PEDIDO MANUAL ════════════ */}
       {modalNovoPedido && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20, backdropFilter: 'blur(4px)' }}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 460, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontWeight: 800, fontSize: 16 }}>Novo Pedido Manual</div>
               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setModalNovoPedido(false)}><X size={15} /></button>
             </div>
-            <div style={{ padding: 24, display: 'grid', gap: 16 }}>
+            <div style={{ padding: '20px 24px', display: 'grid', gap: 16 }}>
               <div style={{ position: 'relative' }}>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>
                   ALUNO * {novoPedidoForm.alunoId && <span style={{ color: '#10b981', fontWeight: 600 }}>✓ Selecionado</span>}
@@ -1469,7 +2041,7 @@ export default function PedidosLivrosPage() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="pedidos-modal-form-grid">
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>TIPO DE MATERIAL *</label>
                   <select className="form-input" value={novoPedidoForm.eventoDescricao} onChange={e => setNovoPedidoForm(p => ({...p, eventoDescricao: e.target.value}))}>
@@ -1559,18 +2131,18 @@ export default function PedidosLivrosPage() {
       <AnimatePresence>
 {/* ════════════ MODAL EDITAR LANÇAMENTO ════════════ */}
       {modalEditar && (
-<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 6000, padding: 20, backdropFilter: 'blur(4px)' }}>
-          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 460, border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
+<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 6000, padding: 16, backdropFilter: 'blur(4px)' }}>
+          <motion.div initial={{scale:0.95, opacity:0, y:20}} animate={{scale:1, opacity:1, y:0}} exit={{scale:0.95, opacity:0, y:20}} transition={{ type: "spring", stiffness: 300, damping: 25 }} style={{ background: 'hsl(var(--bg-surface))', borderRadius: 18, width: '100%', maxWidth: 460, maxHeight: '90vh', overflowY: 'auto', border: '1px solid hsl(var(--border-default))', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontWeight: 800, fontSize: 16 }}>Editar Lançamento</div>
               <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setModalEditar(null)}><X size={15} /></button>
             </div>
-            <div style={{ padding: 24, display: 'grid', gap: 16 }}>
+            <div style={{ padding: '20px 24px', display: 'grid', gap: 16 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>ALUNO</label>
                 <input className="form-input" value={modalEditar.alunoNome} disabled style={{ opacity: 0.6 }} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="pedidos-modal-form-grid">
                 <div>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>TIPO DE MATERIAL</label>
                   <select className="form-input" value={editForm.eventoDescricao} onChange={e => setEditForm(p => ({...p, eventoDescricao: e.target.value}))}>

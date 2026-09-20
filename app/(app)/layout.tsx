@@ -238,7 +238,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Enquanto restaura auth, renderiza o shell do layout com conteúdo mascarado.
   if (authState === 'restoring') {
     return (
-      <div className="app-wrapper" style={{ pointerEvents: 'none', userSelect: 'none' }}>
+      <div className="app-wrapper" style={{ pointerEvents: 'none', userSelect: 'none' }} suppressHydrationWarning>
         {/* Sidebar fantasma com shimmer */}
         <div
           className="sidebar"
@@ -266,7 +266,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           ))}
         </div>
 
-        <div className={`main-content ${sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''}`}>
+        <div className={`main-content ${sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''}`} suppressHydrationWarning>
           {/* Mobile Top Bar (Checking Auth state) */}
           {isMobile && (
             <div style={{ display: 'flex', alignItems: 'center', height: 60, padding: '0 16px', background: 'hsl(var(--bg-surface))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
@@ -385,9 +385,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <DataProvider>
       <DialogProvider>
         <WebVitalsReporter />
-        <div className="app-wrapper">
+        <div className="app-wrapper" suppressHydrationWarning>
           {!hideGlobalSidebar && <Sidebar />}
-          <div className={`main-content ${!hideGlobalSidebar && sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''} ${hideGlobalSidebar ? 'agenda-digital-no-sidebar' : ''}`}>
+          <div className={`main-content ${!hideGlobalSidebar && sidebarCollapsed && !isMobile ? 'sidebar-collapsed' : ''} ${hideGlobalSidebar ? 'agenda-digital-no-sidebar' : ''}`} suppressHydrationWarning>
             {isMobile && !hideGlobalSidebar && (
               <div style={{
                 display: 'flex',

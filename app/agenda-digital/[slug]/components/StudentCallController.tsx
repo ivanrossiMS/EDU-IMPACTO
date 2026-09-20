@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Megaphone, Users, CheckCircle2, Loader2, Send, AlertTriangle, 
-  X, Check, LogOut, ShieldCheck, Calendar, ChevronRight 
+  X, Check, LogOut, ShieldCheck, Calendar, ChevronRight, UserCheck 
 } from 'lucide-react'
 import { useSaida } from '@/lib/saidaContext'
 import { triggerHaptic } from '@/lib/utils/haptics'
@@ -1056,13 +1056,14 @@ export const StudentCallController = React.memo(function StudentCallController({
                 className="ad-modal-container"
                 style={{
                   background: 'linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)',
-                  borderRadius: 28,
-                  padding: '28px 28px 24px',
+                  borderRadius: 26,
+                  padding: '22px 22px 20px',
                   width: '100%',
-                  maxWidth: 440,
-                  boxShadow: '0 32px 80px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05)',
+                  maxWidth: 430,
+                  maxHeight: 'min(90vh, 760px)',
+                  boxShadow: '0 28px 70px rgba(0,0,0,0.16), 0 0 0 1px rgba(0,0,0,0.05)',
                   position: 'relative',
-                  overflow: 'hidden',
+                  overflowY: 'auto',
                   fontFamily: 'Outfit, sans-serif'
                 }}
                 onClick={e => e.stopPropagation()}
@@ -1093,41 +1094,40 @@ export const StudentCallController = React.memo(function StudentCallController({
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: 20,
+                  alignItems: 'center',
+                  marginBottom: 14,
                   position: 'relative',
                   zIndex: 1
                 }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                      <div style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 12,
-                        background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 4px 16px rgba(99,102,241,0.3)',
-                        flexShrink: 0,
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 11,
+                      background: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 4px 14px rgba(99,102,241,0.25)',
+                      flexShrink: 0,
+                    }}>
+                      <Megaphone size={17} color="#fff" strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <h3 style={{
+                        fontSize: 17,
+                        fontWeight: 900,
+                        color: '#0f172a',
+                        margin: 0,
+                        fontFamily: 'Outfit, sans-serif',
+                        letterSpacing: '-0.02em',
+                        lineHeight: 1.2
                       }}>
-                        <Megaphone size={18} color="#fff" strokeWidth={2.5} />
-                      </div>
-                      <div>
-                        <h3 style={{
-                          fontSize: 18,
-                          fontWeight: 900,
-                          color: '#0f172a',
-                          margin: 0,
-                          fontFamily: 'Outfit, sans-serif',
-                          letterSpacing: '-0.02em'
-                        }}>
-                          Opções de Retirada
-                        </h3>
-                        <p style={{ fontSize: 11, color: '#64748b', margin: 0, lineHeight: 1.3 }}>
-                          Como deseja retirar o(a) aluno(a)?
-                        </p>
-                      </div>
+                        Opções de Retirada
+                      </h3>
+                      <p style={{ fontSize: 11.5, color: '#64748b', margin: 0, lineHeight: 1.2 }}>
+                        Como deseja retirar o(a) aluno(a)?
+                      </p>
                     </div>
                   </div>
                   <button
@@ -1140,9 +1140,9 @@ export const StudentCallController = React.memo(function StudentCallController({
                     style={{
                       background: 'rgba(0,0,0,0.03)',
                       border: '1px solid rgba(0,0,0,0.06)',
-                      borderRadius: 10,
-                      width: 32,
-                      height: 32,
+                      borderRadius: 9,
+                      width: 30,
+                      height: 30,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1159,13 +1159,13 @@ export const StudentCallController = React.memo(function StudentCallController({
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 12,
-                  marginBottom: 24,
+                  gap: 8,
+                  marginBottom: 14,
                   position: 'relative',
                   zIndex: 1,
-                  maxHeight: 300,
+                  maxHeight: 190,
                   overflowY: 'auto',
-                  paddingRight: 4
+                  paddingRight: 3
                 }}>
                   {(meusAlunos && meusAlunos.length > 0 ? meusAlunos : (aluno ? [aluno] : [])).map((a: any) => {
                     const tObj = (turmas || []).find((t: any) => t && (String(t.id) === String(a.turma) || String(t.codigo) === String(a.turma) || String(t.nome) === String(a.turma)))
@@ -1205,30 +1205,30 @@ export const StudentCallController = React.memo(function StudentCallController({
                             ? 'rgba(0,0,0,0.02)' 
                             : isSelected ? 'rgba(99,102,241,0.05)' : 'rgba(0,0,0,0.02)',
                           border: `1px solid ${isConfirmedExit ? 'rgba(0,0,0,0.04)' : isSelected ? 'rgba(99,102,241,0.3)' : 'rgba(0,0,0,0.04)'}`,
-                          borderRadius: 18,
-                          padding: '14px 16px',
+                          borderRadius: 14,
+                          padding: '9px 13px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 14,
+                          gap: 12,
                           cursor: isConfirmedExit ? 'not-allowed' : 'pointer',
                           opacity: isConfirmedExit ? 0.6 : 1,
                           transition: 'all 0.2s',
                         }}
                       >
                         <div style={{
-                          width: 52,
-                          height: 52,
-                          borderRadius: 16,
+                          width: 42,
+                          height: 42,
+                          borderRadius: 13,
                           flexShrink: 0,
                           overflow: 'hidden',
                           background: isConfirmedExit ? '#cbd5e1' : 'linear-gradient(135deg, #a855f7, #ec4899)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: 18,
+                          fontSize: 15,
                           fontWeight: 900,
                           color: '#fff',
-                          boxShadow: isSelected && !isConfirmedExit ? '0 4px 16px rgba(168,85,247,0.25)' : 'none',
+                          boxShadow: isSelected && !isConfirmedExit ? '0 3px 12px rgba(168,85,247,0.22)' : 'none',
                           filter: isConfirmedExit ? 'grayscale(0.6)' : 'none',
                         }}>
                           {a.foto || a.imagem1
@@ -1238,24 +1238,24 @@ export const StudentCallController = React.memo(function StudentCallController({
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{
-                            fontSize: 15,
+                            fontSize: 14.5,
                             fontWeight: 800,
                             color: isConfirmedExit ? '#64748b' : '#0f172a',
                             fontFamily: 'Outfit, sans-serif',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
+                            whiteSpace: 'nowrap',
+                            lineHeight: 1.2
                           }}>
                             {abbreviateName(a.nome || '')}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Turma:</span>
                             <span style={{
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: 800,
                               color: isConfirmedExit ? '#64748b' : '#4f46e5',
                               background: isConfirmedExit ? 'rgba(0,0,0,0.05)' : 'rgba(99,102,241,0.1)',
-                              padding: '2px 8px',
+                              padding: '2px 7px',
                               borderRadius: 100,
                             }}>{aTurma}</span>
                             {isConfirmedExit && (
@@ -1264,13 +1264,13 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 fontWeight: 800,
                                 color: '#059669',
                                 background: 'rgba(16,185,129,0.12)',
-                                padding: '2px 8px',
+                                padding: '2px 7px',
                                 borderRadius: 100,
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: 4
+                                gap: 3
                               }}>
-                                <CheckCircle2 size={12} /> Retirado
+                                <CheckCircle2 size={11} /> Retirado
                               </span>
                             )}
                             {isPendingCall && (
@@ -1279,13 +1279,13 @@ export const StudentCallController = React.memo(function StudentCallController({
                                 fontWeight: 800,
                                 color: '#d97706',
                                 background: 'rgba(245,158,11,0.12)',
-                                padding: '2px 8px',
+                                padding: '2px 7px',
                                 borderRadius: 100,
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: 4
+                                gap: 3
                               }}>
-                                <Loader2 size={12} className="spin-anim" /> Em chamada
+                                <Loader2 size={11} className="spin-anim" /> Em chamada
                               </span>
                             )}
                           </div>
@@ -1295,9 +1295,9 @@ export const StudentCallController = React.memo(function StudentCallController({
                           <div 
                             title="Aluno já retirado hoje"
                             style={{ 
-                              width: 24,
-                              height: 24,
-                              borderRadius: 8,
+                              width: 22,
+                              height: 22,
+                              borderRadius: 7.5,
                               flexShrink: 0,
                               border: '1px solid rgba(0,0,0,0.1)',
                               background: 'rgba(0,0,0,0.04)',
@@ -1306,13 +1306,13 @@ export const StudentCallController = React.memo(function StudentCallController({
                               justifyContent: 'center',
                             }}
                           >
-                            <X size={14} color="#94a3b8" strokeWidth={2.5} />
+                            <X size={13} color="#94a3b8" strokeWidth={2.5} />
                           </div>
                         ) : (
                           <div style={{ 
-                            width: 24,
-                            height: 24,
-                            borderRadius: 8,
+                            width: 22,
+                            height: 22,
+                            borderRadius: 7.5,
                             flexShrink: 0,
                             border: `2px solid ${isSelected ? '#6366f1' : 'rgba(0,0,0,0.15)'}`,
                             background: isSelected ? '#6366f1' : 'transparent',
@@ -1321,7 +1321,7 @@ export const StudentCallController = React.memo(function StudentCallController({
                             justifyContent: 'center',
                             transition: 'all 0.2s'
                           }}>
-                            {isSelected && <Check size={14} color="#fff" strokeWidth={3} />}
+                            {isSelected && <Check size={13} color="#fff" strokeWidth={3} />}
                           </div>
                         )}
                       </div>
@@ -1330,108 +1330,196 @@ export const StudentCallController = React.memo(function StudentCallController({
                 </div>
 
                 {/* Primary Action: Normal Call */}
-                <div style={{ position: 'relative', zIndex: 1, marginBottom: 24 }}>
+                <div style={{ position: 'relative', zIndex: 1, marginBottom: 12 }}>
                   <button
                     onClick={handleNormalCallConfirm}
                     disabled={specialAuthSending || specialAuthSent || selectedAlunos.length === 0}
                     style={{
                       width: '100%',
-                      height: 56,
-                      borderRadius: 16,
+                      height: 48,
+                      borderRadius: 14,
                       border: 'none',
                       background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                       color: '#fff',
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: 800,
                       cursor: (specialAuthSending || specialAuthSent || selectedAlunos.length === 0) ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: 10,
+                      gap: 9,
                       fontFamily: 'Outfit, sans-serif',
                       transition: 'all 0.3s',
-                      boxShadow: '0 8px 24px rgba(16,185,129,0.25)',
+                      boxShadow: '0 6px 20px rgba(16,185,129,0.25)',
                       opacity: (specialAuthSending || specialAuthSent || selectedAlunos.length === 0) ? 0.6 : 1
                     }}
                     onMouseEnter={e => {
-                      if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(-2px)'
+                      if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(-1.5px)'
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.transform = 'translateY(0)'
                     }}
                   >
-                    <Megaphone size={18} strokeWidth={2.5} />
+                    <Megaphone size={17} strokeWidth={2.5} />
                     <span>{selectedAlunos.length > 1 ? 'Eu vim buscar (Chamar Alunos)' : 'Eu vim buscar (Chamar Aluno)'}</span>
                   </button>
                 </div>
 
-                {/* Divider */}
-                <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                  <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
-                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Ou Outra Pessoa</span>
-                  <div style={{ flex: 1, height: 1, background: 'rgba(0,0,0,0.06)' }} />
-                </div>
-
-                {/* Text Field */}
-                <div style={{ position: 'relative', zIndex: 1, marginBottom: 20 }}>
-                  <label style={{
-                    display: 'block',
-                    fontSize: 11,
-                    fontWeight: 800,
+                {/* Divider between Immediate Call & Special Authorization */}
+                <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 12px' }}>
+                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, transparent, rgba(0,0,0,0.07))' }} />
+                  <span style={{
+                    fontSize: 10.5,
                     color: '#64748b',
+                    fontWeight: 700,
                     textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
-                    marginBottom: 8,
+                    letterSpacing: '0.07em',
+                    background: '#f1f5f9',
+                    padding: '3px 10px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(0,0,0,0.04)'
                   }}>
-                    Quem irá buscar + Observação <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <textarea
-                    ref={specialAuthTextRef}
-                    value={specialAuthText}
-                    onChange={e => setSpecialAuthText(e.target.value)}
-                    placeholder="Ex: Avó Maria Silva — irá buscar às 17h30, carro prata..."
-                    rows={3}
-                    disabled={specialAuthSending || specialAuthSent}
-                    style={{
-                      width: '100%',
-                      padding: '12px 14px',
-                      borderRadius: 14,
-                      border: `1.5px solid ${specialAuthText.trim() ? 'rgba(245,158,11,0.5)' : 'rgba(0,0,0,0.08)'}`,
-                      background: 'rgba(0,0,0,0.02)',
-                      fontSize: 13,
-                      color: '#0f172a',
-                      outline: 'none',
-                      resize: 'none',
-                      fontFamily: 'Outfit, sans-serif',
-                      lineHeight: 1.5,
-                      boxSizing: 'border-box',
-                      transition: 'border-color 0.2s',
-                    }}
-                  />
-                  {!specialAuthText.trim() && (
-                    <p style={{ fontSize: 10, color: '#f87171', margin: '5px 0 0', fontWeight: 600 }}>
-                      Campo obrigatório caso vá usar autorização especial.
-                    </p>
-                  )}
+                    Ou outra pessoa
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, rgba(0,0,0,0.07), transparent)' }} />
                 </div>
 
-                {/* Actions */}
-                <div style={{ display: 'flex', gap: 10, position: 'relative', zIndex: 1 }}>
+                {/* Modern Dedicated Card: Special Authorization */}
+                <div style={{
+                  position: 'relative',
+                  zIndex: 1,
+                  background: 'linear-gradient(160deg, #fdfefe 0%, #fffbf2 50%, #fef7e7 100%)',
+                  borderRadius: 18,
+                  padding: '13px 14px 12px',
+                  border: '1.5px solid rgba(245,158,11,0.22)',
+                  boxShadow: '0 3px 16px rgba(245,158,11,0.05), 0 1px 2px rgba(0,0,0,0.02)',
+                }}>
+                  {/* Card Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 9,
+                        background: 'linear-gradient(135deg, rgba(245,158,11,0.2), rgba(217,119,6,0.12))',
+                        color: '#d97706',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        border: '1px solid rgba(245,158,11,0.25)',
+                      }}>
+                        <UserCheck size={15} strokeWidth={2.4} />
+                      </div>
+                      <div>
+                        <div style={{
+                          fontSize: 12.5,
+                          fontWeight: 800,
+                          color: '#0f172a',
+                          fontFamily: 'Outfit, sans-serif',
+                          lineHeight: 1.2
+                        }}>
+                          Autorização de Retirada
+                        </div>
+                        <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 500, lineHeight: 1.2, marginTop: 2 }}>
+                          Avó, tio, motorista ou terceiro
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 9,
+                      fontWeight: 800,
+                      color: '#b45309',
+                      background: 'rgba(245,158,11,0.14)',
+                      border: '1px solid rgba(245,158,11,0.2)',
+                      padding: '2px 7px',
+                      borderRadius: 999,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
+                      flexShrink: 0
+                    }}>
+                      Portaria
+                    </span>
+                  </div>
+
+                  {/* Text Field */}
+                  <div style={{ position: 'relative', marginBottom: 7 }}>
+                    <textarea
+                      ref={specialAuthTextRef}
+                      value={specialAuthText}
+                      onChange={e => setSpecialAuthText(e.target.value)}
+                      placeholder="Ex: Avó Maria Silva — irá buscar às 17h30, carro prata..."
+                      rows={2}
+                      disabled={specialAuthSending || specialAuthSent}
+                      style={{
+                        width: '100%',
+                        padding: '8px 11px',
+                        borderRadius: 12,
+                        border: specialAuthText.trim()
+                          ? '1.5px solid rgba(245,158,11,0.55)'
+                          : '1.5px solid rgba(0,0,0,0.08)',
+                        background: '#ffffff',
+                        fontSize: 12.5,
+                        color: '#0f172a',
+                        outline: 'none',
+                        resize: 'none',
+                        fontFamily: 'Outfit, sans-serif',
+                        lineHeight: 1.45,
+                        boxSizing: 'border-box',
+                        transition: 'all 0.2s ease',
+                        boxShadow: specialAuthText.trim()
+                          ? '0 0 0 2px rgba(245,158,11,0.12)'
+                          : '0 1px 2px rgba(0,0,0,0.02)',
+                      }}
+                    />
+                  </div>
+
+                  {/* Status / Instruction text */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 9,
+                    padding: '0 2px'
+                  }}>
+                    <span style={{
+                      fontSize: 10.5,
+                      color: specialAuthText.trim() ? '#b45309' : '#94a3b8',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}>
+                      <ShieldCheck size={12} strokeWidth={2.4} color={specialAuthText.trim() ? '#d97706' : '#94a3b8'} />
+                      {specialAuthText.trim() ? 'Identificação preenchida' : 'Identificação de quem busca obrigatória'}
+                    </span>
+                    {specialAuthText.length > 0 && (
+                      <span style={{ fontSize: 9.5, color: '#94a3b8', fontWeight: 600 }}>
+                        {specialAuthText.length} carac.
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Actions */}
                   <button
                     onClick={handleSpecialAuthConfirm}
                     disabled={!specialAuthText.trim() || specialAuthSending || specialAuthSent || selectedAlunos.length === 0}
                     style={{
                       width: '100%',
-                      height: 46,
-                      borderRadius: 14,
+                      height: 42,
+                      borderRadius: 12,
                       border: 'none',
                       background: specialAuthSent
-                        ? 'linear-gradient(135deg, #10b981, #059669)'
+                        ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
                         : !specialAuthText.trim() || specialAuthSending
-                          ? 'rgba(0,0,0,0.04)'
-                          : 'linear-gradient(135deg, #f59e0b, #d97706)',
-                      color: !specialAuthText.trim() && !specialAuthSent ? '#94a3b8' : '#fff',
-                      fontSize: 13,
+                          ? 'rgba(245,158,11,0.12)'
+                          : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: specialAuthSent
+                        ? '#fff'
+                        : !specialAuthText.trim() || specialAuthSending
+                          ? '#b45309'
+                          : '#fff',
+                      fontSize: 12.5,
                       fontWeight: 800,
                       cursor: specialAuthText.trim() && !specialAuthSending && !specialAuthSent ? 'pointer' : 'not-allowed',
                       display: 'flex',
@@ -1439,18 +1527,25 @@ export const StudentCallController = React.memo(function StudentCallController({
                       justifyContent: 'center',
                       gap: 8,
                       fontFamily: 'Outfit, sans-serif',
-                      transition: 'all 0.3s',
+                      transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                       boxShadow: specialAuthText.trim() && !specialAuthSending && !specialAuthSent
-                        ? '0 8px 24px rgba(245,158,11,0.35)'
+                        ? '0 6px 18px rgba(245,158,11,0.3)'
                         : 'none',
+                      opacity: (!specialAuthText.trim() && !specialAuthSent) ? 0.65 : 1,
+                    }}
+                    onMouseEnter={e => {
+                      if (!e.currentTarget.disabled) e.currentTarget.style.transform = 'translateY(-1px)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'translateY(0)'
                     }}
                   >
                     {specialAuthSent ? (
-                      <><CheckCircle2 size={16} /> Autorização Registrada!</>
+                      <><CheckCircle2 size={15} /> Autorização Registrada!</>
                     ) : specialAuthSending ? (
-                      <><Loader2 size={16} className="spin-anim" /> Enviando...</>
+                      <><Loader2 size={15} className="spin-anim" /> Enviando...</>
                     ) : (
-                      <><Send size={15} /> Confirmar Autorização Especial</>
+                      <><Send size={14} /> Confirmar Autorização Especial</>
                     )}
                   </button>
                 </div>

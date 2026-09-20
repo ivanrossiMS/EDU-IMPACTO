@@ -39,12 +39,7 @@ export function isMobileVersion(): boolean {
  * se a aplicação está sendo executada na versão mobile ou desktop.
  */
 export function useIsMobileVersion(): boolean {
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return isMobileVersion()
-    }
-    return false
-  })
+  const [isMobile, setIsMobile] = useState<boolean>(false)
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout | null = null

@@ -3,6 +3,10 @@
     {
       "path": "/api/portaria/cron-push",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/alertas-financeiros",
+      "schedule": "0 12 * * *"
     }
   ]
 }

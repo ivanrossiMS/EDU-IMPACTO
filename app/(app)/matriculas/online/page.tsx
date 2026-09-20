@@ -9,8 +9,13 @@ import {
   User, Users, DollarSign, Calendar, FileText, Settings, Key, Eye, EyeOff,
   Download, ArrowRight, Sparkles, CheckSquare, Trash2, Smartphone, Monitor,
   Upload, FileUp, Paperclip, X, File, FileCheck, Layers, ChevronRight, Zap,
-  BookOpen, Building2, Plus, Edit3, UserCheck, Lock, GraduationCap
+  BookOpen, Building2, Plus, Edit3, UserCheck, Lock, GraduationCap, RotateCcw
 } from 'lucide-react'
+import {
+  formatarMensagemZapSign,
+  DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
+  DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO
+} from '@/lib/zapsign'
 
 export interface SignatarioEscola {
   id: string
@@ -215,6 +220,8 @@ export default function MatriculasOnlinePage() {
     envioAutomaticoWhatsapp: boolean
     envioAutomaticoEmail: boolean
     signatariosEscola?: SignatarioEscola[]
+    mensagemWhatsappContratante?: string
+    mensagemWhatsappContratado?: string
   }>({
     apiToken: '',
     sandbox: false,
@@ -224,6 +231,8 @@ export default function MatriculasOnlinePage() {
     envioAutomaticoWhatsapp: true,
     envioAutomaticoEmail: false,
     signatariosEscola: [],
+    mensagemWhatsappContratante: DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
+    mensagemWhatsappContratado: DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO,
   })
   const [hasTokenConfigurado, setHasTokenConfigurado] = useState(false)
   const [showTokenSecret, setShowTokenSecret] = useState(false)
@@ -232,6 +241,50 @@ export default function MatriculasOnlinePage() {
   const [copiedLink, setCopiedLink] = useState<string | null>(null)
   const [copiadoContratanteModal, setCopiadoContratanteModal] = useState(false)
   const [copiadoContratadoModal, setCopiadoContratadoModal] = useState(false)
+
+  // Estados de Edição de Modelos de Mensagem WhatsApp
+  const [templateAbaAtiva, setTemplateAbaAtiva] = useState<'contratante' | 'contratado'>('contratante')
+  const textareaMsgRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const handleInserirVariavel = (tag: string) => {
+    const isContratante = templateAbaAtiva === 'contratante'
+    const textoAtual = isContratante
+      ? (zapConfig.mensagemWhatsappContratante ?? DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE)
+      : (zapConfig.mensagemWhatsappContratado ?? DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO)
+
+    const el = textareaMsgRef.current
+    if (el) {
+      const start = el.selectionStart ?? textoAtual.length
+      const end = el.selectionEnd ?? textoAtual.length
+      const novoTexto = textoAtual.slice(0, start) + tag + textoAtual.slice(end)
+      if (isContratante) {
+        setZapConfig(prev => ({ ...prev, mensagemWhatsappContratante: novoTexto }))
+      } else {
+        setZapConfig(prev => ({ ...prev, mensagemWhatsappContratado: novoTexto }))
+      }
+      setTimeout(() => {
+        el.focus()
+        el.setSelectionRange(start + tag.length, start + tag.length)
+      }, 30)
+    } else {
+      const novoTexto = textoAtual + tag
+      if (isContratante) {
+        setZapConfig(prev => ({ ...prev, mensagemWhatsappContratante: novoTexto }))
+      } else {
+        setZapConfig(prev => ({ ...prev, mensagemWhatsappContratado: novoTexto }))
+      }
+    }
+  }
+
+  const handleRestaurarPadraoMensagem = (tipo: 'contratante' | 'contratado') => {
+    if (tipo === 'contratante') {
+      setZapConfig(prev => ({ ...prev, mensagemWhatsappContratante: DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE }))
+      showToast('Texto do Contratante restaurado para o padrão oficial!', 'info')
+    } else {
+      setZapConfig(prev => ({ ...prev, mensagemWhatsappContratado: DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO }))
+      showToast('Texto do Contratado restaurado para o padrão oficial!', 'info')
+    }
+  }
 
   // Signatários da escola configurados
   const escolaSignatarios = useMemo(() => zapConfig.signatariosEscola || [], [zapConfig.signatariosEscola])
@@ -4254,7 +4307,14 @@ export default function MatriculasOnlinePage() {
                                 {c.responsavel_telefone && c.zapsign_sign_url ? (
                                   <a
                                     href={`https://wa.me/55${c.responsavel_telefone.replace(/\D/g, '')}?text=${encodeURIComponent(
-                                      `Olá, ${c.responsavel_nome}! Segue o link do Colégio Impacto para assinatura do documento${c.aluno_nome ? ` de ${c.aluno_nome}` : ''}: ${c.zapsign_sign_url}`
+                                      formatarMensagemZapSign(zapConfig.mensagemWhatsappContratante, {
+                                        nomeResponsavel: c.responsavel_nome,
+                                        nomeAluno: c.aluno_nome,
+                                        turmaAluno: c.aluno_turma || c.aluno_serie || '',
+                                        linkAssinatura: c.zapsign_sign_url,
+                                        nomeEscola: 'Colégio Impacto',
+                                        nomeDocumento: c.tipo_documento || 'Contrato Escolar',
+                                      })
                                     )}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
@@ -4918,6 +4978,352 @@ export default function MatriculasOnlinePage() {
                       </div>
                     )
                   })}
+                </div>
+              </div>
+            </div>
+
+            {/* ── SEÇÃO: MODELOS DE MENSAGEM PARA WHATSAPP ── */}
+            <div style={{
+              background: '#ffffff',
+              borderRadius: 16,
+              border: '1px solid #e2e8f0',
+              padding: '22px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+            }}>
+              {/* Header da Seção */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
+                    color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '1px solid #a7f3d0'
+                  }}>
+                    <MessageSquare size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 15, fontWeight: 900, color: '#0f172a', margin: 0 }}>
+                      Modelos de Mensagem do WhatsApp
+                    </h3>
+                    <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0' }}>
+                      Personalize os textos enviados com links oficiais de assinatura eletrônica do ZapSign.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sub-abas de Mensagem: Contratante vs Contratado */}
+                <div style={{
+                  display: 'inline-flex',
+                  background: '#f1f5f9',
+                  padding: 4,
+                  borderRadius: 10,
+                  gap: 4
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateAbaAtiva('contratante')}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      background: templateAbaAtiva === 'contratante' ? '#ffffff' : 'transparent',
+                      color: templateAbaAtiva === 'contratante' ? '#047857' : '#64748b',
+                      boxShadow: templateAbaAtiva === 'contratante' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Contratante (Responsável)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTemplateAbaAtiva('contratado')}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      fontSize: 12,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      background: templateAbaAtiva === 'contratado' ? '#ffffff' : 'transparent',
+                      color: templateAbaAtiva === 'contratado' ? '#4338ca' : '#64748b',
+                      boxShadow: templateAbaAtiva === 'contratado' ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Contratado (Escola)
+                  </button>
+                </div>
+              </div>
+
+              {/* Toolbar de Variáveis Disponíveis */}
+              <div style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 12,
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Variáveis Disponíveis (Clique para inserir no texto):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRestaurarPadraoMensagem(templateAbaAtiva)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#2563eb',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: 0
+                    }}
+                    title="Restaurar o modelo padrão do sistema"
+                  >
+                    <RotateCcw size={12} />
+                    <span>Restaurar Padrão Oficial</span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {templateAbaAtiva === 'contratante' ? (
+                    [
+                      { tag: '{{nome_responsavel}}', desc: 'Nome do Responsável' },
+                      { tag: '{{nome_aluno}}', desc: 'Nome do Aluno' },
+                      { tag: '{{turma_aluno}}', desc: 'Turma / Série' },
+                      { tag: '{{link_assinatura}}', desc: 'Link ZapSign' },
+                      { tag: '{{nome_escola}}', desc: 'Colégio Impacto' },
+                      { tag: '{{nome_documento}}', desc: 'Nome do Documento' },
+                    ].map(v => (
+                      <button
+                        key={v.tag}
+                        type="button"
+                        onClick={() => handleInserirVariavel(v.tag)}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 8,
+                          padding: '4px 9px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#047857',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'all 0.15s',
+                          fontFamily: 'ui-monospace, monospace'
+                        }}
+                        title={`Inserir ${v.desc}`}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = '#10b981'
+                          e.currentTarget.style.background = '#ecfdf5'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = '#cbd5e1'
+                          e.currentTarget.style.background = '#ffffff'
+                        }}
+                      >
+                        <Plus size={10} strokeWidth={3} />
+                        <span>{v.tag}</span>
+                      </button>
+                    ))
+                  ) : (
+                    [
+                      { tag: '{{nome_representante}}', desc: 'Nome do Representante' },
+                      { tag: '{{cargo}}', desc: 'Cargo' },
+                      { tag: '{{razao_social}}', desc: 'Razão Social' },
+                      { tag: '{{nome_aluno}}', desc: 'Nome do Aluno' },
+                      { tag: '{{link_assinatura}}', desc: 'Link ZapSign' },
+                      { tag: '{{nome_documento}}', desc: 'Nome do Documento' },
+                    ].map(v => (
+                      <button
+                        key={v.tag}
+                        type="button"
+                        onClick={() => handleInserirVariavel(v.tag)}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 8,
+                          padding: '4px 9px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#4338ca',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'all 0.15s',
+                          fontFamily: 'ui-monospace, monospace'
+                        }}
+                        title={`Inserir ${v.desc}`}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = '#6366f1'
+                          e.currentTarget.style.background = '#eef2ff'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = '#cbd5e1'
+                          e.currentTarget.style.background = '#ffffff'
+                        }}
+                      >
+                        <Plus size={10} strokeWidth={3} />
+                        <span>{v.tag}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Editor do Texto */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
+                    {templateAbaAtiva === 'contratante'
+                      ? 'Texto da Mensagem para o CONTRATANTE (WhatsApp):'
+                      : 'Texto da Mensagem para o CONTRATADO / ESCOLA (WhatsApp):'}
+                  </label>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                    {(templateAbaAtiva === 'contratante'
+                      ? (zapConfig.mensagemWhatsappContratante ?? DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE)
+                      : (zapConfig.mensagemWhatsappContratado ?? DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO)
+                    ).length} caracteres
+                  </span>
+                </div>
+
+                <textarea
+                  ref={textareaMsgRef}
+                  rows={8}
+                  value={
+                    templateAbaAtiva === 'contratante'
+                      ? (zapConfig.mensagemWhatsappContratante ?? DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE)
+                      : (zapConfig.mensagemWhatsappContratado ?? DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO)
+                  }
+                  onChange={e => {
+                    const val = e.target.value
+                    if (templateAbaAtiva === 'contratante') {
+                      setZapConfig(prev => ({ ...prev, mensagemWhatsappContratante: val }))
+                    } else {
+                      setZapConfig(prev => ({ ...prev, mensagemWhatsappContratado: val }))
+                    }
+                  }}
+                  className="mo-input"
+                  style={{
+                    width: '100%',
+                    padding: '12px 14px',
+                    fontFamily: 'inherit',
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    borderRadius: 12,
+                    border: '1px solid #cbd5e1',
+                    resize: 'vertical',
+                    background: '#ffffff'
+                  }}
+                  placeholder="Escreva a mensagem aqui..."
+                />
+                
+                {templateAbaAtiva === 'contratante' && (
+                  <div style={{
+                    marginTop: 6,
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    fontSize: 11.5,
+                    color: '#065f46',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}>
+                    <Sparkles size={14} color="#059669" />
+                    <span>
+                      Frase de confirmação de matrícula inclusa: <strong>"Assim que concluir a assinatura, por gentileza, nos avise por aqui para darmos andamento imediato à efetivação da matrícula! ✍️"</strong>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Simulação Visual em Tempo Real (WhatsApp Chat Bubble) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Smartphone size={15} color="#059669" />
+                  <span style={{ fontSize: 12, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Pré-visualização da Mensagem (Como o destinatário verá no WhatsApp):
+                  </span>
+                </div>
+
+                <div style={{
+                  background: '#efeae2',
+                  backgroundImage: 'radial-gradient(#d1d5db 0.75px, transparent 0.75px)',
+                  backgroundSize: '12px 12px',
+                  borderRadius: 14,
+                  padding: '18px 20px',
+                  border: '1px solid #e2e8f0',
+                  display: 'flex',
+                  justifyContent: 'flex-start'
+                }}>
+                  <div style={{
+                    maxWidth: 540,
+                    background: '#ffffff',
+                    borderRadius: '0px 14px 14px 14px',
+                    padding: '12px 16px',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.13)',
+                    position: 'relative',
+                    fontSize: 13,
+                    color: '#111827',
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    borderLeft: '4px solid #10b981'
+                  }}>
+                    {formatarMensagemZapSign(
+                      templateAbaAtiva === 'contratante'
+                        ? (zapConfig.mensagemWhatsappContratante ?? DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE)
+                        : (zapConfig.mensagemWhatsappContratado ?? DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO),
+                      templateAbaAtiva === 'contratante'
+                        ? {
+                            nomeResponsavel: 'Renata Pereira Ortiz',
+                            nomeAluno: 'José Fernando Alves Ortiz',
+                            turmaAluno: '6º Ano A - Ensino Fundamental',
+                            linkAssinatura: 'https://sandbox.app.zapsign.com.br/verificar/e395b795-766f-49d5-b35c-536c7fdab750',
+                            nomeEscola: 'Colégio Impacto',
+                            nomeDocumento: 'Contrato de Prestação de Serviços Educacionais 2027',
+                          }
+                        : {
+                            nomeRepresentante: escolaSignatarioAtual?.nomeRepresentante || 'Direção Geral',
+                            cargo: escolaSignatarioAtual?.cargo || 'Representante Legal',
+                            razaoSocial: escolaSignatarioAtual?.razaoSocial || 'Colégio Impacto Ltda',
+                            nomeAluno: 'José Fernando Alves Ortiz',
+                            linkAssinatura: 'https://sandbox.app.zapsign.com.br/verificar/c882a101-443b-47e2-a09c-982c7fdab750',
+                            nomeEscola: escolaSignatarioAtual?.razaoSocial || 'Colégio Impacto',
+                            nomeDocumento: 'Contrato de Prestação de Serviços Educacionais 2027',
+                          }
+                    )}
+
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      alignItems: 'center',
+                      gap: 4,
+                      marginTop: 8,
+                      fontSize: 10.5,
+                      color: '#64748b'
+                    }}>
+                      <span>17:35</span>
+                      <span style={{ color: '#0284c7', fontWeight: 900 }}>✓✓</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

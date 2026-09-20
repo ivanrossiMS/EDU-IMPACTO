@@ -3,7 +3,13 @@ import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { gerarContratoPdf } from '@/lib/contracts/contractPdfGenerator'
 import { ContractDataModel } from '@/lib/contracts/contractTemplates'
-import { criarDocumentoZapSign, formatPhoneForZapSign } from '@/lib/zapsign'
+import {
+  criarDocumentoZapSign,
+  formatPhoneForZapSign,
+  formatarMensagemZapSign,
+  DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE,
+  DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO
+} from '@/lib/zapsign'
 import { PDFDocument } from 'pdf-lib'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -235,6 +241,9 @@ export async function POST(request: Request) {
       })
     }
 
+    const templateContratante = config.mensagemWhatsappContratante || DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE
+    const templateContratado = config.mensagemWhatsappContratado || DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO
+
     // 4. Chamar API do ZapSign
     const zapSignResponse = await criarDocumentoZapSign({
       name: docTitle,
@@ -243,6 +252,14 @@ export async function POST(request: Request) {
       sandbox: isSandbox,
       apiToken,
       externalId: aluno?.id ? `aluno_${aluno.id}_${Date.now()}` : `doc_${Date.now()}`,
+      customMessage: formatarMensagemZapSign(templateContratante, {
+        nomeResponsavel: responsavel.nome,
+        nomeAluno: alunoNome,
+        turmaAluno: aluno?.turma_nome || aluno?.turma || aluno?.serie || '',
+        linkAssinatura: '',
+        nomeEscola: escolaInfo?.nomeFantasia || 'Colégio Impacto',
+        nomeDocumento: docTitle,
+      }),
     })
 
     const signersResp = Array.isArray(zapSignResponse.signers) ? zapSignResponse.signers : []
@@ -333,31 +350,33 @@ export async function POST(request: Request) {
     }
 
     // 6. Link direto opcional para envio manual via WhatsApp
-    const studentRef = alunoNome ? ` para o(a) aluno(a) *${alunoNome}*` : ''
     let whatsappLink = ''
     if (cleanPhone) {
-      const msgTexto = encodeURIComponent(
-        `Olá, ${responsavel.nome}!\n\n` +
-        `Segue o documento do Colégio Impacto${studentRef}.\n\n` +
-        `Por favor, acesse o link oficial abaixo para assinar eletronicamente via ZapSign:\n` +
-        `${signUrl}\n\n` +
-        `Qualquer dúvida, a Secretaria Escolar está à disposição!`
-      )
-      whatsappLink = `https://wa.me/55${cleanPhone}?text=${msgTexto}`
+      const textoMensagem = formatarMensagemZapSign(templateContratante, {
+        nomeResponsavel: responsavel.nome,
+        nomeAluno: alunoNome,
+        turmaAluno: aluno?.turma_nome || aluno?.turma || aluno?.serie || '',
+        linkAssinatura: signUrl,
+        nomeEscola: escolaInfo?.nomeFantasia || 'Colégio Impacto',
+        nomeDocumento: docTitle,
+      })
+      whatsappLink = `https://wa.me/55${cleanPhone}?text=${encodeURIComponent(textoMensagem)}`
     }
 
     let escolaWhatsappLink = ''
     if (isAssinaturaBilateral && escolaSignatario && (escolaSignatario.telefone || escolaSignatario.celular)) {
       const cleanEscolaPhone = formatPhoneForZapSign(escolaSignatario.telefone || escolaSignatario.celular)
       if (cleanEscolaPhone && escolaSignUrl) {
-        const msgEscola = encodeURIComponent(
-          `Olá, ${escolaSignatario.nomeRepresentante}!\n\n` +
-          `Segue o documento do Colégio Impacto${studentRef} para assinatura institucional como CONTRATADO (${escolaSignatario.razaoSocial || 'Colégio Impacto'}).\n\n` +
-          `Acesse o link oficial abaixo para assinar eletronicamente via ZapSign:\n` +
-          `${escolaSignUrl}\n\n` +
-          `Secretaria Digital`
-        )
-        escolaWhatsappLink = `https://wa.me/55${cleanEscolaPhone}?text=${msgEscola}`
+        const textoEscola = formatarMensagemZapSign(templateContratado, {
+          nomeRepresentante: escolaSignatario.nomeRepresentante,
+          cargo: escolaSignatario.cargo || 'Representante Legal',
+          razaoSocial: escolaSignatario.razaoSocial || 'Colégio Impacto',
+          nomeAluno: alunoNome,
+          linkAssinatura: escolaSignUrl,
+          nomeEscola: escolaSignatario.razaoSocial || 'Colégio Impacto',
+          nomeDocumento: docTitle,
+        })
+        escolaWhatsappLink = `https://wa.me/55${cleanEscolaPhone}?text=${encodeURIComponent(textoEscola)}`
       }
     }
 

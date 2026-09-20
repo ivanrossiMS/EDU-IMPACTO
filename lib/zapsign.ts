@@ -30,6 +30,84 @@ export interface ZapSignCreateDocParams {
   sandbox?: boolean
   apiToken?: string
   brandLogo?: string
+  customMessage?: string
+}
+
+export interface ZapSignTemplateVars {
+  nomeResponsavel?: string
+  nomeAluno?: string
+  turmaAluno?: string
+  linkAssinatura?: string
+  nomeEscola?: string
+  nomeDocumento?: string
+  nomeRepresentante?: string
+  razaoSocial?: string
+  cargo?: string
+}
+
+export const DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE =
+  `Olá, {{nome_responsavel}}!\n\n` +
+  `Segue o documento do Colégio Impacto para o(a) aluno(a) *{{nome_aluno}}*.\n\n` +
+  `Por favor, acesse o link oficial abaixo para assinar eletronicamente via ZapSign:\n` +
+  `{{link_assinatura}}\n\n` +
+  `Assim que concluir a assinatura, por gentileza, nos avise por aqui para darmos andamento imediato à efetivação da matrícula! ✍️\n\n` +
+  `Qualquer dúvida, a Secretaria Escolar está à inteira disposição!`
+
+export const DEFAULT_MENSAGEM_WHATSAPP_CONTRATADO =
+  `Olá, {{nome_representante}}!\n\n` +
+  `Segue o documento do Colégio Impacto para o(a) aluno(a) *{{nome_aluno}}* para assinatura institucional como CONTRATADO ({{razao_social}}).\n\n` +
+  `Acesse o link oficial abaixo para assinar eletronicamente via ZapSign:\n` +
+  `{{link_assinatura}}\n\n` +
+  `Secretaria Digital`
+
+export function formatarMensagemZapSign(template?: string | null, vars: ZapSignTemplateVars = {}): string {
+  let text = (template && template.trim()) ? template : DEFAULT_MENSAGEM_WHATSAPP_CONTRATANTE
+
+  const nomeAluno = vars.nomeAluno?.trim() || ''
+  const nomeResp = vars.nomeResponsavel?.trim() || 'Responsável'
+  const link = vars.linkAssinatura?.trim() || ''
+  const escola = vars.nomeEscola?.trim() || 'Colégio Impacto'
+  const doc = vars.nomeDocumento?.trim() || 'Documento Escolar'
+  const turma = vars.turmaAluno?.trim() || ''
+  const representante = vars.nomeRepresentante?.trim() || 'Representante Legal'
+  const razaoSocial = vars.razaoSocial?.trim() || 'Colégio Impacto'
+  const cargo = vars.cargo?.trim() || 'Representante Legal'
+
+  // Substituições inteligentes de referência ao aluno
+  const refAluno = nomeAluno ? ` para o(a) aluno(a) *${nomeAluno}*` : ''
+
+  const map: Record<string, string> = {
+    nome_responsavel: nomeResp,
+    responsavel: nomeResp,
+    nome_aluno: nomeAluno || 'aluno(a)',
+    aluno: nomeAluno || 'aluno(a)',
+    referencia_aluno: refAluno,
+    turma_aluno: turma,
+    turma: turma,
+    link_assinatura: link,
+    link: link,
+    nome_escola: escola,
+    escola: escola,
+    nome_documento: doc,
+    documento: doc,
+    nome_representante: representante,
+    representante: representante,
+    razao_social: razaoSocial,
+    cargo: cargo,
+  }
+
+  // Se o aluno não estiver informado, limpa construções como "para o(a) aluno(a) *aluno(a)*" de forma elegante
+  if (!nomeAluno) {
+    text = text.replace(/para\s+o\(a\)\s+aluno\(a\)\s+\*?\{\{\s*(?:nome_)?aluno\s*\}\}\*?/gi, '')
+    text = text.replace(/para\s+o\(a\)\s+aluno\(a\)\s+\*?\{(?:nome_)?aluno\}\*?/gi, '')
+    text = text.replace(/de\s+\*?\{\{\s*(?:nome_)?aluno\s*\}\}\*?/gi, '')
+    text = text.replace(/de\s+\*?\{(?:nome_)?aluno\}\*?/gi, '')
+  }
+
+  return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}|\{([a-zA-Z0-9_]+)\}/g, (match, p1, p2) => {
+    const key = (p1 || p2 || '').toLowerCase()
+    return key in map ? map[key] : match
+  }).replace(/[ \t]{2,}/g, ' ')
 }
 
 export interface ZapSignDocResponse {
@@ -144,6 +222,9 @@ export async function criarDocumentoZapSign(params: ZapSignCreateDocParams): Pro
   }
   if (params.brandLogo) {
     payload.brand_logo = params.brandLogo
+  }
+  if (params.customMessage) {
+    payload.custom_message = params.customMessage
   }
 
   const response = await fetch(`${baseUrl}/docs/`, {

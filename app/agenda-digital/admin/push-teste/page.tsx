@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { PushHistoryTab } from './components/PushHistoryTab'
 import {
   Bell, Send, Users, Smartphone, ShieldCheck, CheckCircle2,
   AlertTriangle, RefreshCw, Sparkles, ExternalLink, ArrowRight,
@@ -62,28 +64,28 @@ const CATEGORY_DEFINITIONS: Record<
         label: 'Presença Confirmada',
         title: '✅ Presença Confirmada',
         message: 'A presença de {aluno} foi confirmada na escola.',
-        routeSuffix: '/frequencia',
+        routeSuffix: '/{alunoId}/frequencia',
       },
       {
         id: 'freq_portaria',
         label: 'Entrada na Portaria (com horário)',
         title: '✅ Presença Confirmada',
         message: 'A presença de {aluno} foi confirmada na escola (Entrada às {hora}).',
-        routeSuffix: '/frequencia',
+        routeSuffix: '/{alunoId}/frequencia',
       },
       {
         id: 'freq_falta',
         label: 'Falta Registrada',
         title: '❌ Falta Registrada',
         message: 'Foi registrada uma falta para {aluno}.',
-        routeSuffix: '/frequencia',
+        routeSuffix: '/{alunoId}/frequencia',
       },
       {
         id: 'freq_falta_justificada',
         label: 'Falta Justificada',
         title: '📋 Falta Justificada',
         message: 'Foi registrada uma falta justificada para {aluno}.',
-        routeSuffix: '/frequencia',
+        routeSuffix: '/{alunoId}/frequencia',
       },
     ],
   },
@@ -177,7 +179,7 @@ const CATEGORY_DEFINITIONS: Record<
         label: 'Resposta no Comunicado',
         title: '🏫 Nova mensagem de Coordenação Pedagógica',
         message: 'Sobre "Passeio Escolar": Mensagem recebida com sucesso.',
-        routeSuffix: '/comunicados',
+        routeSuffix: '/{alunoId}/comunicados',
       },
     ],
   },
@@ -192,7 +194,7 @@ const CATEGORY_DEFINITIONS: Record<
         label: 'Novas Notas Lançadas',
         title: '🏆 Novas Notas Lançadas!',
         message: 'O boletim de {aluno} acabou de ser atualizado.',
-        routeSuffix: '/notas',
+        routeSuffix: '/{alunoId}/notas',
       },
     ],
   },
@@ -207,7 +209,7 @@ const CATEGORY_DEFINITIONS: Record<
         label: 'Aviso de Ocorrência',
         title: '⚠️ Aviso de Ocorrência',
         message: 'Uma nova ocorrência foi registrada para {aluno}. Acesse para ver os detalhes.',
-        routeSuffix: '/ocorrencias',
+        routeSuffix: '/{alunoId}/ocorrencias',
       },
     ],
   },
@@ -218,10 +220,10 @@ const CATEGORY_DEFINITIONS: Record<
     icon: DollarSign,
     presets: [
       {
-        id: 'fin_mensalidade',
-        label: 'Mensalidade Disponível',
-        title: '💳 Mensalidade Disponível',
-        message: 'A mensalidade escolar de {aluno} já está disponível para pagamento no app.',
+        id: 'fin_parcela_vencida_3d',
+        label: 'Parcela Vencida (3 dias)',
+        title: '⏰ Lembrete: Mensalidade Vencida',
+        message: 'A fatura de {aluno} venceu há 3 dias. Acesse o app para consultar o código Pix ou 2ª via.',
         routeSuffix: '/{alunoId}/financeiro',
       },
       {
@@ -244,14 +246,14 @@ const CATEGORY_DEFINITIONS: Record<
         label: 'Saída Confirmada na Portaria',
         title: '🎓 Saída Confirmada',
         message: 'A saída de {aluno} foi confirmada na portaria às {hora}.',
-        routeSuffix: '/frequencia',
+        routeSuffix: '/{alunoId}/frequencia',
       },
       {
         id: 'sai_chamada_portao',
         label: 'Chamada de Saída no Portão',
         title: '🚗 Chamada de Portaria',
         message: '{aluno} foi chamado na portaria para saída e está se dirigindo ao portão principal.',
-        routeSuffix: '',
+        routeSuffix: '/{alunoId}',
       },
     ],
   },
@@ -266,7 +268,7 @@ const CATEGORY_DEFINITIONS: Record<
         label: 'Push de Teste Padrão',
         title: '🔔 Teste de Notificação Push',
         message: 'Sistema de notificações da Agenda Digital funcionando com sucesso para {aluno}!',
-        routeSuffix: '',
+        routeSuffix: '/{alunoId}',
       },
     ],
   },
@@ -276,6 +278,16 @@ export default function ADAdminPushTestPage() {
   const [alunos, setAlunos, { loading: isAlunosLoading }] = useSupabaseArray<any>('alunos/lightweight?limit=2000')
   const { adAlert } = useAgendaDigital()
   const { currentUser } = useApp()
+  const searchParams = useSearchParams()
+  const initialTab = searchParams?.get('tab') === 'historico' ? 'historico' : 'disparador'
+  const [activeMainTab, setActiveMainTab] = useState<'disparador' | 'historico'>(initialTab)
+
+  useEffect(() => {
+    const tabParam = searchParams?.get('tab')
+    if (tabParam === 'historico' || tabParam === 'disparador') {
+      setActiveMainTab(tabParam)
+    }
+  }, [searchParams])
 
   // ── Estado de Diagnóstico Local Deste Aparelho ──
   const [deviceDiagnostic, setDeviceDiagnostic] = useState<{
@@ -528,8 +540,18 @@ export default function ADAdminPushTestPage() {
         const data = await res.json()
         const resps = data.responsaveis || []
         setGuardians(resps)
-        // Seleciona todos os responsáveis por padrão
-        setSelectedRespIds(resps.map((r: any) => String(r.responsavel_id)))
+        // Se a categoria for cobrança, seleciona exclusivamente o responsável financeiro
+        if (activeCategory === 'cobrancas') {
+          const finResps = resps.filter((r: any) => r.isFinanceiro)
+          if (finResps.length > 0) {
+            setSelectedRespIds(finResps.map((r: any) => String(r.responsavel_id)))
+          } else {
+            setSelectedRespIds(resps.map((r: any) => String(r.responsavel_id)))
+          }
+        } else {
+          // Seleciona todos os responsáveis por padrão
+          setSelectedRespIds(resps.map((r: any) => String(r.responsavel_id)))
+        }
       }
     } catch (err) {
       console.error('Erro ao buscar responsáveis do aluno:', err)
@@ -771,6 +793,13 @@ export default function ADAdminPushTestPage() {
       setMessage(firstPreset.message)
       setTargetRoute(firstPreset.routeSuffix)
     }
+    // Ao alternar para Cobranças, focar exclusivamente no responsável financeiro
+    if (cat === 'cobrancas' && guardians.length > 0) {
+      const finResps = guardians.filter((g: any) => g.isFinanceiro)
+      if (finResps.length > 0) {
+        setSelectedRespIds(finResps.map((g: any) => String(g.responsavel_id)))
+      }
+    }
   }
 
   // 6. Troca de Preset
@@ -808,13 +837,15 @@ export default function ADAdminPushTestPage() {
 
   const previewTargetUrl = useMemo(() => {
     let route = (targetRoute || '').trim()
-    if (selectedAluno?.id) {
-      route = route.replace(/{alunoId}/gi, String(selectedAluno.id))
-    } else if (selectedColaborador?.id) {
-      route = route.replace(/{alunoId}/gi, 'colaborador')
-    } else {
-      route = route.replace(/{alunoId}/gi, 'aluno')
+    const targetSlug = selectedColaborador?.id ? 'colaborador' : (selectedAluno?.id ? String(selectedAluno.id) : '')
+
+    if (route.includes('{alunoId}')) {
+      route = route.replace(/{alunoId}/gi, targetSlug || 'aluno')
+    } else if (targetSlug && !route.startsWith('/colaborador') && !route.startsWith(`/${targetSlug}`)) {
+      const clean = route.startsWith('/') ? route : `/${route}`
+      route = clean !== '/' ? `/${targetSlug}${clean}` : `/${targetSlug}`
     }
+
     if (route && !route.startsWith('/')) route = `/${route}`
     return `/agenda-digital${route}`
   }, [selectedAluno, selectedColaborador, targetRoute])
@@ -940,8 +971,86 @@ export default function ADAdminPushTestPage() {
         </div>
       </div>
 
-      {/* ── STATUS DESTE APARELHO (DIAGNÓSTICO LOCAL PUSH) ── */}
+      {/* ── NAVEGAÇÃO DE ABAS: SIMULADOR vs HISTÓRICO ── */}
       <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        borderBottom: '1.5px solid hsl(var(--border-subtle))',
+        paddingBottom: 2,
+        overflowX: 'auto',
+      }}>
+        <button
+          onClick={() => setActiveMainTab('disparador')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 18px',
+            borderRadius: '12px 12px 0 0',
+            border: 'none',
+            borderBottom: activeMainTab === 'disparador' ? '3px solid #6366f1' : '3px solid transparent',
+            background: activeMainTab === 'disparador' ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+            color: activeMainTab === 'disparador' ? '#6366f1' : 'hsl(var(--text-muted))',
+            fontSize: 14,
+            fontWeight: activeMainTab === 'disparador' ? 800 : 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <Radio size={16} />
+          Disparador & Simulador de Push
+        </button>
+
+        <button
+          onClick={() => setActiveMainTab('historico')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '10px 18px',
+            borderRadius: '12px 12px 0 0',
+            border: 'none',
+            borderBottom: activeMainTab === 'historico' ? '3px solid #6366f1' : '3px solid transparent',
+            background: activeMainTab === 'historico' ? 'rgba(99, 102, 241, 0.08)' : 'transparent',
+            color: activeMainTab === 'historico' ? '#6366f1' : 'hsl(var(--text-muted))',
+            fontSize: 14,
+            fontWeight: activeMainTab === 'historico' ? 800 : 600,
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <Clock size={16} />
+          Histórico & Auditoria de Disparos
+          <span style={{
+            fontSize: 10,
+            padding: '2px 8px',
+            borderRadius: 12,
+            background: activeMainTab === 'historico' ? '#6366f1' : 'hsl(var(--border-subtle))',
+            color: activeMainTab === 'historico' ? 'white' : 'hsl(var(--text-muted))',
+            fontWeight: 800,
+          }}>
+            Auditoria Completa
+          </span>
+        </button>
+      </div>
+
+      {activeMainTab === 'historico' ? (
+        <PushHistoryTab
+          onSwitchToTesterWithPayload={payload => {
+            if (payload.title) setTitle(payload.title)
+            if (payload.message) setMessage(payload.message)
+            if (payload.category) setActiveCategory(payload.category as PushCategory)
+            if (payload.targetRoute) setTargetRoute(payload.targetRoute)
+            setActiveMainTab('disparador')
+          }}
+        />
+      ) : (
+        <>
+          {/* ── STATUS DESTE APARELHO (DIAGNÓSTICO LOCAL PUSH) ── */}
+          <div style={{
         background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.7) 0%, rgba(30, 41, 59, 0.5) 100%)',
         border: '1px solid rgba(99, 102, 241, 0.25)',
         borderRadius: 18,
@@ -2204,13 +2313,23 @@ export default function ADAdminPushTestPage() {
                 <Clock size={16} color="hsl(var(--text-muted))" />
                 <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Histórico de Disparos</h3>
               </div>
-              <button
-                onClick={loadRecentLogs}
-                className="btn btn-ghost btn-sm"
-                style={{ fontSize: 11, padding: '4px 8px' }}
-              >
-                Atualizar
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  onClick={() => setActiveMainTab('historico')}
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11, padding: '4px 8px', color: '#6366f1', fontWeight: 700 }}
+                  title="Abrir aba de auditoria e histórico completo"
+                >
+                  Ver Histórico Completo →
+                </button>
+                <button
+                  onClick={loadRecentLogs}
+                  className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11, padding: '4px 8px' }}
+                >
+                  Atualizar
+                </button>
+              </div>
             </div>
 
             {isLoadingLogs ? (
@@ -2266,6 +2385,8 @@ export default function ADAdminPushTestPage() {
           </div>
         </div>
       </div>
+    </>
+  )}
 
       {/* ── MODAL DE DETALHES DO LOG ── */}
       {viewLogDetail && (
