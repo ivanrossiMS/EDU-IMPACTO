@@ -111,13 +111,17 @@ workflows:
             LATEST_BUILD=${BUILD_NUMBER:-1}
           fi
           NEW_BUILD=$((LATEST_BUILD + 1))
+          APP_VERSION=$(node -p "require('$CM_BUILD_DIR/package.json').version" 2>/dev/null || echo "1.0.10")
           echo "=========================================="
           echo "Ultimo Build Number no TestFlight: $LATEST_BUILD"
           echo "Novo Build Number a aplicar: $NEW_BUILD"
+          echo "Versao Comercial (Marketing): $APP_VERSION"
           echo "=========================================="
           cd ios/App
           agvtool new-version -all $NEW_BUILD || true
+          agvtool new-marketing-version "$APP_VERSION" || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NEW_BUILD" App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" App/Info.plist || true
       - name: Check provisioning profile
         script: |
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
