@@ -11,7 +11,7 @@ import {
   Building2, User, Users, Calendar, PenTool, Lock,
   Fingerprint, ChevronRight, Settings, Upload, FileText, CheckSquare,
   Loader2, BadgeCheck, Image as ImageIcon, Activity, Send, Ban, Sparkles,
-  MoreHorizontal
+  MoreHorizontal, School, GraduationCap, ChevronDown
 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { SmtpDiagnosticModal } from '@/components/matriculas/SmtpDiagnosticModal'
@@ -100,6 +100,52 @@ const AUTORIZACOES_PADRAO = [
 
 export default function MatriculaDigitalPage() {
   const { alunos = [], turmas = [], cfgCalendarioLetivo = [] } = useData() as any
+
+  // Resolve o nome legível da turma (ex: "4º ANO A - MATUTINO") a partir do ID, código ou objeto do aluno
+  const getNomeTurma = (alunoOuTurma: any): string => {
+    if (!alunoOuTurma) return 'Regular'
+
+    // Se for um objeto aluno
+    if (typeof alunoOuTurma === 'object') {
+      if (alunoOuTurma.turma_nome && isNaN(Number(alunoOuTurma.turma_nome))) {
+        return String(alunoOuTurma.turma_nome).trim()
+      }
+      if (typeof alunoOuTurma.turma === 'string' && alunoOuTurma.turma && isNaN(Number(alunoOuTurma.turma))) {
+        return String(alunoOuTurma.turma).trim()
+      }
+
+      const raw = alunoOuTurma.turma || alunoOuTurma.turma_id || alunoOuTurma.serieTurma || ''
+      const rawStr = String(raw).trim()
+
+      if (Array.isArray(turmas) && rawStr) {
+        const found = turmas.find((t: any) =>
+          String(t.id).trim() === rawStr ||
+          (t.codigo && String(t.codigo).trim() === rawStr) ||
+          (t.nome && String(t.nome).trim().toLowerCase() === rawStr.toLowerCase())
+        )
+        if (found?.nome) return String(found.nome).trim()
+      }
+
+      if (alunoOuTurma.dados?.turmaNome) return String(alunoOuTurma.dados.turmaNome).trim()
+      if (alunoOuTurma.dados?.nomeTurma) return String(alunoOuTurma.dados.nomeTurma).trim()
+      if (alunoOuTurma.serie && isNaN(Number(alunoOuTurma.serie))) return String(alunoOuTurma.serie).trim()
+
+      return rawStr || alunoOuTurma.serie || 'Regular'
+    }
+
+    // Se for ID ou string direta
+    const rawStr = String(alunoOuTurma).trim()
+    if (Array.isArray(turmas) && rawStr) {
+      const found = turmas.find((t: any) =>
+        String(t.id).trim() === rawStr ||
+        (t.codigo && String(t.codigo).trim() === rawStr) ||
+        (t.nome && String(t.nome).trim().toLowerCase() === rawStr.toLowerCase())
+      )
+      if (found?.nome) return String(found.nome).trim()
+    }
+
+    return rawStr || 'Regular'
+  }
 
   // Determina com inteligência o ano letivo inicial da campanha de matrícula:
   // No 2º semestre do ano civil (julho em diante), a campanha de matrículas visa o ano subsequente (ex: 2027 em 2026).
@@ -850,7 +896,13 @@ export default function MatriculaDigitalPage() {
 
   // Seleciona um aluno no modal e extrai seus responsáveis para escolha rápida
   const handleSelecionarAluno = async (aluno: any) => {
-    setAlunoSelecionado(aluno)
+    const nomeTurmaCalculado = getNomeTurma(aluno)
+    const alunoFormatado = {
+      ...aluno,
+      turma_nome: nomeTurmaCalculado,
+      turma: isNaN(Number(aluno.turma)) ? aluno.turma : nomeTurmaCalculado,
+    }
+    setAlunoSelecionado(alunoFormatado)
     setBuscaAlunoInput(aluno.nome)
     setDropdownAlunosAberto(false)
     setCarregandoResponsaveis(true)
@@ -858,7 +910,7 @@ export default function MatriculaDigitalPage() {
     setResponsavelSelecionadoId(null)
 
     // Auto-seleciona o CNPJ/Representante compatível com o segmento do aluno
-    const turmaStr = `${aluno.serie || ''} ${aluno.turma || ''} ${aluno.nivel || ''}`.toUpperCase()
+    const turmaStr = `${aluno.serie || ''} ${nomeTurmaCalculado || aluno.turma || ''} ${aluno.nivel || ''}`.toUpperCase()
     const isMedio = turmaStr.includes('EM') || turmaStr.includes('MÉDIO') || turmaStr.includes('MEDIO')
     const repSugerido = isMedio
       ? configData.representantes.find(r => r.cnpj === '04.397.021/0001-43' || r.segmento?.toLowerCase().includes('médio'))
@@ -1676,6 +1728,38 @@ export default function MatriculaDigitalPage() {
           height: 1px;
           background: hsl(var(--border-subtle));
           margin: 4px 0;
+        }
+
+        /* ── MODAL ULTRA MODERNO DIGITAL ── */
+        .digital-modal-novo-pro {
+          box-shadow: 0 32px 80px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+          animation: modalNovoFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .digital-modal-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(59, 130, 246, 0.4) transparent;
+          -webkit-overflow-scrolling: touch;
+        }
+        .digital-modal-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .digital-modal-scroll::-webkit-scrollbar-track {
+          background: rgba(0, 0, 0, 0.03);
+          border-radius: 999px;
+        }
+        .digital-modal-scroll::-webkit-scrollbar-thumb {
+          background: rgba(59, 130, 246, 0.35);
+          border-radius: 999px;
+        }
+        .digital-modal-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(59, 130, 246, 0.65);
+        }
+        .digital-modal-input {
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }
+        .digital-modal-input:focus {
+          border-color: #3b82f6 !important;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18) !important;
         }
 
         /* ── REGRAS ESPECÍFICAS PARA DISPOSITIVOS MÓVEIS (MOBILE) ── */
@@ -3385,8 +3469,9 @@ export default function MatriculaDigitalPage() {
               position: 'fixed',
               inset: 0,
               zIndex: 100,
-              background: 'rgba(0, 0, 0, 0.75)',
-              backdropFilter: 'blur(8px)',
+              background: 'rgba(7, 11, 22, 0.82)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -3394,89 +3479,168 @@ export default function MatriculaDigitalPage() {
             }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="digital-modal-content"
+              initial={{ opacity: 0, scale: 0.95, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+              className="digital-modal-content digital-modal-novo-pro"
               style={{
                 background: 'hsl(var(--bg-surface))',
-                border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 20,
-                maxWidth: 720,
+                border: '1px solid rgba(59, 130, 246, 0.28)',
+                borderRadius: 24,
+                maxWidth: 820,
                 width: '100%',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+                maxHeight: 'calc(94vh - 20px)',
                 display: 'flex',
                 flexDirection: 'column',
+                overflow: 'hidden',
+                boxShadow: '0 32px 80px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
+                position: 'relative',
               }}
             >
-              {/* Header do Modal */}
+              {/* Barra superior de gradiente ultra moderno */}
               <div
                 style={{
-                  padding: '20px 24px',
+                  height: 3,
+                  width: '100%',
+                  background: 'linear-gradient(90deg, #2563eb 0%, #4f46e5 35%, #06b6d4 70%, #10b981 100%)',
+                  flexShrink: 0,
+                }}
+              />
+
+              {/* Header do Modal (Fixo) */}
+              <div
+                style={{
+                  padding: '16px 24px',
                   borderBottom: '1px solid hsl(var(--border-subtle))',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  gap: 16,
+                  background: 'linear-gradient(180deg, rgba(37, 99, 235, 0.04) 0%, transparent 100%)',
+                  flexShrink: 0,
                 }}
               >
-                <div>
-                  <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))' }}>
-                    Emissão de Documento para Assinatura & Ciência
-                  </h2>
-                  <p style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', margin: '4px 0 0' }}>
-                    Envie um documento para ciência formal do responsável, autorizações e assinatura com código OTP.
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+                  <div
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: 12,
+                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#ffffff',
+                      boxShadow: '0 8px 18px -4px rgba(37, 99, 235, 0.45)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <FileCheck2 size={22} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
+                        Emissão de Documento Digital
+                      </h2>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 800,
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                          padding: '2px 8px',
+                          borderRadius: 999,
+                          background: 'rgba(37, 99, 235, 0.12)',
+                          color: '#3b82f6',
+                          border: '1px solid rgba(59, 130, 246, 0.28)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Lock size={10} /> LEI 14.063 / OTP
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', margin: '3px 0 0', lineHeight: 1.35 }}>
+                      Envie contratos, termos e declarações com assinatura eletrônica e validação jurídica.
+                    </p>
+                  </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     setModalNovoAberto(false)
                     setContratoCriadoSucesso(null)
                     setCopiadoModalLink(false)
                   }}
-                  style={{ background: 'none', border: 'none', color: 'hsl(var(--text-secondary))', cursor: 'pointer', padding: 4 }}
+                  style={{
+                    background: 'hsl(var(--bg-elevated))',
+                    border: '1px solid hsl(var(--border-subtle))',
+                    color: 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    padding: 8,
+                    borderRadius: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'
+                    e.currentTarget.style.color = '#ef4444'
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'hsl(var(--bg-elevated))'
+                    e.currentTarget.style.color = 'hsl(var(--text-secondary))'
+                    e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                  }}
+                  title="Fechar modal"
                 >
-                  <X size={20} />
+                  <X size={18} />
                 </button>
               </div>
 
               {/* Sucesso na Emissão */}
               {contratoCriadoSucesso ? (
-                <div style={{ padding: '32px 24px', textAlign: 'center' }}>
+                <div className="digital-modal-scroll" style={{ padding: '36px 28px', textAlign: 'center', overflowY: 'auto', flex: 1 }}>
                   <div
                     style={{
-                      width: 64,
-                      height: 64,
+                      width: 68,
+                      height: 68,
                       borderRadius: '50%',
-                      background: 'rgba(16, 185, 129, 0.15)',
+                      background: 'radial-gradient(circle, rgba(16, 185, 129, 0.22) 0%, rgba(16, 185, 129, 0.05) 70%)',
+                      border: '2px solid #10b981',
                       color: '#10b981',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       margin: '0 auto 16px',
+                      boxShadow: '0 0 24px rgba(16, 185, 129, 0.35)',
                     }}
                   >
-                    <CheckCircle2 size={36} />
+                    <CheckCircle2 size={38} />
                   </div>
-                  <h3 style={{ fontSize: 20, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 6px' }}>
+                  <h3 style={{ fontSize: 21, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 6px', letterSpacing: '-0.01em' }}>
                     Documento Emitido com Sucesso!
                   </h3>
-                  <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: '0 0 20px' }}>
-                    Protocolo: <strong style={{ color: '#38bdf8', fontFamily: 'monospace' }}>{contratoCriadoSucesso.contrato.protocolo}</strong>
+                  <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: '0 0 24px' }}>
+                    Protocolo de Rastreabilidade: <strong style={{ color: '#38bdf8', fontFamily: 'monospace', fontSize: 13, background: 'rgba(56, 189, 248, 0.12)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(56, 189, 248, 0.25)' }}>{contratoCriadoSucesso.contrato.protocolo}</strong>
                   </p>
 
                   <div
                     style={{
                       background: 'hsl(var(--bg-elevated))',
-                      borderRadius: 12,
-                      padding: 16,
+                      borderRadius: 16,
+                      padding: 18,
                       textAlign: 'left',
-                      marginBottom: 20,
+                      marginBottom: 24,
                       border: '1px solid hsl(var(--border-subtle))',
                     }}
                   >
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', marginBottom: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.04em' }}>
                       Link Oficial de Assinatura & Ciência:
                     </div>
                     {(() => {
@@ -3486,19 +3650,19 @@ export default function MatriculaDigitalPage() {
                           : contratoCriadoSucesso.signUrl
                       return (
                         <div>
-                          <div style={{ display: 'flex', gap: 8 }}>
+                          <div style={{ display: 'flex', gap: 10 }}>
                             <input
                               type="text"
                               readOnly
                               value={effectiveSignUrl}
                               style={{
                                 flex: 1,
-                                height: 40,
+                                height: 44,
                                 background: 'hsl(var(--bg-surface))',
                                 border: copiadoModalLink ? '1.5px solid #10b981' : '1px solid hsl(var(--border-subtle))',
-                                borderRadius: 8,
-                                padding: '0 12px',
-                                fontSize: 12,
+                                borderRadius: 10,
+                                padding: '0 14px',
+                                fontSize: 13,
                                 color: copiadoModalLink ? '#10b981' : '#38bdf8',
                                 transition: 'all 0.2s ease',
                                 outline: 'none',
@@ -3517,17 +3681,17 @@ export default function MatriculaDigitalPage() {
                                 background: copiadoModalLink ? '#10b981' : 'hsl(var(--bg-surface))',
                                 border: copiadoModalLink ? '1px solid #10b981' : '1px solid hsl(var(--border-subtle))',
                                 color: copiadoModalLink ? '#ffffff' : 'hsl(var(--text-primary))',
-                                borderRadius: 8,
-                                padding: '0 16px',
-                                height: 40,
+                                borderRadius: 10,
+                                padding: '0 18px',
+                                height: 44,
                                 cursor: 'pointer',
                                 fontWeight: 700,
-                                fontSize: 12,
+                                fontSize: 13,
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 gap: 6,
-                                minWidth: 100,
+                                minWidth: 110,
                                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                                 transform: copiadoModalLink ? 'scale(1.03)' : 'scale(1)',
                                 boxShadow: copiadoModalLink ? '0 0 14px rgba(16, 185, 129, 0.4)' : 'none',
@@ -3535,12 +3699,12 @@ export default function MatriculaDigitalPage() {
                             >
                               {copiadoModalLink ? (
                                 <>
-                                  <Check size={15} style={{ strokeWidth: 2.5 }} />
+                                  <Check size={16} style={{ strokeWidth: 2.5 }} />
                                   <span>Copiado!</span>
                                 </>
                               ) : (
                                 <>
-                                  <Copy size={14} />
+                                  <Copy size={15} />
                                   <span>Copiar</span>
                                 </>
                               )}
@@ -3574,7 +3738,7 @@ export default function MatriculaDigitalPage() {
                     })()}
                   </div>
 
-                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
                     {(() => {
                       let effectiveWhatsappUrl = contratoCriadoSucesso.whatsappShareUrl || ''
                       if (
@@ -3602,13 +3766,14 @@ export default function MatriculaDigitalPage() {
                             background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                             color: '#fff',
                             textDecoration: 'none',
-                            borderRadius: 10,
-                            padding: '12px 20px',
+                            borderRadius: 12,
+                            padding: '12px 22px',
                             fontWeight: 700,
                             fontSize: 13,
                             display: 'flex',
                             alignItems: 'center',
                             gap: 8,
+                            boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)',
                           }}
                         >
                           <MessageSquare size={16} /> Enviar no WhatsApp Agora
@@ -3616,6 +3781,7 @@ export default function MatriculaDigitalPage() {
                       )
                     })()}
                     <button
+                      type="button"
                       onClick={() => {
                         setModalNovoAberto(false)
                         setContratoCriadoSucesso(null)
@@ -3625,11 +3791,12 @@ export default function MatriculaDigitalPage() {
                         background: 'hsl(var(--bg-elevated))',
                         border: '1px solid hsl(var(--border-subtle))',
                         color: 'hsl(var(--text-primary))',
-                        borderRadius: 10,
-                        padding: '12px 20px',
+                        borderRadius: 12,
+                        padding: '12px 22px',
                         fontWeight: 600,
                         fontSize: 13,
                         cursor: 'pointer',
+                        transition: 'all 0.15s ease',
                       }}
                     >
                       Fechar
@@ -3637,9 +3804,31 @@ export default function MatriculaDigitalPage() {
                   </div>
                 </div>
               ) : (
-                /* Formulário de Envio de Documento Pronto */
-                <form onSubmit={handleCriarContrato} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-                  {/* Upload de Arquivo PDF ou Word (.docx/.doc) com Conversão Automática */}
+                /* Formulário de Envio com Estrutura Fixo + Rolável */
+                <form
+                  onSubmit={handleCriarContrato}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flex: 1,
+                    minHeight: 0,
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Conteúdo Rolável do Formulário */}
+                  <div
+                    className="digital-modal-scroll"
+                    style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      padding: '20px 24px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 16,
+                      minHeight: 0,
+                    }}
+                  >
+                  {/* ── 1. Upload de Arquivo PDF ou Word (Compacto, Ultra Moderno, Sem Legenda Longa) ── */}
                   <div
                     onDragOver={(e) => {
                       e.preventDefault()
@@ -3659,78 +3848,100 @@ export default function MatriculaDigitalPage() {
                       background: arrastandoArquivo
                         ? 'rgba(37, 99, 235, 0.1)'
                         : pdfUploadBase64
-                        ? 'rgba(16, 185, 129, 0.04)'
-                        : 'hsl(var(--bg-elevated))',
+                        ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(37, 99, 235, 0.04) 100%)'
+                        : 'linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(99, 102, 241, 0.04) 100%)',
                       border: arrastandoArquivo
-                        ? '2px dashed #3b82f6'
+                        ? '2px dashed #2563eb'
                         : pdfUploadBase64
-                        ? '2px solid #10b981'
+                        ? '1.5px solid rgba(16, 185, 129, 0.4)'
                         : convertendoDocumento
                         ? '2px dashed #60a5fa'
-                        : '2px dashed hsl(var(--border-subtle))',
+                        : '1.5px dashed rgba(59, 130, 246, 0.35)',
                       borderRadius: 14,
-                      padding: '24px',
-                      textAlign: 'center',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 14,
                       transition: 'all 0.2s ease',
                       position: 'relative',
+                      boxShadow: arrastandoArquivo ? '0 0 20px rgba(37, 99, 235, 0.2)' : 'none',
+                      flexShrink: 0,
                     }}
                   >
                     {pdfUploadBase64 ? (
-                      <div>
-                        <div
-                          style={{
-                            width: 52,
-                            height: 52,
-                            borderRadius: '50%',
-                            background:
-                              formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
-                                ? 'rgba(37, 99, 235, 0.15)'
-                                : 'rgba(16, 185, 129, 0.15)',
-                            color:
-                              formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
-                                ? '#3b82f6'
-                                : '#10b981',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            margin: '0 auto 10px',
-                          }}
-                        >
-                          <FileText size={28} />
-                        </div>
-                        <div style={{ fontWeight: 800, fontSize: 15, color: 'hsl(var(--text-primary))' }}>
-                          {pdfUploadNome}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                          <div
+                            style={{
+                              width: 42,
+                              height: 42,
+                              borderRadius: 12,
+                              background: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
+                                ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%)'
+                                : 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.1) 100%)',
+                              color: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc' ? '#2563eb' : '#10b981',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              border: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
+                                ? '1px solid rgba(37, 99, 235, 0.3)'
+                                : '1px solid rgba(16, 185, 129, 0.3)',
+                            }}
+                          >
+                            <FileText size={22} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 800, fontSize: 13.5, color: 'hsl(var(--text-primary))', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {pdfUploadNome}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: 999,
+                                  background: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
+                                    ? 'rgba(37, 99, 235, 0.15)'
+                                    : 'rgba(16, 185, 129, 0.15)',
+                                  color: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc' ? '#2563eb' : '#059669',
+                                  border: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
+                                    ? '1px solid rgba(37, 99, 235, 0.3)'
+                                    : '1px solid rgba(16, 185, 129, 0.3)',
+                                }}
+                              >
+                                {formatoOriginalUpload ? formatoOriginalUpload.toUpperCase() : 'PDF'} • {pdfUploadTamanho}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#10b981', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                              <CheckCircle2 size={12} /> Documento original pronto para assinatura com Hash SHA-256
+                            </div>
+                          </div>
                         </div>
 
-                        {formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc' ? (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(37, 99, 235, 0.15)', color: '#60a5fa', padding: '3px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, margin: '6px 0 12px' }}>
-                            <Sparkles size={13} /> Documento Word (.{(formatoOriginalUpload || 'docx').toUpperCase()}) Original • Formatação 100% Intacta • {pdfUploadTamanho}
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 12, color: '#34d399', margin: '4px 0 12px' }}>
-                            Arquivo PDF original pronto ({pdfUploadTamanho}) • Hash SHA-256 será calculado no envio
-                          </div>
-                        )}
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                           <button
                             type="button"
                             onClick={() => setModalPreviaPdfAberto(true)}
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 6,
+                              gap: 5,
                               background: 'rgba(56, 189, 248, 0.12)',
                               border: '1px solid rgba(56, 189, 248, 0.3)',
-                              color: '#38bdf8',
-                              padding: '7px 14px',
+                              color: '#0284c7',
+                              padding: '6px 12px',
                               borderRadius: 8,
-                              fontSize: 12,
-                              fontWeight: 600,
+                              fontSize: 11.5,
+                              fontWeight: 700,
                               cursor: 'pointer',
+                              transition: 'all 0.15s ease',
                             }}
+                            title="Visualizar documento em PDF"
                           >
-                            <Eye size={14} /> Pré-visualizar Documento (PDF)
+                            <Eye size={13} /> Prévia
                           </button>
 
                           <a
@@ -3739,37 +3950,41 @@ export default function MatriculaDigitalPage() {
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 6,
-                              background: 'rgba(37, 99, 235, 0.12)',
-                              border: '1px solid rgba(37, 99, 235, 0.3)',
-                              color: '#60a5fa',
-                              padding: '7px 14px',
+                              gap: 5,
+                              background: 'rgba(37, 99, 235, 0.1)',
+                              border: '1px solid rgba(37, 99, 235, 0.25)',
+                              color: '#2563eb',
+                              padding: '6px 12px',
                               borderRadius: 8,
-                              fontSize: 12,
-                              fontWeight: 600,
+                              fontSize: 11.5,
+                              fontWeight: 700,
                               textDecoration: 'none',
                               cursor: 'pointer',
+                              transition: 'all 0.15s ease',
                             }}
+                            title="Baixar arquivo original"
                           >
-                            <Download size={14} /> Baixar PDF
+                            <Download size={13} /> Baixar
                           </a>
 
                           <label
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 6,
+                              gap: 5,
                               background: 'hsl(var(--bg-surface))',
                               border: '1px solid hsl(var(--border-subtle))',
                               color: 'hsl(var(--text-primary))',
-                              padding: '7px 14px',
+                              padding: '6px 12px',
                               borderRadius: 8,
-                              fontSize: 12,
-                              fontWeight: 600,
+                              fontSize: 11.5,
+                              fontWeight: 700,
                               cursor: 'pointer',
+                              transition: 'all 0.15s ease',
                             }}
+                            title="Substituir arquivo por outro"
                           >
-                            Trocar Arquivo
+                            <RefreshCw size={12} /> Trocar
                             <input
                               type="file"
                               accept=".pdf,.docx,.doc,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -3785,128 +4000,320 @@ export default function MatriculaDigitalPage() {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 4,
-                              background: 'rgba(239, 68, 68, 0.1)',
+                              background: 'rgba(239, 68, 68, 0.08)',
                               border: '1px solid rgba(239, 68, 68, 0.25)',
-                              color: '#f87171',
-                              padding: '7px 12px',
+                              color: '#ef4444',
+                              padding: '6px 10px',
                               borderRadius: 8,
-                              fontSize: 12,
-                              fontWeight: 600,
+                              fontSize: 11.5,
+                              fontWeight: 700,
                               cursor: 'pointer',
+                              transition: 'all 0.15s ease',
                             }}
+                            title="Remover arquivo selecionado"
                           >
-                            <Trash2 size={13} /> Remover
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <div>
-                        <Upload size={36} color="#60a5fa" style={{ margin: '0 auto 10px', display: 'block' }} />
-                        <div style={{ fontWeight: 800, fontSize: 15, color: 'hsl(var(--text-primary))' }}>
-                          Selecione o Documento (PDF, Word DOCX ou DOC)
-                        </div>
-                        <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', margin: '6px auto 14px', maxWidth: 460, lineHeight: 1.5 }}>
-                          Faça upload do contrato, termo de ciência, autorização ou requerimento. Arquivos Word (.doc e .docx) e PDF são <strong>mantidos 100% originais sem nenhuma alteração de formatação</strong>.
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 14 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: 'rgba(37, 99, 235, 0.12)', color: '#60a5fa', border: '1px solid rgba(37, 99, 235, 0.25)' }}>
-                            PDF
-                          </span>
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: 'rgba(16, 185, 129, 0.12)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
-                            DOCX (Word)
-                          </span>
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: 'rgba(168, 85, 247, 0.12)', color: '#c084fc', border: '1px solid rgba(168, 85, 247, 0.25)' }}>
-                            DOC (Word 97-2003)
-                          </span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                          <div
+                            style={{
+                              width: 42,
+                              height: 42,
+                              borderRadius: 12,
+                              background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(99, 102, 241, 0.12) 100%)',
+                              color: '#2563eb',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              border: '1px solid rgba(59, 130, 246, 0.25)',
+                            }}
+                          >
+                            {convertendoDocumento ? (
+                              <Loader2 size={20} className="animate-spin" color="#2563eb" />
+                            ) : (
+                              <Upload size={20} />
+                            )}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 800, fontSize: 13.5, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
+                                {convertendoDocumento ? 'Processando e convertendo documento...' : 'Selecionar Documento (PDF ou Word DOCX)'}
+                              </span>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)' }}>
+                                Opcional
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
+                              {convertendoDocumento ? 'Aguarde um instante...' : 'Arraste o arquivo aqui ou clique no botão ao lado'}
+                            </div>
+                          </div>
                         </div>
 
                         <label
                           style={{
-                            display: 'inline-block',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 7,
                             background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                            color: '#fff',
-                            padding: '10px 22px',
+                            color: '#ffffff',
+                            padding: '8px 18px',
                             borderRadius: 10,
-                            fontSize: 13,
+                            fontSize: 12.5,
                             fontWeight: 700,
-                            cursor: 'pointer',
-                            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+                            cursor: convertendoDocumento ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            transition: 'all 0.18s ease',
                           }}
+                          onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.08)')}
+                          onMouseLeave={e => (e.currentTarget.style.filter = 'none')}
                         >
-                          Escolher Arquivo (PDF, DOCX ou DOC)
+                          <Upload size={14} />
+                          <span>{convertendoDocumento ? 'Convertendo...' : 'Escolher Arquivo'}</span>
                           <input
                             type="file"
+                            disabled={convertendoDocumento}
                             accept=".pdf,.docx,.doc,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                             style={{ display: 'none' }}
                             onChange={handleFileUpload}
                           />
                         </label>
-                        <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 8 }}>
-                          ou arraste e solte o arquivo aqui
-                        </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Seleção do Representante Legal / CNPJ Emissor */}
-                  <div style={{ background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 12, padding: '14px 16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase' }}>
-                        <Building2 size={14} /> Representante Legal / CNPJ Emissor do Documento *
-                      </label>
-                      <span style={{ fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
-                        Signatário Institucional
-                      </span>
-                    </div>
-                    <select
-                      required
-                      value={formNovo.escola_representante_id}
-                      onChange={e => setFormNovo({ ...formNovo, escola_representante_id: e.target.value })}
-                      style={{
-                        width: '100%',
-                        height: 40,
-                        background: 'hsl(var(--bg-surface))',
-                        border: '1px solid hsl(var(--border-subtle))',
-                        borderRadius: 8,
-                        padding: '0 12px',
-                        color: 'hsl(var(--text-primary))',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        outline: 'none',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {configData.representantes.map(r => (
-                        <option key={r.id} value={r.id}>
-                          {r.razaoSocial} • CNPJ: {r.cnpj} ({r.nome} - {r.cargo})
-                        </option>
-                      ))}
-                    </select>
-                    {(() => {
-                      const repAtivo = configData.representantes.find(r => r.id === formNovo.escola_representante_id) || configData.representantes[0]
-                      if (!repAtivo) return null
-                      return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8, fontSize: 11, color: 'hsl(var(--text-secondary))', flexWrap: 'wrap' }}>
-                          <span><strong>CNPJ:</strong> {repAtivo.cnpj}</span>
-                          <span>•</span>
-                          <span><strong>Signatário:</strong> {repAtivo.nome} ({repAtivo.cargo})</span>
-                          {repAtivo.segmento && (
-                            <>
-                              <span>•</span>
-                              <span style={{ color: '#38bdf8' }}>{repAtivo.segmento}</span>
-                            </>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  </div>
+                  {/* ── 2. CARD DE REPRESENTANTE LEGAL / CNPJ EMISSOR (DESTAQUE VISUAL ULTRA MODERNO) ── */}
+                  {(() => {
+                    const listaRepresentantes =
+                      Array.isArray(configData.representantes) && configData.representantes.length > 0
+                        ? configData.representantes
+                        : DEFAULT_REPRESENTANTES_INICIAIS
 
-                  {/* Título do Documento e Seleção de Ano Letivo */}
-                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-                    <div style={{ flex: '1 1 360px' }}>
-                      <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
-                        TÍTULO DO DOCUMENTO *
+                    const repAtivo =
+                      listaRepresentantes.find(r => r.id === formNovo.escola_representante_id) ||
+                      listaRepresentantes[0] ||
+                      {
+                        id: 'rep_infantil_fundamental',
+                        razaoSocial: 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA',
+                        cnpj: '04.395.789/0001-88',
+                        nome: 'IVAN ROSSI SAMBRANA',
+                        cargo: 'Representante Legal / Diretor Geral',
+                        segmento: 'Educação Infantil e Ensino Fundamental',
+                      }
+
+                    const segmentoBadgeTexto = repAtivo.segmento || 'Educação Infantil e Ensino Fundamental'
+                    const isInfantil =
+                      segmentoBadgeTexto.toLowerCase().includes('infantil') ||
+                      segmentoBadgeTexto.toLowerCase().includes('fundamental')
+
+                    return (
+                      <div
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.07) 0%, rgba(99, 102, 241, 0.05) 50%, rgba(6, 182, 212, 0.05) 100%)',
+                          border: '1.5px solid rgba(59, 130, 246, 0.35)',
+                          borderRadius: 16,
+                          padding: '16px 18px',
+                          position: 'relative',
+                          boxShadow: '0 8px 24px -6px rgba(37, 99, 235, 0.15)',
+                          flexShrink: 0,
+                          minHeight: 'fit-content',
+                          width: '100%',
+                        }}
+                      >
+                        {/* Topo do Card: Título e Badge Proeminente */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 10,
+                                background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#ffffff',
+                                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <Building2 size={18} />
+                            </div>
+                            <div>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                Representante Legal / CNPJ Emissor do Documento *
+                              </label>
+                              <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 1 }}>
+                                Signatário Institucional Oficial da Instituição
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* BADGE PROEMINENTE EM DESTAQUE */}
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
+                              color: '#ffffff',
+                              padding: '5px 14px',
+                              borderRadius: 999,
+                              fontSize: 11.5,
+                              fontWeight: 800,
+                              letterSpacing: '0.02em',
+                              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.35)',
+                              border: '1px solid rgba(255, 255, 255, 0.3)',
+                            }}
+                          >
+                            {isInfantil ? <School size={14} /> : <GraduationCap size={14} />}
+                            <span>{segmentoBadgeTexto}</span>
+                          </div>
+                        </div>
+
+                        {/* Seletor Visual Rápido em Botões / Tabs de Segmento */}
+                        {listaRepresentantes.length > 1 && (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginBottom: 12 }}>
+                            {listaRepresentantes.map(r => {
+                              const isSelected = formNovo.escola_representante_id === r.id || (!formNovo.escola_representante_id && r.id === repAtivo.id)
+                              const isInfantilTab = (r.segmento || '').toLowerCase().includes('infantil') || (r.segmento || '').toLowerCase().includes('fundamental')
+                              return (
+                                <button
+                                  key={r.id}
+                                  type="button"
+                                  onClick={() => setFormNovo(prev => ({ ...prev, escola_representante_id: r.id }))}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 8,
+                                    padding: '9px 14px',
+                                    borderRadius: 10,
+                                    background: isSelected
+                                      ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
+                                      : 'hsl(var(--bg-surface))',
+                                    border: isSelected
+                                      ? '1.5px solid #2563eb'
+                                      : '1px solid hsl(var(--border-subtle))',
+                                    color: isSelected ? '#ffffff' : 'hsl(var(--text-secondary))',
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? 800 : 600,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.18s ease',
+                                    boxShadow: isSelected ? '0 4px 14px rgba(37, 99, 235, 0.35)' : 'none',
+                                    textAlign: 'left',
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                    {isInfantilTab ? <School size={14} style={{ flexShrink: 0 }} /> : <GraduationCap size={14} style={{ flexShrink: 0 }} />}
+                                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                      {r.segmento || r.razaoSocial}
+                                    </span>
+                                  </div>
+                                  {isSelected && <Check size={14} style={{ strokeWidth: 2.5, flexShrink: 0 }} />}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+
+                        {/* Caixa de Detalhes do Representante Selecionado */}
+                        <div
+                          style={{
+                            background: 'hsl(var(--bg-surface))',
+                            border: '1px solid rgba(59, 130, 246, 0.25)',
+                            borderRadius: 12,
+                            padding: '12px 16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: 13, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span>{repAtivo.razaoSocial}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.15)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                                SIGNATÁRIO OFICIAL
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontSize: 11, fontFamily: 'monospace', fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: 'rgba(37, 99, 235, 0.12)', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.25)' }}>
+                                CNPJ: {repAtivo.cnpj}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'hsl(var(--text-secondary))', flexWrap: 'wrap' }}>
+                            <span>
+                              Signatário Legal: <strong style={{ color: 'hsl(var(--text-primary))' }}>{repAtivo.nome}</strong> ({repAtivo.cargo})
+                            </span>
+                            {repAtivo.telefone && (
+                              <>
+                                <span>•</span>
+                                <span>📱 {repAtivo.telefone}</span>
+                              </>
+                            )}
+                            {repAtivo.email && (
+                              <>
+                                <span>•</span>
+                                <span>✉️ {repAtivo.email}</span>
+                              </>
+                            )}
+                            {repAtivo.cidadeUf && (
+                              <>
+                                <span>•</span>
+                                <span>📍 {repAtivo.cidadeUf}</span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Seletor Dropdown para Fácil Alternância de Múltiplos CNPJs */}
+                          <div style={{ marginTop: 2, paddingTop: 8, borderTop: '1px solid hsl(var(--border-subtle))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>
+                              Alterar signatário institucional:
+                            </span>
+                            <select
+                              required
+                              value={formNovo.escola_representante_id || repAtivo.id}
+                              onChange={e => setFormNovo(prev => ({ ...prev, escola_representante_id: e.target.value }))}
+                              className="digital-modal-input"
+                              style={{
+                                height: 32,
+                                background: 'hsl(var(--bg-elevated))',
+                                border: '1px solid hsl(var(--border-subtle))',
+                                borderRadius: 8,
+                                padding: '0 10px',
+                                color: 'hsl(var(--text-primary))',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {listaRepresentantes.map(r => (
+                                <option key={r.id} value={r.id}>
+                                  {r.segmento ? `[${r.segmento}] ` : ''}{r.razaoSocial} • CNPJ: {r.cnpj} ({r.nome})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* ── 3. Título do Documento e Seleção de Ano Letivo ── */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14, flexShrink: 0 }}>
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        <FileText size={13} color="#2563eb" /> Título do Documento *
                       </label>
                       <input
                         type="text"
@@ -3914,25 +4321,37 @@ export default function MatriculaDigitalPage() {
                         value={formNovo.titulo_documento}
                         onChange={e => setFormNovo({ ...formNovo, titulo_documento: e.target.value })}
                         placeholder={`Ex: Termo de Adesão e Ciência Escolar ${formNovo.ano_letivo || ultimoAnoCadastrado}`}
-                        style={{ width: '100%', height: 40, background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                        className="digital-modal-input"
+                        style={{
+                          width: '100%',
+                          height: 42,
+                          background: 'hsl(var(--bg-surface))',
+                          border: '1px solid hsl(var(--border-subtle))',
+                          borderRadius: 10,
+                          padding: '0 14px',
+                          color: 'hsl(var(--text-primary))',
+                          fontSize: 13,
+                          outline: 'none',
+                        }}
                       />
                     </div>
 
-                    <div style={{ flex: '0 0 200px', minWidth: 160 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: '#60a5fa', marginBottom: 4 }}>
-                        <Calendar size={13} /> ANO LETIVO *
+                    <div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#2563eb', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        <Calendar size={13} /> Ano Letivo *
                       </label>
                       <select
                         required
                         value={formNovo.ano_letivo}
                         onChange={e => setFormNovo({ ...formNovo, ano_letivo: e.target.value })}
+                        className="digital-modal-input"
                         style={{
                           width: '100%',
-                          height: 40,
-                          background: 'hsl(var(--bg-elevated))',
+                          height: 42,
+                          background: 'hsl(var(--bg-surface))',
                           border: '1px solid hsl(var(--border-subtle))',
-                          borderRadius: 8,
-                          padding: '0 12px',
+                          borderRadius: 10,
+                          padding: '0 14px',
                           color: 'hsl(var(--text-primary))',
                           fontSize: 13,
                           fontWeight: 600,
@@ -3949,20 +4368,21 @@ export default function MatriculaDigitalPage() {
                     </div>
                   </div>
 
-                  {/* Busca Inteligente de Aluno & Seleção de Responsável */}
+                  {/* ── 4. Busca Inteligente de Aluno & Seleção de Responsável ── */}
                   <div
                     ref={searchContainerRef}
                     style={{
-                      background: 'hsl(var(--bg-elevated))',
-                      borderRadius: 12,
+                      background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(37, 99, 235, 0.03) 100%)',
+                      borderRadius: 16,
                       padding: 16,
-                      border: '1px solid hsl(var(--border-subtle))',
+                      border: '1px solid rgba(99, 102, 241, 0.25)',
                       position: 'relative',
+                      flexShrink: 0,
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <label style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Users size={14} /> Atalho: Buscar Aluno para Puxar Responsáveis (Opcional)
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <label style={{ fontSize: 11, fontWeight: 800, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Users size={14} /> Atalho Inteligente: Buscar Aluno para Puxar Responsáveis (Opcional)
                       </label>
                       {alunoSelecionado && (
                         <button
@@ -3972,14 +4392,15 @@ export default function MatriculaDigitalPage() {
                             background: 'rgba(239, 68, 68, 0.1)',
                             border: '1px solid rgba(239, 68, 68, 0.25)',
                             color: '#ef4444',
-                            borderRadius: 6,
-                            padding: '4px 8px',
+                            borderRadius: 8,
+                            padding: '4px 10px',
                             fontSize: 11,
                             cursor: 'pointer',
                             fontWeight: 600,
                             display: 'flex',
                             alignItems: 'center',
                             gap: 4,
+                            transition: 'all 0.15s ease',
                           }}
                         >
                           <X size={12} /> Desvincular Aluno
@@ -3994,14 +4415,14 @@ export default function MatriculaDigitalPage() {
                             display: 'flex',
                             alignItems: 'center',
                             background: 'hsl(var(--bg-surface))',
-                            border: dropdownAlunosAberto ? '1px solid #3b82f6' : '1px solid hsl(var(--border-subtle))',
-                            borderRadius: 8,
-                            padding: '0 12px',
+                            border: dropdownAlunosAberto ? '1.5px solid #3b82f6' : '1px solid hsl(var(--border-subtle))',
+                            borderRadius: 10,
+                            padding: '0 14px',
                             transition: 'all 0.2s ease',
                             boxShadow: dropdownAlunosAberto ? '0 0 0 3px rgba(59, 130, 246, 0.15)' : 'none',
                           }}
                         >
-                          <Search size={16} color="hsl(var(--text-secondary))" style={{ marginRight: 8, flexShrink: 0 }} />
+                          <Search size={16} color="hsl(var(--text-secondary))" style={{ marginRight: 10, flexShrink: 0 }} />
                           <input
                             type="text"
                             value={buscaAlunoInput}
@@ -4012,7 +4433,7 @@ export default function MatriculaDigitalPage() {
                             placeholder="Digite o nome, CPF ou matrícula do estudante..."
                             style={{
                               width: '100%',
-                              height: 40,
+                              height: 42,
                               background: 'transparent',
                               border: 'none',
                               color: 'hsl(var(--text-primary))',
@@ -4051,6 +4472,7 @@ export default function MatriculaDigitalPage() {
                         {/* Dropdown de sugestões em tempo real */}
                         {dropdownAlunosAberto && (
                           <div
+                            className="digital-modal-scroll"
                             style={{
                               position: 'absolute',
                               top: '100%',
@@ -4059,16 +4481,16 @@ export default function MatriculaDigitalPage() {
                               zIndex: 50,
                               background: 'hsl(var(--bg-elevated))',
                               border: '1px solid hsl(var(--border-subtle))',
-                              borderRadius: 10,
+                              borderRadius: 12,
                               marginTop: 6,
-                              maxHeight: 260,
+                              maxHeight: 280,
                               overflowY: 'auto',
-                              boxShadow: '0 14px 35px rgba(0,0,0,0.45)',
+                              boxShadow: '0 16px 40px rgba(0,0,0,0.3)',
                             }}
                           >
                             {alunosSugeridos.length > 0 ? (
                               <div>
-                                <div style={{ padding: '8px 14px', fontSize: 10, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'rgba(0,0,0,0.1)' }}>
+                                <div style={{ padding: '8px 16px', fontSize: 10, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid hsl(var(--border-subtle))', background: 'rgba(0,0,0,0.05)' }}>
                                   Estudantes Encontrados ({alunosSugeridos.length})
                                 </div>
                                 {alunosSugeridos.map(a => {
@@ -4084,7 +4506,7 @@ export default function MatriculaDigitalPage() {
                                       key={a.id}
                                       onClick={() => handleSelecionarAluno(a)}
                                       style={{
-                                        padding: '10px 14px',
+                                        padding: '12px 16px',
                                         borderBottom: '1px solid hsl(var(--border-subtle))',
                                         cursor: 'pointer',
                                         display: 'flex',
@@ -4093,21 +4515,21 @@ export default function MatriculaDigitalPage() {
                                         gap: 12,
                                         transition: 'background 0.15s ease',
                                       }}
-                                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)')}
+                                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.12)')}
                                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                     >
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                                         <div
                                           style={{
-                                            width: 32,
-                                            height: 32,
+                                            width: 36,
+                                            height: 36,
                                             borderRadius: '50%',
                                             background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                                             color: '#fff',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            fontSize: 12,
+                                            fontSize: 13,
                                             fontWeight: 700,
                                             flexShrink: 0,
                                           }}
@@ -4119,7 +4541,7 @@ export default function MatriculaDigitalPage() {
                                             {a.nome}
                                           </div>
                                           <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                                            <span>{a.turma || a.serie || 'Regular'}</span>
+                                            <span>{getNomeTurma(a)}</span>
                                             {a.matricula && <span>• Matrícula: {a.matricula}</span>}
                                           </div>
                                         </div>
@@ -4129,15 +4551,16 @@ export default function MatriculaDigitalPage() {
                                         <div
                                           style={{
                                             fontSize: 11,
-                                            color: '#60a5fa',
-                                            background: 'rgba(59, 130, 246, 0.1)',
-                                            padding: '4px 8px',
+                                            color: '#2563eb',
+                                            background: 'rgba(37, 99, 235, 0.1)',
+                                            padding: '4px 10px',
                                             borderRadius: 6,
-                                            border: '1px solid rgba(59, 130, 246, 0.2)',
+                                            border: '1px solid rgba(37, 99, 235, 0.2)',
                                             whiteSpace: 'nowrap',
                                             maxWidth: 180,
                                             overflow: 'hidden',
                                             textOverflow: 'ellipsis',
+                                            fontWeight: 600,
                                           }}
                                         >
                                           👤 {respPreview}
@@ -4148,7 +4571,7 @@ export default function MatriculaDigitalPage() {
                                 })}
                               </div>
                             ) : (
-                              <div style={{ padding: 20, textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12 }}>
+                              <div style={{ padding: 24, textAlign: 'center', color: 'hsl(var(--text-secondary))', fontSize: 12 }}>
                                 {buscandoAlunos ? (
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                                     <Loader2 size={16} className="animate-spin" color="#3b82f6" />
@@ -4173,28 +4596,29 @@ export default function MatriculaDigitalPage() {
                       /* Card do Aluno Selecionado */
                       <div
                         style={{
-                          background: 'rgba(59, 130, 246, 0.08)',
-                          border: '1px solid rgba(59, 130, 246, 0.3)',
-                          borderRadius: 10,
+                          background: 'hsl(var(--bg-surface))',
+                          border: '1.5px solid rgba(59, 130, 246, 0.35)',
+                          borderRadius: 12,
                           padding: '12px 16px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           gap: 12,
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                           <div
                             style={{
-                              width: 38,
-                              height: 38,
+                              width: 40,
+                              height: 40,
                               borderRadius: '50%',
                               background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                               color: '#fff',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              fontSize: 13,
+                              fontSize: 14,
                               fontWeight: 700,
                               flexShrink: 0,
                             }}
@@ -4211,7 +4635,7 @@ export default function MatriculaDigitalPage() {
                               {alunoSelecionado.nome}
                             </div>
                             <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
-                              Turma: <strong style={{ color: '#93c5fd' }}>{alunoSelecionado.turma || alunoSelecionado.serie || 'Regular'}</strong>
+                              Turma: <strong style={{ color: '#2563eb' }}>{getNomeTurma(alunoSelecionado)}</strong>
                               {alunoSelecionado.matricula && ` • Matrícula: ${alunoSelecionado.matricula}`}
                             </div>
                           </div>
@@ -4221,11 +4645,11 @@ export default function MatriculaDigitalPage() {
                           type="button"
                           onClick={handleLimparAluno}
                           style={{
-                            background: 'hsl(var(--bg-surface))',
+                            background: 'hsl(var(--bg-elevated))',
                             border: '1px solid hsl(var(--border-subtle))',
                             color: 'hsl(var(--text-secondary))',
                             borderRadius: 8,
-                            padding: '6px 12px',
+                            padding: '7px 14px',
                             fontSize: 12,
                             fontWeight: 600,
                             cursor: 'pointer',
@@ -4243,17 +4667,33 @@ export default function MatriculaDigitalPage() {
                             e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
                           }}
                         >
-                          <RefreshCw size={12} /> Trocar Aluno
+                          <RefreshCw size={13} /> Trocar Aluno
                         </button>
                       </div>
                     )}
 
                     {/* Seleção do Signatário / Responsável */}
                     {alunoSelecionado && (
-                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid hsl(var(--border-subtle))' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(99, 102, 241, 0.15)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <BadgeCheck size={16} color="#10b981" /> Escolha o Responsável que Assinará o Documento:
+                            <BadgeCheck size={16} color="#10b981" />
+                            <span>Escolha o Responsável que Assinará o Documento:</span>
+                            {responsaveisDisponiveis.length > 0 && (
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  fontWeight: 800,
+                                  color: '#059669',
+                                  background: 'rgba(16, 185, 129, 0.12)',
+                                  padding: '1px 8px',
+                                  borderRadius: 999,
+                                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                                }}
+                              >
+                                {responsaveisDisponiveis.length} {responsaveisDisponiveis.length === 1 ? 'opção' : 'opções'}
+                              </span>
+                            )}
                           </div>
                           {carregandoResponsaveis && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#3b82f6' }}>
@@ -4264,88 +4704,230 @@ export default function MatriculaDigitalPage() {
                         </div>
 
                         {responsaveisDisponiveis.length > 0 ? (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             {responsaveisDisponiveis.map((r, idx) => {
                               const isSelected = responsavelSelecionadoId === (r.id || r.nome) || formNovo.signatario_nome === r.nome
 
-                              let badgeBg = 'rgba(59, 130, 246, 0.15)'
-                              let badgeColor = '#60a5fa'
-                              let badgeBorder = 'rgba(59, 130, 246, 0.3)'
+                              const tipoLower = (r.tipo || '').toLowerCase()
+                              let badgeBg = 'rgba(59, 130, 246, 0.12)'
+                              let badgeColor = '#2563eb'
+                              let badgeBorder = 'rgba(59, 130, 246, 0.28)'
+                              let avatarGradient = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)'
+                              let tagText = r.tipo || 'RESPONSÁVEL'
 
-                              const tipoLower = r.tipo.toLowerCase()
                               if (tipoLower.includes('mãe') || tipoLower.includes('mae')) {
-                                badgeBg = 'rgba(168, 85, 247, 0.15)'
-                                badgeColor = '#c084fc'
-                                badgeBorder = 'rgba(168, 85, 247, 0.3)'
+                                badgeBg = 'rgba(168, 85, 247, 0.12)'
+                                badgeColor = '#9333ea'
+                                badgeBorder = 'rgba(168, 85, 247, 0.28)'
+                                avatarGradient = 'linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)'
+                                tagText = 'MÃE'
+                              } else if (tipoLower.includes('pai')) {
+                                badgeBg = 'rgba(37, 99, 235, 0.12)'
+                                badgeColor = '#2563eb'
+                                badgeBorder = 'rgba(59, 130, 246, 0.28)'
+                                avatarGradient = 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
+                                tagText = 'PAI'
                               } else if (tipoLower.includes('financeiro')) {
-                                badgeBg = 'rgba(16, 185, 129, 0.15)'
-                                badgeColor = '#34d399'
-                                badgeBorder = 'rgba(16, 185, 129, 0.3)'
+                                badgeBg = 'rgba(16, 185, 129, 0.12)'
+                                badgeColor = '#059669'
+                                badgeBorder = 'rgba(16, 185, 129, 0.28)'
+                                avatarGradient = 'linear-gradient(135deg, #10b981 0%, #047857 100%)'
+                                tagText = 'FINANCEIRO'
                               } else if (tipoLower.includes('pedagógico') || tipoLower.includes('pedagogico')) {
-                                badgeBg = 'rgba(245, 158, 11, 0.15)'
-                                badgeColor = '#fbbf24'
-                                badgeBorder = 'rgba(245, 158, 11, 0.3)'
+                                badgeBg = 'rgba(245, 158, 11, 0.12)'
+                                badgeColor = '#d97706'
+                                badgeBorder = 'rgba(245, 158, 11, 0.28)'
+                                avatarGradient = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                                tagText = 'PEDAGÓGICO'
                               }
+
+                              const iniciais = (r.nome || 'R')
+                                .split(' ')
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .map((p: string) => p[0].toUpperCase())
+                                .join('')
 
                               return (
                                 <div
                                   key={idx}
                                   onClick={() => selecionarResponsavel(r, alunoSelecionado)}
                                   style={{
-                                    background: isSelected ? 'rgba(16, 185, 129, 0.12)' : 'hsl(var(--bg-surface))',
-                                    border: isSelected ? '2px solid #10b981' : '1px solid hsl(var(--border-subtle))',
-                                    borderRadius: 10,
-                                    padding: '12px 14px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 12,
+                                    padding: '9px 14px',
+                                    borderRadius: 12,
                                     cursor: 'pointer',
-                                    transition: 'all 0.15s ease',
-                                    position: 'relative',
-                                    boxShadow: isSelected ? '0 0 14px rgba(16, 185, 129, 0.2)' : 'none',
+                                    transition: 'all 0.18s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    background: isSelected
+                                      ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.09) 0%, rgba(37, 99, 235, 0.04) 100%)'
+                                      : 'hsl(var(--bg-surface))',
+                                    border: isSelected
+                                      ? '1.5px solid #10b981'
+                                      : '1px solid hsl(var(--border-subtle))',
+                                    boxShadow: isSelected
+                                      ? '0 4px 14px -2px rgba(16, 185, 129, 0.22)'
+                                      : '0 1px 3px rgba(0, 0, 0, 0.02)',
                                   }}
                                   onMouseEnter={e => {
-                                    if (!isSelected) e.currentTarget.style.borderColor = 'hsl(var(--text-secondary))'
+                                    if (!isSelected) {
+                                      e.currentTarget.style.borderColor = 'rgba(59, 130, 246, 0.45)'
+                                      e.currentTarget.style.background = 'rgba(59, 130, 246, 0.03)'
+                                    }
                                   }}
                                   onMouseLeave={e => {
-                                    if (!isSelected) e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                                    if (!isSelected) {
+                                      e.currentTarget.style.borderColor = 'hsl(var(--border-subtle))'
+                                      e.currentTarget.style.background = 'hsl(var(--bg-surface))'
+                                    }
                                   }}
                                 >
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                    <span
+                                  {/* Lado Esquerdo: Avatar + Nome + Tag de Parentesco + Contatos em Linha */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                                    {/* Mini Avatar com Iniciais */}
+                                    <div
                                       style={{
-                                        fontSize: 10,
-                                        fontWeight: 700,
-                                        background: badgeBg,
-                                        color: badgeColor,
-                                        border: `1px solid ${badgeBorder}`,
-                                        padding: '2px 8px',
-                                        borderRadius: 6,
-                                        textTransform: 'uppercase',
-                                        letterSpacing: '0.04em',
+                                        width: 34,
+                                        height: 34,
+                                        borderRadius: 10,
+                                        background: avatarGradient,
+                                        color: '#ffffff',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: 12,
+                                        fontWeight: 800,
+                                        flexShrink: 0,
+                                        boxShadow: isSelected
+                                          ? '0 3px 8px rgba(16, 185, 129, 0.3)'
+                                          : '0 2px 5px rgba(0, 0, 0, 0.08)',
                                       }}
                                     >
-                                      {r.tipo}
-                                    </span>
-                                    {isSelected && (
-                                      <span style={{ fontSize: 11, fontWeight: 700, color: '#10b981', display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <CheckCircle2 size={13} /> Selecionado
-                                      </span>
+                                      {iniciais}
+                                    </div>
+
+                                    {/* Dados do Responsável em Linha Compacta */}
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                                        <span
+                                          style={{
+                                            fontSize: 13,
+                                            fontWeight: 700,
+                                            color: 'hsl(var(--text-primary))',
+                                            letterSpacing: '-0.01em',
+                                          }}
+                                        >
+                                          {r.nome}
+                                        </span>
+                                        <span
+                                          style={{
+                                            fontSize: 9.5,
+                                            fontWeight: 800,
+                                            background: badgeBg,
+                                            color: badgeColor,
+                                            border: `1px solid ${badgeBorder}`,
+                                            padding: '1px 6px',
+                                            borderRadius: 999,
+                                            textTransform: 'uppercase',
+                                            letterSpacing: '0.03em',
+                                          }}
+                                        >
+                                          {tagText}
+                                        </span>
+                                      </div>
+
+                                      <div
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          fontSize: 11,
+                                          color: 'hsl(var(--text-secondary))',
+                                          marginTop: 2,
+                                          flexWrap: 'wrap',
+                                        }}
+                                      >
+                                        {r.telefone && (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                            <span>📱</span>
+                                            <strong style={{ color: 'hsl(var(--text-primary))', fontWeight: 600 }}>{r.telefone}</strong>
+                                          </span>
+                                        )}
+                                        {r.email && (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {r.telefone && <span style={{ color: 'hsl(var(--text-muted))' }}>•</span>}
+                                            <span>✉️</span>
+                                            <span>{r.email}</span>
+                                          </span>
+                                        )}
+                                        {r.cpf && (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                            {(r.telefone || r.email) && <span style={{ color: 'hsl(var(--text-muted))' }}>•</span>}
+                                            <span>🪪</span>
+                                            <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{r.cpf}</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Lado Direito: Badge / Indicador de Seleção */}
+                                  <div style={{ flexShrink: 0 }}>
+                                    {isSelected ? (
+                                      <div
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 5,
+                                          padding: '4px 11px',
+                                          borderRadius: 999,
+                                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                          color: '#ffffff',
+                                          fontSize: 11,
+                                          fontWeight: 800,
+                                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                                          letterSpacing: '0.02em',
+                                        }}
+                                      >
+                                        <Check size={12} style={{ strokeWidth: 2.8 }} />
+                                        <span>Selecionado</span>
+                                      </div>
+                                    ) : (
+                                      <div
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 5,
+                                          padding: '4px 10px',
+                                          borderRadius: 999,
+                                          background: 'hsl(var(--bg-elevated))',
+                                          border: '1px solid hsl(var(--border-subtle))',
+                                          color: 'hsl(var(--text-secondary))',
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            width: 6,
+                                            height: 6,
+                                            borderRadius: '50%',
+                                            border: '1.5px solid hsl(var(--text-muted))',
+                                            display: 'inline-block',
+                                          }}
+                                        />
+                                        <span>Escolher</span>
+                                      </div>
                                     )}
-                                  </div>
-
-                                  <div style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-primary))', marginBottom: 6 }}>
-                                    {r.nome}
-                                  </div>
-
-                                  <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                    {r.cpf && <div>🪪 CPF: <span style={{ color: 'hsl(var(--text-primary))', fontWeight: 600 }}>{r.cpf}</span></div>}
-                                    {r.email && <div>✉️ <span style={{ color: 'hsl(var(--text-primary))' }}>{r.email}</span></div>}
-                                    {r.telefone && <div>📱 <span style={{ color: 'hsl(var(--text-primary))' }}>{r.telefone}</span></div>}
                                   </div>
                                 </div>
                               )
                             })}
                           </div>
                         ) : !carregandoResponsaveis ? (
-                          <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: 8, padding: 12, fontSize: 12, color: 'hsl(var(--text-secondary))', textAlign: 'center' }}>
+                          <div style={{ background: 'hsl(var(--bg-surface))', borderRadius: 8, padding: 12, fontSize: 12, color: 'hsl(var(--text-secondary))', textAlign: 'center', border: '1px solid hsl(var(--border-subtle))' }}>
                             Nenhum responsável cadastrado diretamente para este aluno. Preencha os dados do signatário abaixo.
                           </div>
                         ) : null}
@@ -4353,20 +4935,28 @@ export default function MatriculaDigitalPage() {
                     )}
                   </div>
 
-                  {/* Dados do Signatário (100% Editáveis) */}
-                  <div style={{ background: 'hsl(var(--bg-elevated))', padding: 18, borderRadius: 14, border: '1px solid hsl(var(--border-subtle))' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#34d399', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <User size={14} /> Dados do Signatário (Totalmente Editável)
+                  {/* ── 5. Dados do Signatário (100% Editáveis com Visual Sofisticado) ── */}
+                  <div
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(37, 99, 235, 0.03) 100%)',
+                      padding: '18px 20px',
+                      borderRadius: 16,
+                      border: '1px solid rgba(16, 185, 129, 0.25)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <User size={15} /> Dados do Signatário da Assinatura (Totalmente Editável)
                       </div>
                       <span style={{ fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
-                        Pessoa física que receberá e assinará o documento
+                        Pessoa física que receberá e assinará o documento com código OTP
                       </span>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
                           NOME COMPLETO DO SIGNATÁRIO *
                         </label>
                         <input
@@ -4375,12 +4965,13 @@ export default function MatriculaDigitalPage() {
                           value={formNovo.signatario_nome}
                           onChange={e => setFormNovo({ ...formNovo, signatario_nome: e.target.value })}
                           placeholder="Nome da pessoa que irá assinar"
-                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 10px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                          className="digital-modal-input"
+                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
                           E-MAIL (RECEBE CÓDIGO OTP E CÓPIA) *
                         </label>
                         <input
@@ -4389,12 +4980,13 @@ export default function MatriculaDigitalPage() {
                           value={formNovo.signatario_email}
                           onChange={e => setFormNovo({ ...formNovo, signatario_email: e.target.value })}
                           placeholder="email@exemplo.com"
-                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 10px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                          className="digital-modal-input"
+                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
                           WHATSAPP / CELULAR
                         </label>
                         <input
@@ -4402,12 +4994,13 @@ export default function MatriculaDigitalPage() {
                           value={formNovo.signatario_telefone}
                           onChange={e => setFormNovo({ ...formNovo, signatario_telefone: formatarTelefone(e.target.value) })}
                           placeholder="(67) 99999-9999"
-                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 10px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                          className="digital-modal-input"
+                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
                           CPF DO SIGNATÁRIO
                         </label>
                         <input
@@ -4415,12 +5008,13 @@ export default function MatriculaDigitalPage() {
                           value={formNovo.signatario_cpf}
                           onChange={e => setFormNovo({ ...formNovo, signatario_cpf: formatarCpf(e.target.value) })}
                           placeholder="000.000.000-00"
-                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 10px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                          className="digital-modal-input"
+                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
                           DATA DE NASCIMENTO
                         </label>
                         <input
@@ -4429,12 +5023,13 @@ export default function MatriculaDigitalPage() {
                           onChange={e => setFormNovo({ ...formNovo, signatario_data_nascimento: formatarData(e.target.value) })}
                           placeholder="DD/MM/AAAA"
                           maxLength={10}
-                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 10px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                          className="digital-modal-input"
+                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
                         />
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-secondary))', marginBottom: 4 }}>
+                        <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 5 }}>
                           VÍNCULO / PAPEL
                         </label>
                         <input
@@ -4442,23 +5037,54 @@ export default function MatriculaDigitalPage() {
                           value={formNovo.signatario_cargo}
                           onChange={e => setFormNovo({ ...formNovo, signatario_cargo: e.target.value })}
                           placeholder="Ex: Mãe, Pai, Resp. Financeiro, etc."
-                          style={{ width: '100%', height: 38, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 10px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
+                          className="digital-modal-input"
+                          style={{ width: '100%', height: 40, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 8, padding: '0 12px', color: 'hsl(var(--text-primary))', fontSize: 13, outline: 'none' }}
                         />
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 12, padding: '8px 12px', background: 'rgba(59, 130, 246, 0.08)', borderRadius: 8, border: '1px solid rgba(59, 130, 246, 0.2)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
-                      <ShieldCheck size={14} color="#60a5fa" style={{ flexShrink: 0 }} />
-                      <span>Estes dados identificam formalmente o signatário perante a Lei 14.063/2020. O código de segurança será enviado para o e-mail informado.</span>
+                    <div style={{ marginTop: 14, padding: '10px 14px', background: 'hsl(var(--bg-surface))', borderRadius: 10, border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: 'hsl(var(--text-secondary))', lineHeight: 1.4 }}>
+                      <ShieldCheck size={16} color="#059669" style={{ flexShrink: 0 }} />
+                      <span>Estes dados identificam formalmente o signatário perante a Lei Federal 14.063/2020. O código de segurança será enviado para o e-mail informado.</span>
                     </div>
                   </div>
+                </div>
 
-                  {/* Footer com Botão de Submissão */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
+                {/* ── 6. Rodapé Fixo com Ações Proeminentes ── */}
+                <div
+                  style={{
+                    flexShrink: 0,
+                    padding: '14px 24px',
+                    borderTop: '1px solid hsl(var(--border-subtle))',
+                    background: 'hsl(var(--bg-surface))',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
+                    <ShieldCheck size={14} color="#10b981" />
+                    <span>Validade Jurídica • ICP-Brasil / OTP</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <button
                       type="button"
                       onClick={() => setModalNovoAberto(false)}
-                      style={{ background: 'transparent', border: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-secondary))', borderRadius: 8, padding: '10px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                      style={{
+                        background: 'hsl(var(--bg-elevated))',
+                        border: '1px solid hsl(var(--border-subtle))',
+                        color: 'hsl(var(--text-secondary))',
+                        borderRadius: 10,
+                        padding: '10px 18px',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.color = 'hsl(var(--text-primary))')}
+                      onMouseLeave={e => (e.currentTarget.style.color = 'hsl(var(--text-secondary))')}
                     >
                       Cancelar
                     </button>
@@ -4470,29 +5096,37 @@ export default function MatriculaDigitalPage() {
                         background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                         color: '#fff',
                         border: 'none',
-                        borderRadius: 8,
-                        padding: '12px 24px',
+                        borderRadius: 10,
+                        padding: '10px 22px',
                         cursor: salvandoContrato ? 'not-allowed' : 'pointer',
-                        fontSize: 14,
+                        fontSize: 13.5,
                         fontWeight: 700,
                         display: 'flex',
                         alignItems: 'center',
                         gap: 8,
-                        boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                        boxShadow: '0 4px 16px rgba(16, 185, 129, 0.35)',
+                        transition: 'all 0.18s ease',
+                      }}
+                      onMouseEnter={e => {
+                        if (!salvandoContrato) e.currentTarget.style.filter = 'brightness(1.08)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.filter = 'none'
                       }}
                     >
                       {salvandoContrato ? (
                         <>
-                          <RefreshCw size={16} className="animate-spin" /> Processando Arquivo e Hashes...
+                          <RefreshCw size={15} className="animate-spin" /> Processando Arquivo e Hashes...
                         </>
                       ) : (
                         <>
-                          <Check size={16} /> Enviar Documento & Gerar Link
+                          <Check size={15} /> Enviar Documento & Gerar Link
                         </>
                       )}
                     </button>
                   </div>
-                </form>
+                </div>
+              </form>
               )}
             </motion.div>
           </div>
@@ -4850,8 +5484,8 @@ export default function MatriculaDigitalPage() {
               position: 'fixed',
               inset: 0,
               zIndex: 100,
-              background: 'rgba(0, 0, 0, 0.75)',
-              backdropFilter: 'blur(8px)',
+              background: 'rgba(5, 8, 16, 0.82)',
+              backdropFilter: 'blur(12px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -4859,27 +5493,62 @@ export default function MatriculaDigitalPage() {
             }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="digital-modal-content"
               style={{
                 background: 'hsl(var(--bg-surface))',
                 border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 20,
-                maxWidth: 680,
+                borderRadius: 24,
+                maxWidth: 720,
                 width: '100%',
                 maxHeight: '90vh',
                 overflowY: 'auto',
-                boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+                boxShadow: '0 30px 70px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
               }}
             >
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))' }}>
-                  Configurações de Assinatura Eletrônica
-                </h3>
-                <button onClick={() => setModalConfigAberto(false)} style={{ background: 'none', border: 'none', color: 'hsl(var(--text-secondary))', cursor: 'pointer' }}>
-                  <X size={20} />
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)' }}>
+                    <Settings size={18} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
+                      Configurações de Assinatura Eletrônica
+                    </h3>
+                    <p style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', margin: '2px 0 0' }}>
+                      Gerencie CNPJs, representantes legais, logomarca oficial e parâmetros de envio
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalConfigAberto(false)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid hsl(var(--border-subtle))',
+                    color: 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    padding: 8,
+                    borderRadius: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
+                    e.currentTarget.style.color = 'hsl(var(--text-primary))'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+                    e.currentTarget.style.color = 'hsl(var(--text-secondary))'
+                  }}
+                  title="Fechar configurações"
+                >
+                  <X size={18} />
                 </button>
               </div>
 
@@ -5333,8 +6002,8 @@ export default function MatriculaDigitalPage() {
               position: 'fixed',
               inset: 0,
               zIndex: 100,
-              background: 'rgba(0, 0, 0, 0.75)',
-              backdropFilter: 'blur(8px)',
+              background: 'rgba(5, 8, 16, 0.82)',
+              backdropFilter: 'blur(12px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -5342,28 +6011,63 @@ export default function MatriculaDigitalPage() {
             }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="digital-modal-content"
               style={{
                 background: 'hsl(var(--bg-surface))',
                 border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 20,
-                maxWidth: 620,
+                borderRadius: 24,
+                maxWidth: 640,
                 width: '100%',
                 maxHeight: '90vh',
                 overflowY: 'auto',
-                boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+                boxShadow: '0 30px 70px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
                 padding: '24px',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))' }}>
-                  Verificador Pericial de Arquivo PDF
-                </h3>
-                <button onClick={() => setModalVerificadorAberto(false)} style={{ background: 'none', border: 'none', color: 'hsl(var(--text-secondary))', cursor: 'pointer' }}>
-                  <X size={20} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)' }}>
+                    <Fingerprint size={19} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
+                      Verificador Pericial de Arquivo PDF
+                    </h3>
+                    <p style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', margin: '2px 0 0' }}>
+                      Validação criptográfica de integridade SHA-256
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalVerificadorAberto(false)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid hsl(var(--border-subtle))',
+                    color: 'hsl(var(--text-secondary))',
+                    cursor: 'pointer',
+                    padding: 8,
+                    borderRadius: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
+                    e.currentTarget.style.color = 'hsl(var(--text-primary))'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+                    e.currentTarget.style.color = 'hsl(var(--text-secondary))'
+                  }}
+                  title="Fechar verificador"
+                >
+                  <X size={18} />
                 </button>
               </div>
 

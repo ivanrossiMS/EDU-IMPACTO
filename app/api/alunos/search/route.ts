@@ -9,6 +9,8 @@ interface CachedStudent {
   nome: string
   matricula: string
   turma: string
+  turma_id?: string
+  turma_nome?: string
   serie: string
   turno: string
   status: string
@@ -45,6 +47,18 @@ async function getOrRefreshStudents(): Promise<CachedStudent[]> {
     return serverStudentsCache.students
   }
 
+  // Carrega turmas para mapear id/código para o nome legível oficial (ex: "4º ANO A - MATUTINO")
+  const { data: turmasDb } = await supabase
+    .from('turmas')
+    .select('id, nome, codigo')
+
+  const turmaMap = new Map<string, string>()
+  ;(turmasDb || []).forEach((t: any) => {
+    const nomeLimpo = String(t.nome || '').trim()
+    if (t.id && nomeLimpo) turmaMap.set(String(t.id).trim(), nomeLimpo)
+    if (t.codigo && nomeLimpo) turmaMap.set(String(t.codigo).trim(), nomeLimpo)
+  })
+
   // Busca estritamente as colunas necessárias para autocomplete e exibição de signatários
   // NÃO busca fotos base64 nem históricos pesados
   const { data, error } = await supabase
@@ -77,7 +91,8 @@ async function getOrRefreshStudents(): Promise<CachedStudent[]> {
     const idStr = String(s.id || '').trim()
     const matriculaStr = String(s.matricula || idStr).trim()
     const nomeStr = String(s.nome || '').trim()
-    const turmaStr = String(s.turma || '').trim()
+    const turmaRaw = String(s.turma || '').trim()
+    const turmaNomeResolvido = turmaMap.get(turmaRaw) || cleanDados.turmaNome || cleanDados.nomeTurma || turmaRaw
     const serieStr = String(s.serie || '').trim()
     const turnoStr = String(s.turno || '').trim()
 
@@ -95,7 +110,8 @@ async function getOrRefreshStudents(): Promise<CachedStudent[]> {
       nomeStr,
       matriculaStr,
       idStr,
-      turmaStr,
+      turmaRaw,
+      turmaNomeResolvido,
       serieStr,
       respFin,
       respGeral,
@@ -113,7 +129,9 @@ async function getOrRefreshStudents(): Promise<CachedStudent[]> {
       id: idStr,
       nome: nomeStr,
       matricula: matriculaStr,
-      turma: turmaStr,
+      turma: turmaNomeResolvido || turmaRaw,
+      turma_id: turmaRaw,
+      turma_nome: turmaNomeResolvido,
       serie: serieStr,
       turno: turnoStr,
       status: s.status || 'ativo',
