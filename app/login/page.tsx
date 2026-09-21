@@ -9,7 +9,7 @@ import { performLogout } from '@/lib/auth/logout'
 import { getLogoutBarrier, isUserLoggedOut, clearSessionSecurely, clearLogoutBarrierSync, markExplicitLogin } from '@/lib/auth/secureSession'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
-import { LogOut } from 'lucide-react'
+import { LogOut, Eye, EyeOff } from 'lucide-react'
 import { hideSplashScreen } from '@/lib/capacitor/splash'
 import { PENDING_PUSH_ROUTE_KEY } from '@/components/providers/GlobalNotificationProvider'
 import {
@@ -909,7 +909,39 @@ export default function LoginPage() {
                 suppressHydrationWarning
                 className="login-input"
                 style={{ ...baseInputStyle, paddingLeft: 46, paddingRight:46, borderColor: loginError&&!password?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.12)' }} onFocus={focusOn} onBlur={focusOff} />
-              <button type="button" onClick={()=>setShowPw(p=>!p)} style={{ position:'absolute', right:16, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:16, color:'rgba(255,255,255,0.5)' }}>{showPw?'🙈':'👁'}</button>
+              <button
+                type="button"
+                onClick={() => setShowPw(p => !p)}
+                onMouseDown={(e) => e.preventDefault()}
+                data-no-ripple="true"
+                className="no-click-anim"
+                aria-label={showPw ? 'Ocultar senha' : 'Ver senha'}
+                title={showPw ? 'Ocultar senha' : 'Ver senha'}
+                style={{
+                  position: 'absolute',
+                  right: 14,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  outline: 'none',
+                  boxShadow: 'none',
+                  cursor: 'pointer',
+                  padding: 4,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'rgba(255,255,255,0.5)',
+                  zIndex: 10,
+                  WebkitTapHighlightColor: 'transparent',
+                  userSelect: 'none',
+                  transition: 'color 0.2s'
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.9)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}
+              >
+                {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => window.location.href = '/esqueci-senha'} style={{ fontSize:13, color:'#fbbf24', background:'none', border:'none', cursor:'pointer', fontWeight:600, position:'relative', zIndex:50, padding: 0, transition:'color 0.2s', letterSpacing:'0.02em' }} onMouseEnter={e=>e.currentTarget.style.color='#fcd34d'} onMouseLeave={e=>e.currentTarget.style.color='#fbbf24'}>🤔 Esqueci minha senha</button>
@@ -1108,7 +1140,39 @@ export default function LoginPage() {
                 <input type={showNewPw?'text':'password'} value={newPass} onChange={e=>{setNewPass(e.target.value);setCreateError('')}} placeholder="Mínimo 6 caracteres" suppressHydrationWarning
                   className="login-input"
                   style={{ ...baseInputStyle, paddingRight:44 }} onFocus={focusOn} onBlur={focusOff} />
-                <button type="button" onClick={()=>setShowNewPw(p=>!p)} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:14, opacity:0.5, color:'#fff' }}>{showNewPw?'🙈':'👁'}</button>
+                <button
+                  type="button"
+                  onClick={() => setShowNewPw(p => !p)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  data-no-ripple="true"
+                  className="no-click-anim"
+                  aria-label={showNewPw ? 'Ocultar senha' : 'Ver senha'}
+                  title={showNewPw ? 'Ocultar senha' : 'Ver senha'}
+                  style={{
+                    position: 'absolute',
+                    right: 14,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    outline: 'none',
+                    boxShadow: 'none',
+                    cursor: 'pointer',
+                    padding: 4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'rgba(255,255,255,0.5)',
+                    zIndex: 10,
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none',
+                    transition: 'color 0.2s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.9)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}
+                >
+                  {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
               {newPass.length > 0 && (
                 <div style={{ marginTop:8 }}>
@@ -1127,7 +1191,39 @@ export default function LoginPage() {
                 <input type={showConfPw?'text':'password'} value={confirmPass} onChange={e=>{setConfirmPass(e.target.value);setCreateError('')}} placeholder="Repita a senha" suppressHydrationWarning
                   className="login-input"
                   style={{ ...baseInputStyle, paddingRight:44, borderColor: confirmPass&&confirmPass!==newPass?'rgba(239,68,68,0.5)':'rgba(255,255,255,0.12)' }} onFocus={focusOn} onBlur={focusOff} />
-                <button type="button" onClick={()=>setShowConfPw(p=>!p)} style={{ position:'absolute', right:14, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:14, opacity:0.5, color:'#fff' }}>{showConfPw?'🙈':'👁'}</button>
+                <button
+                  type="button"
+                  onClick={() => setShowConfPw(p => !p)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  data-no-ripple="true"
+                  className="no-click-anim"
+                  aria-label={showConfPw ? 'Ocultar senha' : 'Ver senha'}
+                  title={showConfPw ? 'Ocultar senha' : 'Ver senha'}
+                  style={{
+                    position: 'absolute',
+                    right: 14,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    outline: 'none',
+                    boxShadow: 'none',
+                    cursor: 'pointer',
+                    padding: 4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'rgba(255,255,255,0.5)',
+                    zIndex: 10,
+                    WebkitTapHighlightColor: 'transparent',
+                    userSelect: 'none',
+                    transition: 'color 0.2s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.9)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}
+                >
+                  {showConfPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
               {confirmPass && (
                 <div style={{ fontSize:11, marginTop:5, color: confirmPass===newPass?'#34d399':'#f87171' }}>

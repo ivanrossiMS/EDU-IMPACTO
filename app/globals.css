@@ -462,12 +462,12 @@ input, textarea, select, .page-content p, .page-content span, td {
    ═══════════════════════════════════════════════════════════════════ */
 
 /* 1. Base transition & interaction properties for all buttons */
-button:not(:disabled):not([aria-disabled="true"]),
-[role="button"]:not([aria-disabled="true"]),
-.btn:not(:disabled):not(.disabled),
-input[type="button"]:not(:disabled),
-input[type="submit"]:not(:disabled),
-input[type="reset"]:not(:disabled) {
+button:not(:disabled):not([aria-disabled="true"]):not(.no-click-anim):not([data-no-ripple]),
+[role="button"]:not([aria-disabled="true"]):not(.no-click-anim):not([data-no-ripple]),
+.btn:not(:disabled):not(.disabled):not(.no-click-anim):not([data-no-ripple]),
+input[type="button"]:not(:disabled):not(.no-click-anim):not([data-no-ripple]),
+input[type="submit"]:not(:disabled):not(.no-click-anim):not([data-no-ripple]),
+input[type="reset"]:not(:disabled):not(.no-click-anim):not([data-no-ripple]) {
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
@@ -481,20 +481,20 @@ input[type="reset"]:not(:disabled) {
 }
 
 /* 2. Universal Hover micro-interaction: subtle lift and brightness */
-button:not(:disabled):not([aria-disabled="true"]):hover,
-[role="button"]:not([aria-disabled="true"]):hover,
-.btn:not(:disabled):not(.disabled):hover,
-input[type="button"]:not(:disabled):hover,
-input[type="submit"]:not(:disabled):hover {
+button:not(:disabled):not([aria-disabled="true"]):not(.no-click-anim):not([data-no-ripple]):hover,
+[role="button"]:not([aria-disabled="true"]):not(.no-click-anim):not([data-no-ripple]):hover,
+.btn:not(:disabled):not(.disabled):not(.no-click-anim):not([data-no-ripple]):hover,
+input[type="button"]:not(:disabled):not(.no-click-anim):not([data-no-ripple]):hover,
+input[type="submit"]:not(:disabled):not(.no-click-anim):not([data-no-ripple]):hover {
   filter: brightness(1.05);
 }
 
 /* 3. Universal Active/Press state: tactile depression */
-button:not(:disabled):not([aria-disabled="true"]):active,
-[role="button"]:not([aria-disabled="true"]):active,
-.btn:not(:disabled):not(.disabled):active,
-input[type="button"]:not(:disabled):active,
-input[type="submit"]:not(:disabled):active {
+button:not(:disabled):not([aria-disabled="true"]):not(.no-click-anim):not([data-no-ripple]):active,
+[role="button"]:not([aria-disabled="true"]):not(.no-click-anim):not([data-no-ripple]):active,
+.btn:not(:disabled):not(.disabled):not(.no-click-anim):not([data-no-ripple]):active,
+input[type="button"]:not(:disabled):not(.no-click-anim):not([data-no-ripple]):active,
+input[type="submit"]:not(:disabled):not(.no-click-anim):not([data-no-ripple]):active {
   transform: scale(0.94) translateY(1.5px) !important;
   filter: brightness(0.92) !important;
   transition: transform 0.05s ease-out, filter 0.05s ease-out !important;
@@ -533,8 +533,25 @@ input[type="submit"]:not(:disabled):active {
 
 /* 6. Ripple Container & Expanding Ripple Wave */
 .btn-ripple-container {
-  position: relative !important;
-  overflow: hidden !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-ripple-container.absolute,
+.btn-ripple-container[style*="position: absolute"],
+.btn-ripple-container[style*="position:absolute"] {
+  position: absolute !important;
+}
+
+.no-click-anim,
+button.no-click-anim,
+button.no-click-anim:active,
+button.no-click-anim:focus,
+button.no-click-anim:hover {
+  animation: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  transform: none;
 }
 
 .global-btn-ripple {

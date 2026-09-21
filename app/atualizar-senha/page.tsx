@@ -511,12 +511,17 @@ export default function AtualizarSenha() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  data-no-ripple="true"
+                  className="no-click-anim"
                   aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
                   style={{
                     position: 'absolute',
                     right: '16px',
                     background: 'none',
                     border: 'none',
+                    outline: 'none',
+                    boxShadow: 'none',
                     cursor: 'pointer',
                     color: '#94a3b8',
                     display: 'flex',
@@ -524,7 +529,8 @@ export default function AtualizarSenha() {
                     justifyContent: 'center',
                     padding: '4px',
                     borderRadius: '8px',
-                    transition: 'color 0.2s'
+                    transition: 'color 0.2s',
+                    zIndex: 10
                   }}
                   onMouseEnter={(e) => (e.currentTarget.style.color = '#ffffff')}
                   onMouseLeave={(e) => (e.currentTarget.style.color = '#94a3b8')}

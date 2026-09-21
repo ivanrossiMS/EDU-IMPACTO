@@ -26,8 +26,12 @@ export function GlobalButtonEffects() {
     }
 
     const createRipple = (btn: HTMLElement, clientX: number, clientY: number) => {
-      // Se tiver data-no-ripple, não adiciona ondulação
-      if (btn.hasAttribute('data-no-ripple') || btn.classList.contains('no-ripple')) {
+      // Se tiver data-no-ripple ou no-click-anim, não adiciona ondulação
+      if (
+        btn.hasAttribute('data-no-ripple') ||
+        btn.classList.contains('no-ripple') ||
+        btn.classList.contains('no-click-anim')
+      ) {
         return
       }
 
@@ -48,9 +52,12 @@ export function GlobalButtonEffects() {
       ripple.style.left = `${x}px`
       ripple.style.top = `${y}px`
 
-      // Assegura que o container tenha posição relativa/absoluta e overflow hidden
-      if (!btn.classList.contains('btn-ripple-container')) {
+      // Assegura que o container tenha contexto de posicionamento sem sobrescrever absolute ou fixed
+      const computedPos = window.getComputedStyle(btn).position
+      if (computedPos === 'static') {
         btn.classList.add('btn-ripple-container')
+      } else {
+        btn.style.overflow = 'hidden'
       }
 
       btn.appendChild(ripple)
@@ -62,6 +69,16 @@ export function GlobalButtonEffects() {
     }
 
     const animateButton = (btn: HTMLElement, clientX?: number, clientY?: number) => {
+      // Ignora botões com animação desativada ou posicionamento absoluto
+      if (
+        btn.classList.contains('no-click-anim') ||
+        btn.classList.contains('no-ripple') ||
+        btn.hasAttribute('data-no-ripple') ||
+        window.getComputedStyle(btn).position === 'absolute'
+      ) {
+        return
+      }
+
       // 1. Aplica classe de animação com reinício de frame
       btn.classList.remove('btn-click-animating')
       // Força reflow para permitir múltiplos cliques consecutivos
@@ -102,7 +119,10 @@ export function GlobalButtonEffects() {
         btn.hasAttribute('disabled') ||
         btn.getAttribute('aria-disabled') === 'true' ||
         btn.classList.contains('disabled') ||
-        btn.classList.contains('no-click-anim')
+        btn.classList.contains('no-click-anim') ||
+        btn.classList.contains('no-ripple') ||
+        btn.hasAttribute('data-no-ripple') ||
+        window.getComputedStyle(btn).position === 'absolute'
       ) {
         return
       }
@@ -125,7 +145,10 @@ export function GlobalButtonEffects() {
           btn.hasAttribute('disabled') ||
           btn.getAttribute('aria-disabled') === 'true' ||
           btn.classList.contains('disabled') ||
-          btn.classList.contains('no-click-anim')
+          btn.classList.contains('no-click-anim') ||
+          btn.classList.contains('no-ripple') ||
+          btn.hasAttribute('data-no-ripple') ||
+          window.getComputedStyle(btn).position === 'absolute'
         ) {
           return
         }
