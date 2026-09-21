@@ -737,6 +737,32 @@ export default function MatriculaDigitalPage() {
     return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`
   }
 
+  const getIniciaisNome = (nomeCompleto?: string): string => {
+    if (!nomeCompleto) return '?'
+    const partes = nomeCompleto.trim().split(/\s+/).filter(Boolean)
+    if (partes.length === 0) return '?'
+    if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase()
+    return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+  }
+
+  const getAvatarColor = (nomeCompleto?: string): { bg: string; text: string; border: string } => {
+    const cores = [
+      { bg: 'rgba(59, 130, 246, 0.12)', text: '#3b82f6', border: 'rgba(59, 130, 246, 0.25)' },
+      { bg: 'rgba(16, 185, 129, 0.12)', text: '#10b981', border: 'rgba(16, 185, 129, 0.25)' },
+      { bg: 'rgba(139, 92, 246, 0.12)', text: '#8b5cf6', border: 'rgba(139, 92, 246, 0.25)' },
+      { bg: 'rgba(245, 158, 11, 0.12)', text: '#f59e0b', border: 'rgba(245, 158, 11, 0.25)' },
+      { bg: 'rgba(236, 72, 153, 0.12)', text: '#ec4899', border: 'rgba(236, 72, 153, 0.25)' },
+      { bg: 'rgba(14, 165, 233, 0.12)', text: '#0ea5e9', border: 'rgba(14, 165, 233, 0.25)' },
+    ]
+    if (!nomeCompleto) return cores[0]
+    let hash = 0
+    for (let i = 0; i < nomeCompleto.length; i++) {
+      hash = nomeCompleto.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    return cores[Math.abs(hash) % cores.length]
+  }
+
+
   // Busca dinâmica de alunos de alta performance via /api/alunos/search com cache e AbortController
   useEffect(() => {
     const termo = buscaAlunoInput.trim()
@@ -1665,246 +1691,604 @@ export default function MatriculaDigitalPage() {
           display: flex;
           flex-direction: column;
           gap: 20px;
-          padding: 8px 4px 40px;
+          padding: 6px 4px 40px;
+          max-width: 1600px;
+          margin: 0 auto;
+          width: 100%;
         }
+
+        /* ── HEADER ULTRA MODERNO ── */
         .digital-header {
           display: flex;
           justify-content: space-between;
-          align-items: flex-start;
+          align-items: center;
           flex-wrap: wrap;
           gap: 16px;
+          padding-bottom: 2px;
         }
         .digital-header-info {
           display: flex;
           align-items: center;
-          gap: 16px;
+          gap: 14px;
         }
-        .digital-header-logo {
-          width: 48px;
-          height: 48px;
-          object-fit: contain;
-          border-radius: 8px;
+        .digital-header-logo-wrap {
+          position: relative;
           flex-shrink: 0;
         }
+        .digital-header-logo {
+          width: 44px;
+          height: 44px;
+          object-fit: contain;
+          border-radius: 12px;
+          background: hsl(var(--bg-surface));
+          border: 1px solid hsl(var(--border-subtle));
+          padding: 2px;
+          display: block;
+        }
         .digital-header-title {
-          font-size: 26px;
+          font-size: 23px;
           font-weight: 800;
           margin: 0;
           color: hsl(var(--text-primary));
-          letter-spacing: -0.02em;
-        }
-        .digital-header-badge {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          color: #fff;
-          font-size: 10px;
-          font-weight: 800;
-          padding: 3px 8px;
-          border-radius: 6px;
-          letter-spacing: 0.05em;
-          white-space: nowrap;
-        }
-        .digital-header-desc {
-          margin: 6px 0 0;
-          font-size: 13px;
-          color: hsl(var(--text-secondary));
-          line-height: 1.45;
-        }
-        .digital-header-actions {
+          letter-spacing: -0.025em;
           display: flex;
           align-items: center;
           gap: 10px;
           flex-wrap: wrap;
         }
-        .digital-secondary-actions-group {
+        .digital-header-badge {
+          background: rgba(16, 185, 129, 0.08);
+          color: #10b981;
+          border: 1px solid rgba(16, 185, 129, 0.25);
+          font-size: 11px;
+          font-weight: 700;
+          padding: 2.5px 9px;
+          border-radius: 9999px;
+          letter-spacing: 0.02em;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .digital-pulse-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #10b981;
+          box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+          animation: digitalPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        @keyframes digitalPulse {
+          0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+          70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .digital-header-desc {
+          margin: 3px 0 0;
+          font-size: 13px;
+          color: hsl(var(--text-secondary));
+          line-height: 1.4;
+        }
+        .digital-header-actions {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
+          flex-wrap: wrap;
         }
+        .btn-novo-doc {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: #ffffff;
+          border: 1px solid rgba(16, 185, 129, 0.4);
+          border-radius: 10px;
+          padding: 0 16px;
+          height: 38px;
+          font-size: 12.5px;
+          font-weight: 700;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          box-shadow: 0 2px 10px rgba(16, 185, 129, 0.22);
+          transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+          white-space: nowrap;
+        }
+        .btn-novo-doc:hover {
+          background: linear-gradient(135deg, #059669 0%, #047857 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.32);
+        }
+        .digital-secondary-actions-group {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .digital-secondary-btn {
+          background: hsl(var(--bg-surface));
+          border: 1px solid hsl(var(--border-subtle));
+          color: hsl(var(--text-primary));
+          border-radius: 10px;
+          padding: 0 13px;
+          height: 38px;
+          font-size: 12.5px;
+          font-weight: 600;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+        }
+        .digital-secondary-btn:hover {
+          background: hsl(var(--bg-elevated));
+          border-color: hsl(var(--border-default));
+          transform: translateY(-1px);
+        }
+
+        /* ── CARDS DE KPIS ULTRA MODERNOS (INTERATIVOS) ── */
         .digital-kpi-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 16px;
+          gap: 14px;
         }
         .digital-kpi-card {
           background: hsl(var(--bg-surface));
           border: 1px solid hsl(var(--border-subtle));
           border-radius: 16px;
-          padding: 20px;
+          padding: 16px 18px;
+          position: relative;
+          overflow: hidden;
+          cursor: pointer;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
         }
-        .digital-kpi-card-title {
+        .digital-kpi-card:hover {
+          transform: translateY(-2px);
+          border-color: hsl(var(--border-default));
+          box-shadow: 0 6px 20px -4px rgba(0, 0, 0, 0.06);
+        }
+        .digital-kpi-card.active-total {
+          border-color: #3b82f6 !important;
+          box-shadow: 0 0 0 1.5px rgba(59, 130, 246, 0.4), 0 6px 20px -4px rgba(59, 130, 246, 0.15) !important;
+        }
+        .digital-kpi-card.active-pendente {
+          border-color: #f59e0b !important;
+          box-shadow: 0 0 0 1.5px rgba(245, 158, 11, 0.4), 0 6px 20px -4px rgba(245, 158, 11, 0.15) !important;
+        }
+        .digital-kpi-card.active-assinado {
+          border-color: #10b981 !important;
+          box-shadow: 0 0 0 1.5px rgba(16, 185, 129, 0.4), 0 6px 20px -4px rgba(16, 185, 129, 0.15) !important;
+        }
+        .digital-kpi-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          color: hsl(var(--text-secondary));
+          margin-bottom: 8px;
+        }
+        .digital-kpi-label {
           font-size: 12px;
-          fontWeight: 600;
+          font-weight: 600;
+          color: hsl(var(--text-secondary));
         }
-        .digital-kpi-card-value {
-          font-size: 28px;
+        .digital-kpi-icon-wrap {
+          width: 32px;
+          height: 32px;
+          border-radius: 9px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .digital-kpi-value {
+          font-size: 26px;
           font-weight: 800;
-          margin-top: 8px;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: -0.03em;
+          line-height: 1.1;
         }
-        .digital-kpi-card-sub {
+        .digital-kpi-sub {
           font-size: 11px;
-          margin-top: 4px;
+          margin-top: 6px;
+          color: hsl(var(--text-secondary));
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
         }
+        .digital-mini-bar {
+          width: 100%;
+          height: 4px;
+          border-radius: 999px;
+          background: hsl(var(--bg-elevated));
+          overflow: hidden;
+          margin-top: 6px;
+        }
+        .digital-mini-bar-fill {
+          height: 100%;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #8b5cf6 0%, #10b981 100%);
+          transition: width 0.4s ease-out;
+        }
+
+        /* ── BARRA DE FILTROS ULTRA MODERNA ── */
         .digital-filter-bar {
           background: hsl(var(--bg-surface));
           border: 1px solid hsl(var(--border-subtle));
-          border-radius: 16px;
-          padding: 16px 20px;
+          border-radius: 14px;
+          padding: 8px 12px;
           display: flex;
           justify-content: space-between;
           align-items: center;
           flex-wrap: wrap;
-          gap: 16px;
+          gap: 10px;
         }
-        .digital-filter-search {
+        .digital-filter-left {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
           flex: 1;
           min-width: 260px;
         }
-        .digital-filter-selects {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          flex-wrap: wrap;
+        .digital-search-wrap {
+          position: relative;
+          flex: 1;
+          max-width: 460px;
         }
-        .digital-filter-select-group {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 13px;
+        .digital-search-input {
+          width: 100%;
+          height: 36px;
+          background: hsl(var(--bg-elevated));
+          border: 1px solid hsl(var(--border-subtle));
+          border-radius: 9px;
+          padding: 0 30px 0 32px;
+          font-size: 12.5px;
+          color: hsl(var(--text-primary));
+          outline: none;
+          transition: all 0.15s ease;
+        }
+        .digital-search-input:focus {
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+        }
+        .digital-search-clear {
+          position: absolute;
+          right: 7px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
           color: hsl(var(--text-secondary));
+          cursor: pointer;
+          padding: 2px;
+          display: flex;
+          align-items: center;
+          border-radius: 4px;
         }
-        .digital-desktop-table {
-          display: block;
-        }
-        .digital-mobile-list {
-          display: none;
-        }
-        .digital-mobile-pagination {
-          display: none;
-        }
-        .btn-label-mobile {
-          display: none;
-        }
-        .btn-label-desktop {
-          display: inline;
+        .digital-search-clear:hover {
+          color: hsl(var(--text-primary));
         }
 
-        /* ── BOTÕES DE AÇÕES MODERNOS (SINGLE ROW TOOLBAR & DROPDOWN) ── */
-        .digital-action-group {
+        /* Segmented Tabs (Status) */
+        .digital-segmented-tabs {
           display: inline-flex;
           align-items: center;
-          justify-content: flex-end;
-          gap: 6px;
-          flex-wrap: nowrap;
+          background: hsl(var(--bg-elevated));
+          padding: 2px;
+          border-radius: 9px;
+          border: 1px solid hsl(var(--border-subtle));
+          gap: 2px;
         }
-        .digital-action-btn {
+        .digital-segmented-tab {
+          border: none;
+          background: none;
+          font-size: 12px;
+          font-weight: 600;
+          color: hsl(var(--text-secondary));
+          padding: 5px 11px;
+          border-radius: 7px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          transition: all 0.15s ease;
+          white-space: nowrap;
+        }
+        .digital-segmented-tab:hover {
+          color: hsl(var(--text-primary));
+        }
+        .digital-segmented-tab.active {
+          background: hsl(var(--bg-surface));
+          color: hsl(var(--text-primary));
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+        }
+        .digital-tab-badge {
+          font-size: 10px;
+          padding: 0.5px 5.5px;
+          border-radius: 999px;
+          font-weight: 700;
+          background: hsl(var(--bg-elevated));
+          color: hsl(var(--text-secondary));
+        }
+        .digital-segmented-tab.active .digital-tab-badge {
+          background: rgba(59, 130, 246, 0.12);
+          color: #3b82f6;
+        }
+        .digital-segmented-tab.active.tab-pendente .digital-tab-badge {
+          background: rgba(245, 158, 11, 0.14);
+          color: #f59e0b;
+        }
+        .digital-segmented-tab.active.tab-assinado .digital-tab-badge {
+          background: rgba(16, 185, 129, 0.14);
+          color: #10b981;
+        }
+
+        /* Year & Refresh controls */
+        .digital-filter-right {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .digital-select-wrap {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          background: hsl(var(--bg-elevated));
+          border: 1px solid hsl(var(--border-subtle));
+          border-radius: 9px;
+          padding: 0 9px;
+          height: 36px;
+          color: hsl(var(--text-secondary));
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .digital-select-custom {
+          background: transparent;
+          border: none;
+          color: hsl(var(--text-primary));
+          font-size: 12px;
+          font-weight: 600;
+          outline: none;
+          cursor: pointer;
+          padding-right: 4px;
+        }
+        .digital-refresh-btn {
+          width: 36px;
+          height: 36px;
+          border-radius: 9px;
+          background: hsl(var(--bg-elevated));
+          border: 1px solid hsl(var(--border-subtle));
+          color: hsl(var(--text-secondary));
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .digital-refresh-btn:hover:not(:disabled) {
+          color: hsl(var(--text-primary));
+          border-color: hsl(var(--border-default));
+        }
+
+        /* ── TABELA DESKTOP ULTRA ELEGANTE ── */
+        .digital-desktop-table {
+          background: hsl(var(--bg-surface));
+          border: 1px solid hsl(var(--border-subtle));
+          border-radius: 16px;
+          overflow: hidden;
+          box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.05);
+        }
+        .digital-table-el {
+          width: 100%;
+          border-collapse: collapse;
+          text-align: left;
+          font-size: 13px;
+        }
+        .digital-table-head th {
+          background: hsl(var(--bg-elevated));
+          color: hsl(var(--text-secondary));
+          font-size: 10.5px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          padding: 12px 18px;
+          border-bottom: 1px solid hsl(var(--border-subtle));
+          user-select: none;
+        }
+        .digital-table-row {
+          border-bottom: 1px solid hsl(var(--border-subtle));
+          transition: background 0.15s ease;
+        }
+        .digital-table-row:last-child {
+          border-bottom: none;
+        }
+        .digital-table-row:hover {
+          background: hsl(var(--bg-surface-hover, rgba(0, 0, 0, 0.015)));
+        }
+
+        /* Coluna 1: Protocolo */
+        .digital-proto-pill {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+          font-size: 12px;
+          font-weight: 700;
+          color: #0284c7;
+          background: rgba(2, 132, 199, 0.08);
+          border: 1px solid rgba(2, 132, 199, 0.2);
+          border-radius: 6px;
+          padding: 2px 7px;
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          text-decoration: none;
+          transition: all 0.15s ease;
+        }
+        .digital-proto-pill:hover {
+          background: rgba(2, 132, 199, 0.16);
+          border-color: #0284c7;
+        }
+        .digital-proto-copy {
+          background: none;
+          border: none;
+          color: hsl(var(--text-secondary));
+          cursor: pointer;
+          padding: 2px;
+          display: inline-flex;
+          align-items: center;
+          transition: color 0.15s ease;
+        }
+        .digital-proto-copy:hover {
+          color: hsl(var(--text-primary));
+        }
+
+        /* Coluna 2: Documento & Metadados */
+        .digital-doc-title {
+          font-size: 13.5px;
+          font-weight: 600;
+          color: hsl(var(--text-primary));
+          line-height: 1.35;
+          margin-bottom: 4px;
+        }
+        .digital-doc-tags {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .digital-tag-student {
+          font-size: 11px;
+          font-weight: 600;
+          color: #4f46e5;
+          background: rgba(79, 70, 229, 0.08);
+          border: 1px solid rgba(79, 70, 229, 0.2);
+          padding: 1.5px 7px;
+          border-radius: 6px;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+        .digital-tag-packet {
+          font-size: 10.5px;
+          font-weight: 700;
+          color: #0ea5e9;
+          background: rgba(14, 165, 233, 0.09);
+          border: 1px solid rgba(14, 165, 233, 0.25);
+          padding: 1px 6px;
+          border-radius: 6px;
+          display: inline-flex;
+          align-items: center;
+          gap: 3.5px;
+        }
+        .digital-tag-year {
+          font-size: 10.5px;
+          font-weight: 600;
+          color: hsl(var(--text-secondary));
+          background: hsl(var(--bg-elevated));
+          border: 1px solid hsl(var(--border-subtle));
+          padding: 1px 6px;
+          border-radius: 5px;
+        }
+
+        /* Coluna 3: Signatário */
+        .digital-signer-wrap {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .digital-signer-avatar {
+          width: 34px;
+          height: 34px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11.5px;
+          font-weight: 800;
+          flex-shrink: 0;
+          letter-spacing: -0.02em;
+        }
+        .digital-signer-name {
+          font-size: 13px;
+          font-weight: 600;
+          color: hsl(var(--text-primary));
+          line-height: 1.25;
+        }
+        .digital-signer-sub {
+          font-size: 11px;
+          color: hsl(var(--text-secondary));
+          margin-top: 1px;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        /* Coluna 4: Status */
+        .digital-status-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 3px 9px;
+          border-radius: 9999px;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.01em;
+          white-space: nowrap;
+        }
+        .digital-status-pill.assinado {
+          background: rgba(16, 185, 129, 0.1);
+          color: #10b981;
+          border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+        .digital-status-pill.pendente {
+          background: rgba(245, 158, 11, 0.1);
+          color: #f59e0b;
+          border: 1px solid rgba(245, 158, 11, 0.25);
+        }
+        .digital-status-pill.cancelado {
+          background: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
+          border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        /* Coluna 5: Ações Inteligentes */
+        .digital-action-row {
+          display: inline-flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 5px;
+        }
+        .digital-btn-primary-smart {
+          display: inline-flex;
+          align-items: center;
           gap: 5px;
           height: 31px;
           padding: 0 11px;
           border-radius: 8px;
           font-size: 11.5px;
-          font-weight: 600;
-          white-space: nowrap;
+          font-weight: 700;
           cursor: pointer;
-          outline: none;
           transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-          text-decoration: none;
-          user-select: none;
+          white-space: nowrap;
+          border: none;
         }
-        .digital-action-btn:hover:not(:disabled) {
+        .digital-btn-primary-smart.assinado {
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: #ffffff;
+          box-shadow: 0 2px 6px rgba(16, 185, 129, 0.22);
+        }
+        .digital-btn-primary-smart.assinado:hover:not(:disabled) {
+          background: linear-gradient(135deg, #059669 0%, #047857 100%);
           transform: translateY(-1px);
         }
-        .digital-action-btn:active:not(:disabled) {
-          transform: translateY(0) scale(0.98);
-        }
-        .digital-action-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        /* Botão Primário: Baixar Doc Assinado */
-        .digital-btn-primary {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          border: 1px solid rgba(16, 185, 129, 0.45);
-          color: #ffffff;
-          box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
-          font-weight: 700;
-          letter-spacing: 0.01em;
-        }
-        .digital-btn-primary:hover:not(:disabled) {
-          background: linear-gradient(135deg, #059669 0%, #047857 100%);
-          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.4);
-        }
-
-        /* Botão WhatsApp */
-        .digital-btn-whatsapp {
-          background: rgba(37, 211, 102, 0.12);
-          border: 1px solid rgba(37, 211, 102, 0.32);
-          color: #22c55e;
-        }
-        .digital-btn-whatsapp:hover:not(:disabled) {
-          background: rgba(37, 211, 102, 0.22);
-          border-color: #22c55e;
-          box-shadow: 0 2px 10px rgba(37, 211, 102, 0.2);
-        }
-
-        /* Botão WhatsApp Primário (Pendente) */
-        .digital-btn-whatsapp-primary {
+        .digital-btn-primary-smart.pendente {
           background: linear-gradient(135deg, rgba(37, 211, 102, 0.2), rgba(16, 185, 129, 0.28));
-          border: 1px solid rgba(37, 211, 102, 0.45);
-          color: #22c55e;
-          font-weight: 700;
-          box-shadow: 0 2px 8px rgba(37, 211, 102, 0.18);
+          color: #16a34a;
+          border: 1px solid rgba(37, 211, 102, 0.4);
         }
-        .digital-btn-whatsapp-primary:hover:not(:disabled) {
-          background: linear-gradient(135deg, rgba(37, 211, 102, 0.3), rgba(16, 185, 129, 0.4));
-          border-color: #25d366;
-          box-shadow: 0 4px 12px rgba(37, 211, 102, 0.28);
+        .digital-btn-primary-smart.pendente:hover:not(:disabled) {
+          background: rgba(37, 211, 102, 0.3);
+          border-color: #22c55e;
+          transform: translateY(-1px);
         }
-
-        /* Botão Copiar Link */
-        .digital-btn-copy {
-          background: hsl(var(--bg-elevated));
-          border: 1px solid hsl(var(--border-subtle));
-          color: hsl(var(--text-primary));
-        }
-        .digital-btn-copy:hover:not(:disabled) {
-          border-color: hsl(var(--text-secondary));
-          background: hsl(var(--bg-surface-hover, rgba(255, 255, 255, 0.05)));
-        }
-        .digital-btn-copy.copied {
-          background: rgba(16, 185, 129, 0.18);
-          border-color: #10b981;
-          color: #10b981;
-          font-weight: 700;
-        }
-
-        /* Botão Dossiê */
-        .digital-btn-dossie {
-          background: rgba(168, 85, 247, 0.1);
-          border: 1px solid rgba(168, 85, 247, 0.25);
-          color: #c084fc;
-        }
-        .digital-btn-dossie:hover:not(:disabled) {
-          background: rgba(168, 85, 247, 0.2);
-          border-color: #c084fc;
-          box-shadow: 0 2px 10px rgba(168, 85, 247, 0.2);
-        }
-
-        /* Botão Mais Opções (...) */
-        .digital-btn-more {
+        .digital-btn-icon-smart {
           width: 31px;
           height: 31px;
-          padding: 0;
           border-radius: 8px;
           background: hsl(var(--bg-elevated));
           border: 1px solid hsl(var(--border-subtle));
@@ -1913,14 +2297,28 @@ export default function MatriculaDigitalPage() {
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          outline: none;
           transition: all 0.15s ease;
+          padding: 0;
         }
-        .digital-btn-more:hover, .digital-btn-more[data-state="open"] {
-          background: hsl(var(--bg-surface-hover, rgba(255, 255, 255, 0.08)));
-          border-color: hsl(var(--text-secondary));
+        .digital-btn-icon-smart:hover {
           color: hsl(var(--text-primary));
+          border-color: hsl(var(--border-default));
           transform: translateY(-1px);
+        }
+        .digital-btn-icon-smart.whatsapp:hover {
+          color: #22c55e;
+          border-color: rgba(37, 211, 102, 0.4);
+          background: rgba(37, 211, 102, 0.1);
+        }
+        .digital-btn-icon-smart.dossie:hover {
+          color: #a855f7;
+          border-color: rgba(168, 85, 247, 0.4);
+          background: rgba(168, 85, 247, 0.1);
+        }
+        .digital-btn-icon-smart.copied {
+          color: #10b981;
+          border-color: #10b981;
+          background: rgba(16, 185, 129, 0.15);
         }
 
         /* Dropdown Radix */
@@ -1990,6 +2388,7 @@ export default function MatriculaDigitalPage() {
           margin: 4px 0;
         }
 
+
         /* ── MODAL ULTRA MODERNO DIGITAL ── */
         .digital-modal-novo-pro {
           box-shadow: 0 32px 80px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
@@ -2022,36 +2421,54 @@ export default function MatriculaDigitalPage() {
           box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18) !important;
         }
 
+        .digital-mobile-list {
+          display: none;
+        }
+        .digital-mobile-pagination {
+          display: none;
+        }
+        .btn-label-desktop {
+          display: inline;
+        }
+        .btn-label-mobile {
+          display: none;
+        }
+
         /* ── REGRAS ESPECÍFICAS PARA DISPOSITIVOS MÓVEIS (MOBILE) ── */
         @media (max-width: 768px) {
           .digital-page-container {
             gap: 12px !important;
-            padding: 2px 2px 24px !important;
+            padding: 2px 2px 28px !important;
           }
+
+          /* Header Mobile */
           .digital-header {
             flex-direction: column !important;
-            gap: 10px !important;
+            gap: 12px !important;
             align-items: stretch !important;
+            padding: 14px 15px !important;
+            border-radius: 16px !important;
           }
           .digital-header-info {
             align-items: flex-start !important;
             gap: 10px !important;
           }
           .digital-header-logo {
-            width: 36px !important;
-            height: 36px !important;
-            margin-top: 2px;
+            width: 38px !important;
+            height: 38px !important;
+            margin-top: 1px;
           }
           .digital-header-title {
-            font-size: 19px !important;
+            font-size: 18px !important;
+            gap: 6px !important;
           }
           .digital-header-badge {
             font-size: 8.5px !important;
-            padding: 2px 6px !important;
+            padding: 2px 7px !important;
           }
           .digital-header-desc {
-            font-size: 11.5px !important;
-            margin: 3px 0 0 !important;
+            font-size: 11px !important;
+            margin: 2px 0 0 !important;
             line-height: 1.35 !important;
           }
           .digital-header-actions {
@@ -2062,9 +2479,11 @@ export default function MatriculaDigitalPage() {
           .digital-header-actions .btn-novo-doc {
             width: 100% !important;
             justify-content: center !important;
-            padding: 11px 16px !important;
-            font-size: 13px !important;
+            height: 42px !important;
+            font-size: 13.5px !important;
+            font-weight: 700 !important;
             order: 1 !important;
+            border-radius: 10px !important;
           }
           .digital-secondary-actions-group {
             display: grid !important;
@@ -2073,20 +2492,17 @@ export default function MatriculaDigitalPage() {
             width: 100% !important;
             order: 2 !important;
           }
-          .digital-secondary-actions-group button {
-            padding: 8px 4px !important;
-            font-size: 11px !important;
+          .digital-secondary-actions-group button,
+          .digital-secondary-btn {
+            height: 38px !important;
+            padding: 0 4px !important;
+            font-size: 11.5px !important;
+            font-weight: 600 !important;
             justify-content: center !important;
             text-align: center !important;
-            gap: 4px !important;
+            gap: 5px !important;
             border-radius: 8px !important;
             white-space: nowrap !important;
-          }
-          .digital-secondary-actions-group button span.btn-label-desktop {
-            display: none !important;
-          }
-          .digital-secondary-actions-group button span.btn-label-mobile {
-            display: inline !important;
           }
           .btn-label-desktop {
             display: none !important;
@@ -2094,81 +2510,201 @@ export default function MatriculaDigitalPage() {
           .btn-label-mobile {
             display: inline !important;
           }
+
+          /* KPI Grid Mobile */
           .digital-kpi-grid {
             grid-template-columns: repeat(2, 1fr) !important;
             gap: 8px !important;
           }
           .digital-kpi-card {
-            padding: 10px 12px !important;
-            border-radius: 12px !important;
+            padding: 11px 12px !important;
+            border-radius: 13px !important;
           }
-          .digital-kpi-card-title {
+          .digital-kpi-header {
+            gap: 6px !important;
+          }
+          .digital-kpi-label {
             font-size: 10.5px !important;
+            line-height: 1.2 !important;
           }
-          .digital-kpi-card-value {
+          .digital-kpi-icon-wrap {
+            width: 26px !important;
+            height: 26px !important;
+          }
+          .digital-kpi-value {
             font-size: 20px !important;
             margin-top: 3px !important;
           }
-          .digital-kpi-card-sub {
+          .digital-kpi-sub {
             font-size: 9.5px !important;
             margin-top: 2px !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
           }
+
+          /* Barra de Filtros Mobile */
           .digital-filter-bar {
             padding: 10px 12px !important;
-            border-radius: 12px !important;
+            border-radius: 14px !important;
             gap: 8px !important;
             flex-direction: column !important;
             align-items: stretch !important;
           }
-          .digital-filter-search {
+          .digital-filter-left {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 8px !important;
             width: 100% !important;
             min-width: 0 !important;
-            gap: 8px !important;
           }
-          .digital-filter-search > div {
-            max-width: 100% !important;
-            flex: 1 !important;
-          }
-          .digital-filter-selects {
+          .digital-search-wrap {
             width: 100% !important;
-            gap: 8px !important;
+            min-width: 0 !important;
+          }
+          .digital-search-input {
+            height: 40px !important;
+            font-size: 13px !important;
+            border-radius: 9px !important;
+          }
+          .digital-segmented-tabs {
+            width: 100% !important;
             display: flex !important;
+            padding: 3px !important;
+            gap: 3px !important;
+            border-radius: 10px !important;
           }
-          .digital-filter-select-group {
+          .digital-segmented-tab {
             flex: 1 !important;
-            min-width: 0 !important;
+            justify-content: center !important;
+            text-align: center !important;
+            height: 36px !important;
+            padding: 0 4px !important;
+            font-size: 11.5px !important;
+            font-weight: 600 !important;
+            border-radius: 7px !important;
+          }
+          .digital-tab-badge {
+            padding: 1px 5px !important;
+            font-size: 10px !important;
+            margin-left: 4px !important;
+          }
+          .digital-filter-right {
+            width: 100% !important;
             display: flex !important;
             align-items: center !important;
-            gap: 4px !important;
-            font-size: 11.5px !important;
+            gap: 8px !important;
           }
-          .digital-filter-select-group select {
-            width: 100% !important;
+          .digital-select-wrap {
+            flex: 1 !important;
             min-width: 0 !important;
-            font-size: 11.5px !important;
-            padding: 0 6px !important;
-            height: 36px !important;
+            height: 38px !important;
           }
+          .digital-select-custom {
+            width: 100% !important;
+            height: 38px !important;
+            font-size: 12.5px !important;
+            border-radius: 9px !important;
+          }
+          .digital-refresh-btn {
+            width: 38px !important;
+            height: 38px !important;
+            flex-shrink: 0 !important;
+            border-radius: 9px !important;
+          }
+
+          /* Tabela Desktop vs Lista Mobile */
           .digital-desktop-table {
             display: none !important;
           }
           .digital-mobile-list {
             display: flex !important;
             flex-direction: column !important;
-            gap: 10px !important;
+            gap: 12px !important;
+          }
+          .digital-mobile-card {
+            border-radius: 16px !important;
+            padding: 14px 15px !important;
+            box-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.12) !important;
           }
           .digital-mobile-pagination {
             display: block !important;
           }
+
+          /* Paginação Mobile */
+          .digital-pagination-container {
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 10px !important;
+            padding: 12px 14px !important;
+            text-align: center !important;
+            border-radius: 14px !important;
+          }
+          .digital-pagination-container > div {
+            width: 100% !important;
+            justify-content: center !important;
+            flex-wrap: wrap !important;
+          }
+
+          /* Modais Mobile (Fácil Leitura e Edição) */
           .digital-modal-backdrop {
-            padding: 8px !important;
+            padding: 8px 6px !important;
+            align-items: flex-end !important;
           }
           .digital-modal-content {
-            border-radius: 14px !important;
+            border-radius: 20px 20px 12px 12px !important;
             max-height: 94vh !important;
+            width: 100% !important;
+            margin: 0 !important;
+          }
+          .digital-modal-header {
+            padding: 14px 16px !important;
+            gap: 10px !important;
+          }
+          .digital-modal-header h2,
+          .digital-modal-header h3 {
+            font-size: 15.5px !important;
+          }
+          .digital-modal-header p {
+            font-size: 11px !important;
+          }
+          .digital-modal-scroll {
+            padding: 14px 14px !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+          .digital-config-form {
+            padding: 14px 14px !important;
+            gap: 14px !important;
+          }
+          .digital-modal-input,
+          .digital-modal-content input[type="text"],
+          .digital-modal-content input[type="email"],
+          .digital-modal-content select {
+            height: 42px !important;
+            font-size: 14px !important;
+            border-radius: 9px !important;
+          }
+          .digital-modal-footer {
+            padding: 12px 14px !important;
+            flex-direction: column-reverse !important;
+            gap: 8px !important;
+            align-items: stretch !important;
+          }
+          .digital-modal-footer > div {
+            width: 100% !important;
+            justify-content: center !important;
+          }
+          .digital-modal-footer button {
+            width: 100% !important;
+            height: 42px !important;
+            justify-content: center !important;
+            font-size: 13.5px !important;
+            font-weight: 700 !important;
+            border-radius: 9px !important;
+          }
+          .digital-legal-badge {
+            display: none !important;
           }
         }
       `}} />
@@ -2176,22 +2712,23 @@ export default function MatriculaDigitalPage() {
       {/* ── Top Header com Título e Ações Rápidas ── */}
       <div className="digital-header">
         <div className="digital-header-info">
-          <img
-            src="/logo-impacto-clean.png"
-            alt="Colégio Impacto"
-            className="digital-header-logo"
-          />
+          <div className="digital-header-logo-wrap">
+            <img
+              src="/logo-impacto-clean.png"
+              alt="Colégio Impacto"
+              className="digital-header-logo"
+            />
+          </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <h1 className="digital-header-title">
-                Matrícula Digital
-              </h1>
+            <div className="digital-header-title">
+              <span>Matrícula Digital</span>
               <span className="digital-header-badge">
-                ASSINATURA & CIÊNCIA IMPACTO EDU
+                <span className="digital-pulse-dot" />
+                Assinatura & Ciência Digital
               </span>
             </div>
             <p className="digital-header-desc">
-              Emissão de termos de ciência, autorizações e documentos escolares para assinatura digital com código OTP, validade jurídica e dossiê de evidências em PDF.
+              Emissão, controle e validação jurídica de termos e documentos escolares com assinatura eletrônica OTP e dossiê de evidências.
             </p>
           </div>
         </div>
@@ -2232,73 +2769,12 @@ export default function MatriculaDigitalPage() {
               setModalNovoAberto(true)
             }}
             className="btn-novo-doc"
-            style={{
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 10,
-              padding: '10px 20px',
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
-              transition: 'all 0.2s ease',
-            }}
           >
-            <Plus size={16} /> Novo Documento para Assinatura
+            <Plus size={15} style={{ strokeWidth: 2.5 }} />
+            <span>Novo Documento</span>
           </button>
 
           <div className="digital-secondary-actions-group">
-            <button
-              onClick={() => setModalVerificadorAberto(true)}
-              style={{
-                background: 'hsl(var(--bg-surface))',
-                border: '1px solid hsl(var(--border-subtle))',
-                color: 'hsl(var(--text-primary))',
-                borderRadius: 10,
-                padding: '10px 16px',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                transition: 'all 0.2s ease',
-              }}
-            >
-              <Fingerprint size={16} color="#60a5fa" />
-              <span className="btn-label-desktop">Verificador de Arquivo</span>
-              <span className="btn-label-mobile">Verificador</span>
-            </button>
-
-            <button
-              onClick={() => {
-                carregarConfiguracoes()
-                setModalConfigAberto(true)
-              }}
-              style={{
-                background: 'hsl(var(--bg-surface))',
-                border: '1px solid hsl(var(--border-subtle))',
-                color: 'hsl(var(--text-primary))',
-                borderRadius: 10,
-                padding: '10px 16px',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                transition: 'all 0.2s ease',
-              }}
-            >
-              <Settings size={16} />
-              <span className="btn-label-desktop">Configurações</span>
-              <span className="btn-label-mobile">Configurar</span>
-            </button>
-
             <button
               onClick={() => {
                 setModalValidacaoAberto(true)
@@ -2311,245 +2787,255 @@ export default function MatriculaDigitalPage() {
                   }
                 }
               }}
-              style={{
-                background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%)',
-                border: '1px solid rgba(16, 185, 129, 0.45)',
-                color: '#34d399',
-                borderRadius: 10,
-                padding: '10px 18px',
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 2px 10px rgba(16, 185, 129, 0.18)',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseOver={e => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.35) 100%)'
-                e.currentTarget.style.transform = 'translateY(-1px)'
-              }}
-              onMouseOut={e => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.25) 100%)'
-                e.currentTarget.style.transform = 'translateY(0)'
-              }}
+              className="digital-secondary-btn"
+              title="Validação Oficial de Contrato"
             >
-              <ShieldCheck size={16} color="#34d399" />
-              <span className="btn-label-desktop">Validação de Contrato</span>
-              <span className="btn-label-mobile">Validação</span>
+              <ShieldCheck size={15} color="#10b981" />
+              <span className="btn-label-desktop">Validação</span>
+              <span className="btn-label-mobile">Validar</span>
+            </button>
+
+            <button
+              onClick={() => setModalVerificadorAberto(true)}
+              className="digital-secondary-btn"
+              title="Verificar integridade criptográfica de arquivo PDF"
+            >
+              <Fingerprint size={15} color="#3b82f6" />
+              <span className="btn-label-desktop">Verificador</span>
+              <span className="btn-label-mobile">Verificar</span>
+            </button>
+
+            <button
+              onClick={() => {
+                carregarConfiguracoes()
+                setModalConfigAberto(true)
+              }}
+              className="digital-secondary-btn"
+              title="Configurações de representantes e templates"
+            >
+              <Settings size={15} />
+              <span className="btn-label-desktop">Configurações</span>
+              <span className="btn-label-mobile">Ajustes</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── Cards de Indicadores / Métricas (KPIs) ── */}
+      {/* ── Cards de Indicadores / Métricas (KPIs Interativos) ── */}
       <div className="digital-kpi-grid">
-        <div className="digital-kpi-card">
-          <div className="digital-kpi-card-title">
-            <span>Total de Documentos</span>
-            <FileText size={16} color="#3b82f6" />
+        {/* Total */}
+        <div
+          onClick={() => setStatusFiltro('todos')}
+          className={`digital-kpi-card ${statusFiltro === 'todos' ? 'active-total' : ''}`}
+          title="Clique para listar todos os documentos"
+        >
+          <div className="digital-kpi-header">
+            <span className="digital-kpi-label">Total de Documentos</span>
+            <div className="digital-kpi-icon-wrap" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
+              <FileText size={16} />
+            </div>
           </div>
-          <div className="digital-kpi-card-value" style={{ color: 'hsl(var(--text-primary))' }}>
+          <div className="digital-kpi-value" style={{ color: 'hsl(var(--text-primary))' }}>
             {metrics.total}
           </div>
-          <div className="digital-kpi-card-sub" style={{ color: '#3b82f6' }}>Emitidos no ano letivo</div>
+          <div className="digital-kpi-sub">
+            <span style={{ color: '#3b82f6', fontWeight: 600 }}>Emitidos no ano letivo</span>
+            <span>{anoFiltro === 'todos' ? 'Todos os anos' : `Ano ${anoFiltro}`}</span>
+          </div>
         </div>
 
-        <div className="digital-kpi-card">
-          <div className="digital-kpi-card-title">
-            <span>Aguardando Ciência</span>
-            <Clock size={16} color="#f59e0b" />
+        {/* Aguardando Ciência */}
+        <div
+          onClick={() => setStatusFiltro(prev => prev === 'pendente' ? 'todos' : 'pendente')}
+          className={`digital-kpi-card ${statusFiltro === 'pendente' ? 'active-pendente' : ''}`}
+          title="Clique para filtrar apenas pendentes de assinatura"
+        >
+          <div className="digital-kpi-header">
+            <span className="digital-kpi-label">Aguardando Ciência</span>
+            <div className="digital-kpi-icon-wrap" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+              <Clock size={16} />
+            </div>
           </div>
-          <div className="digital-kpi-card-value" style={{ color: '#f59e0b' }}>
+          <div className="digital-kpi-value" style={{ color: '#f59e0b' }}>
             {metrics.pendentes}
           </div>
-          <div className="digital-kpi-card-sub" style={{ color: 'hsl(var(--text-secondary))' }}>Pendentes com responsável</div>
+          <div className="digital-kpi-sub">
+            <span>Pendentes com responsável</span>
+            {statusFiltro === 'pendente' && <span style={{ color: '#f59e0b', fontWeight: 700 }}>● Ativo</span>}
+          </div>
         </div>
 
-        <div className="digital-kpi-card">
-          <div className="digital-kpi-card-title">
-            <span>Assinados & Certificados</span>
-            <CheckCircle2 size={16} color="#10b981" />
+        {/* Assinados & Certificados */}
+        <div
+          onClick={() => setStatusFiltro(prev => prev === 'assinado' ? 'todos' : 'assinado')}
+          className={`digital-kpi-card ${statusFiltro === 'assinado' ? 'active-assinado' : ''}`}
+          title="Clique para filtrar apenas assinados"
+        >
+          <div className="digital-kpi-header">
+            <span className="digital-kpi-label">Assinados & Certificados</span>
+            <div className="digital-kpi-icon-wrap" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+              <CheckCircle2 size={16} />
+            </div>
           </div>
-          <div className="digital-kpi-card-value" style={{ color: '#10b981' }}>
+          <div className="digital-kpi-value" style={{ color: '#10b981' }}>
             {metrics.assinados}
           </div>
-          <div className="digital-kpi-card-sub" style={{ color: '#10b981' }}>Com Selo SHA-256</div>
+          <div className="digital-kpi-sub">
+            <span style={{ color: '#10b981', fontWeight: 600 }}>Com Selo SHA-256</span>
+            {statusFiltro === 'assinado' && <span style={{ color: '#10b981', fontWeight: 700 }}>● Ativo</span>}
+          </div>
         </div>
 
-        <div className="digital-kpi-card">
-          <div className="digital-kpi-card-title">
-            <span>Taxa de Assinatura</span>
-            <ShieldCheck size={16} color="#8b5cf6" />
+        {/* Taxa de Assinatura */}
+        <div className="digital-kpi-card" style={{ cursor: 'default' }}>
+          <div className="digital-kpi-header">
+            <span className="digital-kpi-label">Taxa de Assinatura</span>
+            <div className="digital-kpi-icon-wrap" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+              <ShieldCheck size={16} />
+            </div>
           </div>
-          <div className="digital-kpi-card-value" style={{ color: '#8b5cf6' }}>
+          <div className="digital-kpi-value" style={{ color: '#8b5cf6' }}>
             {metrics.taxaAssinatura}%
           </div>
-          <div className="digital-kpi-card-sub" style={{ color: '#10b981' }}>100% de Integridade</div>
+          <div className="digital-mini-bar">
+            <div className="digital-mini-bar-fill" style={{ width: `${Math.min(100, Math.max(0, metrics.taxaAssinatura))}%` }} />
+          </div>
+          <div className="digital-kpi-sub" style={{ marginTop: 6 }}>
+            <span style={{ color: '#10b981', fontWeight: 600 }}>100% de Integridade</span>
+            <span>Validade jurídica</span>
+          </div>
         </div>
       </div>
 
-      {/* ── Barra de Filtros e Busca ── */}
+      {/* ── Barra de Filtros e Busca Ultra Moderna ── */}
       <div className="digital-filter-bar">
-        <div className="digital-filter-search">
-          <div style={{ position: 'relative', width: '100%' }}>
-            <Search size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))' }} />
+        <div className="digital-filter-left">
+          {/* Campo de Busca Rápida */}
+          <div className="digital-search-wrap">
+            <Search size={15} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'hsl(var(--text-secondary))', pointerEvents: 'none' }} />
             <input
               type="text"
               value={busca}
               onChange={e => setBusca(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && carregarContratos()}
-              placeholder="Buscar estudante, responsável ou protocolo..."
-              style={{
-                width: '100%',
-                height: 38,
-                background: 'hsl(var(--bg-elevated))',
-                border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 8,
-                padding: '0 12px 0 36px',
-                fontSize: 13,
-                color: 'hsl(var(--text-primary))',
-                outline: 'none',
-              }}
+              placeholder="Buscar estudante, responsável, documento ou protocolo..."
+              className="digital-search-input"
             />
+            {busca && (
+              <button
+                onClick={() => {
+                  setBusca('')
+                  carregarContratos({ search: '' })
+                }}
+                className="digital-search-clear"
+                title="Limpar busca"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
 
-          <button
-            onClick={() => carregarContratos()}
-            style={{
-              background: 'hsl(var(--bg-elevated))',
-              border: '1px solid hsl(var(--border-subtle))',
-              color: 'hsl(var(--text-primary))',
-              borderRadius: 8,
-              padding: '0 14px',
-              height: 38,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              flexShrink: 0,
-            }}
-          >
-            <Search size={14} /> <span className="btn-label-desktop">Filtrar</span>
-          </button>
+          {/* Segmented Tabs de Status (1 clique) */}
+          <div className="digital-segmented-tabs">
+            <button
+              onClick={() => setStatusFiltro('todos')}
+              className={`digital-segmented-tab ${statusFiltro === 'todos' ? 'active' : ''}`}
+            >
+              <span>Todos</span>
+              <span className="digital-tab-badge">{metrics.total}</span>
+            </button>
+            <button
+              onClick={() => setStatusFiltro('pendente')}
+              className={`digital-segmented-tab tab-pendente ${statusFiltro === 'pendente' ? 'active' : ''}`}
+            >
+              <Clock size={12} style={{ color: '#f59e0b' }} />
+              <span>Pendentes</span>
+              <span className="digital-tab-badge">{metrics.pendentes}</span>
+            </button>
+            <button
+              onClick={() => setStatusFiltro('assinado')}
+              className={`digital-segmented-tab tab-assinado ${statusFiltro === 'assinado' ? 'active' : ''}`}
+            >
+              <CheckCircle2 size={12} style={{ color: '#10b981' }} />
+              <span>Assinados</span>
+              <span className="digital-tab-badge">{metrics.assinados}</span>
+            </button>
+            {metrics.cancelados > 0 && (
+              <button
+                onClick={() => setStatusFiltro('cancelado')}
+                className={`digital-segmented-tab ${statusFiltro === 'cancelado' ? 'active' : ''}`}
+              >
+                <AlertCircle size={12} style={{ color: '#ef4444' }} />
+                <span>Cancelados</span>
+                <span className="digital-tab-badge">{metrics.cancelados}</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        <div className="digital-filter-selects">
-          {/* Filtro Status */}
-          <div className="digital-filter-select-group">
-            <span className="btn-label-desktop">Status:</span>
-            <select
-              value={statusFiltro}
-              onChange={e => setStatusFiltro(e.target.value)}
-              style={{
-                height: 38,
-                background: 'hsl(var(--bg-elevated))',
-                border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 8,
-                padding: '0 8px',
-                fontSize: 12.5,
-                color: 'hsl(var(--text-primary))',
-                outline: 'none',
-              }}
-            >
-              <option value="todos">Todos os Status</option>
-              <option value="pendente">Aguardando Ciência</option>
-              <option value="assinado">Assinados</option>
-              <option value="cancelado">Cancelados</option>
-            </select>
-          </div>
-
-          {/* Filtro Ano Letivo */}
-          <div className="digital-filter-select-group">
-            <span className="btn-label-desktop">Ano:</span>
+        <div className="digital-filter-right">
+          {/* Seletor de Ano Letivo */}
+          <div className="digital-select-wrap">
+            <Calendar size={13} />
             <select
               value={anoFiltro}
               onChange={e => {
                 anoAlteradoManualmenteRef.current = true
                 setAnoFiltro(e.target.value)
               }}
-              style={{
-                height: 38,
-                background: 'hsl(var(--bg-elevated))',
-                border: '1px solid hsl(var(--border-subtle))',
-                borderRadius: 8,
-                padding: '0 8px',
-                fontSize: 12.5,
-                color: 'hsl(var(--text-primary))',
-                outline: 'none',
-              }}
+              className="digital-select-custom"
             >
               {anosLetivosDisponiveis.map(ano => (
                 <option key={ano} value={ano}>
                   {ano} {ano === ultimoAnoCadastrado ? '(Atual)' : ''}
                 </option>
               ))}
-              <option value="todos">Todos Anos</option>
+              <option value="todos">Todos os Anos</option>
             </select>
           </div>
 
+          {/* Botão Atualizar */}
           <button
             onClick={() => carregarContratos()}
             disabled={loading}
-            title="Atualizar lista"
-            style={{
-              background: 'hsl(var(--bg-elevated))',
-              border: '1px solid hsl(var(--border-subtle))',
-              color: 'hsl(var(--text-primary))',
-              borderRadius: 8,
-              width: 38,
-              height: 38,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              flexShrink: 0,
-            }}
+            title="Atualizar lista de documentos"
+            className="digital-refresh-btn"
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
+
       {/* ── Tabela Desktop de Documentos para Assinatura ── */}
       <div
         ref={tabelaRef}
         className="digital-desktop-table"
-        style={{
-          background: 'hsl(var(--bg-surface))',
-          border: '1px solid hsl(var(--border-subtle))',
-          borderRadius: 16,
-          overflow: 'hidden',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-        }}
       >
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: 'hsl(var(--bg-elevated))', borderBottom: '1px solid hsl(var(--border-subtle))', color: 'hsl(var(--text-secondary))' }}>
-                <th style={{ padding: '14px 18px', fontWeight: 700, width: 160 }}>PROTOCOLO</th>
-                <th style={{ padding: '14px 18px', fontWeight: 700 }}>DOCUMENTO</th>
-                <th style={{ padding: '14px 18px', fontWeight: 700 }}>SIGNATÁRIO</th>
-                <th style={{ padding: '14px 18px', fontWeight: 700 }}>STATUS</th>
-                <th style={{ padding: '14px 18px', fontWeight: 700, textAlign: 'right', minWidth: 340 }}>AÇÕES</th>
+          <table className="digital-table-el">
+            <thead className="digital-table-head">
+              <tr>
+                <th style={{ width: 170 }}>PROTOCOLO</th>
+                <th>DOCUMENTO & ESTUDANTE</th>
+                <th style={{ width: 250 }}>SIGNATÁRIO</th>
+                <th style={{ width: 130 }}>STATUS</th>
+                <th style={{ textAlign: 'right', width: 230 }}>AÇÕES</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>
-                    <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 10px', display: 'block' }} />
-                    Carregando documentos para assinatura...
+                  <td colSpan={5} style={{ padding: 48, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>
+                    <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 10px', display: 'block', color: '#3b82f6' }} />
+                    <span style={{ fontSize: 13, fontWeight: 500 }}>Carregando documentos para assinatura...</span>
                   </td>
                 </tr>
               ) : fetchError ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: 40, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>
-                    <AlertCircle size={32} style={{ margin: '0 auto 12px', color: '#ef4444', display: 'block' }} />
-                    <div style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', marginBottom: 6 }}>
+                  <td colSpan={5} style={{ padding: 44, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>
+                    <AlertCircle size={32} style={{ margin: '0 auto 10px', color: '#ef4444', display: 'block' }} />
+                    <div style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', marginBottom: 4 }}>
                       Não foi possível carregar os documentos
                     </div>
                     <div style={{ fontSize: 12, color: 'hsl(var(--text-secondary))', marginBottom: 14 }}>
@@ -2558,11 +3044,11 @@ export default function MatriculaDigitalPage() {
                     <button
                       onClick={() => carregarContratos()}
                       style={{
-                        padding: '6px 16px',
+                        padding: '7px 16px',
                         background: 'hsl(var(--primary))',
                         color: 'white',
                         border: 'none',
-                        borderRadius: 6,
+                        borderRadius: 8,
                         fontSize: 12.5,
                         fontWeight: 600,
                         cursor: 'pointer',
@@ -2577,8 +3063,8 @@ export default function MatriculaDigitalPage() {
                 </tr>
               ) : contratos.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: 48, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>
-                    <FileText size={32} style={{ margin: '0 auto 12px', opacity: 0.4, display: 'block' }} />
+                  <td colSpan={5} style={{ padding: 52, textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>
+                    <FileText size={34} style={{ margin: '0 auto 12px', opacity: 0.35, display: 'block' }} />
                     <div style={{ fontSize: 13, color: 'hsl(var(--text-secondary))' }}>
                       {anoFiltro && anoFiltro !== 'todos' ? (
                         <>
@@ -2594,7 +3080,7 @@ export default function MatriculaDigitalPage() {
                                 border: '1px solid rgba(56, 189, 248, 0.3)',
                                 color: '#38bdf8',
                                 padding: '6px 14px',
-                                borderRadius: 6,
+                                borderRadius: 8,
                                 fontSize: 12,
                                 fontWeight: 600,
                                 cursor: 'pointer',
@@ -2620,49 +3106,19 @@ export default function MatriculaDigitalPage() {
                   const isPendente = c.status === 'pendente'
 
                   return (
-                    <tr
-                      key={c.id}
-                      style={{
-                        borderBottom: '1px solid hsl(var(--border-subtle))',
-                        transition: 'background 0.15s ease',
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'hsl(var(--bg-elevated))')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      {/* Protocolo */}
-                      <td style={{ padding: '14px 18px' }}>
+                    <tr key={c.id} className="digital-table-row">
+                      {/* Coluna 1: Protocolo */}
+                      <td style={{ padding: '14px 18px', width: 170 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <a
                             href={`/validar-assinatura/${encodeURIComponent(c.protocolo)}`}
                             target="_blank"
                             rel="noreferrer"
-                            title={`Validar contrato ${c.protocolo} oficialmente (Abre validação pesquisada)`}
-                            style={{
-                              fontFamily: 'monospace',
-                              fontWeight: 800,
-                              color: '#38bdf8',
-                              textDecoration: 'none',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              cursor: 'pointer',
-                              borderBottom: '1px dashed rgba(56, 189, 248, 0.45)',
-                              paddingBottom: 1,
-                              transition: 'all 0.15s ease',
-                            }}
-                            onMouseEnter={e => {
-                              e.currentTarget.style.color = '#7dd3fc'
-                              e.currentTarget.style.borderBottomColor = '#38bdf8'
-                              e.currentTarget.style.transform = 'translateY(-1px)'
-                            }}
-                            onMouseLeave={e => {
-                              e.currentTarget.style.color = '#38bdf8'
-                              e.currentTarget.style.borderBottomColor = 'rgba(56, 189, 248, 0.45)'
-                              e.currentTarget.style.transform = 'translateY(0)'
-                            }}
+                            title={`Validar contrato ${c.protocolo} oficialmente`}
+                            className="digital-proto-pill"
                           >
-                            {c.protocolo}
-                            <ExternalLink size={11} style={{ opacity: 0.7 }} />
+                            <span>{c.protocolo}</span>
+                            <ExternalLink size={10} style={{ opacity: 0.6 }} />
                           </a>
                           <button
                             onClick={() => {
@@ -2673,16 +3129,9 @@ export default function MatriculaDigitalPage() {
                               })
                             }}
                             title={copiadoProtocoloId === c.protocolo ? 'Protocolo copiado!' : 'Copiar Protocolo'}
+                            className="digital-proto-copy"
                             style={{
-                              background: 'none',
-                              border: 'none',
                               color: copiadoProtocoloId === c.protocolo ? '#10b981' : 'hsl(var(--text-secondary))',
-                              cursor: 'pointer',
-                              padding: 2,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              transition: 'all 0.2s ease',
-                              transform: copiadoProtocoloId === c.protocolo ? 'scale(1.2)' : 'scale(1)',
                             }}
                           >
                             {copiadoProtocoloId === c.protocolo ? (
@@ -2692,124 +3141,96 @@ export default function MatriculaDigitalPage() {
                             )}
                           </button>
                         </div>
-                        <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
+                        <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Calendar size={11} style={{ opacity: 0.7 }} />
                           {new Date(c.created_at).toLocaleDateString('pt-BR')}
                         </div>
                       </td>
 
-                      {/* Documento / Título */}
+                      {/* Coluna 2: Documento & Estudante */}
                       <td style={{ padding: '14px 18px' }}>
-                        <div style={{ fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                        <div className="digital-doc-title">
                           {c.titulo_documento}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 11, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <FileText size={12} /> Arquivo PDF
-                          </span>
+                        <div className="digital-doc-tags">
+                          {c.aluno_nome && (
+                            <span className="digital-tag-student" title={`Estudante vinculado: ${c.aluno_nome}`}>
+                              <GraduationCap size={11} /> {c.aluno_nome}
+                            </span>
+                          )}
                           {(c.evidencias as any)?.totalDocumentos > 1 && (
                             <span
                               title={`Pacote unificado contendo ${(c.evidencias as any).totalDocumentos} documentos mesclados em um único arquivo`}
-                              style={{
-                                fontSize: 10,
-                                background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(99, 102, 241, 0.18) 100%)',
-                                color: '#38bdf8',
-                                padding: '1px 7px',
-                                borderRadius: 6,
-                                fontWeight: 700,
-                                border: '1px solid rgba(56, 189, 248, 0.35)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 3.5,
-                              }}
+                              className="digital-tag-packet"
                             >
                               <Layers size={10} /> {(c.evidencias as any).totalDocumentos} docs unificados
                             </span>
                           )}
-                          {c.ano_letivo && (
-                            <span style={{ fontSize: 10, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', padding: '1px 6px', borderRadius: 4, fontWeight: 700, border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                          {c.ano_letivo && c.ano_letivo !== anoFiltro && (
+                            <span className="digital-tag-year">
                               Ano {c.ano_letivo}
                             </span>
                           )}
-                          {c.aluno_nome && (
-                            <span style={{ fontSize: 10, background: 'rgba(59, 130, 246, 0.12)', color: '#93c5fd', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
-                              Ref: {c.aluno_nome}
-                            </span>
-                          )}
                         </div>
                       </td>
 
-                      {/* Signatário */}
-                      <td style={{ padding: '14px 18px' }}>
-                        <div style={{ fontWeight: 600, color: 'hsl(var(--text-primary))' }}>{c.responsavel_nome}</div>
-                        <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
-                          {c.responsavel_email}
-                        </div>
-                        {(c.responsavel_cpf || c.responsavel_telefone) && (
-                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
-                            {c.responsavel_cpf ? `CPF: ${c.responsavel_cpf}` : ''}{c.responsavel_cpf && c.responsavel_telefone ? ' • ' : ''}{c.responsavel_telefone}
-                          </div>
-                        )}
+                      {/* Coluna 3: Signatário com Avatar */}
+                      <td style={{ padding: '14px 18px', width: 250 }}>
+                        {(() => {
+                          const avatar = getAvatarColor(c.responsavel_nome)
+                          const initials = getIniciaisNome(c.responsavel_nome)
+                          return (
+                            <div className="digital-signer-wrap">
+                              <div
+                                className="digital-signer-avatar"
+                                style={{ background: avatar.bg, color: avatar.text, border: `1px solid ${avatar.border}` }}
+                              >
+                                {initials}
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <div className="digital-signer-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {c.responsavel_nome}
+                                </div>
+                                <div className="digital-signer-sub">
+                                  <Mail size={11} style={{ opacity: 0.7, flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {c.responsavel_email}
+                                  </span>
+                                </div>
+                                {(c.responsavel_cpf || c.responsavel_telefone) && (
+                                  <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 1 }}>
+                                    {c.responsavel_cpf ? formatarCpf(c.responsavel_cpf) : ''}
+                                    {c.responsavel_cpf && c.responsavel_telefone ? ' • ' : ''}
+                                    {c.responsavel_telefone ? formatarTelefone(c.responsavel_telefone) : ''}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })()}
                       </td>
 
-                      {/* Status */}
-                      <td style={{ padding: '14px 18px' }}>
+                      {/* Coluna 4: Status */}
+                      <td style={{ padding: '14px 18px', width: 130 }}>
                         {isAssinado ? (
-                          <span
-                            style={{
-                              background: 'rgba(16, 185, 129, 0.15)',
-                              color: '#34d399',
-                              border: '1px solid rgba(16, 185, 129, 0.3)',
-                              padding: '4px 10px',
-                              borderRadius: 20,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
+                          <span className="digital-status-pill assinado">
                             <CheckCircle2 size={12} /> Assinado
                           </span>
                         ) : isCancelado ? (
-                          <span
-                            style={{
-                              background: 'rgba(239, 68, 68, 0.15)',
-                              color: '#f87171',
-                              border: '1px solid rgba(239, 68, 68, 0.3)',
-                              padding: '4px 10px',
-                              borderRadius: 20,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
+                          <span className="digital-status-pill cancelado">
                             <AlertCircle size={12} /> Cancelado
                           </span>
                         ) : (
-                          <span
-                            style={{
-                              background: 'rgba(245, 158, 11, 0.15)',
-                              color: '#fbbf24',
-                              border: '1px solid rgba(245, 158, 11, 0.3)',
-                              padding: '4px 10px',
-                              borderRadius: 20,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                            }}
-                          >
-                            <Clock size={12} /> Pendente
+                          <span className="digital-status-pill pendente">
+                            <span className="digital-pulse-dot" style={{ background: '#f59e0b', boxShadow: 'none' }} />
+                            Aguardando
                           </span>
                         )}
                       </td>
 
-                      {/* Ações Modernas em Linha Única */}
-                      <td style={{ padding: '12px 18px', textAlign: 'right', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-                        <div className="digital-action-group">
+                      {/* Coluna 5: Ações Inteligentes e Despoluídas */}
+                      <td style={{ padding: '12px 18px', textAlign: 'right', verticalAlign: 'middle', whiteSpace: 'nowrap', width: 230 }}>
+                        <div className="digital-action-row">
                           {/* 1. DOCUMENTO ASSINADO */}
                           {isAssinado && (
                             <>
@@ -2818,7 +3239,7 @@ export default function MatriculaDigitalPage() {
                                 onClick={() => handleBaixarPdf(c, 'assinado')}
                                 disabled={baixandoPdfId === `${c.id}_assinado`}
                                 title="Baixar Documento Oficial Assinado com Certificado Digital (PDF)"
-                                className="digital-action-btn digital-btn-primary"
+                                className="digital-btn-primary-smart assinado"
                               >
                                 {baixandoPdfId === `${c.id}_assinado` ? (
                                   <>
@@ -2827,112 +3248,61 @@ export default function MatriculaDigitalPage() {
                                   </>
                                 ) : (
                                   <>
-                                    <Download size={13} style={{ strokeWidth: 2.4 }} />
-                                    <span>Baixar Doc Assinado</span>
+                                    <Download size={13} style={{ strokeWidth: 2.3 }} />
+                                    <span>Baixar PDF</span>
                                   </>
                                 )}
                               </button>
 
-                              {/* WhatsApp */}
+                              {/* WhatsApp Icon Button */}
                               <button
                                 onClick={() => handleCompartilharWhatsApp(c)}
-                                title="Enviar Comprovante e Link pelo WhatsApp"
-                                className="digital-action-btn digital-btn-whatsapp"
+                                title="Enviar comprovante pelo WhatsApp"
+                                className="digital-btn-icon-smart whatsapp"
                               >
-                                <MessageSquare size={13} />
-                                <span>WhatsApp</span>
+                                <MessageSquare size={14} />
                               </button>
 
-                              {/* Dossiê */}
+                              {/* Dossiê Icon Button */}
                               <button
                                 onClick={() => setModalAuditoriaContrato(c)}
-                                title="Ver Dossiê e Trilha de Auditoria Digital Imutável"
-                                className="digital-action-btn digital-btn-dossie"
+                                title="Ver Dossiê e Trilha de Auditoria Digital"
+                                className="digital-btn-icon-smart dossie"
                               >
-                                <ShieldCheck size={13} />
-                                <span>Dossiê</span>
+                                <ShieldCheck size={14} />
                               </button>
 
                               {/* Menu Mais Opções (...) */}
                               <DropdownMenu.Root>
                                 <DropdownMenu.Trigger asChild>
-                                  <button
-                                    className="digital-btn-more"
-                                    title="Mais opções do documento"
-                                    onClick={e => e.stopPropagation()}
-                                  >
-                                    <MoreHorizontal size={15} />
+                                  <button className="digital-btn-icon-smart" title="Mais opções do documento">
+                                    <MoreHorizontal size={14} />
                                   </button>
                                 </DropdownMenu.Trigger>
-
                                 <DropdownMenu.Portal>
-                                  <DropdownMenu.Content
-                                    align="end"
-                                    side="bottom"
-                                    sideOffset={6}
-                                    className="digital-dropdown-content"
-                                    onClick={e => e.stopPropagation()}
-                                  >
-                                    {/* Validar Assinatura Pública */}
+                                  <DropdownMenu.Content align="end" side="bottom" sideOffset={6} className="digital-dropdown-content" onClick={e => e.stopPropagation()}>
                                     <DropdownMenu.Item asChild>
-                                      <a
-                                        href={`/validar-assinatura/${encodeURIComponent(c.protocolo)}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="digital-dropdown-item"
-                                      >
+                                      <a href={`/validar-assinatura/${encodeURIComponent(c.protocolo)}`} target="_blank" rel="noreferrer" className="digital-dropdown-item">
                                         <BadgeCheck size={15} color="#38bdf8" />
                                         <span>Validar Assinatura Pública</span>
                                       </a>
                                     </DropdownMenu.Item>
-
-                                    {/* Reenviar Cópia Oficial por E-mail */}
                                     <DropdownMenu.Item asChild>
-                                      <div
-                                        onClick={() => handleReenviarDocumentoEmail(c)}
-                                        className="digital-dropdown-item"
-                                        style={{ cursor: reenviandoEmailId === c.id ? 'wait' : 'pointer' }}
-                                      >
-                                        {reenviandoEmailId === c.id ? (
-                                          <Loader2 size={15} className="animate-spin" color="#38bdf8" />
-                                        ) : (
-                                          <Mail size={15} color="#38bdf8" />
-                                        )}
+                                      <div onClick={() => handleReenviarDocumentoEmail(c)} className="digital-dropdown-item" style={{ cursor: reenviandoEmailId === c.id ? 'wait' : 'pointer' }}>
+                                        {reenviandoEmailId === c.id ? <Loader2 size={15} className="animate-spin" color="#38bdf8" /> : <Mail size={15} color="#38bdf8" />}
                                         <span>Reenviar Cópia por E-mail</span>
                                       </div>
                                     </DropdownMenu.Item>
-
-                                    {/* Copiar Link de Acesso */}
                                     <DropdownMenu.Item asChild>
-                                      <div
-                                        onClick={() => handleCopiarLink(c.token_assinatura)}
-                                        className="digital-dropdown-item"
-                                      >
-                                        {copiadoTokenLink === c.token_assinatura ? (
-                                          <Check size={15} color="#10b981" style={{ strokeWidth: 2.5 }} />
-                                        ) : (
-                                          <Copy size={15} color="#10b981" />
-                                        )}
-                                        <span>
-                                          {copiadoTokenLink === c.token_assinatura ? 'Link Copiado!' : 'Copiar Link de Acesso'}
-                                        </span>
+                                      <div onClick={() => handleCopiarLink(c.token_assinatura)} className="digital-dropdown-item">
+                                        {copiadoTokenLink === c.token_assinatura ? <Check size={15} color="#10b981" style={{ strokeWidth: 2.5 }} /> : <Copy size={15} color="#10b981" />}
+                                        <span>{copiadoTokenLink === c.token_assinatura ? 'Link Copiado!' : 'Copiar Link de Acesso'}</span>
                                       </div>
                                     </DropdownMenu.Item>
-
                                     <div className="digital-dropdown-separator" />
-
-                                    {/* Excluir Documento */}
                                     <DropdownMenu.Item asChild>
-                                      <div
-                                        onClick={() => handleExcluirContrato(c.id, c.protocolo, c.titulo_documento)}
-                                        className="digital-dropdown-item danger"
-                                        style={{ cursor: excluindoId === c.id ? 'wait' : 'pointer' }}
-                                      >
-                                        {excluindoId === c.id ? (
-                                          <Loader2 size={15} className="animate-spin" color="#ef4444" />
-                                        ) : (
-                                          <Trash2 size={15} color="#ef4444" />
-                                        )}
+                                      <div onClick={() => handleExcluirContrato(c.id, c.protocolo, c.titulo_documento)} className="digital-dropdown-item danger" style={{ cursor: excluindoId === c.id ? 'wait' : 'pointer' }}>
+                                        {excluindoId === c.id ? <Loader2 size={15} className="animate-spin" color="#ef4444" /> : <Trash2 size={15} color="#ef4444" />}
                                         <span>Excluir Documento</span>
                                       </div>
                                     </DropdownMenu.Item>
@@ -2945,11 +3315,11 @@ export default function MatriculaDigitalPage() {
                           {/* 2. DOCUMENTO PENDENTE */}
                           {isPendente && (
                             <>
-                              {/* Botão Primário: WhatsApp para Enviar / Cobrar */}
+                              {/* Botão Primário: WhatsApp */}
                               <button
                                 onClick={() => handleCompartilharWhatsApp(c)}
                                 title="Enviar Link de Assinatura pelo WhatsApp"
-                                className="digital-action-btn digital-btn-whatsapp-primary"
+                                className="digital-btn-primary-smart pendente"
                               >
                                 <MessageSquare size={13} />
                                 <span>WhatsApp</span>
@@ -2959,116 +3329,57 @@ export default function MatriculaDigitalPage() {
                               <button
                                 onClick={() => handleCopiarLink(c.token_assinatura)}
                                 title={copiadoTokenLink === c.token_assinatura ? 'Link Copiado!' : 'Copiar Link de Assinatura'}
-                                className={`digital-action-btn digital-btn-copy ${copiadoTokenLink === c.token_assinatura ? 'copied' : ''}`}
+                                className={`digital-btn-icon-smart ${copiadoTokenLink === c.token_assinatura ? 'copied' : ''}`}
                               >
-                                {copiadoTokenLink === c.token_assinatura ? (
-                                  <>
-                                    <Check size={13} style={{ strokeWidth: 2.5 }} />
-                                    <span>Copiado!</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy size={13} />
-                                    <span>Copiar Link</span>
-                                  </>
-                                )}
+                                {copiadoTokenLink === c.token_assinatura ? <Check size={13} style={{ strokeWidth: 2.5 }} /> : <Copy size={13} />}
                               </button>
 
-                              {/* Dossiê */}
+                              {/* Dossiê Icon Button */}
                               <button
                                 onClick={() => setModalAuditoriaContrato(c)}
                                 title="Ver Dossiê e Trilha de Auditoria Digital"
-                                className="digital-action-btn digital-btn-dossie"
+                                className="digital-btn-icon-smart dossie"
                               >
-                                <ShieldCheck size={13} />
-                                <span>Dossiê</span>
+                                <ShieldCheck size={14} />
                               </button>
 
                               {/* Menu Mais Opções (...) */}
                               <DropdownMenu.Root>
                                 <DropdownMenu.Trigger asChild>
-                                  <button
-                                    className="digital-btn-more"
-                                    title="Mais opções do documento"
-                                    onClick={e => e.stopPropagation()}
-                                  >
-                                    <MoreHorizontal size={15} />
+                                  <button className="digital-btn-icon-smart" title="Mais opções do documento">
+                                    <MoreHorizontal size={14} />
                                   </button>
                                 </DropdownMenu.Trigger>
-
                                 <DropdownMenu.Portal>
-                                  <DropdownMenu.Content
-                                    align="end"
-                                    side="bottom"
-                                    sideOffset={6}
-                                    className="digital-dropdown-content"
-                                    onClick={e => e.stopPropagation()}
-                                  >
-                                    {/* Reenviar Código OTP por E-mail */}
+                                  <DropdownMenu.Content align="end" side="bottom" sideOffset={6} className="digital-dropdown-content" onClick={e => e.stopPropagation()}>
                                     <DropdownMenu.Item asChild>
-                                      <div
-                                        onClick={() => handleReenviarOtp(c)}
-                                        className="digital-dropdown-item"
-                                      >
+                                      <div onClick={() => handleReenviarOtp(c)} className="digital-dropdown-item">
                                         <Mail size={15} color="#38bdf8" />
                                         <span>Reenviar Código OTP por E-mail</span>
                                       </div>
                                     </DropdownMenu.Item>
-
-                                    {/* Baixar Minuta Original (PDF) */}
                                     <DropdownMenu.Item asChild>
-                                      <div
-                                        onClick={() => handleBaixarPdf(c, 'original')}
-                                        className="digital-dropdown-item"
-                                        style={{ cursor: baixandoPdfId === `${c.id}_original` ? 'wait' : 'pointer' }}
-                                      >
-                                        {baixandoPdfId === `${c.id}_original` ? (
-                                          <Loader2 size={15} className="animate-spin" color="#94a3b8" />
-                                        ) : (
-                                          <Download size={15} color="#94a3b8" />
-                                        )}
+                                      <div onClick={() => handleBaixarPdf(c, 'original')} className="digital-dropdown-item" style={{ cursor: baixandoPdfId === `${c.id}_original` ? 'wait' : 'pointer' }}>
+                                        {baixandoPdfId === `${c.id}_original` ? <Loader2 size={15} className="animate-spin" color="#94a3b8" /> : <Download size={15} color="#94a3b8" />}
                                         <span>Baixar Minuta Original (PDF)</span>
                                       </div>
                                     </DropdownMenu.Item>
-
-                                    {/* Validar Documento */}
                                     <DropdownMenu.Item asChild>
-                                      <a
-                                        href={`/validar-assinatura/${encodeURIComponent(c.protocolo)}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="digital-dropdown-item"
-                                      >
+                                      <a href={`/validar-assinatura/${encodeURIComponent(c.protocolo)}`} target="_blank" rel="noreferrer" className="digital-dropdown-item">
                                         <BadgeCheck size={15} color="#38bdf8" />
                                         <span>Validar Documento Oficial</span>
                                       </a>
                                     </DropdownMenu.Item>
-
                                     <div className="digital-dropdown-separator" />
-
-                                    {/* Cancelar / Revogar Link */}
                                     <DropdownMenu.Item asChild>
-                                      <div
-                                        onClick={() => handleCancelarContrato(c.id, c.protocolo)}
-                                        className="digital-dropdown-item warning"
-                                      >
+                                      <div onClick={() => handleCancelarContrato(c.id, c.protocolo)} className="digital-dropdown-item warning">
                                         <Ban size={15} color="#f59e0b" />
                                         <span>Revogar / Cancelar Link</span>
                                       </div>
                                     </DropdownMenu.Item>
-
-                                    {/* Excluir Documento */}
                                     <DropdownMenu.Item asChild>
-                                      <div
-                                        onClick={() => handleExcluirContrato(c.id, c.protocolo, c.titulo_documento)}
-                                        className="digital-dropdown-item danger"
-                                        style={{ cursor: excluindoId === c.id ? 'wait' : 'pointer' }}
-                                      >
-                                        {excluindoId === c.id ? (
-                                          <Loader2 size={15} className="animate-spin" color="#ef4444" />
-                                        ) : (
-                                          <Trash2 size={15} color="#ef4444" />
-                                        )}
+                                      <div onClick={() => handleExcluirContrato(c.id, c.protocolo, c.titulo_documento)} className="digital-dropdown-item danger" style={{ cursor: excluindoId === c.id ? 'wait' : 'pointer' }}>
+                                        {excluindoId === c.id ? <Loader2 size={15} className="animate-spin" color="#ef4444" /> : <Trash2 size={15} color="#ef4444" />}
                                         <span>Excluir Documento</span>
                                       </div>
                                     </DropdownMenu.Item>
@@ -3085,59 +3396,30 @@ export default function MatriculaDigitalPage() {
                               <button
                                 onClick={() => setModalAuditoriaContrato(c)}
                                 title="Ver Dossiê e Trilha de Auditoria Digital"
-                                className="digital-action-btn digital-btn-dossie"
+                                className="digital-btn-icon-smart dossie"
                               >
-                                <ShieldCheck size={13} />
-                                <span>Dossiê</span>
+                                <ShieldCheck size={14} />
                               </button>
 
                               {/* Menu Mais Opções (...) */}
                               <DropdownMenu.Root>
                                 <DropdownMenu.Trigger asChild>
-                                  <button
-                                    className="digital-btn-more"
-                                    title="Mais opções do documento"
-                                    onClick={e => e.stopPropagation()}
-                                  >
-                                    <MoreHorizontal size={15} />
+                                  <button className="digital-btn-icon-smart" title="Mais opções do documento">
+                                    <MoreHorizontal size={14} />
                                   </button>
                                 </DropdownMenu.Trigger>
-
                                 <DropdownMenu.Portal>
-                                  <DropdownMenu.Content
-                                    align="end"
-                                    side="bottom"
-                                    sideOffset={6}
-                                    className="digital-dropdown-content"
-                                    onClick={e => e.stopPropagation()}
-                                  >
-                                    {/* Validar Documento */}
+                                  <DropdownMenu.Content align="end" side="bottom" sideOffset={6} className="digital-dropdown-content" onClick={e => e.stopPropagation()}>
                                     <DropdownMenu.Item asChild>
-                                      <a
-                                        href={`/validar-assinatura/${encodeURIComponent(c.protocolo)}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="digital-dropdown-item"
-                                      >
+                                      <a href={`/validar-assinatura/${encodeURIComponent(c.protocolo)}`} target="_blank" rel="noreferrer" className="digital-dropdown-item">
                                         <BadgeCheck size={15} color="#38bdf8" />
                                         <span>Validar Documento Oficial</span>
                                       </a>
                                     </DropdownMenu.Item>
-
                                     <div className="digital-dropdown-separator" />
-
-                                    {/* Excluir Documento */}
                                     <DropdownMenu.Item asChild>
-                                      <div
-                                        onClick={() => handleExcluirContrato(c.id, c.protocolo, c.titulo_documento)}
-                                        className="digital-dropdown-item danger"
-                                        style={{ cursor: excluindoId === c.id ? 'wait' : 'pointer' }}
-                                      >
-                                        {excluindoId === c.id ? (
-                                          <Loader2 size={15} className="animate-spin" color="#ef4444" />
-                                        ) : (
-                                          <Trash2 size={15} color="#ef4444" />
-                                        )}
+                                      <div onClick={() => handleExcluirContrato(c.id, c.protocolo, c.titulo_documento)} className="digital-dropdown-item danger" style={{ cursor: excluindoId === c.id ? 'wait' : 'pointer' }}>
+                                        {excluindoId === c.id ? <Loader2 size={15} className="animate-spin" color="#ef4444" /> : <Trash2 size={15} color="#ef4444" />}
                                         <span>Excluir Documento</span>
                                       </div>
                                     </DropdownMenu.Item>
@@ -3216,44 +3498,144 @@ export default function MatriculaDigitalPage() {
             const isAssinado = c.status === 'assinado'
             const isCancelado = c.status === 'cancelado'
             const isPendente = c.status === 'pendente'
+            const avatar = getAvatarColor(c.responsavel_nome)
+            const initials = getIniciaisNome(c.responsavel_nome)
 
             return (
               <div
                 key={`mob_${c.id}`}
+                className="digital-mobile-card"
                 style={{
                   background: 'hsl(var(--bg-surface))',
                   border: '1px solid hsl(var(--border-subtle))',
                   borderRadius: 14,
-                  padding: '14px',
+                  padding: '14px 15px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 10,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  gap: 11,
+                  boxShadow: '0 2px 8px -2px rgba(0, 0, 0, 0.08)',
                 }}
               >
-                {/* Topo do Card: Protocolo e Status */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {/* Topo do Card: Signatário + Status */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: '50%',
+                        background: avatar.bg,
+                        color: avatar.text,
+                        border: `1px solid ${avatar.border}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        letterSpacing: '0.02em',
+                        flexShrink: 0,
+                        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.12)',
+                      }}
+                    >
+                      {initials}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 650,
+                          fontSize: 13,
+                          color: 'hsl(var(--text-primary))',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          lineHeight: 1.3,
+                        }}
+                      >
+                        {c.responsavel_nome}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: 'hsl(var(--text-secondary))',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {c.responsavel_email || (c.responsavel_cpf ? `CPF: ${c.responsavel_cpf}` : (c.responsavel_telefone || 'Sem contato'))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Badge de Status Ultra Moderno */}
+                  <div style={{ flexShrink: 0 }}>
+                    {isAssinado ? (
+                      <span className="status-pill status-pill-assinado">
+                        <span className="status-pulse-dot" />
+                        <CheckCircle2 size={11} style={{ strokeWidth: 2.5 }} />
+                        <span>Assinado</span>
+                      </span>
+                    ) : isCancelado ? (
+                      <span className="status-pill status-pill-cancelado">
+                        <AlertCircle size={11} />
+                        <span>Cancelado</span>
+                      </span>
+                    ) : (
+                      <span className="status-pill status-pill-pendente">
+                        <span className="status-pulse-dot" />
+                        <Clock size={11} />
+                        <span>Pendente</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Título do Documento */}
+                <div>
+                  <div
+                    style={{
+                      fontWeight: 650,
+                      fontSize: 13.5,
+                      color: 'hsl(var(--text-primary))',
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {c.titulo_documento}
+                  </div>
+                </div>
+
+                {/* Badges de Contexto: Protocolo, Aluno, Ano, Pacote, Data */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {/* Protocolo Pill com validação e cópia */}
+                  <div
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      background: 'hsl(var(--bg-elevated))',
+                      border: '1px solid hsl(var(--border-subtle))',
+                      borderRadius: 6,
+                      padding: '2px 7px',
+                    }}
+                  >
                     <a
                       href={`/validar-assinatura/${encodeURIComponent(c.protocolo)}`}
                       target="_blank"
                       rel="noreferrer"
                       title={`Validar contrato ${c.protocolo}`}
                       style={{
-                        fontFamily: 'monospace',
-                        fontWeight: 800,
-                        fontSize: 12.5,
+                        fontFamily: 'var(--font-mono, monospace)',
+                        fontWeight: 700,
+                        fontSize: 11,
                         color: '#38bdf8',
                         textDecoration: 'none',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: 3,
-                        borderBottom: '1px dashed rgba(56, 189, 248, 0.45)',
-                        paddingBottom: 1,
                       }}
                     >
                       {c.protocolo}
-                      <ExternalLink size={10} style={{ opacity: 0.7 }} />
+                      <ExternalLink size={9} style={{ opacity: 0.7 }} />
                     </a>
                     <button
                       onClick={() => {
@@ -3269,154 +3651,98 @@ export default function MatriculaDigitalPage() {
                         border: 'none',
                         color: copiadoProtocoloId === c.protocolo ? '#10b981' : 'hsl(var(--text-secondary))',
                         cursor: 'pointer',
-                        padding: 2,
+                        padding: 0,
                         display: 'inline-flex',
                         alignItems: 'center',
+                        marginLeft: 2,
                       }}
                     >
                       {copiadoProtocoloId === c.protocolo ? (
-                        <Check size={12} style={{ strokeWidth: 3 }} />
+                        <Check size={11} style={{ strokeWidth: 3 }} />
                       ) : (
-                        <Copy size={12} />
+                        <Copy size={11} />
                       )}
                     </button>
                   </div>
 
-                  {/* Badge de Status */}
-                  <div>
-                    {isAssinado ? (
-                      <span
-                        style={{
-                          background: 'rgba(16, 185, 129, 0.15)',
-                          color: '#34d399',
-                          border: '1px solid rgba(16, 185, 129, 0.3)',
-                          padding: '3px 8px',
-                          borderRadius: 20,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                      >
-                        <CheckCircle2 size={12} /> Assinado
+                  {/* Aluno */}
+                  {c.aluno_nome && (
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        background: 'rgba(59, 130, 246, 0.08)',
+                        color: '#60a5fa',
+                        border: '1px solid rgba(59, 130, 246, 0.18)',
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        fontWeight: 500,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3.5,
+                      }}
+                    >
+                      <GraduationCap size={11} />
+                      <span style={{ maxWidth: 140, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {c.aluno_nome}
                       </span>
-                    ) : isCancelado ? (
-                      <span
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.15)',
-                          color: '#f87171',
-                          border: '1px solid rgba(239, 68, 68, 0.3)',
-                          padding: '3px 8px',
-                          borderRadius: 20,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                      >
-                        <AlertCircle size={12} /> Cancelado
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          background: 'rgba(245, 158, 11, 0.15)',
-                          color: '#fbbf24',
-                          border: '1px solid rgba(245, 158, 11, 0.3)',
-                          padding: '3px 8px',
-                          borderRadius: 20,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                      >
-                        <Clock size={12} /> Pendente
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Título do Documento e Tags */}
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13.5, color: 'hsl(var(--text-primary))', lineHeight: 1.3 }}>
-                    {c.titulo_documento}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))' }}>
-                      {new Date(c.created_at).toLocaleDateString('pt-BR')}
                     </span>
-                    {(c.evidencias as any)?.totalDocumentos > 1 && (
-                      <span
-                        title={`Pacote com ${(c.evidencias as any).totalDocumentos} documentos mesclados`}
-                        style={{
-                          fontSize: 9.5,
-                          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(99, 102, 241, 0.18) 100%)',
-                          color: '#38bdf8',
-                          padding: '1px 6px',
-                          borderRadius: 4,
-                          fontWeight: 700,
-                          border: '1px solid rgba(56, 189, 248, 0.35)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 3,
-                        }}
-                      >
-                        <Layers size={9} /> {(c.evidencias as any).totalDocumentos} docs
-                      </span>
-                    )}
-                    {c.ano_letivo && (
-                      <span style={{ fontSize: 10, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', padding: '1px 6px', borderRadius: 4, fontWeight: 700, border: '1px solid rgba(56, 189, 248, 0.25)' }}>
-                        Ano {c.ano_letivo}
-                      </span>
-                    )}
-                    {c.aluno_nome && (
-                      <span style={{ fontSize: 10, background: 'rgba(59, 130, 246, 0.12)', color: '#93c5fd', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
-                        Aluno: {c.aluno_nome}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Dados do Signatário */}
-                <div
-                  style={{
-                    background: 'hsl(var(--bg-elevated))',
-                    border: '1px solid hsl(var(--border-subtle))',
-                    borderRadius: 8,
-                    padding: '8px 10px',
-                    fontSize: 11.5,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 2,
-                  }}
-                >
-                  <div style={{ fontWeight: 600, color: 'hsl(var(--text-primary))' }}>
-                    👤 {c.responsavel_nome}
-                  </div>
-                  <div style={{ color: 'hsl(var(--text-secondary))', fontSize: 11 }}>
-                    {c.responsavel_email}
-                  </div>
-                  {(c.responsavel_cpf || c.responsavel_telefone) && (
-                    <div style={{ color: '#64748b', fontSize: 10.5 }}>
-                      {c.responsavel_cpf ? `CPF: ${c.responsavel_cpf}` : ''}{c.responsavel_cpf && c.responsavel_telefone ? ' • ' : ''}{c.responsavel_telefone}
-                    </div>
                   )}
+
+                  {/* Ano */}
+                  {c.ano_letivo && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        background: 'rgba(148, 163, 184, 0.08)',
+                        color: 'hsl(var(--text-secondary))',
+                        border: '1px solid hsl(var(--border-subtle))',
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {c.ano_letivo}
+                    </span>
+                  )}
+
+                  {/* Pacote Multi-docs */}
+                  {(c.evidencias as any)?.totalDocumentos > 1 && (
+                    <span
+                      title={`Pacote com ${(c.evidencias as any).totalDocumentos} documentos`}
+                      style={{
+                        fontSize: 10,
+                        background: 'rgba(56, 189, 248, 0.08)',
+                        color: '#38bdf8',
+                        border: '1px solid rgba(56, 189, 248, 0.22)',
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                      }}
+                    >
+                      <Layers size={10} /> {(c.evidencias as any).totalDocumentos} docs
+                    </span>
+                  )}
+
+                  {/* Data de Criação */}
+                  <span style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', marginLeft: 'auto' }}>
+                    {new Date(c.created_at).toLocaleDateString('pt-BR')}
+                  </span>
                 </div>
 
                 {/* Ações Específicas Mobile Ultra Modernas */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 3, paddingTop: 10, borderTop: '1px solid hsl(var(--border-subtle))' }}>
                   {/* 1. SE ASSINADO */}
                   {isAssinado && (
                     <>
-                      {/* Botão Baixar Doc Assinado (Destaque Total) */}
+                      {/* Botão Primário: Baixar Documento Assinado */}
                       <button
                         onClick={() => handleBaixarPdf(c, 'assinado')}
                         disabled={baixandoPdfId === `${c.id}_assinado`}
-                        className="digital-action-btn digital-btn-primary"
-                        style={{ height: 38, width: '100%', fontSize: 12.5 }}
+                        className="digital-btn-primary-smart"
+                        style={{ height: 38, width: '100%', fontSize: 12.5, justifyContent: 'center' }}
                       >
                         {baixandoPdfId === `${c.id}_assinado` ? (
                           <>
@@ -3425,42 +3751,41 @@ export default function MatriculaDigitalPage() {
                           </>
                         ) : (
                           <>
-                            <Download size={15} style={{ strokeWidth: 2.4 }} />
-                            <span>Baixar Documento Assinado (PDF)</span>
+                            <Download size={14} style={{ strokeWidth: 2.2 }} />
+                            <span>Baixar PDF Assinado</span>
                           </>
                         )}
                       </button>
 
-                      {/* Linha de Ações Rápidas: WhatsApp + Dossiê + Menu */}
+                      {/* Linha de Ações Secundárias: WhatsApp + Dossiê + Menu */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <button
                           onClick={() => handleCompartilharWhatsApp(c)}
                           className="digital-action-btn digital-btn-whatsapp"
-                          style={{ flex: 1, height: 36 }}
+                          style={{ flex: 1, height: 34, fontSize: 12 }}
                         >
-                          <MessageSquare size={14} />
+                          <MessageSquare size={13} />
                           <span>WhatsApp</span>
                         </button>
 
                         <button
                           onClick={() => setModalAuditoriaContrato(c)}
                           className="digital-action-btn digital-btn-dossie"
-                          style={{ flex: 1, height: 36 }}
+                          style={{ flex: 1, height: 34, fontSize: 12 }}
                         >
-                          <ShieldCheck size={14} />
+                          <ShieldCheck size={13} />
                           <span>Dossiê</span>
                         </button>
 
-                        {/* Menu Mais Opções */}
                         <DropdownMenu.Root>
                           <DropdownMenu.Trigger asChild>
                             <button
-                              className="digital-btn-more"
-                              style={{ width: 36, height: 36, flexShrink: 0 }}
+                              className="digital-btn-icon-smart"
+                              style={{ width: 34, height: 34, flexShrink: 0 }}
                               title="Mais opções"
                               onClick={e => e.stopPropagation()}
                             >
-                              <MoreHorizontal size={16} />
+                              <MoreHorizontal size={15} />
                             </button>
                           </DropdownMenu.Trigger>
 
@@ -3541,12 +3866,12 @@ export default function MatriculaDigitalPage() {
                   {/* 2. SE PENDENTE */}
                   {isPendente && (
                     <>
-                      {/* Linha 1: WhatsApp + Copiar Link */}
+                      {/* Linha 1: WhatsApp (Primário) + Copiar Link */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <button
                           onClick={() => handleCompartilharWhatsApp(c)}
-                          className="digital-action-btn digital-btn-whatsapp-primary"
-                          style={{ flex: 1, height: 38, fontSize: 12.5 }}
+                          className="digital-btn-primary-smart pendente"
+                          style={{ flex: 1.2, height: 38, fontSize: 12.5, justifyContent: 'center' }}
                         >
                           <MessageSquare size={14} />
                           <span>WhatsApp</span>
@@ -3555,7 +3880,7 @@ export default function MatriculaDigitalPage() {
                         <button
                           onClick={() => handleCopiarLink(c.token_assinatura)}
                           className={`digital-action-btn digital-btn-copy ${copiadoTokenLink === c.token_assinatura ? 'copied' : ''}`}
-                          style={{ flex: 1, height: 38, fontSize: 12.5 }}
+                          style={{ flex: 1, height: 38, fontSize: 12.5, justifyContent: 'center' }}
                         >
                           {copiadoTokenLink === c.token_assinatura ? (
                             <>
@@ -3576,21 +3901,21 @@ export default function MatriculaDigitalPage() {
                         <button
                           onClick={() => setModalAuditoriaContrato(c)}
                           className="digital-action-btn digital-btn-dossie"
-                          style={{ flex: 1, height: 36 }}
+                          style={{ flex: 1, height: 34, fontSize: 12 }}
                         >
-                          <ShieldCheck size={14} />
+                          <ShieldCheck size={13} />
                           <span>Dossiê e Auditoria</span>
                         </button>
 
                         <DropdownMenu.Root>
                           <DropdownMenu.Trigger asChild>
                             <button
-                              className="digital-btn-more"
-                              style={{ width: 36, height: 36, flexShrink: 0 }}
+                              className="digital-btn-icon-smart"
+                              style={{ width: 34, height: 34, flexShrink: 0 }}
                               title="Mais opções"
                               onClick={e => e.stopPropagation()}
                             >
-                              <MoreHorizontal size={16} />
+                              <MoreHorizontal size={15} />
                             </button>
                           </DropdownMenu.Trigger>
 
@@ -3678,21 +4003,21 @@ export default function MatriculaDigitalPage() {
                       <button
                         onClick={() => setModalAuditoriaContrato(c)}
                         className="digital-action-btn digital-btn-dossie"
-                        style={{ flex: 1, height: 36 }}
+                        style={{ flex: 1, height: 34, fontSize: 12 }}
                       >
-                        <ShieldCheck size={14} />
+                        <ShieldCheck size={13} />
                         <span>Dossiê e Auditoria</span>
                       </button>
 
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger asChild>
                           <button
-                            className="digital-btn-more"
-                            style={{ width: 36, height: 36, flexShrink: 0 }}
+                            className="digital-btn-icon-smart"
+                            style={{ width: 34, height: 34, flexShrink: 0 }}
                             title="Mais opções"
                             onClick={e => e.stopPropagation()}
                           >
-                            <MoreHorizontal size={16} />
+                            <MoreHorizontal size={15} />
                           </button>
                         </DropdownMenu.Trigger>
 
@@ -3811,6 +4136,7 @@ export default function MatriculaDigitalPage() {
 
               {/* Header do Modal (Fixo) */}
               <div
+                className="digital-modal-header"
                 style={{
                   padding: '16px 24px',
                   borderBottom: '1px solid hsl(var(--border-subtle))',
@@ -5838,6 +6164,7 @@ export default function MatriculaDigitalPage() {
 
                 {/* ── 6. Rodapé Fixo com Ações Proeminentes ── */}
                 <div
+                  className="digital-modal-footer"
                   style={{
                     flexShrink: 0,
                     padding: '14px 24px',
@@ -5849,7 +6176,7 @@ export default function MatriculaDigitalPage() {
                     gap: 12,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
+                  <div className="digital-legal-badge" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
                     <ShieldCheck size={14} color="#10b981" />
                     <span>Validade Jurídica • ICP-Brasil / OTP</span>
                   </div>
@@ -6177,7 +6504,10 @@ export default function MatriculaDigitalPage() {
                 boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
               }}
             >
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div
+                className="digital-modal-header"
+                style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+              >
                 <div>
                   <h3 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: 'hsl(var(--text-primary))' }}>
                     Dossiê e Trilha de Auditoria
@@ -6208,7 +6538,7 @@ export default function MatriculaDigitalPage() {
                 </button>
               </div>
 
-              <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div className="digital-modal-scroll" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Quadro de Chaves */}
                 <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 12, padding: 16, border: '1px solid hsl(var(--border-subtle))' }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', marginBottom: 8 }}>
@@ -6475,7 +6805,10 @@ export default function MatriculaDigitalPage() {
                 boxShadow: '0 30px 70px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
               }}
             >
-              <div style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%)' }}>
+              <div
+                className="digital-modal-header"
+                style={{ padding: '20px 24px', borderBottom: '1px solid hsl(var(--border-subtle))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%)' }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)' }}>
                     <Settings size={18} />
@@ -6518,7 +6851,7 @@ export default function MatriculaDigitalPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleSalvarConfig} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <form onSubmit={handleSalvarConfig} className="digital-config-form" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {/* 1. Representantes Legais por CNPJ */}
                 <div style={{ background: 'hsl(var(--bg-elevated))', padding: 16, borderRadius: 12, border: '1px solid hsl(var(--border-subtle))' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
@@ -7358,7 +7691,7 @@ export default function MatriculaDigitalPage() {
                   )}
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                <div className="digital-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
                   <button
                     type="button"
                     onClick={() => setModalConfigAberto(false)}
@@ -7586,6 +7919,7 @@ export default function MatriculaDigitalPage() {
             >
               {/* Header do Modal */}
               <div
+                className="digital-modal-header"
                 style={{
                   padding: '20px 24px',
                   borderBottom: '1px solid hsl(var(--border-subtle))',
@@ -7714,7 +8048,7 @@ export default function MatriculaDigitalPage() {
               </div>
 
               {/* Corpo das Tabs */}
-              <div style={{ padding: '24px' }}>
+              <div className="digital-modal-scroll" style={{ padding: '24px' }}>
                 {/* ── TAB 1: CONSULTA POR PROTOCOLO ── */}
                 {tabValidacao === 'protocolo' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
