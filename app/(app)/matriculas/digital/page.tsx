@@ -11,13 +11,20 @@ import {
   Building2, User, Users, Calendar, PenTool, Lock,
   Fingerprint, ChevronRight, Settings, Upload, FileText, CheckSquare,
   Loader2, BadgeCheck, Image as ImageIcon, Activity, Send, Ban, Sparkles,
-  MoreHorizontal, School, GraduationCap, ChevronDown
+  MoreHorizontal, School, GraduationCap, ChevronDown, ArrowUp, ArrowDown,
+  Layers, Files, FilePlus2
 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { SmtpDiagnosticModal } from '@/components/matriculas/SmtpDiagnosticModal'
 import { DigitalPagination, LimitePorPagina } from '@/components/matriculas/DigitalPagination'
-import { getWhatsAppShareUrl } from '@/lib/whatsapp'
-import { processarDocumentoParaPdf } from '@/lib/converters/documentToPdfClient'
+import { getWhatsAppShareUrl, DEFAULT_WHATSAPP_DIGITAL_TEMPLATE, formatarMensagemWhatsApp } from '@/lib/whatsapp'
+import {
+  processarDocumentoParaPdf,
+  processarArquivosEmLote,
+  mesclarMultiplosDocumentosPdf,
+  DocumentoUploadItem,
+  formatBytes,
+} from '@/lib/converters/documentToPdfClient'
 
 export interface RepresentanteConfigItem {
   id: string
@@ -306,15 +313,76 @@ export default function MatriculaDigitalPage() {
   const [modalConfigAberto, setModalConfigAberto] = useState(false)
   const [modalVerificadorAberto, setModalVerificadorAberto] = useState(false)
 
-  // Estados de Upload do PDF e Documentos Word (.doc e .docx)
-  const [pdfUploadBase64, setPdfUploadBase64] = useState<string | null>(null)
-  const [pdfUploadNome, setPdfUploadNome] = useState<string>('')
-  const [pdfUploadTamanho, setPdfUploadTamanho] = useState<string>('')
+  // Estados de Upload de Documentos (suporte a seleção e envio de múltiplos arquivos)
+  const [documentosUpload, setDocumentosUpload] = useState<DocumentoUploadItem[]>([])
+  const [modoEnvioMultiplo, setModoEnvioMultiplo] = useState<'unificado' | 'separados'>('unificado')
+  const [docPreviaAtivo, setDocPreviaAtivo] = useState<DocumentoUploadItem | null>(null)
+  const [previaEhPacoteUnificado, setPreviaEhPacoteUnificado] = useState<boolean>(false)
+  const [pdfUnificadoPreview, setPdfUnificadoPreview] = useState<{
+    pdfBase64: string
+    cleanBase64: string
+    nomeArquivoPdf: string
+    tamanhoFormatado: string
+    totalPaginas: number
+  } | null>(null)
+  const [gerandoPreviaPacote, setGerandoPreviaPacote] = useState<boolean>(false)
   const [convertendoDocumento, setConvertendoDocumento] = useState<boolean>(false)
   const [statusConversao, setStatusConversao] = useState<string>('')
-  const [formatoOriginalUpload, setFormatoOriginalUpload] = useState<'pdf' | 'docx' | 'doc' | null>(null)
   const [modalPreviaPdfAberto, setModalPreviaPdfAberto] = useState<boolean>(false)
   const [arrastandoArquivo, setArrastandoArquivo] = useState<boolean>(false)
+
+  // Propriedades derivadas para compatibilidade e pré-visualização
+  const documentoPrincipal = documentosUpload[0] || null
+  const totalPaginasGeral = useMemo(() => {
+    return documentosUpload.reduce((acc, d) => acc + (d.totalPaginas || 1), 0)
+  }, [documentosUpload])
+  const totalBytesGeral = useMemo(() => {
+    return documentosUpload.reduce((acc, d) => acc + (d.tamanhoBytes || 0), 0)
+  }, [documentosUpload])
+  const totalTamanhoFormatadoGeral = useMemo(() => {
+    return formatBytes(totalBytesGeral)
+  }, [totalBytesGeral])
+
+  // PDF ativo para exibição no modal de prévia (individual ou pacote unificado)
+  const pdfPreviaAtivo = useMemo(() => {
+    if (previaEhPacoteUnificado && pdfUnificadoPreview) {
+      return {
+        base64: pdfUnificadoPreview.pdfBase64,
+        nome: pdfUnificadoPreview.nomeArquivoPdf,
+        tamanho: pdfUnificadoPreview.tamanhoFormatado,
+        paginas: pdfUnificadoPreview.totalPaginas,
+        formato: 'pdf' as const,
+        isPacote: true,
+      }
+    }
+    if (docPreviaAtivo) {
+      return {
+        base64: docPreviaAtivo.pdfBase64,
+        nome: docPreviaAtivo.nome,
+        tamanho: docPreviaAtivo.tamanhoFormatado,
+        paginas: docPreviaAtivo.totalPaginas,
+        formato: docPreviaAtivo.formatoOriginal,
+        isPacote: false,
+      }
+    }
+    if (documentoPrincipal) {
+      return {
+        base64: documentoPrincipal.pdfBase64,
+        nome: documentoPrincipal.nome,
+        tamanho: documentoPrincipal.tamanhoFormatado,
+        paginas: documentoPrincipal.totalPaginas,
+        formato: documentoPrincipal.formatoOriginal,
+        isPacote: false,
+      }
+    }
+    return null
+  }, [previaEhPacoteUnificado, pdfUnificadoPreview, docPreviaAtivo, documentoPrincipal])
+
+  // Getters para compatibilidade com partes existentes
+  const pdfUploadBase64 = pdfPreviaAtivo?.base64 || documentoPrincipal?.pdfBase64 || null
+  const pdfUploadNome = pdfPreviaAtivo?.nome || documentoPrincipal?.nome || ''
+  const pdfUploadTamanho = pdfPreviaAtivo?.tamanho || documentoPrincipal?.tamanhoFormatado || ''
+  const formatoOriginalUpload = pdfPreviaAtivo?.formato || documentoPrincipal?.formatoOriginal || null
 
   // URL Blob para pré-visualização compatível com Safari no macOS/iOS (evita tela branca)
   const previewPdfBlobUrl = useMemo(() => {
@@ -358,7 +426,7 @@ export default function MatriculaDigitalPage() {
       telefone: '(67) 99280-6464',
       endereco: 'Rua Alagoas, 1081 - Jardim dos Estados',
       cidadeUf: 'Campo Grande - MS',
-      segmento: 'Educação Infantil e Ensino Fundamental',
+      segmento: 'Ed. Infantil e Ens. Fund',
       padrao: true,
     },
     {
@@ -372,7 +440,7 @@ export default function MatriculaDigitalPage() {
       telefone: '(67) 99280-6464',
       endereco: 'Rua Alagoas, 1081 - Jardim dos Estados',
       cidadeUf: 'Campo Grande - MS',
-      segmento: 'Ensino Médio',
+      segmento: 'Ens. Médio',
       padrao: false,
     },
   ]
@@ -410,6 +478,16 @@ export default function MatriculaDigitalPage() {
     validationUrl: string
     whatsappText: string
     whatsappShareUrl: string
+    modo_envio?: 'unificado' | 'separados'
+    total?: number
+    totalDocumentos?: number
+    itens?: Array<{
+      contrato: ContratoItem
+      signUrl: string
+      validationUrl: string
+      whatsappText: string
+      whatsappShareUrl: string
+    }>
   } | null>(null)
   const [copiadoModalLink, setCopiadoModalLink] = useState(false)
   const [copiadoProtocoloId, setCopiadoProtocoloId] = useState<string | null>(null)
@@ -420,6 +498,7 @@ export default function MatriculaDigitalPage() {
     representante: DEFAULT_REPRESENTANTES_INICIAIS[0],
     representantes: DEFAULT_REPRESENTANTES_INICIAIS,
     logoUrl: '/logo-impacto-clean.png',
+    whatsappTemplate: DEFAULT_WHATSAPP_DIGITAL_TEMPLATE,
     smtp: {
       host: 'email-ssl.com.br',
       port: 465,
@@ -436,6 +515,8 @@ export default function MatriculaDigitalPage() {
   const [testandoSmtp, setTestandoSmtp] = useState(false)
   const [modalDiagnosticoAberto, setModalDiagnosticoAberto] = useState(false)
   const [modoDiagnostico, setModoDiagnostico] = useState<'test_connection' | 'send_test_email'>('test_connection')
+  const [mostrarPreviaWhatsapp, setMostrarPreviaWhatsapp] = useState(true)
+  const [telefoneTesteWhatsapp, setTelefoneTesteWhatsapp] = useState('(67) 99280-6464')
 
   const handleAbrirDiagnostico = (modo: 'test_connection' | 'send_test_email' = 'test_connection') => {
     setModoDiagnostico(modo)
@@ -583,13 +664,24 @@ export default function MatriculaDigitalPage() {
         }
 
         setConfigData(prev => {
-          const reps = Array.isArray(data.representantes) && data.representantes.length > 0
+          const repsRaw = Array.isArray(data.representantes) && data.representantes.length > 0
             ? data.representantes
             : prev.representantes
+
+          const reps = repsRaw.map((r: any) => {
+            let seg = r.segmento
+            if (seg === 'Educação Infantil e Ensino Fundamental' || seg === 'Educação Infantil e Fundamental') {
+              seg = 'Ed. Infantil e Ens. Fund'
+            } else if (seg === 'Ensino Médio') {
+              seg = 'Ens. Médio'
+            }
+            return { ...r, segmento: seg }
+          })
           return {
             representante: data.representante || reps[0] || prev.representante,
             representantes: reps,
             logoUrl: data.logoUrl || prev.logoUrl,
+            whatsappTemplate: data.whatsappTemplate || prev.whatsappTemplate || DEFAULT_WHATSAPP_DIGITAL_TEMPLATE,
             smtp: {
               host: data.smtp?.host || 'email-ssl.com.br',
               port: Number(data.smtp?.port) || 465,
@@ -972,94 +1064,166 @@ export default function MatriculaDigitalPage() {
     }))
   }
 
-  // Processa o arquivo selecionado ou arrastado (PDF, DOCX ou DOC)
-  const processarArquivoSelecionado = async (file: File) => {
-    if (!file) return
+  // Processa múltiplos arquivos selecionados ou arrastados (PDF, DOCX ou DOC)
+  const processarArquivosSelecionados = async (files: File[]) => {
+    if (!files || files.length === 0) return
 
-    const ext = file.name.split('.').pop()?.toLowerCase() || ''
-    const formatoValido =
-      ext === 'pdf' ||
-      ext === 'docx' ||
-      ext === 'doc' ||
-      file.type === 'application/pdf' ||
-      file.type === 'application/msword' ||
-      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    const arquivosValidos: File[] = []
+    for (const f of files) {
+      const ext = f.name.split('.').pop()?.toLowerCase() || ''
+      const formatoValido =
+        ext === 'pdf' ||
+        ext === 'docx' ||
+        ext === 'doc' ||
+        f.type === 'application/pdf' ||
+        f.type === 'application/msword' ||
+        f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
-    if (!formatoValido) {
-      toast.error('Formato não suportado. Por favor, envie um arquivo PDF ou Word (.docx / .doc).')
-      return
+      if (formatoValido) {
+        arquivosValidos.push(f)
+      } else {
+        toast.error(`Formato do arquivo "${f.name}" não suportado. Envie arquivos PDF ou Word (.docx / .doc).`)
+      }
     }
 
+    if (arquivosValidos.length === 0) return
+
     setConvertendoDocumento(true)
-    setStatusConversao('Processando documento Word e extraindo imagens e papel timbrado...')
+    setStatusConversao(`Iniciando processamento de ${arquivosValidos.length} documento(s)...`)
 
     try {
-      const result = await processarDocumentoParaPdf(file, {
-        onProgress: (msg) => setStatusConversao(msg),
+      const novosItens = await processarArquivosEmLote(arquivosValidos, {
+        onProgress: (info) => {
+          setStatusConversao(info.etapa)
+        },
       })
 
-      setPdfUploadBase64(result.pdfBase64)
-      setPdfUploadNome(result.nomeArquivoPdf)
-      setPdfUploadTamanho(result.tamanhoFormatado)
-      setFormatoOriginalUpload(result.formatoOriginal)
-      setFormNovo(prev => ({
-        ...prev,
-        titulo_documento:
-          prev.titulo_documento ||
-          file.name
+      setDocumentosUpload(prev => {
+        const atualizados = [...prev, ...novosItens]
+        // Se ainda não havia título, preenche com sugestão automática
+        if (!formNovo.titulo_documento.trim()) {
+          const nomePrimeiro = atualizados[0].nome
             .replace(/\.(docx?|pdf)$/i, '')
             .replace(/[_-]+/g, ' ')
-            .trim(),
-      }))
+            .trim()
+          const tituloSugerido =
+            atualizados.length > 1
+              ? `Pacote de Documentos (${atualizados.length} arquivos): ${nomePrimeiro}`
+              : nomePrimeiro
+          setFormNovo(f => ({ ...f, titulo_documento: f.titulo_documento || tituloSugerido }))
+        }
+        return atualizados
+      })
 
-      if (result.formatoOriginal === 'docx' || result.formatoOriginal === 'doc') {
-        toast.success(`Documento "${file.name}" importado e convertido para PDF com papel timbrado e imagens com sucesso!`)
+      setPdfUnificadoPreview(null)
+
+      if (arquivosValidos.length === 1) {
+        toast.success(`Documento "${arquivosValidos[0].name}" pronto para emissão!`)
       } else {
-        toast.success(`Arquivo PDF "${file.name}" importado com sucesso!`)
+        toast.success(`${arquivosValidos.length} documentos adicionados com sucesso!`)
       }
     } catch (err: any) {
-      console.error('Erro ao importar documento:', err)
-      toast.error(err.message || 'Falha ao importar o documento.')
-      setPdfUploadBase64(null)
-      setPdfUploadNome('')
-      setPdfUploadTamanho('')
-      setFormatoOriginalUpload(null)
+      console.error('Erro ao processar documentos:', err)
+      toast.error(err.message || 'Falha ao processar os documentos.')
     } finally {
       setConvertendoDocumento(false)
       setStatusConversao('')
     }
   }
 
-  // Lida com upload do arquivo PDF ou Word
+  // Lida com upload do input file (suporte a múltiplos arquivos)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      processarArquivoSelecionado(file)
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      processarArquivosSelecionados(files)
     }
     e.target.value = ''
   }
 
-  // Limpa o arquivo atualmente carregado
-  const handleRemoverArquivo = () => {
-    setPdfUploadBase64(null)
-    setPdfUploadNome('')
-    setPdfUploadTamanho('')
-    setFormatoOriginalUpload(null)
-    setModalPreviaPdfAberto(false)
-    toast.info('Arquivo removido.')
+  // Remove um arquivo específico da lista
+  const handleRemoverDocumento = (id: string) => {
+    setDocumentosUpload(prev => {
+      const filtrados = prev.filter(d => d.id !== id)
+      if (filtrados.length === 0) {
+        setPdfUnificadoPreview(null)
+      }
+      return filtrados
+    })
+    if (docPreviaAtivo?.id === id) {
+      setDocPreviaAtivo(null)
+      setModalPreviaPdfAberto(false)
+    }
+    toast.info('Documento removido da seleção.')
   }
 
-  // Submissão do novo envio de documento
+  // Limpa todos os arquivos atualmente selecionados
+  const handleLimparTodosDocumentos = () => {
+    setDocumentosUpload([])
+    setDocPreviaAtivo(null)
+    setPdfUnificadoPreview(null)
+    setModalPreviaPdfAberto(false)
+    toast.info('Todos os arquivos foram removidos.')
+  }
+
+  // Reordena documento na lista (sobe ou desce na sequência do PDF final)
+  const handleMoverDocumento = (index: number, direcao: 'cima' | 'baixo') => {
+    setDocumentosUpload(prev => {
+      const novoArr = [...prev]
+      const targetIndex = direcao === 'cima' ? index - 1 : index + 1
+      if (targetIndex < 0 || targetIndex >= novoArr.length) return prev
+      const temp = novoArr[index]
+      novoArr[index] = novoArr[targetIndex]
+      novoArr[targetIndex] = temp
+      return novoArr
+    })
+    setPdfUnificadoPreview(null)
+  }
+
+  // Abre prévia de documento individual
+  const handleAbrirPreviaIndividual = (doc: DocumentoUploadItem) => {
+    setDocPreviaAtivo(doc)
+    setPreviaEhPacoteUnificado(false)
+    setModalPreviaPdfAberto(true)
+  }
+
+  // Abre prévia do pacote unificado consolidando todos os PDFs
+  const handleAbrirPreviaPacoteUnificado = async () => {
+    if (documentosUpload.length === 0) return
+    if (documentosUpload.length === 1) {
+      handleAbrirPreviaIndividual(documentosUpload[0])
+      return
+    }
+
+    try {
+      setGerandoPreviaPacote(true)
+      const mesclado = await mesclarMultiplosDocumentosPdf(
+        documentosUpload,
+        formNovo.titulo_documento
+          ? `${formNovo.titulo_documento.replace(/[^\w.-]/gi, '_')}.pdf`
+          : undefined
+      )
+      setPdfUnificadoPreview(mesclado)
+      setPreviaEhPacoteUnificado(true)
+      setDocPreviaAtivo(null)
+      setModalPreviaPdfAberto(true)
+    } catch (err: any) {
+      toast.error('Erro ao gerar prévia do pacote: ' + err.message)
+    } finally {
+      setGerandoPreviaPacote(false)
+    }
+  }
+
+  // Submissão do novo envio de documento (unificado ou em lote)
   const handleCriarContrato = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (convertendoDocumento) {
-      toast.error('Aguarde a conclusão da conversão do documento para PDF antes de emitir.')
+      toast.error('Aguarde a conclusão da conversão dos documentos para PDF antes de emitir.')
       return
     }
 
-    if (!pdfUploadBase64) {
-      toast.error('Por favor, selecione ou faça upload de um arquivo PDF ou Word (.docx/.doc) para assinatura.')
+    if (documentosUpload.length === 0) {
+      toast.error('Por favor, selecione ou faça upload de pelo menos um arquivo PDF ou Word (.docx/.doc) para assinatura.')
       return
     }
     if (!formNovo.signatario_nome.trim()) {
@@ -1074,10 +1238,8 @@ export default function MatriculaDigitalPage() {
     setSalvandoContrato(true)
     try {
       const repEscolhido = configData.representantes.find(r => r.id === formNovo.escola_representante_id) || configData.representantes[0]
-      const payload: any = {
-        pdf_base64: pdfUploadBase64,
-        arquivo_nome: pdfUploadNome,
-        titulo_documento: formNovo.titulo_documento || pdfUploadNome.replace(/\.(docx?|pdf)$/i, '') || 'Documento para Assinatura',
+
+      const payloadBase: any = {
         signatario_nome: formNovo.signatario_nome,
         signatario_email: formNovo.signatario_email,
         signatario_cpf: formNovo.signatario_cpf,
@@ -1095,10 +1257,58 @@ export default function MatriculaDigitalPage() {
         escola_cnpj: repEscolhido?.cnpj,
       }
 
+      let payloadFinal: any = { ...payloadBase }
+
+      if (modoEnvioMultiplo === 'separados' && documentosUpload.length > 1) {
+        // Modo Documentos Separados (Emissão em Lote)
+        payloadFinal.modo_envio = 'separados'
+        payloadFinal.documentos = documentosUpload.map((doc, idx) => ({
+          pdf_base64: doc.pdfBase64,
+          cleanBase64: doc.cleanBase64,
+          nome: doc.nome,
+          arquivo_nome: doc.nome,
+          titulo: doc.nome.replace(/\.(docx?|pdf)$/i, '').replace(/[_-]+/g, ' ').trim(),
+          totalPaginas: doc.totalPaginas,
+          formatoOriginal: doc.formatoOriginal,
+        }))
+      } else {
+        // Modo Pacote Unificado (ou 1 único arquivo)
+        let pdfFinalBase64 = documentosUpload[0].pdfBase64
+        let nomeArquivoFinal = documentosUpload[0].nome
+        let totalPaginasFinal = documentosUpload[0].totalPaginas
+
+        if (documentosUpload.length > 1) {
+          const resultadoMesclado = await mesclarMultiplosDocumentosPdf(
+            documentosUpload,
+            formNovo.titulo_documento ? `${formNovo.titulo_documento.replace(/[^\w.-]/gi, '_')}.pdf` : undefined
+          )
+          pdfFinalBase64 = resultadoMesclado.pdfBase64
+          nomeArquivoFinal = resultadoMesclado.nomeArquivoPdf
+          totalPaginasFinal = resultadoMesclado.totalPaginas
+        }
+
+        payloadFinal.modo_envio = 'unificado'
+        payloadFinal.pdf_base64 = pdfFinalBase64
+        payloadFinal.arquivo_nome = nomeArquivoFinal
+        payloadFinal.total_paginas = totalPaginasFinal
+        payloadFinal.titulo_documento =
+          formNovo.titulo_documento ||
+          nomeArquivoFinal.replace(/\.(docx?|pdf)$/i, '') ||
+          'Documento para Assinatura'
+        payloadFinal.documentos_anexados = documentosUpload.map((d, i) => ({
+          ordem: i + 1,
+          nome: d.nome,
+          tamanhoBytes: d.tamanhoBytes,
+          tamanhoFormatado: d.tamanhoFormatado,
+          totalPaginas: d.totalPaginas,
+          formatoOriginal: d.formatoOriginal,
+        }))
+      }
+
       const res = await fetch('/api/matriculas/digital', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payloadFinal),
       })
       const data = await res.json()
 
@@ -1106,7 +1316,14 @@ export default function MatriculaDigitalPage() {
         throw new Error(data.error || 'Falha ao emitir documento digital.')
       }
 
-      toast.success('Documento enviado e disponibilizado para assinatura!')
+      if (data.modo_envio === 'separados') {
+        toast.success(`${data.total || documentosUpload.length} documentos emitidos com sucesso!`)
+      } else if (documentosUpload.length > 1) {
+        toast.success(`Pacote com ${documentosUpload.length} documentos unificados e emitido com sucesso!`)
+      } else {
+        toast.success('Documento enviado e disponibilizado para assinatura!')
+      }
+
       setContratoCriadoSucesso(data)
       carregarContratos()
     } catch (err: any) {
@@ -1250,14 +1467,57 @@ export default function MatriculaDigitalPage() {
     })
   }
 
-  // Abrir WhatsApp com mensagem pronta
+  // Abrir WhatsApp com mensagem pronta personalizada pela escola
   const handleCompartilharWhatsApp = (contrato: ContratoItem) => {
     const signUrl = `${window.location.origin}/assinar/${contrato.token_assinatura}`
-    const texto = `Olá, ${contrato.responsavel_nome}! 💙\nO Colégio Impacto disponibilizou o documento *${contrato.titulo_documento}* referente ao(à) estudante *${contrato.aluno_nome}* para sua ciência e assinatura digital.\n\n✍️ *Acesse com segurança pelo link oficial:*\n${signUrl}\n\nAo acessar, você confirmará um código de segurança enviado para o seu e-mail (${contrato.responsavel_email}). Agradecemos pela confiança na nossa escola!`
+    const totalDocs = (contrato.evidencias as any)?.totalDocumentos || 1
+    const docTitulo = totalDocs > 1
+      ? `${contrato.titulo_documento} (${totalDocs} anexos)`
+      : contrato.titulo_documento
+
+    const texto = formatarMensagemWhatsApp(configData.whatsappTemplate, {
+      responsavel: contrato.responsavel_nome,
+      documento: docTitulo,
+      aluno: contrato.aluno_nome,
+      ano: contrato.ano_letivo,
+      link_assinatura: signUrl,
+      email: contrato.responsavel_email,
+      escola: 'Colégio Impacto',
+      protocolo: contrato.protocolo,
+    })
 
     const foneClean = (contrato.responsavel_telefone || '').replace(/\D/g, '')
     const url = getWhatsAppShareUrl(foneClean, texto)
     window.open(url, '_blank')
+  }
+
+  // Gerar texto simulado para prévia e teste do WhatsApp
+  const gerarTextoMensagemTeste = () => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://impacto-edu.net'
+    return formatarMensagemWhatsApp(configData.whatsappTemplate, {
+      responsavel: 'Ivan Rossi',
+      documento: 'CONTRATO NV1 e NV2 2027',
+      aluno: 'Cecília Graziela Marinho Fonseca',
+      ano: '2027',
+      link_assinatura: `${origin}/assinar/teste-preview-${Date.now().toString(36)}`,
+      email: 'ivanrossims@gmail.com',
+      escola: configData.representantes?.[0]?.razaoSocial?.includes('IMPACTO') ? 'Colégio Impacto' : (configData.representantes?.[0]?.nome || 'Colégio Impacto'),
+      protocolo: 'IMP-2027-0012',
+    })
+  }
+
+  // Disparar teste de envio do WhatsApp em tempo real
+  const handleTestarEnvioWhatsApp = (telefoneDestino?: string) => {
+    const destino = telefoneDestino !== undefined ? telefoneDestino : telefoneTesteWhatsapp
+    const texto = gerarTextoMensagemTeste()
+    const telLimpo = (destino || '').replace(/\D/g, '')
+    const url = getWhatsAppShareUrl(telLimpo, texto)
+    window.open(url, '_blank')
+    if (telLimpo) {
+      toast.success(`Abrindo WhatsApp para o número (${telLimpo})...`)
+    } else {
+      toast.success('Abrindo WhatsApp para você escolher o contato ou grupo!')
+    }
   }
 
   // Download do PDF legado via Base64
@@ -1947,9 +2207,12 @@ export default function MatriculaDigitalPage() {
               setResponsaveisDisponiveis([])
               setResponsavelSelecionadoId(null)
               setCarregandoResponsaveis(false)
-              setPdfUploadBase64(null)
-              setPdfUploadNome('')
-              setPdfUploadTamanho('')
+              setDocumentosUpload([])
+              setModoEnvioMultiplo('unificado')
+              setDocPreviaAtivo(null)
+              setPreviaEhPacoteUnificado(false)
+              setPdfUnificadoPreview(null)
+              setArrastandoArquivo(false)
               setContratoCriadoSucesso(null)
               setFormNovo({
                 aluno_id: '',
@@ -2443,6 +2706,25 @@ export default function MatriculaDigitalPage() {
                           <span style={{ fontSize: 11, color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4 }}>
                             <FileText size={12} /> Arquivo PDF
                           </span>
+                          {(c.evidencias as any)?.totalDocumentos > 1 && (
+                            <span
+                              title={`Pacote unificado contendo ${(c.evidencias as any).totalDocumentos} documentos mesclados em um único arquivo`}
+                              style={{
+                                fontSize: 10,
+                                background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(99, 102, 241, 0.18) 100%)',
+                                color: '#38bdf8',
+                                padding: '1px 7px',
+                                borderRadius: 6,
+                                fontWeight: 700,
+                                border: '1px solid rgba(56, 189, 248, 0.35)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3.5,
+                              }}
+                            >
+                              <Layers size={10} /> {(c.evidencias as any).totalDocumentos} docs unificados
+                            </span>
+                          )}
                           {c.ano_letivo && (
                             <span style={{ fontSize: 10, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', padding: '1px 6px', borderRadius: 4, fontWeight: 700, border: '1px solid rgba(56, 189, 248, 0.25)' }}>
                               Ano {c.ano_letivo}
@@ -3066,6 +3348,25 @@ export default function MatriculaDigitalPage() {
                     <span style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))' }}>
                       {new Date(c.created_at).toLocaleDateString('pt-BR')}
                     </span>
+                    {(c.evidencias as any)?.totalDocumentos > 1 && (
+                      <span
+                        title={`Pacote com ${(c.evidencias as any).totalDocumentos} documentos mesclados`}
+                        style={{
+                          fontSize: 9.5,
+                          background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(99, 102, 241, 0.18) 100%)',
+                          color: '#38bdf8',
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          fontWeight: 700,
+                          border: '1px solid rgba(56, 189, 248, 0.35)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                        }}
+                      >
+                        <Layers size={9} /> {(c.evidencias as any).totalDocumentos} docs
+                      </span>
+                    )}
                     {c.ano_letivo && (
                       <span style={{ fontSize: 10, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8', padding: '1px 6px', borderRadius: 4, fontWeight: 700, border: '1px solid rgba(56, 189, 248, 0.25)' }}>
                         Ano {c.ano_letivo}
@@ -3624,119 +3925,233 @@ export default function MatriculaDigitalPage() {
                     <CheckCircle2 size={38} />
                   </div>
                   <h3 style={{ fontSize: 21, fontWeight: 800, color: 'hsl(var(--text-primary))', margin: '0 0 6px', letterSpacing: '-0.01em' }}>
-                    Documento Emitido com Sucesso!
+                    {contratoCriadoSucesso.modo_envio === 'separados' && (contratoCriadoSucesso.itens?.length ?? 0) > 1
+                      ? `${contratoCriadoSucesso.total || contratoCriadoSucesso.itens?.length} Documentos Emitidos com Sucesso!`
+                      : 'Documento Emitido com Sucesso!'}
                   </h3>
-                  <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: '0 0 24px' }}>
-                    Protocolo de Rastreabilidade: <strong style={{ color: '#38bdf8', fontFamily: 'monospace', fontSize: 13, background: 'rgba(56, 189, 248, 0.12)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(56, 189, 248, 0.25)' }}>{contratoCriadoSucesso.contrato.protocolo}</strong>
-                  </p>
 
-                  <div
-                    style={{
-                      background: 'hsl(var(--bg-elevated))',
-                      borderRadius: 16,
-                      padding: 18,
-                      textAlign: 'left',
-                      marginBottom: 24,
-                      border: '1px solid hsl(var(--border-subtle))',
-                    }}
-                  >
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.04em' }}>
-                      Link Oficial de Assinatura & Ciência:
+                  {contratoCriadoSucesso.modo_envio === 'separados' && (contratoCriadoSucesso.itens?.length ?? 0) > 1 ? (
+                    <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: '0 0 20px' }}>
+                      Cada documento foi gerado com protocolo e link de assinatura individual para o signatário.
+                    </p>
+                  ) : (
+                    <div style={{ marginBottom: 20 }}>
+                      <p style={{ fontSize: 13, color: 'hsl(var(--text-secondary))', margin: '0 0 6px' }}>
+                        Protocolo de Rastreabilidade: <strong style={{ color: '#38bdf8', fontFamily: 'monospace', fontSize: 13, background: 'rgba(56, 189, 248, 0.12)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(56, 189, 248, 0.25)' }}>{contratoCriadoSucesso.contrato?.protocolo}</strong>
+                      </p>
+                      {(contratoCriadoSucesso.totalDocumentos ?? 0) > 1 && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 800,
+                            padding: '3px 10px',
+                            borderRadius: 999,
+                            background: 'rgba(37, 99, 235, 0.12)',
+                            color: '#2563eb',
+                            border: '1px solid rgba(37, 99, 235, 0.25)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            marginTop: 4,
+                          }}
+                        >
+                          <Layers size={13} /> Pacote com {contratoCriadoSucesso.totalDocumentos} documentos unificados
+                        </span>
+                      )}
                     </div>
-                    {(() => {
-                      const effectiveSignUrl =
-                        typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-                          ? contratoCriadoSucesso.signUrl.replace(/https?:\/\/[^\/]+/, window.location.origin)
-                          : contratoCriadoSucesso.signUrl
-                      return (
-                        <div>
-                          <div style={{ display: 'flex', gap: 10 }}>
-                            <input
-                              type="text"
-                              readOnly
-                              value={effectiveSignUrl}
-                              style={{
-                                flex: 1,
-                                height: 44,
-                                background: 'hsl(var(--bg-surface))',
-                                border: copiadoModalLink ? '1.5px solid #10b981' : '1px solid hsl(var(--border-subtle))',
-                                borderRadius: 10,
-                                padding: '0 14px',
-                                fontSize: 13,
-                                color: copiadoModalLink ? '#10b981' : '#38bdf8',
-                                transition: 'all 0.2s ease',
-                                outline: 'none',
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                copiarTextoComFeedback(effectiveSignUrl, () => {
-                                  setCopiadoModalLink(true)
-                                  toast.success('Link copiado para a área de transferência! 📋')
-                                  setTimeout(() => setCopiadoModalLink(false), 2500)
-                                })
-                              }}
-                              style={{
-                                background: copiadoModalLink ? '#10b981' : 'hsl(var(--bg-surface))',
-                                border: copiadoModalLink ? '1px solid #10b981' : '1px solid hsl(var(--border-subtle))',
-                                color: copiadoModalLink ? '#ffffff' : 'hsl(var(--text-primary))',
-                                borderRadius: 10,
-                                padding: '0 18px',
-                                height: 44,
-                                cursor: 'pointer',
-                                fontWeight: 700,
-                                fontSize: 13,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: 6,
-                                minWidth: 110,
-                                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                                transform: copiadoModalLink ? 'scale(1.03)' : 'scale(1)',
-                                boxShadow: copiadoModalLink ? '0 0 14px rgba(16, 185, 129, 0.4)' : 'none',
-                              }}
-                            >
-                              {copiadoModalLink ? (
-                                <>
-                                  <Check size={16} style={{ strokeWidth: 2.5 }} />
-                                  <span>Copiado!</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy size={15} />
-                                  <span>Copiar</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
+                  )}
 
-                          <AnimatePresence>
-                            {copiadoModalLink && (
-                              <motion.div
-                                initial={{ opacity: 0, y: -4, height: 0 }}
-                                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                                exit={{ opacity: 0, y: -4, height: 0 }}
-                                transition={{ duration: 0.2 }}
+                  {/* Lista de Documentos Emitidos (Modo Separados) */}
+                  {contratoCriadoSucesso.modo_envio === 'separados' && Array.isArray(contratoCriadoSucesso.itens) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24, textAlign: 'left' }}>
+                      {contratoCriadoSucesso.itens.map((item: any, idx: number) => {
+                        const effectiveItemSignUrl =
+                          typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                            ? item.signUrl.replace(/https?:\/\/[^\/]+/, window.location.origin)
+                            : item.signUrl
+                        const isCopiado = copiadoModalLink === item.id || copiadoModalLink === item.protocolo
+
+                        return (
+                          <div
+                            key={item.id || idx}
+                            style={{
+                              background: 'hsl(var(--bg-elevated))',
+                              border: '1px solid hsl(var(--border-subtle))',
+                              borderRadius: 14,
+                              padding: '12px 16px',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-primary))' }}>
+                                📄 #{idx + 1} {item.titulo}
+                              </div>
+                              <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '2px 7px', borderRadius: 6, border: '1px solid rgba(56, 189, 248, 0.25)' }}>
+                                {item.protocolo}
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input
+                                type="text"
+                                readOnly
+                                value={effectiveItemSignUrl}
                                 style={{
-                                  marginTop: 8,
+                                  flex: 1,
+                                  height: 38,
+                                  background: 'hsl(var(--bg-surface))',
+                                  border: isCopiado ? '1.5px solid #10b981' : '1px solid hsl(var(--border-subtle))',
+                                  borderRadius: 8,
+                                  padding: '0 10px',
                                   fontSize: 12,
-                                  fontWeight: 600,
-                                  color: '#10b981',
-                                  display: 'flex',
+                                  color: isCopiado ? '#10b981' : '#38bdf8',
+                                  outline: 'none',
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  copiarTextoComFeedback(effectiveItemSignUrl, () => {
+                                    setCopiadoModalLink(item.id || item.protocolo)
+                                    toast.success(`Link de "${item.titulo}" copiado! 📋`)
+                                    setTimeout(() => setCopiadoModalLink(false), 2500)
+                                  })
+                                }}
+                                style={{
+                                  background: isCopiado ? '#10b981' : 'hsl(var(--bg-surface))',
+                                  border: isCopiado ? '1px solid #10b981' : '1px solid hsl(var(--border-subtle))',
+                                  color: isCopiado ? '#fff' : 'hsl(var(--text-primary))',
+                                  borderRadius: 8,
+                                  padding: '0 14px',
+                                  height: 38,
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  fontSize: 12,
+                                  display: 'inline-flex',
                                   alignItems: 'center',
-                                  gap: 6,
+                                  gap: 5,
+                                  flexShrink: 0,
                                 }}
                               >
-                                <CheckCircle2 size={14} />
-                                <span>Link copiado com sucesso para a área de transferência!</span>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )
-                    })()}
-                  </div>
+                                {isCopiado ? <Check size={14} /> : <Copy size={13} />}
+                                <span>{isCopiado ? 'Copiado!' : 'Copiar'}</span>
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Caixa de Link Único (Modo Unificado ou Arquivo Único) */}
+                  {(contratoCriadoSucesso.modo_envio !== 'separados' || !contratoCriadoSucesso.itens) && (
+                    <div
+                      style={{
+                        background: 'hsl(var(--bg-elevated))',
+                        borderRadius: 16,
+                        padding: 18,
+                        textAlign: 'left',
+                        marginBottom: 24,
+                        border: '1px solid hsl(var(--border-subtle))',
+                      }}
+                    >
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.04em' }}>
+                        Link Oficial de Assinatura & Ciência:
+                      </div>
+                      {(() => {
+                        const effectiveSignUrl =
+                          typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                            ? contratoCriadoSucesso.signUrl.replace(/https?:\/\/[^\/]+/, window.location.origin)
+                            : contratoCriadoSucesso.signUrl
+                        return (
+                          <div>
+                            <div style={{ display: 'flex', gap: 10 }}>
+                              <input
+                                type="text"
+                                readOnly
+                                value={effectiveSignUrl}
+                                style={{
+                                  flex: 1,
+                                  height: 44,
+                                  background: 'hsl(var(--bg-surface))',
+                                  border: copiadoModalLink ? '1.5px solid #10b981' : '1px solid hsl(var(--border-subtle))',
+                                  borderRadius: 10,
+                                  padding: '0 14px',
+                                  fontSize: 13,
+                                  color: copiadoModalLink ? '#10b981' : '#38bdf8',
+                                  transition: 'all 0.2s ease',
+                                  outline: 'none',
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  copiarTextoComFeedback(effectiveSignUrl, () => {
+                                    setCopiadoModalLink(true)
+                                    toast.success('Link copiado para a área de transferência! 📋')
+                                    setTimeout(() => setCopiadoModalLink(false), 2500)
+                                  })
+                                }}
+                                style={{
+                                  background: copiadoModalLink ? '#10b981' : 'hsl(var(--bg-surface))',
+                                  border: copiadoModalLink ? '1px solid #10b981' : '1px solid hsl(var(--border-subtle))',
+                                  color: copiadoModalLink ? '#ffffff' : 'hsl(var(--text-primary))',
+                                  borderRadius: 10,
+                                  padding: '0 18px',
+                                  height: 44,
+                                  cursor: 'pointer',
+                                  fontWeight: 700,
+                                  fontSize: 13,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: 6,
+                                  minWidth: 110,
+                                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                  transform: copiadoModalLink ? 'scale(1.03)' : 'scale(1)',
+                                  boxShadow: copiadoModalLink ? '0 0 14px rgba(16, 185, 129, 0.4)' : 'none',
+                                }}
+                              >
+                                {copiadoModalLink ? (
+                                  <>
+                                    <Check size={16} style={{ strokeWidth: 2.5 }} />
+                                    <span>Copiado!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy size={15} />
+                                    <span>Copiar</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            <AnimatePresence>
+                              {copiadoModalLink && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -4, height: 0 }}
+                                  animate={{ opacity: 1, y: 0, height: 'auto' }}
+                                  exit={{ opacity: 0, y: -4, height: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  style={{
+                                    marginTop: 8,
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    color: '#10b981',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                  }}
+                                >
+                                  <CheckCircle2 size={14} />
+                                  <span>Link copiado com sucesso para a área de transferência!</span>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
                     {(() => {
@@ -3828,7 +4243,7 @@ export default function MatriculaDigitalPage() {
                       minHeight: 0,
                     }}
                   >
-                  {/* ── 1. Upload de Arquivo PDF ou Word (Compacto, Ultra Moderno, Sem Legenda Longa) ── */}
+                  {/* ── 1. Upload de Múltiplos Arquivos PDF ou Word (Pacote Unificado ou Documentos Separados) ── */}
                   <div
                     onDragOver={(e) => {
                       e.preventDefault()
@@ -3841,189 +4256,83 @@ export default function MatriculaDigitalPage() {
                     onDrop={(e) => {
                       e.preventDefault()
                       setArrastandoArquivo(false)
-                      const f = e.dataTransfer.files?.[0]
-                      if (f) processarArquivoSelecionado(f)
+                      const files = Array.from(e.dataTransfer.files || [])
+                      if (files.length > 0) processarArquivosSelecionados(files)
                     }}
                     style={{
                       background: arrastandoArquivo
-                        ? 'rgba(37, 99, 235, 0.1)'
-                        : pdfUploadBase64
-                        ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(37, 99, 235, 0.04) 100%)'
-                        : 'linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(99, 102, 241, 0.04) 100%)',
+                        ? 'rgba(37, 99, 235, 0.12)'
+                        : documentosUpload.length > 0
+                        ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(99, 102, 241, 0.04) 100%)'
+                        : 'linear-gradient(135deg, rgba(37, 99, 235, 0.03) 0%, rgba(99, 102, 241, 0.02) 100%)',
                       border: arrastandoArquivo
                         ? '2px dashed #2563eb'
-                        : pdfUploadBase64
-                        ? '1.5px solid rgba(16, 185, 129, 0.4)'
+                        : documentosUpload.length > 0
+                        ? '1.5px solid rgba(59, 130, 246, 0.3)'
                         : convertendoDocumento
                         ? '2px dashed #60a5fa'
                         : '1.5px dashed rgba(59, 130, 246, 0.35)',
-                      borderRadius: 14,
-                      padding: '12px 16px',
+                      borderRadius: 16,
+                      padding: documentosUpload.length > 0 ? '14px 16px' : '18px 20px',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 14,
+                      flexDirection: 'column',
+                      gap: 12,
                       transition: 'all 0.2s ease',
                       position: 'relative',
-                      boxShadow: arrastandoArquivo ? '0 0 20px rgba(37, 99, 235, 0.2)' : 'none',
+                      boxShadow: arrastandoArquivo ? '0 0 24px rgba(37, 99, 235, 0.25)' : 'none',
                       flexShrink: 0,
                     }}
                   >
-                    {pdfUploadBase64 ? (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12, flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                          <div
-                            style={{
-                              width: 42,
-                              height: 42,
-                              borderRadius: 12,
-                              background: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
-                                ? 'linear-gradient(135deg, rgba(37, 99, 235, 0.2) 0%, rgba(59, 130, 246, 0.1) 100%)'
-                                : 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.1) 100%)',
-                              color: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc' ? '#2563eb' : '#10b981',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                              border: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
-                                ? '1px solid rgba(37, 99, 235, 0.3)'
-                                : '1px solid rgba(16, 185, 129, 0.3)',
-                            }}
-                          >
-                            <FileText size={22} />
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 800, fontSize: 13.5, color: 'hsl(var(--text-primary))', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {pdfUploadNome}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  padding: '2px 8px',
-                                  borderRadius: 999,
-                                  background: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
-                                    ? 'rgba(37, 99, 235, 0.15)'
-                                    : 'rgba(16, 185, 129, 0.15)',
-                                  color: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc' ? '#2563eb' : '#059669',
-                                  border: formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
-                                    ? '1px solid rgba(37, 99, 235, 0.3)'
-                                    : '1px solid rgba(16, 185, 129, 0.3)',
-                                }}
-                              >
-                                {formatoOriginalUpload ? formatoOriginalUpload.toUpperCase() : 'PDF'} • {pdfUploadTamanho}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: 11, color: '#10b981', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
-                              <CheckCircle2 size={12} /> Documento original pronto para assinatura com Hash SHA-256
-                            </div>
-                          </div>
-                        </div>
+                    {/* Input file invisível com suporte a seleção de múltiplos arquivos */}
+                    <input
+                      id="input-multiplos-documentos-upload"
+                      type="file"
+                      multiple
+                      disabled={convertendoDocumento}
+                      accept=".pdf,.docx,.doc,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      style={{ display: 'none' }}
+                      onChange={handleFileUpload}
+                    />
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                          <button
-                            type="button"
-                            onClick={() => setModalPreviaPdfAberto(true)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5,
-                              background: 'rgba(56, 189, 248, 0.12)',
-                              border: '1px solid rgba(56, 189, 248, 0.3)',
-                              color: '#0284c7',
-                              padding: '6px 12px',
-                              borderRadius: 8,
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                            }}
-                            title="Visualizar documento em PDF"
-                          >
-                            <Eye size={13} /> Prévia
-                          </button>
-
-                          <a
-                            href={previewPdfBlobUrl || pdfUploadBase64 || '#'}
-                            download={pdfUploadNome}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5,
-                              background: 'rgba(37, 99, 235, 0.1)',
-                              border: '1px solid rgba(37, 99, 235, 0.25)',
-                              color: '#2563eb',
-                              padding: '6px 12px',
-                              borderRadius: 8,
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              textDecoration: 'none',
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                            }}
-                            title="Baixar arquivo original"
-                          >
-                            <Download size={13} /> Baixar
-                          </a>
-
-                          <label
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 5,
-                              background: 'hsl(var(--bg-surface))',
-                              border: '1px solid hsl(var(--border-subtle))',
-                              color: 'hsl(var(--text-primary))',
-                              padding: '6px 12px',
-                              borderRadius: 8,
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                            }}
-                            title="Substituir arquivo por outro"
-                          >
-                            <RefreshCw size={12} /> Trocar
-                            <input
-                              type="file"
-                              accept=".pdf,.docx,.doc,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                              style={{ display: 'none' }}
-                              onChange={handleFileUpload}
-                            />
-                          </label>
-
-                          <button
-                            type="button"
-                            onClick={handleRemoverArquivo}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              background: 'rgba(239, 68, 68, 0.08)',
-                              border: '1px solid rgba(239, 68, 68, 0.25)',
-                              color: '#ef4444',
-                              padding: '6px 10px',
-                              borderRadius: 8,
-                              fontSize: 11.5,
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease',
-                            }}
-                            title="Remover arquivo selecionado"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                    {/* Feedback visual durante processamento/conversão de arquivos */}
+                    {convertendoDocumento && (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          background: 'rgba(37, 99, 235, 0.12)',
+                          border: '1px solid rgba(37, 99, 235, 0.3)',
+                          borderRadius: 10,
+                          padding: '10px 14px',
+                          color: '#2563eb',
+                        }}
+                      >
+                        <Loader2 size={20} className="animate-spin" />
+                        <div style={{ fontSize: 12.5, fontWeight: 700 }}>
+                          {statusConversao || 'Processando e convertendo arquivos...'}
                         </div>
                       </div>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 14 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    )}
+
+                    {documentosUpload.length === 0 ? (
+                      /* Estado 0: Nenhum arquivo selecionado */
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%',
+                          gap: 14,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
                           <div
                             style={{
-                              width: 42,
-                              height: 42,
-                              borderRadius: 12,
+                              width: 48,
+                              height: 48,
+                              borderRadius: 14,
                               background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.18) 0%, rgba(99, 102, 241, 0.12) 100%)',
                               color: '#2563eb',
                               display: 'flex',
@@ -4033,35 +4342,45 @@ export default function MatriculaDigitalPage() {
                               border: '1px solid rgba(59, 130, 246, 0.25)',
                             }}
                           >
-                            {convertendoDocumento ? (
-                              <Loader2 size={20} className="animate-spin" color="#2563eb" />
-                            ) : (
-                              <Upload size={20} />
-                            )}
+                            <Files size={24} />
                           </div>
                           <div style={{ minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 800, fontSize: 13.5, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
-                                {convertendoDocumento ? 'Processando e convertendo documento...' : 'Selecionar Documento (PDF ou Word DOCX)'}
+                              <span style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))', letterSpacing: '-0.01em' }}>
+                                Selecionar Documento(s) (PDF ou Word)
                               </span>
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', border: '1px solid rgba(37, 99, 235, 0.2)' }}>
-                                Opcional
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '2px 8px',
+                                  borderRadius: 999,
+                                  background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(99, 102, 241, 0.15) 100%)',
+                                  color: '#2563eb',
+                                  border: '1px solid rgba(37, 99, 235, 0.3)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                }}
+                              >
+                                <Sparkles size={11} /> Múltiplos Arquivos Permitidos
                               </span>
                             </div>
-                            <div style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', marginTop: 2 }}>
-                              {convertendoDocumento ? 'Aguarde um instante...' : 'Arraste o arquivo aqui ou clique no botão ao lado'}
+                            <div style={{ fontSize: 11.5, color: 'hsl(var(--text-secondary))', marginTop: 3 }}>
+                              Arraste um ou mais PDFs/Word (.docx) aqui, ou clique para escolher do computador
                             </div>
                           </div>
                         </div>
 
                         <label
+                          htmlFor="input-multiplos-documentos-upload"
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: 7,
                             background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
                             color: '#ffffff',
-                            padding: '8px 18px',
+                            padding: '9px 18px',
                             borderRadius: 10,
                             fontSize: 12.5,
                             fontWeight: 700,
@@ -4071,19 +4390,468 @@ export default function MatriculaDigitalPage() {
                             flexShrink: 0,
                             transition: 'all 0.18s ease',
                           }}
-                          onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.08)')}
-                          onMouseLeave={e => (e.currentTarget.style.filter = 'none')}
+                          onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(1.08)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.filter = 'none')}
                         >
                           <Upload size={14} />
-                          <span>{convertendoDocumento ? 'Convertendo...' : 'Escolher Arquivo'}</span>
-                          <input
-                            type="file"
-                            disabled={convertendoDocumento}
-                            accept=".pdf,.docx,.doc,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                            style={{ display: 'none' }}
-                            onChange={handleFileUpload}
-                          />
+                          <span>{convertendoDocumento ? 'Convertendo...' : 'Escolher Arquivo(s)'}</span>
                         </label>
+                      </div>
+                    ) : (
+                      /* Estado 1+: Arquivos selecionados */
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+                        {/* Barra de cabeçalho do upload com métricas e ações */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 10,
+                            paddingBottom: 8,
+                            borderBottom: '1px solid hsl(var(--border-subtle))',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                fontSize: 12.5,
+                                fontWeight: 800,
+                                color: 'hsl(var(--text-primary))',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                              }}
+                            >
+                              <Files size={16} color="#2563eb" />
+                              {documentosUpload.length} {documentosUpload.length === 1 ? 'documento selecionado' : 'documentos selecionados'}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: 999,
+                                background: 'rgba(37, 99, 235, 0.1)',
+                                color: '#2563eb',
+                                border: '1px solid rgba(37, 99, 235, 0.2)',
+                              }}
+                            >
+                              Total: {totalTamanhoFormatadoGeral} • {totalPaginasGeral} {totalPaginasGeral === 1 ? 'pág' : 'págs'}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <label
+                              htmlFor="input-multiplos-documentos-upload"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                background: 'rgba(37, 99, 235, 0.1)',
+                                border: '1px solid rgba(37, 99, 235, 0.3)',
+                                color: '#2563eb',
+                                padding: '6px 12px',
+                                borderRadius: 8,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title="Adicionar mais arquivos à lista"
+                            >
+                              <FilePlus2 size={13} /> + Adicionar Mais
+                            </label>
+
+                            <button
+                              type="button"
+                              onClick={handleLimparTodosDocumentos}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                background: 'rgba(239, 68, 68, 0.08)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                color: '#ef4444',
+                                padding: '6px 10px',
+                                borderRadius: 8,
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title="Remover todos os arquivos da lista"
+                            >
+                              <Trash2 size={13} /> Limpar
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Seletor de Modo de Envio (quando há 2 ou mais documentos) */}
+                        {documentosUpload.length > 1 && (
+                          <div
+                            style={{
+                              background: 'hsl(var(--bg-elevated))',
+                              border: '1.5px solid rgba(59, 130, 246, 0.25)',
+                              borderRadius: 12,
+                              padding: 12,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 10,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                flexWrap: 'wrap',
+                                gap: 8,
+                              }}
+                            >
+                              <div style={{ fontSize: 11.5, fontWeight: 800, color: 'hsl(var(--text-primary))', display: 'flex', alignItems: 'center', gap: 5 }}>
+                                <Layers size={14} color="#2563eb" /> Formato de Envio dos {documentosUpload.length} Documentos:
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleAbrirPreviaPacoteUnificado}
+                                disabled={gerandoPreviaPacote}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 5,
+                                  background: 'linear-gradient(135deg, rgba(56, 189, 248, 0.15) 0%, rgba(37, 99, 235, 0.15) 100%)',
+                                  border: '1px solid rgba(56, 189, 248, 0.35)',
+                                  color: '#0284c7',
+                                  padding: '5px 11px',
+                                  borderRadius: 8,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  cursor: gerandoPreviaPacote ? 'not-allowed' : 'pointer',
+                                }}
+                                title="Visualizar prévia de todos os documentos consolidados em um só arquivo PDF"
+                              >
+                                {gerandoPreviaPacote ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+                                Prévia do Pacote ({totalPaginasGeral} págs)
+                              </button>
+                            </div>
+
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                gap: 8,
+                              }}
+                            >
+                              {/* Opção 1: Pacote Unificado */}
+                              <div
+                                onClick={() => setModoEnvioMultiplo('unificado')}
+                                style={{
+                                  cursor: 'pointer',
+                                  padding: '10px 12px',
+                                  borderRadius: 10,
+                                  border: modoEnvioMultiplo === 'unificado'
+                                    ? '2px solid #2563eb'
+                                    : '1px solid hsl(var(--border-subtle))',
+                                  background: modoEnvioMultiplo === 'unificado'
+                                    ? 'rgba(37, 99, 235, 0.08)'
+                                    : 'hsl(var(--bg-surface))',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 4,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 12, color: modoEnvioMultiplo === 'unificado' ? '#2563eb' : 'hsl(var(--text-primary))' }}>
+                                    <Layers size={14} /> Pacote Unificado
+                                  </div>
+                                  <span
+                                    style={{
+                                      fontSize: 9.5,
+                                      fontWeight: 800,
+                                      background: modoEnvioMultiplo === 'unificado' ? '#2563eb' : 'rgba(100,116,139,0.2)',
+                                      color: modoEnvioMultiplo === 'unificado' ? '#ffffff' : 'hsl(var(--text-secondary))',
+                                      padding: '1px 6px',
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    Recomendado
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', lineHeight: 1.35 }}>
+                                  Mescla todos os documentos em 1 único arquivo sequencial. O responsável assina 1 única vez via link e código OTP.
+                                </div>
+                              </div>
+
+                              {/* Opção 2: Documentos Separados */}
+                              <div
+                                onClick={() => setModoEnvioMultiplo('separados')}
+                                style={{
+                                  cursor: 'pointer',
+                                  padding: '10px 12px',
+                                  borderRadius: 10,
+                                  border: modoEnvioMultiplo === 'separados'
+                                    ? '2px solid #2563eb'
+                                    : '1px solid hsl(var(--border-subtle))',
+                                  background: modoEnvioMultiplo === 'separados'
+                                    ? 'rgba(37, 99, 235, 0.08)'
+                                    : 'hsl(var(--bg-surface))',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 4,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 12, color: modoEnvioMultiplo === 'separados' ? '#2563eb' : 'hsl(var(--text-primary))' }}>
+                                    <Files size={14} /> Documentos Separados
+                                  </div>
+                                  <span
+                                    style={{
+                                      fontSize: 9.5,
+                                      fontWeight: 800,
+                                      background: modoEnvioMultiplo === 'separados' ? '#2563eb' : 'rgba(100,116,139,0.2)',
+                                      color: modoEnvioMultiplo === 'separados' ? '#ffffff' : 'hsl(var(--text-secondary))',
+                                      padding: '1px 6px',
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    Lote
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', lineHeight: 1.35 }}>
+                                  Gera {documentosUpload.length} contratos independentes com links de assinatura e protocolos separados.
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Lista de Documentos Selecionados */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                            maxHeight: 280,
+                            overflowY: 'auto',
+                            paddingRight: 4,
+                          }}
+                        >
+                          {documentosUpload.map((doc, idx) => {
+                            const isDocx = doc.formatoOriginal === 'docx' || doc.formatoOriginal === 'doc'
+                            return (
+                              <div
+                                key={doc.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '8px 12px',
+                                  borderRadius: 10,
+                                  background: 'hsl(var(--bg-surface))',
+                                  border: '1px solid hsl(var(--border-subtle))',
+                                  gap: 10,
+                                  transition: 'all 0.15s ease',
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                  {/* Posição e botões de reordenar */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span
+                                      style={{
+                                        fontSize: 10.5,
+                                        fontWeight: 800,
+                                        color: '#2563eb',
+                                        background: 'rgba(37, 99, 235, 0.1)',
+                                        padding: '2px 6px',
+                                        borderRadius: 5,
+                                        minWidth: 24,
+                                        textAlign: 'center',
+                                      }}
+                                    >
+                                      #{idx + 1}
+                                    </span>
+                                    {documentosUpload.length > 1 && (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                        <button
+                                          type="button"
+                                          disabled={idx === 0}
+                                          onClick={() => handleMoverDocumento(idx, 'cima')}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            padding: 0,
+                                            cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                            opacity: idx === 0 ? 0.25 : 0.8,
+                                            lineHeight: 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                          }}
+                                          title="Mover para cima"
+                                        >
+                                          <ArrowUp size={12} />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={idx === documentosUpload.length - 1}
+                                          onClick={() => handleMoverDocumento(idx, 'baixo')}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            padding: 0,
+                                            cursor: idx === documentosUpload.length - 1 ? 'not-allowed' : 'pointer',
+                                            opacity: idx === documentosUpload.length - 1 ? 0.25 : 0.8,
+                                            lineHeight: 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                          }}
+                                          title="Mover para baixo"
+                                        >
+                                          <ArrowDown size={12} />
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Ícone do tipo */}
+                                  <div
+                                    style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: 8,
+                                      background: isDocx
+                                        ? 'rgba(37, 99, 235, 0.15)'
+                                        : 'rgba(16, 185, 129, 0.15)',
+                                      color: isDocx ? '#2563eb' : '#059669',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    <FileText size={16} />
+                                  </div>
+
+                                  {/* Nome e Metadados */}
+                                  <div style={{ minWidth: 0 }}>
+                                    <div
+                                      title={doc.nome}
+                                      style={{
+                                        fontWeight: 700,
+                                        fontSize: 12.5,
+                                        color: 'hsl(var(--text-primary))',
+                                        maxWidth: 300,
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      {doc.nome}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                                      <span
+                                        style={{
+                                          fontSize: 9.5,
+                                          fontWeight: 800,
+                                          padding: '1px 5px',
+                                          borderRadius: 4,
+                                          background: isDocx ? 'rgba(37, 99, 235, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                          color: isDocx ? '#2563eb' : '#059669',
+                                        }}
+                                      >
+                                        {doc.formatoOriginal.toUpperCase()}
+                                      </span>
+                                      <span style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))' }}>
+                                        {doc.tamanhoFormatado} • {doc.totalPaginas} {doc.totalPaginas === 1 ? 'pág' : 'págs'}
+                                      </span>
+                                      <span
+                                        style={{
+                                          fontSize: 9.5,
+                                          color: '#10b981',
+                                          fontWeight: 600,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 3,
+                                        }}
+                                        title={`Hash SHA-256: ${doc.hashSha256}`}
+                                      >
+                                        <CheckCircle2 size={10} /> SHA-256
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Ações do arquivo */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAbrirPreviaIndividual(doc)}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      background: 'rgba(56, 189, 248, 0.12)',
+                                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                                      color: '#0284c7',
+                                      padding: '5px 9px',
+                                      borderRadius: 6,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Visualizar documento"
+                                  >
+                                    <Eye size={12} /> Prévia
+                                  </button>
+
+                                  <a
+                                    href={doc.pdfBase64}
+                                    download={doc.nomeArquivoPdf || `${doc.nome.replace(/\.(docx?|pdf)$/i, '')}.pdf`}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      background: 'rgba(37, 99, 235, 0.08)',
+                                      border: '1px solid rgba(37, 99, 235, 0.2)',
+                                      color: '#2563eb',
+                                      padding: '5px 9px',
+                                      borderRadius: 6,
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      textDecoration: 'none',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Baixar em PDF"
+                                  >
+                                    <Download size={12} />
+                                  </a>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoverDocumento(doc.id)}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      background: 'rgba(239, 68, 68, 0.08)',
+                                      border: '1px solid rgba(239, 68, 68, 0.25)',
+                                      color: '#ef4444',
+                                      padding: '5px 7px',
+                                      borderRadius: 6,
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Remover documento da seleção"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -4104,13 +4872,19 @@ export default function MatriculaDigitalPage() {
                         cnpj: '04.395.789/0001-88',
                         nome: 'IVAN ROSSI SAMBRANA',
                         cargo: 'Representante Legal / Diretor Geral',
-                        segmento: 'Educação Infantil e Ensino Fundamental',
+                        segmento: 'Ed. Infantil e Ens. Fund',
                       }
 
-                    const segmentoBadgeTexto = repAtivo.segmento || 'Educação Infantil e Ensino Fundamental'
+                    const rawSegmento = repAtivo.segmento || 'Ed. Infantil e Ens. Fund'
+                    const segmentoBadgeTexto = rawSegmento === 'Educação Infantil e Ensino Fundamental' || rawSegmento.toLowerCase().includes('educação infantil')
+                      ? 'Ed. Infantil e Ens. Fund'
+                      : rawSegmento === 'Ensino Médio'
+                        ? 'Ens. Médio'
+                        : rawSegmento
                     const isInfantil =
                       segmentoBadgeTexto.toLowerCase().includes('infantil') ||
-                      segmentoBadgeTexto.toLowerCase().includes('fundamental')
+                      segmentoBadgeTexto.toLowerCase().includes('fundamental') ||
+                      segmentoBadgeTexto.toLowerCase().includes('fund')
 
                     return (
                       <div
@@ -4182,7 +4956,12 @@ export default function MatriculaDigitalPage() {
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginBottom: 12 }}>
                             {listaRepresentantes.map(r => {
                               const isSelected = formNovo.escola_representante_id === r.id || (!formNovo.escola_representante_id && r.id === repAtivo.id)
-                              const isInfantilTab = (r.segmento || '').toLowerCase().includes('infantil') || (r.segmento || '').toLowerCase().includes('fundamental')
+                              const segTexto = r.segmento === 'Educação Infantil e Ensino Fundamental' || (r.segmento && r.segmento.toLowerCase().includes('educação infantil'))
+                                ? 'Ed. Infantil e Ens. Fund'
+                                : r.segmento === 'Ensino Médio'
+                                  ? 'Ens. Médio'
+                                  : (r.segmento || r.razaoSocial)
+                              const isInfantilTab = (segTexto || '').toLowerCase().includes('infantil') || (segTexto || '').toLowerCase().includes('fundamental') || (segTexto || '').toLowerCase().includes('fund')
                               return (
                                 <button
                                   key={r.id}
@@ -4213,7 +4992,7 @@ export default function MatriculaDigitalPage() {
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                                     {isInfantilTab ? <School size={14} style={{ flexShrink: 0 }} /> : <GraduationCap size={14} style={{ flexShrink: 0 }} />}
                                     <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                      {r.segmento || r.razaoSocial}
+                                      {segTexto}
                                     </span>
                                   </div>
                                   {isSelected && <Check size={14} style={{ strokeWidth: 2.5, flexShrink: 0 }} />}
@@ -4297,11 +5076,18 @@ export default function MatriculaDigitalPage() {
                                 cursor: 'pointer',
                               }}
                             >
-                              {listaRepresentantes.map(r => (
-                                <option key={r.id} value={r.id}>
-                                  {r.segmento ? `[${r.segmento}] ` : ''}{r.razaoSocial} • CNPJ: {r.cnpj} ({r.nome})
-                                </option>
-                              ))}
+                              {listaRepresentantes.map(r => {
+                                const segNome = r.segmento === 'Educação Infantil e Ensino Fundamental' || (r.segmento && r.segmento.toLowerCase().includes('educação infantil'))
+                                  ? 'Ed. Infantil e Ens. Fund'
+                                  : r.segmento === 'Ensino Médio'
+                                    ? 'Ens. Médio'
+                                    : r.segmento
+                                return (
+                                  <option key={r.id} value={r.id}>
+                                    {segNome ? `[${segNome}] ` : ''}{r.razaoSocial} • CNPJ: {r.cnpj} ({r.nome})
+                                  </option>
+                                )
+                              })}
                             </select>
                           </div>
                         </div>
@@ -5193,12 +5979,32 @@ export default function MatriculaDigitalPage() {
                     <FileText size={20} color="#38bdf8" />
                   </div>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#f8fafc' }}>
-                      {pdfUploadNome}
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <span>{pdfUploadNome}</span>
+                      {previaEhPacoteUnificado && (
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 800,
+                            padding: '1px 7px',
+                            borderRadius: 4,
+                            background: 'rgba(56, 189, 248, 0.2)',
+                            color: '#38bdf8',
+                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                          }}
+                        >
+                          <Layers size={10} /> Pacote Unificado
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                      {formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
-                        ? `Documento Word (.${formatoOriginalUpload.toUpperCase()}) original preservado sem alterações • ${pdfUploadTamanho}`
+                      {previaEhPacoteUnificado
+                        ? `Consolidação sequencial de ${documentosUpload.length} documentos • Total de ${totalPaginasGeral} páginas • ${pdfUploadTamanho}`
+                        : formatoOriginalUpload === 'docx' || formatoOriginalUpload === 'doc'
+                        ? `Documento Word (.${formatoOriginalUpload.toUpperCase()}) convertido para PDF de alta fidelidade • ${pdfUploadTamanho}`
                         : `Pré-visualização do PDF original pronto para assinatura eletrônica • ${pdfUploadTamanho}`}
                     </div>
                   </div>
@@ -5243,6 +6049,87 @@ export default function MatriculaDigitalPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Se houver mais de 1 documento, exibe abas rápidas para alternar visualização no modal */}
+              {documentosUpload.length > 1 && (
+                <div
+                  style={{
+                    padding: '8px 16px',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: 'rgba(15, 23, 42, 0.96)',
+                    overflowX: 'auto',
+                  }}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4, marginRight: 4 }}>
+                    <Layers size={13} color="#38bdf8" /> Alternar:
+                  </span>
+
+                  {/* Aba Pacote Unificado */}
+                  <button
+                    type="button"
+                    onClick={handleAbrirPreviaPacoteUnificado}
+                    disabled={gerandoPreviaPacote}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      padding: '4px 10px',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: gerandoPreviaPacote ? 'not-allowed' : 'pointer',
+                      whiteSpace: 'nowrap',
+                      border: previaEhPacoteUnificado ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.12)',
+                      background: previaEhPacoteUnificado ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255,255,255,0.05)',
+                      color: previaEhPacoteUnificado ? '#38bdf8' : '#94a3b8',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <Layers size={12} />
+                    Pacote Unificado ({totalPaginasGeral} págs)
+                  </button>
+
+                  {/* Abas individuais para cada arquivo da lista */}
+                  {documentosUpload.map((doc, idx) => {
+                    const isAtivo = !previaEhPacoteUnificado && docPreviaAtivo?.id === doc.id
+                    return (
+                      <button
+                        key={doc.id}
+                        type="button"
+                        onClick={() => handleAbrirPreviaIndividual(doc)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '4px 9px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: isAtivo ? 700 : 500,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                          border: isAtivo ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)',
+                          background: isAtivo ? 'rgba(37, 99, 235, 0.25)' : 'rgba(255,255,255,0.04)',
+                          color: isAtivo ? '#93c5fd' : '#cbd5e1',
+                          maxWidth: 200,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          transition: 'all 0.15s ease',
+                        }}
+                        title={doc.nome}
+                      >
+                        <span style={{ fontWeight: 800 }}>#{idx + 1}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {doc.nome}
+                        </span>
+                        <span style={{ opacity: 0.7, fontSize: 10 }}>({doc.totalPaginas}p)</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
               {/* Corpo do Preview: Visualizador de PDF de alta fidelidade */}
               <div style={{ flex: 1, width: '100%', background: '#1e293b', position: 'relative' }}>
@@ -5340,6 +6227,85 @@ export default function MatriculaDigitalPage() {
                     </>
                   )}
                 </div>
+
+                {/* Documentos Integrantes do Pacote Unificado (se houver mais de 1 documento anexado) */}
+                {Array.isArray((modalAuditoriaContrato.evidencias as any)?.documentosAnexados) &&
+                  (modalAuditoriaContrato.evidencias as any).documentosAnexados.length > 1 && (
+                    <div
+                      style={{
+                        background: 'hsl(var(--bg-elevated))',
+                        borderRadius: 12,
+                        padding: 16,
+                        border: '1px solid hsl(var(--border-subtle))',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          color: '#38bdf8',
+                          textTransform: 'uppercase',
+                          marginBottom: 10,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <Layers size={14} />
+                        Documentos Integrantes do Pacote ({((modalAuditoriaContrato.evidencias as any).documentosAnexados.length)} Arquivos Mesclados)
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {((modalAuditoriaContrato.evidencias as any).documentosAnexados as any[]).map((doc, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 14px',
+                              borderRadius: 8,
+                              background: 'hsl(var(--bg-surface))',
+                              border: '1px solid hsl(var(--border-subtle))',
+                              fontSize: 12,
+                              gap: 12,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                              <span
+                                style={{
+                                  fontWeight: 800,
+                                  color: '#38bdf8',
+                                  fontSize: 11,
+                                  background: 'rgba(56, 189, 248, 0.12)',
+                                  padding: '2px 7px',
+                                  borderRadius: 5,
+                                }}
+                              >
+                                #{idx + 1}
+                              </span>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, color: 'hsl(var(--text-primary))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300 }}>
+                                  {doc.nome}
+                                </div>
+                                <div style={{ fontSize: 10.5, color: 'hsl(var(--text-secondary))', fontFamily: 'monospace', marginTop: 2 }}>
+                                  SHA-256: {doc.hashSha256 || 'N/A'}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, fontSize: 11, color: 'hsl(var(--text-secondary))' }}>
+                              {doc.paginasRange && (
+                                <span style={{ background: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', padding: '2px 7px', borderRadius: 4, fontWeight: 700 }}>
+                                  Páginas {doc.paginasRange}
+                                </span>
+                              )}
+                              <span>{doc.tamanhoFormatado || ''}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Linha do Tempo dos Eventos */}
                 <div>
@@ -5674,7 +6640,7 @@ export default function MatriculaDigitalPage() {
                               type="text"
                               value={repAtivo.segmento || ''}
                               onChange={e => updateRepField('segmento', e.target.value)}
-                              placeholder="Ex: Educação Infantil e Fundamental / Ensino Médio"
+                              placeholder="Ex: Ed. Infantil e Ens. Fund / Ens. Médio"
                               style={{ width: '100%', height: 36, background: 'hsl(var(--bg-surface))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 6, padding: '0 8px', color: 'hsl(var(--text-primary))', fontSize: 13 }}
                             />
                           </div>
@@ -5969,6 +6935,427 @@ export default function MatriculaDigitalPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* ── SEÇÃO: MENSAGEM DE ENVIO PARA O WHATSAPP (NOTIFICAÇÃO DE ASSINATURA) ── */}
+                <div
+                  style={{
+                    background: 'hsl(var(--bg-elevated))',
+                    borderRadius: 16,
+                    padding: 18,
+                    border: '1px solid hsl(var(--border-subtle))',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 14,
+                  }}
+                >
+                  {/* Topo da Seção */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.2) 100%)',
+                          color: '#10b981',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <MessageSquare size={16} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13.5, fontWeight: 800, color: 'hsl(var(--text-primary))' }}>
+                          MENSAGEM DE ENVIO PARA O WHATSAPP
+                        </div>
+                        <div style={{ fontSize: 11, color: 'hsl(var(--text-secondary))', marginTop: 1 }}>
+                          Personalize o texto enviado para os pais e responsáveis ao emitir ou compartilhar documentos
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfigData(prev => ({ ...prev, whatsappTemplate: DEFAULT_WHATSAPP_DIGITAL_TEMPLATE }))
+                          toast.info('Mensagem padrão restaurada.')
+                        }}
+                        style={{
+                          background: 'rgba(56, 189, 248, 0.1)',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          color: '#0284c7',
+                          padding: '5px 10px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                        title="Restaurar para a mensagem padrão oficial do Colégio Impacto"
+                      >
+                        <RefreshCw size={11} /> Restaurar Padrão
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setMostrarPreviaWhatsapp(!mostrarPreviaWhatsapp)}
+                        style={{
+                          background: mostrarPreviaWhatsapp ? 'rgba(16, 185, 129, 0.15)' : 'hsl(var(--bg-surface))',
+                          border: mostrarPreviaWhatsapp ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid hsl(var(--border-subtle))',
+                          color: mostrarPreviaWhatsapp ? '#059669' : 'hsl(var(--text-secondary))',
+                          padding: '5px 10px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                        title="Alternar visualização da simulação do WhatsApp"
+                      >
+                        <Smartphone size={11} /> {mostrarPreviaWhatsapp ? 'Ocultar Prévia' : 'Ver Prévia'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!mostrarPreviaWhatsapp) setMostrarPreviaWhatsapp(true)
+                          handleTestarEnvioWhatsApp()
+                        }}
+                        style={{
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          border: 'none',
+                          color: '#ffffff',
+                          padding: '5px 12px',
+                          borderRadius: 6,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          boxShadow: '0 1px 3px rgba(16, 185, 129, 0.3)',
+                          transition: 'all 0.15s ease',
+                        }}
+                        title="Abrir WhatsApp para testar o envio desta mensagem"
+                      >
+                        <Send size={11} /> Testar Envio WhatsApp
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Chips de Tags / Variáveis Dinâmicas */}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-secondary))', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span>Variáveis Dinâmicas Disponíveis:</span>
+                      <span style={{ fontSize: 10, fontWeight: 500, color: '#64748b' }}>(clique para inserir no texto)</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {[
+                        { tag: '{responsavel}', label: 'Nome do Responsável' },
+                        { tag: '{documento}', label: 'Título do Documento' },
+                        { tag: '{aluno}', label: 'Nome do Estudante' },
+                        { tag: '{link_assinatura}', label: 'Link de Assinatura' },
+                        { tag: '{email}', label: 'E-mail do Responsável' },
+                        { tag: '{escola}', label: 'Nome da Escola' },
+                        { tag: '{ano}', label: 'Ano Letivo' },
+                        { tag: '{protocolo}', label: 'Protocolo' },
+                      ].map((item) => (
+                        <button
+                          key={item.tag}
+                          type="button"
+                          onClick={() => {
+                            const textarea = document.getElementById('textarea-whatsapp-template') as HTMLTextAreaElement | null
+                            if (textarea) {
+                              const start = textarea.selectionStart || 0
+                              const end = textarea.selectionEnd || 0
+                              const currentVal = configData.whatsappTemplate || ''
+                              const newVal = currentVal.substring(0, start) + item.tag + currentVal.substring(end)
+                              setConfigData(prev => ({ ...prev, whatsappTemplate: newVal }))
+                              setTimeout(() => {
+                                textarea.focus()
+                                textarea.setSelectionRange(start + item.tag.length, start + item.tag.length)
+                              }, 10)
+                            } else {
+                              setConfigData(prev => ({
+                                ...prev,
+                                whatsappTemplate: (prev.whatsappTemplate || '') + ' ' + item.tag,
+                              }))
+                            }
+                            toast.success(`Variável ${item.tag} inserida!`)
+                          }}
+                          style={{
+                            background: 'hsl(var(--bg-surface))',
+                            border: '1px solid hsl(var(--border-subtle))',
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            color: '#2563eb',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontFamily: 'monospace',
+                            fontWeight: 600,
+                            transition: 'all 0.15s ease',
+                          }}
+                          title={`Clique para inserir ${item.tag} (${item.label})`}
+                        >
+                          <span style={{ fontWeight: 800 }}>{item.tag}</span>
+                          <span style={{ fontSize: 9.5, color: 'hsl(var(--text-secondary))', fontFamily: 'sans-serif' }}>({item.label})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Campo de Texto para Edição do Template */}
+                  <div style={{ position: 'relative' }}>
+                    <textarea
+                      id="textarea-whatsapp-template"
+                      rows={7}
+                      value={configData.whatsappTemplate}
+                      onChange={e => setConfigData({ ...configData, whatsappTemplate: e.target.value })}
+                      placeholder="Digite a mensagem padrão que será enviada aos responsáveis pelo WhatsApp..."
+                      style={{
+                        width: '100%',
+                        background: 'hsl(var(--bg-surface))',
+                        border: '1px solid hsl(var(--border-subtle))',
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        color: 'hsl(var(--text-primary))',
+                        fontSize: 12.5,
+                        lineHeight: 1.5,
+                        fontFamily: 'inherit',
+                        resize: 'vertical',
+                      }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, fontSize: 10.5, color: 'hsl(var(--text-secondary))' }}>
+                      <span>Dica: Use quebras de linha normais para formatar os parágrafos do WhatsApp.</span>
+                      <span>{(configData.whatsappTemplate || '').length} caracteres</span>
+                    </div>
+                  </div>
+
+                  {/* Painel de Teste de Envio Rápido do WhatsApp */}
+                  <div
+                    style={{
+                      background: 'rgba(16, 185, 129, 0.05)',
+                      border: '1px dashed rgba(16, 185, 129, 0.35)',
+                      borderRadius: 10,
+                      padding: '10px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 260 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#059669', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                        <Smartphone size={13} /> Testar Envio:
+                      </div>
+                      <input
+                        type="text"
+                        value={telefoneTesteWhatsapp}
+                        onChange={e => setTelefoneTesteWhatsapp(e.target.value)}
+                        placeholder="Telefone com DDD (ou vazio para escolher contato)"
+                        style={{
+                          flex: 1,
+                          minWidth: 160,
+                          padding: '6px 10px',
+                          borderRadius: 6,
+                          border: '1px solid hsl(var(--border-subtle))',
+                          background: 'hsl(var(--bg-surface))',
+                          color: 'hsl(var(--text-primary))',
+                          fontSize: 11.5,
+                        }}
+                      />
+                      {configData.representantes?.[0]?.telefone && telefoneTesteWhatsapp !== configData.representantes[0].telefone && (
+                        <button
+                          type="button"
+                          onClick={() => setTelefoneTesteWhatsapp(configData.representantes[0].telefone || '')}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#0284c7',
+                            fontSize: 10.5,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title="Preencher com o telefone do representante"
+                        >
+                          Usar meu número
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button
+                        type="button"
+                        onClick={() => handleTestarEnvioWhatsApp()}
+                        style={{
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          color: '#ffffff',
+                          border: 'none',
+                          padding: '6px 14px',
+                          borderRadius: 6,
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                        }}
+                        title="Abrir WhatsApp com a mensagem formatada para teste"
+                      >
+                        <Send size={11} /> Disparar Teste WhatsApp
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const texto = gerarTextoMensagemTeste()
+                          navigator.clipboard.writeText(texto)
+                          toast.success('Texto formatado de teste copiado!')
+                        }}
+                        style={{
+                          background: 'hsl(var(--bg-surface))',
+                          border: '1px solid hsl(var(--border-subtle))',
+                          color: 'hsl(var(--text-secondary))',
+                          padding: '6px 10px',
+                          borderRadius: 6,
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                        title="Copiar texto formatado de teste"
+                      >
+                        <Copy size={11} /> Copiar
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Simulação Visual do Balão do WhatsApp (Idêntica ao Print do Usuário) */}
+                  {mostrarPreviaWhatsapp && (
+                    <div
+                      style={{
+                        background: '#0b141a',
+                        borderRadius: 12,
+                        padding: '14px 16px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', paddingBottom: 6 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#22c55e', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <Smartphone size={13} /> Simulação em Tempo Real (WhatsApp)
+                        </div>
+                        <span style={{ fontSize: 10, color: '#94a3b8' }}>Visualização aproximada no celular</span>
+                      </div>
+
+                      {/* Balão do WhatsApp */}
+                      <div
+                        style={{
+                          alignSelf: 'flex-start',
+                          maxWidth: '94%',
+                          background: '#d9fdd3',
+                          color: '#111b21',
+                          borderRadius: '8px 8px 8px 2px',
+                          padding: '10px 12px 6px',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.18)',
+                          fontSize: 12.5,
+                          lineHeight: 1.45,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          position: 'relative',
+                        }}
+                      >
+                        {/* Header embutido do link do portal (link preview card) */}
+                        <div
+                          style={{
+                            background: '#c7ebc1',
+                            borderRadius: 6,
+                            padding: '6px 8px',
+                            marginBottom: 8,
+                            fontSize: 11,
+                            borderLeft: '3px solid #25d366',
+                          }}
+                        >
+                          <div style={{ fontWeight: 800, color: '#0f5132', fontSize: 11 }}>
+                            Assinatura Digital: CONTRATO NV1 e NV2 2027 | Colégio Impacto
+                          </div>
+                          <div style={{ color: '#4a5568', fontSize: 10, marginTop: 1 }}>
+                            Portal oficial de assinatura eletrônica do Colégio Impacto (Impacto EDU).
+                          </div>
+                          <div style={{ color: '#059669', fontSize: 9.5, marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                            🔗 impacto-edu.net
+                          </div>
+                        </div>
+
+                        {/* Corpo da mensagem simulada */}
+                        <div style={{ fontSize: 12.5, color: '#111b21' }}>
+                          {gerarTextoMensagemTeste()}
+                        </div>
+
+                        {/* Rodapé com hora e checks duplos */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 3,
+                            marginTop: 4,
+                            fontSize: 10,
+                            color: '#667781',
+                          }}
+                        >
+                          <span>08:11</span>
+                          <span style={{ color: '#53bdeb', fontWeight: 800 }}>✓✓</span>
+                        </div>
+                      </div>
+
+                      {/* Ação rápida dentro da simulação */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: 8, marginTop: 2 }}>
+                        <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
+                          💡 Mensagem renderizada em tempo real com dados de teste.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleTestarEnvioWhatsApp()}
+                          style={{
+                            background: '#25d366',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 6,
+                            padding: '5px 12px',
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            boxShadow: '0 2px 6px rgba(37, 211, 102, 0.35)',
+                          }}
+                          title="Abrir WhatsApp agora com esta mensagem de teste"
+                        >
+                          <Send size={11} /> Testar no WhatsApp Agora
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>

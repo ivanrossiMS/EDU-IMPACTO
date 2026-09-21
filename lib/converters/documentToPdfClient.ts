@@ -18,6 +18,22 @@ export interface ClientConversionResult {
   metodoConversao: 'direto' | 'servidor'
 }
 
+export interface DocumentoUploadItem {
+  id: string
+  nome: string
+  nomeArquivoPdf?: string
+  tamanhoBytes: number
+  tamanhoFormatado: string
+  formatoOriginal: 'pdf' | 'docx' | 'doc'
+  pdfBase64: string
+  cleanBase64: string
+  totalPaginas: number
+  metodoConversao: 'direto' | 'servidor'
+  status?: 'pronto' | 'convertendo' | 'erro'
+  erroMsg?: string
+  hashSha256?: string
+}
+
 /**
  * Formata bytes em string legível (KB ou MB)
  */
@@ -25,6 +41,20 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+}
+
+/**
+ * Converte Uint8Array para Base64 de forma eficiente sem estouro de pilha
+ */
+export function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const len = bytes.byteLength
+  const chunkSize = 8192
+  for (let i = 0; i < len; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, len))
+    binary += String.fromCharCode.apply(null, chunk as any)
+  }
+  return btoa(binary)
 }
 
 /**
@@ -122,3 +152,117 @@ export async function processarDocumentoParaPdf(
     reader.readAsDataURL(file)
   })
 }
+
+/**
+ * Mescla múltiplos documentos PDF em um único arquivo PDF consolidado com todas as páginas
+ */
+export async function mesclarMultiplosDocumentosPdf(
+  documentos: DocumentoUploadItem[],
+  nomeArquivoFinal?: string
+): Promise<ClientConversionResult> {
+  if (!documentos || documentos.length === 0) {
+    throw new Error('Nenhum documento fornecido para mesclagem.')
+  }
+
+  if (documentos.length === 1) {
+    const unico = documentos[0]
+    return {
+      pdfBase64: unico.pdfBase64,
+      cleanBase64: unico.cleanBase64,
+      nomeArquivoPdf: nomeArquivoFinal || unico.nome,
+      tamanhoFormatado: unico.tamanhoFormatado,
+      totalPaginas: unico.totalPaginas,
+      formatoOriginal: unico.formatoOriginal,
+      metodoConversao: unico.metodoConversao,
+    }
+  }
+
+  const mergedPdf = await PDFDocument.create()
+  let totalPaginasAcumuladas = 0
+
+  for (const doc of documentos) {
+    if (!doc.cleanBase64 && !doc.pdfBase64) continue
+    const cleanB64 = doc.cleanBase64 || doc.pdfBase64.replace(/^data:[^;]+;base64,/, '')
+    const binaryStr = atob(cleanB64)
+    const len = binaryStr.length
+    const bytes = new Uint8Array(len)
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryStr.charCodeAt(i)
+    }
+
+    const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true })
+    const pageIndices = pdfDoc.getPageIndices()
+    const copiedPages = await mergedPdf.copyPages(pdfDoc, pageIndices)
+    copiedPages.forEach((page) => mergedPdf.addPage(page))
+    totalPaginasAcumuladas += copiedPages.length
+  }
+
+  const mergedPdfBytes = await mergedPdf.save()
+  const cleanBase64 = uint8ArrayToBase64(mergedPdfBytes)
+  const pdfBase64 = `data:application/pdf;base64,${cleanBase64}`
+
+  const baseNameDoc1 = documentos[0].nome.replace(/\.(docx?|pdf)$/i, '')
+  const nomeFinal =
+    nomeArquivoFinal ||
+    `Pacote_${documentos.length}_Docs_${baseNameDoc1}.pdf`
+
+  return {
+    pdfBase64,
+    cleanBase64,
+    nomeArquivoPdf: nomeFinal,
+    tamanhoFormatado: formatBytes(mergedPdfBytes.byteLength),
+    totalPaginas: totalPaginasAcumuladas,
+    formatoOriginal: 'pdf',
+    metodoConversao: 'direto',
+  }
+}
+
+/**
+ * Processa múltiplos arquivos (PDF ou Word) em lote com controle de progresso individual
+ */
+export async function processarArquivosEmLote(
+  files: File[],
+  options?: {
+    onProgress?: (info: { index: number; total: number; filename: string; etapa: string }) => void
+  }
+): Promise<DocumentoUploadItem[]> {
+  const resultados: DocumentoUploadItem[] = []
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    options?.onProgress?.({
+      index: i + 1,
+      total: files.length,
+      filename: file.name,
+      etapa: `Processando arquivo ${i + 1} de ${files.length}: ${file.name}...`,
+    })
+
+    const conv = await processarDocumentoParaPdf(file, {
+      onProgress: (msg) => {
+        options?.onProgress?.({
+          index: i + 1,
+          total: files.length,
+          filename: file.name,
+          etapa: `[${i + 1}/${files.length}] ${msg}`,
+        })
+      },
+    })
+
+    resultados.push({
+      id: `doc_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}`,
+      nome: file.name,
+      nomeArquivoPdf: `${file.name.replace(/\.(docx?|pdf)$/i, '')}.pdf`,
+      tamanhoBytes: file.size,
+      tamanhoFormatado: conv.tamanhoFormatado,
+      formatoOriginal: conv.formatoOriginal,
+      pdfBase64: conv.pdfBase64,
+      cleanBase64: conv.cleanBase64,
+      totalPaginas: conv.totalPaginas,
+      metodoConversao: conv.metodoConversao,
+      status: 'pronto',
+    })
+  }
+
+  return resultados
+}
+

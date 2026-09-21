@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/server/authGuard'
 import { getAdminClient } from '@/lib/server/supabaseAdminSingleton'
 import { testarConexaoSmtp, executarDiagnosticoSmtp, enviarEmailTeste, SmtpConfig } from '@/lib/server/emailService'
+import { DEFAULT_WHATSAPP_DIGITAL_TEMPLATE } from '@/lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ const DEFAULT_REPRESENTANTES = [
     telefone: '(67) 99280-6464',
     endereco: 'Rua Alagoas, 1081 - Jardim dos Estados',
     cidadeUf: 'Campo Grande - MS',
-    segmento: 'Educação Infantil e Ensino Fundamental',
+    segmento: 'Ed. Infantil e Ens. Fund',
     padrao: true,
   },
   {
@@ -37,14 +38,14 @@ const DEFAULT_REPRESENTANTES = [
     telefone: '(67) 99280-6464',
     endereco: 'Rua Alagoas, 1081 - Jardim dos Estados',
     cidadeUf: 'Campo Grande - MS',
-    segmento: 'Ensino Médio',
+    segmento: 'Ens. Médio',
     padrao: false,
   },
 ]
 
 const DEFAULT_REPRESENTANTE = DEFAULT_REPRESENTANTES[0]
 
-const DEFAULT_WHATSAPP = `Olá, {responsavel}! 💙\nO Colégio Impacto disponibilizou o Contrato de Matrícula {ano} do(a) estudante *{aluno}* para assinatura digital.\n\n✍️ *Acesse com segurança pelo link oficial:*\n{link_assinatura}\n\nAo acessar, você confirmará um código de segurança enviado para o seu e-mail cadastrado. Agradecemos pela confiança na nossa escola!`
+const DEFAULT_WHATSAPP = DEFAULT_WHATSAPP_DIGITAL_TEMPLATE
 
 /**
  * GET /api/matriculas/digital/configuracoes
@@ -100,6 +101,17 @@ export async function GET(request: Request) {
         representantes = DEFAULT_REPRESENTANTES
       }
     }
+
+    // Normaliza os nomes de segmento para a nomenclatura oficial solicitada
+    representantes = representantes.map((r: any) => {
+      let seg = r.segmento
+      if (seg === 'Educação Infantil e Ensino Fundamental' || seg === 'Educação Infantil e Fundamental') {
+        seg = 'Ed. Infantil e Ens. Fund'
+      } else if (seg === 'Ensino Médio') {
+        seg = 'Ens. Médio'
+      }
+      return { ...r, segmento: seg }
+    })
 
     const representante = representantes.find(r => r.padrao) || representantes[0] || DEFAULT_REPRESENTANTE
     const logoUrl = rowMap.get(CONFIG_LOGO_KEY) || '/logo-impacto-clean.png'
