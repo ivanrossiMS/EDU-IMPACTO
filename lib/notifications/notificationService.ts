@@ -1060,7 +1060,7 @@ class NotificationService {
     let appInfo = {
       name: 'Impacto Edu',
       id: 'br.com.impactoedu.agenda',
-      version: '1.0.9',
+      version: '1.0.10',
       build: '1',
     }
 

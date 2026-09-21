@@ -45,6 +45,10 @@ workflows:
         script: |
           cd android
           chmod +x gradlew
+          echo "=========================================="
+          echo "Versao do Android a ser construida:"
+          grep -E "versionCode|versionName" app/build.gradle
+          echo "=========================================="
           ./gradlew bundleRelease assembleRelease
     artifacts:
       - android/app/build/outputs/bundle/release/*.aab
