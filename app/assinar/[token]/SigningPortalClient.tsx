@@ -11,6 +11,7 @@ import {
   HelpCircle, Eye, QrCode, BadgeCheck, MessageSquare, Copy, Send
 } from 'lucide-react'
 import { getWhatsAppShareUrl } from '@/lib/whatsapp'
+import { PdfCanvasViewer } from './PdfCanvasViewer'
 
 interface ContratoProps {
   id: string
@@ -65,7 +66,7 @@ const ESTILOS_CALIGRAFICOS = [
 export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
   // Controle de Visualização do PDF Paginado
   const [currentPage, setCurrentPage] = useState(1)
-  const totalPages = Math.max(1, contrato.totalPaginas || 1)
+  const [totalPages, setTotalPages] = useState(Math.max(1, contrato.totalPaginas || 1))
   const [zoomPercent, setZoomPercent] = useState(100)
 
   // Estado do Modal de Assinatura
@@ -130,6 +131,27 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
   const [resendEmailErrorMsg, setResendEmailErrorMsg] = useState<string | null>(null)
   const [showAlternativeEmailInput, setShowAlternativeEmailInput] = useState(false)
 
+  // Estados para Mobile, Montagem e Zoom Lightbox
+  const [mounted, setMounted] = useState(false)
+  const [viewerWidth, setViewerWidth] = useState(0)
+  const [isZoomModalOpen, setIsZoomModalOpen] = useState(false)
+  const [zoomModalScale, setZoomModalScale] = useState(130)
+  const viewerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    setMounted(true)
+    const handleResize = () => {
+      if (viewerRef.current) {
+        setViewerWidth(viewerRef.current.clientWidth)
+      } else if (typeof window !== 'undefined') {
+        setViewerWidth(window.innerWidth - 32)
+      }
+    }
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   // Estado do Modal de Comprovante e Validação Oficial
   const [isComprovanteModalOpen, setIsComprovanteModalOpen] = useState(false)
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null)
@@ -166,7 +188,9 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (isComprovanteModalOpen) {
+        if (isZoomModalOpen) {
+          setIsZoomModalOpen(false)
+        } else if (isComprovanteModalOpen) {
           setIsComprovanteModalOpen(false)
         } else if (isSignModalOpen && !signingLoading && !otpLoading) {
           setIsSignModalOpen(false)
@@ -175,7 +199,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isSignModalOpen, isComprovanteModalOpen, signingLoading, otpLoading])
+  }, [isSignModalOpen, isComprovanteModalOpen, isZoomModalOpen, signingLoading, otpLoading])
 
   // Inicializa o canvas de desenho manual quando ativado
   useEffect(() => {
@@ -713,73 +737,9 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
             </h1>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button
-              onClick={handleOpenPdfInNewTab}
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                color: '#e2e8f0',
-                padding: '8px 14px',
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <ExternalLink size={14} /> Abrir em Nova Aba
-            </button>
-
+          <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-3 sm:mt-0">
             {signedResult ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => setIsComprovanteModalOpen(true)}
-                  style={{
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    border: '1px solid rgba(16, 185, 129, 0.35)',
-                    color: '#34d399',
-                    borderRadius: 10,
-                    padding: '8px 14px',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    transition: 'all 0.15s ease',
-                  }}
-                  title="Ver Comprovante Oficial e Dossiê de Validação"
-                >
-                  <ShieldCheck size={15} color="#34d399" /> Ver Comprovante
-                </button>
-
-                <a
-                  href={`/validar-assinatura/${signedResult.protocolo}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{
-                    background: 'rgba(56, 189, 248, 0.12)',
-                    border: '1px solid rgba(56, 189, 248, 0.3)',
-                    color: '#38bdf8',
-                    borderRadius: 10,
-                    padding: '8px 12px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    transition: 'all 0.15s ease',
-                  }}
-                  title="Abrir página pública de validação em nova aba"
-                >
-                  <ExternalLink size={13} /> Validação
-                </a>
-
+              <>
                 <button
                   type="button"
                   onClick={() =>
@@ -788,44 +748,119 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       `Documento_Assinado_${signedResult.protocolo}.pdf`
                     )
                   }
+                  className="w-full sm:w-auto"
                   style={{
                     background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                     color: '#ffffff',
                     border: 'none',
-                    borderRadius: 10,
-                    padding: '8px 18px',
+                    borderRadius: 12,
+                    padding: '11px 20px',
                     fontSize: 13,
                     fontWeight: 700,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 6,
+                    justifyContent: 'center',
+                    gap: 8,
                     boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
                   }}
                 >
-                  <Download size={15} /> Baixar PDF Assinado
+                  <Download size={16} /> Baixar PDF Assinado
                 </button>
-              </div>
+
+                <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsComprovanteModalOpen(true)}
+                    style={{
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.35)',
+                      color: '#34d399',
+                      borderRadius: 10,
+                      padding: '10px 14px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                      transition: 'all 0.15s ease',
+                    }}
+                    title="Ver Comprovante Oficial e Dossiê de Validação"
+                  >
+                    <ShieldCheck size={15} color="#34d399" /> Comprovante
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleOpenPdfInNewTab}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: '#e2e8f0',
+                      padding: '10px 14px',
+                      borderRadius: 10,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <ExternalLink size={14} /> Nova Aba
+                  </button>
+                </div>
+              </>
             ) : (
-              <button
-                onClick={() => setIsSignModalOpen(true)}
-                style={{
-                  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: 10,
-                  padding: '9px 20px',
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
-                }}
-              >
-                <PenTool size={15} /> Assinar Documento
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsSignModalOpen(true)}
+                  className="w-full sm:w-auto"
+                  style={{
+                    background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: '12px 24px',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
+                  }}
+                >
+                  <PenTool size={16} /> Assinar Documento
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenPdfInNewTab}
+                  className="w-full sm:w-auto"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    color: '#e2e8f0',
+                    padding: '10px 18px',
+                    borderRadius: 10,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <ExternalLink size={14} /> Abrir em Nova Aba
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -895,111 +930,121 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                 </button>
               </div>
 
-              {/* Controles de Zoom */}
+              {/* Controles de Zoom & Botão de Ampliar */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button
-                  onClick={() => setZoomPercent(z => Math.max(75, z - 15))}
+                  type="button"
+                  onClick={() => setIsZoomModalOpen(true)}
                   style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#94a3b8',
+                    background: 'rgba(56, 189, 248, 0.12)',
+                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                    color: '#38bdf8',
+                    borderRadius: 8,
+                    padding: '6px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
                     cursor: 'pointer',
-                    padding: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    transition: 'all 0.15s ease',
                   }}
-                  title="Diminuir Zoom"
+                  title="Abrir visualização com zoom"
                 >
-                  <ZoomOut size={16} />
+                  <ZoomIn size={14} /> Ampliar / Zoom
                 </button>
 
-                <span style={{ fontSize: 12, color: '#cbd5e1', minWidth: 42, textAlign: 'center' }}>
-                  {zoomPercent}%
-                </span>
+                <div className="hidden sm:flex" style={{ alignItems: 'center', gap: 4 }}>
+                  <button
+                    onClick={() => setZoomPercent(z => Math.max(75, z - 15))}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      padding: 4,
+                    }}
+                    title="Diminuir Zoom"
+                  >
+                    <ZoomOut size={16} />
+                  </button>
 
-                <button
-                  onClick={() => setZoomPercent(z => Math.min(150, z + 15))}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#94a3b8',
-                    cursor: 'pointer',
-                    padding: 4,
-                  }}
-                  title="Aumentar Zoom"
-                >
-                  <ZoomIn size={16} />
-                </button>
+                  <span style={{ fontSize: 12, color: '#cbd5e1', minWidth: 42, textAlign: 'center' }}>
+                    {zoomPercent}%
+                  </span>
+
+                  <button
+                    onClick={() => setZoomPercent(z => Math.min(150, z + 15))}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      padding: 4,
+                    }}
+                    title="Aumentar Zoom"
+                  >
+                    <ZoomIn size={16} />
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Container do Iframe / PDF ou Card de Documento Word Original */}
+            {/* Container do Documento com Cobertura Lateral Total e Sem Barra de Ferramentas */}
             <div
+              ref={viewerRef}
+              suppressHydrationWarning
+              onClick={() => setIsZoomModalOpen(true)}
               style={{
-                background: '#1e293b',
+                background: '#0f172a',
                 borderRadius: 14,
                 overflow: 'hidden',
                 border: '1px solid rgba(255, 255, 255, 0.08)',
                 boxShadow: '0 12px 35px rgba(0, 0, 0, 0.4)',
-                minHeight: 580,
+                width: '100%',
                 position: 'relative',
+                cursor: 'pointer',
               }}
             >
-                <iframe
-                  key={`${currentPage}-${zoomPercent}-${Boolean(signedResult)}`}
-                  src={`${pdfViewUrl}&page=${currentPage}#page=${currentPage}&zoom=${zoomPercent}`}
-                  style={{
-                    width: '100%',
-                    height: 720,
-                    border: 'none',
-                    background: '#ffffff',
-                  }}
-                  title={contrato.titulo_documento}
-                />
-              </div>
-          </div>
+              <PdfCanvasViewer
+                pdfUrl={pdfViewUrl}
+                pageNumber={currentPage}
+                zoomPercent={100}
+                onTotalPagesLoaded={setTotalPages}
+                onTap={() => setIsZoomModalOpen(true)}
+              />
 
-          {/* ── COLUNA LATERAL: SOBRE O SISTEMA & METADADOS PERICIAIS ── */}
-          <div className="lg:col-span-1" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Card Explicativo: Sobre a Assinatura do Impacto EDU */}
-            <div
-              style={{
-                background: 'rgba(30, 41, 59, 0.6)',
-                backdropFilter: 'blur(10px)',
-                borderRadius: 16,
-                padding: '20px',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#38bdf8', fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
-                <Shield size={16} /> Sobre o Sistema
-              </div>
-
-              <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.6, margin: '0 0 12px' }}>
-                Este documento foi disponibilizado para assinatura eletrônica através da plataforma do <strong>Colégio Impacto (Impacto EDU)</strong>.
-              </p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 11, color: '#94a3b8' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <Check size={14} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
-                  <span>
-                    <strong>Eficácia Jurídica Eletrônica</strong>: Respaldada pelo Art. 10, § 2º da MP nº 2.200-2/2001, arts. 107, 219 e 221 do Código Civil Brasileiro e arts. 440 e 441 do CPC.
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <Check size={14} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
-                  <span>
-                    <strong>Criptografia SHA-256</strong>: Prova matemática de que o arquivo não sofreu nenhuma alteração após o envio.
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <Check size={14} color="#10b981" style={{ flexShrink: 0, marginTop: 2 }} />
-                  <span>
-                    <strong>Dossiê Pericial Anexo</strong>: Certificado com carimbo de tempo, IP e QR Code público de autenticidade anexado ao PDF final.
-                  </span>
-                </div>
+              {/* Botão flutuante para toque e zoom */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 12,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'rgba(15, 23, 42, 0.88)',
+                  backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(56, 189, 248, 0.4)',
+                  color: '#38bdf8',
+                  borderRadius: 20,
+                  padding: '7px 16px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  boxShadow: '0 6px 20px rgba(0, 0, 0, 0.5)',
+                  pointerEvents: 'none',
+                  zIndex: 10,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <ZoomIn size={14} /> Toque para ampliar e dar zoom
               </div>
             </div>
+          </div>
+
+          {/* ── COLUNA LATERAL: METADADOS DOS SIGNATÁRIOS ── */}
+          <div className="lg:col-span-1" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
             {/* Card do Signatário Designado */}
             <div
@@ -1224,8 +1269,8 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
               position: 'fixed',
               inset: 0,
               zIndex: 100,
-              background: 'rgba(5, 9, 18, 0.85)',
-              backdropFilter: 'blur(12px)',
+              background: 'rgba(15, 23, 42, 0.65)',
+              backdropFilter: 'blur(8px)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1237,35 +1282,37 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               style={{
-                background: '#0e172a',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
                 borderRadius: 20,
                 width: '100%',
-                maxWidth: 580,
+                maxWidth: 540,
                 maxHeight: '90vh',
                 overflowY: 'auto',
-                boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6)',
+                boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.04)',
                 position: 'relative',
               }}
             >
               {/* Cabeçalho do Modal */}
               <div
                 style={{
-                  padding: '18px 24px',
+                  padding: '16px 20px',
                   borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  background: 'rgba(15, 23, 42, 0.5)',
+                  background: 'linear-gradient(180deg, #0f172a 0%, #0b1329 100%)',
+                  borderTopLeftRadius: 20,
+                  borderTopRightRadius: 20,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      background: 'rgba(255, 255, 255, 0.06)',
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: 'rgba(255, 255, 255, 0.08)',
                       border: '1px solid rgba(255, 255, 255, 0.12)',
                       padding: 4,
                       display: 'flex',
@@ -1276,15 +1323,15 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                   >
                     <img
                       src={contrato.logoUrl || '/logo-impacto-clean.png'}
-                      alt={contrato.representanteEscola?.razaoSocial || 'Colégio Impacto'}
+                      alt={contrato.representanteEscola?.razaoSocial || 'Logo'}
                       style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                     />
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      {contrato.representanteEscola?.razaoSocial || 'Colégio Impacto'} • Assinatura Eletrônica
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                      Assinatura Eletrônica
                     </div>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: '#ffffff' }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: '#ffffff', letterSpacing: '-0.01em' }}>
                       {modalStep === 1 && '1. Confirmação dos Dados do Signatário'}
                       {modalStep === 2 && '2. Código de Segurança (OTP)'}
                       {modalStep === 3 && '3. Assinatura e Manifestação de Vontade'}
@@ -1297,12 +1344,12 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                   type="button"
                   onClick={() => setIsSignModalOpen(false)}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: 8,
-                    color: '#94a3b8',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: 10,
+                    color: '#cbd5e1',
                     cursor: 'pointer',
-                    padding: 6,
+                    padding: '8px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1311,15 +1358,17 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                   onMouseOver={e => {
                     e.currentTarget.style.color = '#ffffff'
                     e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)'
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)'
                   }}
                   onMouseOut={e => {
-                    e.currentTarget.style.color = '#94a3b8'
-                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+                    e.currentTarget.style.color = '#cbd5e1'
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)'
                   }}
                   title="Fechar"
                   aria-label="Fechar"
                 >
-                  <X size={20} />
+                  <X size={18} />
                 </button>
               </div>
 
@@ -1328,12 +1377,8 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                 {/* ── PASSO 1: DADOS DO SIGNATÁRIO ── */}
                 {modalStep === 1 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <p style={{ fontSize: 13, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
-                      Por favor, confirme ou preencha seus dados de identificação civil para registro oficial no Certificado de Evidências.
-                    </p>
-
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1', display: 'block', marginBottom: 6 }}>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: 6 }}>
                         Nome Completo *
                       </label>
                       <input
@@ -1344,10 +1389,10 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                         style={{
                           width: '100%',
                           padding: '12px 14px',
-                          background: '#070b14',
-                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          background: '#ffffff',
+                          border: '1.5px solid #cbd5e1',
                           borderRadius: 10,
-                          color: '#ffffff',
+                          color: '#0f172a',
                           fontSize: 14,
                           outline: 'none',
                         }}
@@ -1356,7 +1401,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1', display: 'block', marginBottom: 6 }}>
+                        <label style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: 6 }}>
                           CPF *
                         </label>
                         <input
@@ -1368,10 +1413,10 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           style={{
                             width: '100%',
                             padding: '12px 14px',
-                            background: '#070b14',
-                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                            background: '#ffffff',
+                            border: '1.5px solid #cbd5e1',
                             borderRadius: 10,
-                            color: '#ffffff',
+                            color: '#0f172a',
                             fontSize: 14,
                             outline: 'none',
                             fontFamily: 'monospace',
@@ -1380,7 +1425,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1', display: 'block', marginBottom: 6 }}>
+                        <label style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: 6 }}>
                           Data de Nascimento *
                         </label>
                         <input
@@ -1392,10 +1437,10 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           style={{
                             width: '100%',
                             padding: '12px 14px',
-                            background: '#070b14',
-                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                            background: '#ffffff',
+                            border: '1.5px solid #cbd5e1',
                             borderRadius: 10,
-                            color: '#ffffff',
+                            color: '#0f172a',
                             fontSize: 14,
                             outline: 'none',
                             fontFamily: 'monospace',
@@ -1406,7 +1451,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1', display: 'block', marginBottom: 6 }}>
+                        <label style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: 6 }}>
                           Telefone / WhatsApp *
                         </label>
                         <input
@@ -1418,10 +1463,10 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           style={{
                             width: '100%',
                             padding: '12px 14px',
-                            background: '#070b14',
-                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                            background: '#ffffff',
+                            border: '1.5px solid #cbd5e1',
                             borderRadius: 10,
-                            color: '#ffffff',
+                            color: '#0f172a',
                             fontSize: 14,
                             outline: 'none',
                           }}
@@ -1429,7 +1474,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       </div>
 
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: '#cbd5e1', display: 'block', marginBottom: 6 }}>
+                        <label style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: 6 }}>
                           E-mail Oficial *
                         </label>
                         <input
@@ -1440,10 +1485,10 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           style={{
                             width: '100%',
                             padding: '12px 14px',
-                            background: '#070b14',
-                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                            background: '#ffffff',
+                            border: '1.5px solid #cbd5e1',
                             borderRadius: 10,
-                            color: '#ffffff',
+                            color: '#0f172a',
                             fontSize: 14,
                             outline: 'none',
                           }}
@@ -1451,12 +1496,12 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       </div>
                     </div>
 
-                    <div style={{ fontSize: 11, color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <ShieldCheck size={14} color="#38bdf8" /> Todos os campos acima são obrigatórios para validar a assinatura jurídica.
+                    <div style={{ fontSize: 12, color: '#0369a1', background: '#f0f9ff', padding: '10px 14px', borderRadius: 8, border: '1px solid #bae6fd', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <ShieldCheck size={16} color="#0284c7" /> Todos os campos acima são obrigatórios para validar a assinatura jurídica.
                     </div>
 
                     {otpError && (
-                      <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', padding: '10px 14px', borderRadius: 8, fontSize: 12 }}>
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, fontSize: 12 }}>
                         {otpError}
                       </div>
                     )}
@@ -1477,7 +1522,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 8,
-                        boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
+                        boxShadow: '0 4px 16px rgba(37, 99, 235, 0.3)',
                         marginTop: 8,
                       }}
                     >
@@ -1502,25 +1547,26 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                         width: 56,
                         height: 56,
                         borderRadius: '50%',
-                        background: 'rgba(59, 130, 246, 0.15)',
-                        color: '#60a5fa',
+                        background: '#eff6ff',
+                        color: '#2563eb',
+                        border: '1px solid #bfdbfe',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         margin: '0 auto',
                       }}
                     >
-                      <Mail size={28} />
+                      <Mail size={26} />
                     </div>
 
-                    <p style={{ fontSize: 13, color: '#94a3b8', margin: 0, lineHeight: 1.6 }}>
+                    <p style={{ fontSize: 13, color: '#1e293b', margin: 0, lineHeight: 1.6 }}>
                       Digite o código de segurança de 6 dígitos enviado para:
                       <br />
-                      <strong style={{ color: '#38bdf8' }}>{emailMascarado || signatarioEmail}</strong>
+                      <strong style={{ color: '#0284c7' }}>{emailMascarado || signatarioEmail}</strong>
                     </p>
 
                     {simulatedCode && (
-                      <div style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fbbf24', borderRadius: 8, padding: '8px 12px', fontSize: 12 }}>
+                      <div style={{ background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 12 }}>
                         ⚡ <strong>Código de Teste:</strong> <strong style={{ fontFamily: 'monospace', fontSize: 15 }}>{simulatedCode}</strong>
                       </div>
                     )}
@@ -1540,9 +1586,9 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           fontSize: 28,
                           fontWeight: 800,
                           letterSpacing: '8px',
-                          background: '#070b14',
-                          color: '#ffffff',
-                          border: '2px solid #3b82f6',
+                          background: '#f8fafc',
+                          color: '#0f172a',
+                          border: '2px solid #2563eb',
                           borderRadius: 12,
                           outline: 'none',
                         }}
@@ -1551,7 +1597,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                     </div>
 
                     {otpError && (
-                      <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', padding: '10px 14px', borderRadius: 8, fontSize: 12 }}>
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, fontSize: 12 }}>
                         {otpError}
                       </div>
                     )}
@@ -1560,9 +1606,9 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       onClick={handleVerifyOtp}
                       disabled={otpLoading || otpCode.length < 6}
                       style={{
-                        background: otpCode.length === 6 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255, 255, 255, 0.1)',
-                        color: '#ffffff',
-                        border: 'none',
+                        background: otpCode.length === 6 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#f1f5f9',
+                        color: otpCode.length === 6 ? '#ffffff' : '#64748b',
+                        border: otpCode.length === 6 ? 'none' : '1.5px solid #cbd5e1',
                         borderRadius: 12,
                         padding: '14px',
                         fontSize: 15,
@@ -1581,7 +1627,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, marginTop: 4 }}>
                       <button
                         onClick={() => setModalStep(1)}
-                        style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                        style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}
                       >
                         <ArrowLeft size={13} /> Corrigir dados
                       </button>
@@ -1591,14 +1637,14 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       ) : (
                         <button
                           onClick={handleRequestOtp}
-                          style={{ background: 'none', border: 'none', color: '#60a5fa', fontWeight: 600, cursor: 'pointer' }}
+                          style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 600, cursor: 'pointer' }}
                         >
                           Reenviar código
                         </button>
                       )}
                     </div>
 
-                    <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1px solid rgba(255, 255, 255, 0.08)', textAlign: 'center' }}>
+                    <div style={{ marginTop: 8, paddingTop: 12, borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
                       <a
                         href={getWhatsAppShareUrl('5567992806464', `Olá! Estou na etapa de validação do código OTP para assinatura do contrato (${contrato.protocolo}) do(a) estudante ${contrato.aluno_nome || 'meu filho(a)'}. Poderiam me auxiliar?`)}
                         target="_blank"
@@ -1607,14 +1653,14 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: 6,
-                          color: '#34d399',
+                          color: '#15803d',
                           fontSize: 12,
                           fontWeight: 600,
                           textDecoration: 'none',
-                          background: 'rgba(16, 185, 129, 0.1)',
+                          background: '#f0fdf4',
                           padding: '8px 14px',
                           borderRadius: 8,
-                          border: '1px solid rgba(16, 185, 129, 0.25)',
+                          border: '1px solid #bbf7d0',
                         }}
                       >
                         <Smartphone size={14} /> Não recebeu no e-mail? Falar no WhatsApp da Secretaria
@@ -1628,7 +1674,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                     {/* Seletor de Tipo de Assinatura */}
                     <div>
-                      <label style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', display: 'block', marginBottom: 8 }}>
+                      <label style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'block', marginBottom: 8 }}>
                         Escolha como deseja assinar o documento:
                       </label>
 
@@ -1637,11 +1683,11 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           type="button"
                           onClick={() => setTipoAssinatura('nome_automatico')}
                           style={{
-                            background: tipoAssinatura === 'nome_automatico' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                            border: tipoAssinatura === 'nome_automatico' ? '2px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.08)',
+                            background: tipoAssinatura === 'nome_automatico' ? '#eff6ff' : '#f8fafc',
+                            border: tipoAssinatura === 'nome_automatico' ? '2px solid #2563eb' : '1.5px solid #cbd5e1',
                             borderRadius: 12,
                             padding: '12px',
-                            color: tipoAssinatura === 'nome_automatico' ? '#ffffff' : '#94a3b8',
+                            color: tipoAssinatura === 'nome_automatico' ? '#1d4ed8' : '#334155',
                             fontSize: 13,
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -1651,18 +1697,18 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                             gap: 8,
                           }}
                         >
-                          <Sparkles size={16} color="#60a5fa" /> Pelo Nome (Automática)
+                          <Sparkles size={16} color={tipoAssinatura === 'nome_automatico' ? '#2563eb' : '#64748b'} /> Pelo Nome (Automática)
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setTipoAssinatura('manual')}
                           style={{
-                            background: tipoAssinatura === 'manual' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255, 255, 255, 0.03)',
-                            border: tipoAssinatura === 'manual' ? '2px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.08)',
+                            background: tipoAssinatura === 'manual' ? '#eff6ff' : '#f8fafc',
+                            border: tipoAssinatura === 'manual' ? '2px solid #2563eb' : '1.5px solid #cbd5e1',
                             borderRadius: 12,
                             padding: '12px',
-                            color: tipoAssinatura === 'manual' ? '#ffffff' : '#94a3b8',
+                            color: tipoAssinatura === 'manual' ? '#1d4ed8' : '#334155',
                             fontSize: 13,
                             fontWeight: 700,
                             cursor: 'pointer',
@@ -1672,15 +1718,15 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                             gap: 8,
                           }}
                         >
-                          <PenTool size={16} color="#60a5fa" /> Desenhar (Manual)
+                          <PenTool size={16} color={tipoAssinatura === 'manual' ? '#2563eb' : '#64748b'} /> Desenhar (Manual)
                         </button>
                       </div>
                     </div>
 
                     {/* Bloco de Assinatura Automática */}
                     {tipoAssinatura === 'nome_automatico' && (
-                      <div style={{ background: '#ffffff', borderRadius: 12, padding: '16px', color: '#0f172a' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '16px', color: '#0f172a' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
                           <span>Selecione o estilo da sua assinatura:</span>
                           <span style={{ color: '#0284c7' }}>Pré-visualização</span>
                         </div>
@@ -1693,12 +1739,13 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                               type="button"
                               onClick={() => setEstiloCaligrafico(estilo.id)}
                               style={{
-                                background: estiloCaligrafico === estilo.id ? '#eff6ff' : '#f8fafc',
+                                background: '#ffffff',
                                 border: estiloCaligrafico === estilo.id ? '2px solid #2563eb' : '1px solid #cbd5e1',
                                 borderRadius: 8,
                                 padding: '10px 8px',
                                 cursor: 'pointer',
                                 textAlign: 'center',
+                                boxShadow: estiloCaligrafico === estilo.id ? '0 0 0 2px rgba(37, 99, 235, 0.2)' : 'none',
                               }}
                             >
                               <div style={{ fontSize: 10, color: '#64748b', marginBottom: 2 }}>{estilo.nome}</div>
@@ -1720,7 +1767,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           ))}
                         </div>
 
-                        <div style={{ textAlign: 'center', fontSize: 10, color: '#64748b', borderTop: '1px dashed #e2e8f0', paddingTop: 8 }}>
+                        <div style={{ textAlign: 'center', fontSize: 10, color: '#64748b', borderTop: '1px dashed #cbd5e1', paddingTop: 8 }}>
                           🔒 Assinatura gerada e vinculada criptograficamente ao seu CPF ({signatarioCpf || 'Registrado'})
                         </div>
                       </div>
@@ -1730,7 +1777,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                     {tipoAssinatura === 'manual' && (
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <span style={{ fontSize: 11, color: '#cbd5e1' }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#334155' }}>
                             Desenhe com o dedo ou mouse no quadro abaixo:
                           </span>
                           {hasManualDrawing && (
@@ -1744,7 +1791,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           )}
                         </div>
 
-                        <div style={{ background: '#ffffff', borderRadius: 12, overflow: 'hidden', border: '2px solid rgba(255, 255, 255, 0.2)', position: 'relative' }}>
+                        <div style={{ background: '#ffffff', borderRadius: 12, overflow: 'hidden', border: '1.5px solid #cbd5e1', position: 'relative' }}>
                           <canvas
                             ref={canvasRef}
                             width={540}
@@ -1770,8 +1817,8 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                     {/* Aceite Explícito */}
                     <label
                       style={{
-                        background: aceitouTermos ? 'rgba(16, 185, 129, 0.12)' : 'rgba(15, 23, 42, 0.6)',
-                        border: aceitouTermos ? '2px solid #10b981' : '1px solid rgba(255, 255, 255, 0.12)',
+                        background: aceitouTermos ? '#f0fdf4' : '#f8fafc',
+                        border: aceitouTermos ? '2px solid #10b981' : '1.5px solid #cbd5e1',
                         borderRadius: 12,
                         padding: '14px',
                         display: 'flex',
@@ -1786,15 +1833,15 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                         onChange={e => setAceitouTermos(e.target.checked)}
                         style={{ width: 20, height: 20, accentColor: '#10b981', marginTop: 2, cursor: 'pointer', flexShrink: 0 }}
                       />
-                      <div style={{ fontSize: 12, lineHeight: 1.5, color: '#f8fafc' }}>
-                        <strong style={{ color: '#34d399' }}>DECLARAÇÃO DE ACEITE EXPRESSO E IRREVOGÁVEL:</strong>
+                      <div style={{ fontSize: 12, lineHeight: 1.5, color: '#1e293b' }}>
+                        <strong style={{ color: '#15803d' }}>DECLARAÇÃO DE ACEITE EXPRESSO E IRREVOGÁVEL:</strong>
                         <br />
                         Declaro que li atentamente o documento <strong>"{contrato.titulo_documento}"</strong> na íntegra, conferi seus termos e manifesto consentimento expresso e irrevogável para sua assinatura eletrônica nos termos do art. 10, § 2º da MP 2.200-2/2001 e arts. 107, 219 e 221 do Código Civil Brasileiro.
                       </div>
                     </label>
 
                     {signingError && (
-                      <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', padding: '10px 14px', borderRadius: 8, fontSize: 12 }}>
+                      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, fontSize: 12 }}>
                         {signingError}
                       </div>
                     )}
@@ -1803,9 +1850,9 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       onClick={handleFinalizeSignature}
                       disabled={signingLoading || !aceitouTermos}
                       style={{
-                        background: aceitouTermos ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'rgba(255, 255, 255, 0.1)',
-                        color: '#ffffff',
-                        border: 'none',
+                        background: aceitouTermos ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#f1f5f9',
+                        color: aceitouTermos ? '#ffffff' : '#64748b',
+                        border: aceitouTermos ? 'none' : '1.5px solid #cbd5e1',
                         borderRadius: 12,
                         padding: '16px',
                         fontSize: 15,
@@ -1815,7 +1862,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 8,
-                        boxShadow: aceitouTermos ? '0 4px 20px rgba(16, 185, 129, 0.4)' : 'none',
+                        boxShadow: aceitouTermos ? '0 4px 20px rgba(16, 185, 129, 0.3)' : 'none',
                       }}
                     >
                       {signingLoading ? (
@@ -1836,89 +1883,93 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                   <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div
                       style={{
-                        width: 72,
-                        height: 72,
+                        width: 64,
+                        height: 64,
                         borderRadius: '50%',
-                        background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.2) 100%)',
-                        color: '#34d399',
+                        background: '#ecfdf5',
+                        color: '#059669',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        margin: '0 auto',
-                        border: '2px solid rgba(16, 185, 129, 0.4)',
+                        margin: '4px auto 0',
+                        border: '4px solid #d1fae5',
                       }}
                     >
-                      <CheckCircle2 size={40} />
+                      <CheckCircle2 size={36} strokeWidth={2.5} />
                     </div>
 
                     <div>
-                      <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 6px', color: '#fff' }}>
+                      <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 6px', color: '#0f172a', letterSpacing: '-0.02em' }}>
                         Documento Assinado com Sucesso!
                       </h2>
-                      <p style={{ fontSize: 13, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
-                        O Certificado Oficial de Evidências com QR Code foi anexado ao documento em PDF e selado criptograficamente.
+                      <p style={{ fontSize: 13, color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+                        O Certificado Oficial de Evidências com QR Code foi anexado ao documento em PDF.
                       </p>
                     </div>
 
-                    <div style={{ background: '#070b14', borderRadius: 12, padding: '14px', border: '1px solid rgba(255, 255, 255, 0.08)', textAlign: 'left', fontSize: 12 }}>
-                      <div style={{ marginBottom: 8 }}>
-                        <span style={{ color: '#64748b' }}>Protocolo: </span>
-                        <strong style={{ color: '#38bdf8', fontFamily: 'monospace' }}>{signedResult.protocolo}</strong>
-                      </div>
-                      <div>
-                        <span style={{ color: '#64748b' }}>Hash SHA-256 Selado: </span>
-                        <div style={{ color: '#34d399', fontFamily: 'monospace', fontSize: 10, wordBreak: 'break-all', marginTop: 2 }}>
-                          {signedResult.documentoFinalHash}
-                        </div>
-                      </div>
+                    {/* Protocolo */}
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        borderRadius: 12,
+                        padding: '10px 16px',
+                        border: '1px solid #e2e8f0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        fontSize: 13,
+                      }}
+                    >
+                      <span style={{ color: '#64748b', fontWeight: 500 }}>Protocolo:</span>
+                      <strong style={{ color: '#0284c7', fontFamily: 'monospace', fontSize: 14 }}>{signedResult.protocolo}</strong>
                     </div>
 
                     {/* Status de Envio por E-mail & Reenvio Imediato */}
                     <div
                       style={{
-                        background: signedResult.emailEnviado ? 'rgba(16, 185, 129, 0.08)' : 'rgba(59, 130, 246, 0.08)',
-                        border: signedResult.emailEnviado ? '1px solid rgba(16, 185, 129, 0.25)' : '1px solid rgba(59, 130, 246, 0.25)',
-                        borderRadius: 12,
-                        padding: '14px',
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                        borderRadius: 14,
+                        padding: '14px 16px',
                         textAlign: 'left',
                         fontSize: 12,
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: signedResult.emailEnviado ? '#34d399' : '#60a5fa' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: '#15803d' }}>
                           <Mail size={15} />
-                          <span>{signedResult.emailEnviado ? 'Cópia Oficial Enviada por E-mail' : 'Envio da Cópia por E-mail'}</span>
+                          <span>Cópia Oficial Enviada por E-mail</span>
                         </div>
                         {signedResult.emailEnviado && (
-                          <span style={{ fontSize: 10, background: 'rgba(16, 185, 129, 0.2)', color: '#a7f3d0', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>
-                            ✓ Entregue ao Servidor
+                          <span style={{ fontSize: 11, background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>
+                            ✓ Entregue
                           </span>
                         )}
                       </div>
 
-                      <div style={{ color: '#cbd5e1', lineHeight: 1.4, marginBottom: 8 }}>
+                      <div style={{ color: '#334155', lineHeight: 1.5, marginBottom: 8 }}>
                         {signedResult.emailEnviado ? (
                           <>
-                            A via oficial em PDF com selo pericial foi despachada para <strong style={{ color: '#ffffff' }}>{signedResult.emailDestinatario || signatarioEmail || contrato.responsavel_email}</strong>.
-                            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                              💡 <em>Não encontrou na Caixa de Entrada? Verifique a aba <strong>"Outros"</strong> ou a pasta de <strong>"Lixo Eletrônico / Spam"</strong>.</em>
+                            A via oficial em PDF foi despachada para <strong style={{ color: '#0f172a' }}>{signedResult.emailDestinatario || signatarioEmail || contrato.responsavel_email}</strong>.
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                              💡 <em>Não encontrou na Caixa de Entrada? Verifique a pasta de <strong>"Spam"</strong> ou <strong>"Lixo Eletrônico"</strong>.</em>
                             </div>
                           </>
                         ) : (
                           <>
-                            O documento está certificado. Se desejar receber a via oficial em PDF por e-mail, clique no botão abaixo.
+                            O documento está certificado. Se desejar receber a via oficial em PDF por e-mail, utilize as opções abaixo.
                           </>
                         )}
                       </div>
 
                       {/* Mensagens de Feedback de Reenvio */}
                       {resendEmailSuccessMsg && (
-                        <div style={{ background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981', color: '#a7f3d0', padding: '8px 12px', borderRadius: 8, fontSize: 11, marginBottom: 8 }}>
+                        <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#166534', padding: '8px 12px', borderRadius: 8, fontSize: 11, marginBottom: 8 }}>
                           {resendEmailSuccessMsg}
                         </div>
                       )}
                       {resendEmailErrorMsg && (
-                        <div style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#fca5a5', padding: '8px 12px', borderRadius: 8, fontSize: 11, marginBottom: 8 }}>
+                        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '8px 12px', borderRadius: 8, fontSize: 11, marginBottom: 8 }}>
                           {resendEmailErrorMsg}
                         </div>
                       )}
@@ -1934,10 +1985,10 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                             style={{
                               flex: 1,
                               padding: '8px 12px',
-                              background: '#070b14',
-                              border: '1px solid rgba(255, 255, 255, 0.2)',
+                              background: '#ffffff',
+                              border: '1px solid #cbd5e1',
                               borderRadius: 8,
-                              color: '#fff',
+                              color: '#0f172a',
                               fontSize: 12,
                               outline: 'none',
                             }}
@@ -1968,8 +2019,8 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                             onClick={() => setShowAlternativeEmailInput(false)}
                             style={{
                               background: 'transparent',
-                              color: '#94a3b8',
-                              border: '1px solid rgba(255, 255, 255, 0.1)',
+                              color: '#64748b',
+                              border: '1px solid #e2e8f0',
                               borderRadius: 8,
                               padding: '8px 10px',
                               fontSize: 11,
@@ -1986,9 +2037,9 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                             disabled={isResendingEmail}
                             onClick={() => handleResendContractEmail()}
                             style={{
-                              background: 'rgba(255, 255, 255, 0.08)',
-                              border: '1px solid rgba(255, 255, 255, 0.15)',
-                              color: '#ffffff',
+                              background: '#ffffff',
+                              border: '1px solid #cbd5e1',
+                              color: '#1e293b',
                               borderRadius: 8,
                               padding: '6px 12px',
                               fontSize: 11,
@@ -2019,9 +2070,9 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                             style={{
                               background: 'transparent',
                               border: 'none',
-                              color: '#38bdf8',
+                              color: '#0284c7',
                               fontSize: 11,
-                              fontWeight: 500,
+                              fontWeight: 600,
                               cursor: 'pointer',
                               textDecoration: 'underline',
                               padding: '6px 4px',
@@ -2033,7 +2084,7 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
                       <button
                         onClick={() =>
                           downloadPdf(
@@ -2054,6 +2105,8 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           alignItems: 'center',
                           justifyContent: 'center',
                           gap: 8,
+                          boxShadow: '0 4px 14px rgba(16, 185, 129, 0.25)',
+                          transition: 'all 0.15s ease',
                         }}
                       >
                         <Download size={16} /> Baixar PDF Assinado com Certificado
@@ -2066,53 +2119,9 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           setIsComprovanteModalOpen(true)
                         }}
                         style={{
-                          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.25) 0%, rgba(5, 150, 105, 0.25) 100%)',
-                          border: '1px solid rgba(16, 185, 129, 0.4)',
-                          color: '#ffffff',
-                          borderRadius: 12,
-                          padding: '13px',
-                          fontSize: 13,
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 8,
-                          boxShadow: '0 4px 14px rgba(16, 185, 129, 0.25)',
-                        }}
-                      >
-                        <ShieldCheck size={16} color="#34d399" /> Ver Comprovante e Validação Oficial
-                      </button>
-
-                      <a
-                        href={`/validar-assinatura/${signedResult.protocolo}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.05)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          color: '#e2e8f0',
-                          textDecoration: 'none',
-                          borderRadius: 12,
-                          padding: '12px',
-                          fontSize: 13,
-                          fontWeight: 600,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: 8,
-                        }}
-                      >
-                        <ExternalLink size={15} /> Consultar Página Pública de Validação
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={() => setIsSignModalOpen(false)}
-                        style={{
-                          background: 'rgba(255, 255, 255, 0.04)',
-                          border: '1px solid rgba(255, 255, 255, 0.12)',
-                          color: '#cbd5e1',
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          color: '#1e293b',
                           borderRadius: 12,
                           padding: '12px',
                           fontSize: 13,
@@ -2125,27 +2134,340 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                           transition: 'all 0.15s ease',
                         }}
                         onMouseOver={e => {
-                          e.currentTarget.style.color = '#ffffff'
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
-                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)'
+                          e.currentTarget.style.background = '#f8fafc'
+                          e.currentTarget.style.borderColor = '#cbd5e1'
                         }}
                         onMouseOut={e => {
-                          e.currentTarget.style.color = '#cbd5e1'
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)'
-                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)'
+                          e.currentTarget.style.background = '#ffffff'
+                          e.currentTarget.style.borderColor = '#e2e8f0'
                         }}
                       >
-                        <X size={15} /> Fechar
+                        <ShieldCheck size={16} color="#059669" /> Ver Comprovante e Validação Oficial
                       </button>
-                    </div>
-
-                    <div style={{ fontSize: 11, color: '#64748b' }}>
-                      Uma cópia foi encaminhada para: <strong style={{ color: '#94a3b8' }}>{signatarioEmail}</strong>
                     </div>
                   </div>
                 )}
               </div>
             </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── MODAL ULTRA MODERNO DE ZOOM & VISUALIZAÇÃO AMPLIADA DO PDF ── */}
+      <AnimatePresence>
+        {isZoomModalOpen && (
+          <div
+            onClick={e => {
+              if (e.target === e.currentTarget) {
+                setIsZoomModalOpen(false)
+              }
+            }}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 115,
+              background: 'rgba(3, 7, 18, 0.94)',
+              backdropFilter: 'blur(16px)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {/* Barra Superior / Header do Zoom */}
+            <div
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'linear-gradient(180deg, #0f172a 0%, #0b1329 100%)',
+                flexShrink: 0,
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              {/* Informações do Documento & Paginação */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage <= 1}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: currentPage <= 1 ? '#475569' : '#e2e8f0',
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+                    }}
+                    title="Página Anterior"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#ffffff', padding: '0 4px' }}>
+                    <strong style={{ color: '#38bdf8' }}>{currentPage}</strong> / {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage >= totalPages}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid rgba(255, 255, 255, 0.15)',
+                      color: currentPage >= totalPages ? '#475569' : '#e2e8f0',
+                      width: 32,
+                      height: 32,
+                      borderRadius: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
+                    }}
+                    title="Próxima Página"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+
+                <div className="hidden sm:block" style={{ fontSize: 12, color: '#94a3b8', maxWidth: 280, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {contrato.titulo_documento}
+                </div>
+              </div>
+
+              {/* Controles de Nível de Zoom */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    borderRadius: 8,
+                    padding: '2px 6px',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setZoomModalScale(z => Math.max(75, z - 20))}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#cbd5e1',
+                      cursor: 'pointer',
+                      padding: '4px 6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title="Reduzir Zoom (-)"
+                  >
+                    <ZoomOut size={16} />
+                  </button>
+
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', minWidth: 44, textAlign: 'center', fontFamily: 'monospace' }}>
+                    {zoomModalScale}%
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setZoomModalScale(z => Math.min(250, z + 20))}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#cbd5e1',
+                      cursor: 'pointer',
+                      padding: '4px 6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title="Ampliar Zoom (+)"
+                  >
+                    <ZoomIn size={16} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setZoomModalScale(100)}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: 'none',
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      borderRadius: 4,
+                      padding: '2px 6px',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      marginLeft: 4,
+                    }}
+                    title="Redefinir para 100%"
+                  >
+                    100%
+                  </button>
+                </div>
+
+                {/* Botão Fechar no Canto Superior */}
+                <button
+                  type="button"
+                  onClick={() => setIsZoomModalOpen(false)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: 10,
+                    color: '#ffffff',
+                    cursor: 'pointer',
+                    padding: '8px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseOver={e => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)'
+                  }}
+                  onMouseOut={e => {
+                    e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)'
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'
+                  }}
+                  title="Fechar visualização ampliada"
+                  aria-label="Fechar"
+                >
+                  <X size={18} />
+                  <span className="hidden sm:inline">Fechar</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Área de Visualização do Documento com Rolagem Contínua e Gestos Fluidos */}
+            <div
+              style={{
+                flex: 1,
+                position: 'relative',
+                overflow: 'hidden',
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <PdfCanvasViewer
+                pdfUrl={pdfViewUrl}
+                pageNumber={currentPage}
+                renderAllPages={true}
+                zoomPercent={zoomModalScale}
+                enableGestures={true}
+                onZoomChange={setZoomModalScale}
+                onPageChange={setCurrentPage}
+                footerAction={
+                  <div
+                    style={{
+                      margin: '28px 0 44px 0',
+                      padding: '24px 20px',
+                      background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(11, 19, 41, 0.96) 100%)',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      borderRadius: 16,
+                      maxWidth: 580,
+                      width: '100%',
+                      textAlign: 'center',
+                      boxShadow: '0 20px 50px rgba(0, 0, 0, 0.65)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 12,
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#38bdf8' }}>
+                      <CheckCircle2 size={20} />
+                      <span style={{ fontSize: 14, fontWeight: 700, color: '#ffffff' }}>
+                        Fim do Documento Oficial
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, maxWidth: 440, lineHeight: 1.5 }}>
+                      Você visualizou todas as {totalPages} páginas deste contrato.
+                    </p>
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center', width: '100%', marginTop: 6 }}>
+                      {!signedResult && contrato.status !== 'assinado' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsZoomModalOpen(false)
+                            setIsSignModalOpen(true)
+                          }}
+                          style={{
+                            background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                            border: '1px solid rgba(56, 189, 248, 0.4)',
+                            borderRadius: 12,
+                            color: '#ffffff',
+                            fontWeight: 800,
+                            fontSize: 13,
+                            padding: '12px 22px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            boxShadow: '0 6px 20px rgba(2, 132, 199, 0.4)',
+                          }}
+                        >
+                          <PenTool size={16} /> Assinar Documento Agora
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            downloadPdf(
+                              signedResult?.signedPdfBase64 || null,
+                              `Documento_Assinado_${contrato.protocolo}.pdf`
+                            )
+                          }
+                          style={{
+                            background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                            border: '1px solid rgba(52, 211, 153, 0.4)',
+                            borderRadius: 12,
+                            color: '#ffffff',
+                            fontWeight: 800,
+                            fontSize: 13,
+                            padding: '12px 22px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            boxShadow: '0 6px 20px rgba(5, 150, 105, 0.4)',
+                          }}
+                        >
+                          <Download size={16} /> Baixar PDF Assinado
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setIsZoomModalOpen(false)}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.08)',
+                          border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: 12,
+                          color: '#e2e8f0',
+                          fontWeight: 700,
+                          fontSize: 13,
+                          padding: '12px 18px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Fechar
+                      </button>
+                    </div>
+                  </div>
+                }
+              />
+            </div>
           </div>
         )}
       </AnimatePresence>

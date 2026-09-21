@@ -49,6 +49,7 @@ const PUBLIC_PATHS = [
   '/api/matriculas/digital/pdf', // Visualização do PDF no portal de assinatura
   '/_next',             // assets Next.js
   '/favicon.ico',
+  '/pdf.worker',
   '/manifest.webmanifest',
   '/manifest.json',
   '/api/webhooks',      // webhooks externos (Asaas, etc)
