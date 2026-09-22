@@ -6,8 +6,5 @@
   NODE_VERSION = "20"
   SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
 
-[functions]
-  timeout = 60
-
 [[plugins]]
   package = "@netlify/plugin-nextjs"
