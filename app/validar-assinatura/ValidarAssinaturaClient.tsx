@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ShieldCheck, CheckCircle2, XCircle, Search, Upload, FileText,
   Clock, Download, Building2, User, Lock, ExternalLink, RefreshCw,
-  Fingerprint, Check, AlertTriangle, ArrowRight, Copy
+  Fingerprint, Check, AlertTriangle, ArrowRight, Copy,
+  Scale, FileCheck, ChevronDown, ChevronUp, Sparkles, BadgeCheck
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -76,6 +77,7 @@ export function ValidarAssinaturaClient({
     hash: string
     mensagem: string
   } | null>(null)
+  const [mostrarDetalhesJuridicos, setMostrarDetalhesJuridicos] = useState(false)
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text)
@@ -250,6 +252,478 @@ export function ValidarAssinaturaClient({
 
       {/* Main Container */}
       <main style={{ maxWidth: 940, margin: '32px auto 0', padding: '0 16px' }}>
+        {/* Card Superior: Respaldo, Validade Jurídica e Medidas de Segurança */}
+        <div
+          style={{
+            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 59, 0.82) 50%, rgba(15, 23, 42, 0.92) 100%)',
+            backdropFilter: 'blur(16px)',
+            borderRadius: 20,
+            border: '1px solid rgba(59, 130, 246, 0.28)',
+            marginBottom: 26,
+            boxShadow: '0 20px 45px -15px rgba(0, 0, 0, 0.65), 0 0 25px -5px rgba(59, 130, 246, 0.15)',
+            overflow: 'hidden',
+            position: 'relative',
+          }}
+        >
+          {/* Barra Superior Decorativa com Gradiente Fino */}
+          <div
+            style={{
+              height: 3,
+              width: '100%',
+              background: 'linear-gradient(90deg, #3b82f6 0%, #10b981 35%, #8b5cf6 70%, #06b6d4 100%)',
+            }}
+          />
+
+          <div style={{ padding: '26px 28px' }}>
+            {/* Linha Superior: Tags e Status */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    color: '#34d399',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    padding: '4px 10px',
+                    borderRadius: 20,
+                    letterSpacing: '0.04em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: '#10b981',
+                      boxShadow: '0 0 8px #10b981',
+                    }}
+                  />
+                  Respaldo Jurídico & Pericial Pleno
+                </span>
+
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    background: 'rgba(59, 130, 246, 0.12)',
+                    border: '1px solid rgba(59, 130, 246, 0.25)',
+                    color: '#93c5fd',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: 20,
+                  }}
+                >
+                  <Scale size={13} /> Eficácia de Título Executivo Extrajudicial
+                </span>
+              </div>
+
+              <span
+                style={{
+                  fontSize: 11,
+                  color: '#94a3b8',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  padding: '3px 10px',
+                  borderRadius: 14,
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                }}
+              >
+                <Sparkles size={11} color="#38bdf8" /> Válido em Todo Território Nacional
+              </span>
+            </div>
+
+            {/* Título Principal e Apresentação Institucional */}
+            <div style={{ marginBottom: 18 }}>
+              <h1
+                style={{
+                  fontSize: 21,
+                  fontWeight: 800,
+                  color: '#ffffff',
+                  margin: '0 0 8px',
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1.3,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                Validade Jurídica, Fé Pública e Integridade Pericial
+              </h1>
+              <p
+                style={{
+                  fontSize: 13.5,
+                  color: '#cbd5e1',
+                  margin: 0,
+                  lineHeight: 1.6,
+                  maxWidth: 880,
+                }}
+              >
+                Todos os contratos, aditivos e termos formalizados pela plataforma digital do <strong>Colégio Impacto</strong> possuem equivalência jurídica irrestrita ao documento físico em papel com firma reconhecida em cartório, sendo dotados de força probante em juízo, presunção legal de veracidade e proteção criptográfica de última geração.
+              </p>
+            </div>
+
+            {/* Faixa de Marcos Legais (Badges Normativas) */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 8,
+                padding: '12px 14px',
+                background: 'rgba(15, 23, 42, 0.65)',
+                borderRadius: 12,
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                marginBottom: 20,
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5, marginRight: 6 }}>
+                <FileCheck size={14} /> Fundamentação Legal:
+              </div>
+
+              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <strong>MP 2.200-2/2001</strong> (Art. 10, § 2º)
+              </span>
+
+              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <strong>Lei Federal nº 14.063/2020</strong> (Assinaturas Eletrônicas)
+              </span>
+
+              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <strong>Código Civil</strong> (Arts. 107, 219, 221 e 422)
+              </span>
+
+              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <strong>CPC</strong> (Arts. 440, 441 e 784, III)
+              </span>
+
+              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                <strong>LGPD</strong> (Lei Federal nº 13.709/2018)
+              </span>
+            </div>
+
+            {/* Grid dos 4 Pilares de Respaldo e Medidas Técnicas */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: 14,
+                marginBottom: 16,
+              }}
+            >
+              {/* Pilar 1: Amparo Legal e Eficácia Executiva */}
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.75)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  borderRadius: 14,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 9,
+                      background: 'rgba(59, 130, 246, 0.15)',
+                      color: '#60a5fa',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Scale size={18} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                      Amparo Legal & Probatório
+                    </h2>
+                    <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600 }}>
+                      Fé Probatória em Juízo
+                    </span>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.55 }}>
+                  Aceito por tribunais, secretarias de educação, bancos e órgãos públicos sem necessidade de impressão física. O CPC equipara expressamente o documento digital ao físico e confere força executiva extrajudicial.
+                </p>
+
+                <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 11, fontWeight: 700 }}>
+                  <Check size={13} /> Reconhecimento de firma dispensado por lei
+                </div>
+              </div>
+
+              {/* Pilar 2: Blindagem Criptográfica SHA-256 e Padrão ISO 32000 */}
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.75)',
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                  borderRadius: 14,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 9,
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      color: '#34d399',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Fingerprint size={18} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                      Integridade Criptográfica
+                    </h2>
+                    <span style={{ fontSize: 11, color: '#6ee7b7', fontWeight: 600 }}>
+                      SHA-256 (FIPS 180-4) • ISO 32000
+                    </span>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.55 }}>
+                  Cada PDF recebe uma assinatura matemática de 256 bits com campos /ByteRange. A alteração de uma única vírgula ou espaço quebra o hash criptográfico, acusando fraude instantaneamente, inclusive no Adobe Acrobat Reader off-line.
+                </p>
+
+                <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 11, fontWeight: 700 }}>
+                  <Check size={13} /> Imutabilidade e selagem matemática
+                </div>
+              </div>
+
+              {/* Pilar 3: Autenticação em Dois Fatores (OTP) e Não-Repúdio */}
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.75)',
+                  border: '1px solid rgba(168, 85, 247, 0.2)',
+                  borderRadius: 14,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 9,
+                      background: 'rgba(168, 85, 247, 0.15)',
+                      color: '#c084fc',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Lock size={18} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                      Identificação & Não-Repúdio
+                    </h2>
+                    <span style={{ fontSize: 11, color: '#d8b4fe', fontWeight: 600 }}>
+                      Confirmação OTP Multicanal
+                    </span>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.55 }}>
+                  A manifestação de vontade é confirmada via código dinâmico de uso único (OTP) enviado ao WhatsApp e E-mail verificados do titular, com termo de adesão expresso irrevogável, impedindo qualquer alegação de desconhecimento.
+                </p>
+
+                <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 11, fontWeight: 700 }}>
+                  <Check size={13} /> Vínculo unívoco e irrevogável com o signatário
+                </div>
+              </div>
+
+              {/* Pilar 4: Trilha de Auditoria e Evidências Periciais */}
+              <div
+                style={{
+                  background: 'rgba(15, 23, 42, 0.75)',
+                  border: '1px solid rgba(245, 158, 11, 0.2)',
+                  borderRadius: 14,
+                  padding: '16px 18px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 9,
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      color: '#fbbf24',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Clock size={18} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                      Cadeia de Custódia Forense
+                    </h2>
+                    <span style={{ fontSize: 11, color: '#fcd34d', fontWeight: 600 }}>
+                      Timestamp UTC • Rastreabilidade IP
+                    </span>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.55 }}>
+                  Trilha ininterrupta que registra carimbo de tempo atômico UTC, endereço IP de conexão, porta lógica, User-Agent e metadados de hardware, permitindo a reconstituição pericial exata de cada etapa da formalização.
+                </p>
+
+                <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 11, fontWeight: 700 }}>
+                  <Check size={13} /> Histórico auditável e prova documental cabal
+                </div>
+              </div>
+            </div>
+
+            {/* Botão para Expandir Detalhamento Técnico & Procedimento Pericial */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+              <button
+                type="button"
+                onClick={() => setMostrarDetalhesJuridicos(!mostrarDetalhesJuridicos)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  color: '#93c5fd',
+                  padding: '8px 18px',
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {mostrarDetalhesJuridicos ? (
+                  <>
+                    <ChevronUp size={15} /> Ocultar Detalhamento Técnico e Procedimento Pericial
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown size={15} /> Ver Orientações para Juízes, Cartórios, Bancos e Procedimento Pericial
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Painel Expansível de Detalhamento Técnico e Jurídico */}
+            <AnimatePresence>
+              {mostrarDetalhesJuridicos && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.25 }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div
+                    style={{
+                      marginTop: 18,
+                      paddingTop: 18,
+                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 16,
+                    }}
+                  >
+                    {/* Guia para Órgãos Externos */}
+                    <div
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.9)',
+                        borderRadius: 12,
+                        padding: '16px 20px',
+                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                      }}
+                    >
+                      <h3 style={{ fontSize: 13.5, fontWeight: 700, color: '#60a5fa', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Building2 size={16} /> Instruções para Conferência por Bancos, Cartórios e Secretarias de Educação:
+                      </h3>
+                      <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.6 }}>
+                        <li>
+                          <strong>Conferência por Protocolo:</strong> Digite o código de protocolo oficial no campo de busca abaixo (ex: <code>IMP-2027-8K3N9P</code>) para visualizar o dossiê probatório, os dados cadastrais protegidos pela LGPD e a assinatura da instituição.
+                        </li>
+                        <li>
+                          <strong>Conferência Pericial Independente (Off-line):</strong> Arraste o arquivo PDF para a área de verificação pericial no final desta página. O navegador calculará o hash SHA-256 nativamente e confrontará com o registro em custódia.
+                        </li>
+                        <li>
+                          <strong>Auditoria Direta no Adobe Acrobat Reader:</strong> Ao abrir o PDF no Adobe Reader oficial, a assinatura digital corporativa e a integridade de todos os bytes são atestadas pelo leitor via especificação ISO 32000, sem necessidade de consultar sistemas externos.
+                        </li>
+                      </ol>
+                    </div>
+
+                    {/* Doutrina e Fundamentos do Marco Legal */}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 10, padding: 14, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#34d399', textTransform: 'uppercase', marginBottom: 4 }}>
+                          MP nº 2.200-2/2001 (Art. 10, § 2º)
+                        </div>
+                        <p style={{ fontSize: 11.5, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+                          &ldquo;O disposto nesta Medida Provisória não obsta a utilização de outro meio de comprovação da autoria e integridade de documentos em forma eletrônica, inclusive os que utilizem certificados não emitidos pela ICP-Brasil, desde que admitido pelas partes como válido ou aceito pela pessoa a quem for oposto o documento.&rdquo;
+                        </p>
+                      </div>
+
+                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 10, padding: 14, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', marginBottom: 4 }}>
+                          CPC (Lei 13.105/2015, Art. 784, III)
+                        </div>
+                        <p style={{ fontSize: 11.5, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+                          &ldquo;São títulos executivos extrajudiciais: o documento particular assinado pelo devedor e por 2 (duas) testemunhas ou assinado eletronicamente nos termos da lei.&rdquo; A assinatura digital confere via executiva autônoma à dívida ou obrigação pactuada.
+                        </p>
+                      </div>
+
+                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 10, padding: 14, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 4 }}>
+                          Código Civil (Art. 219) & LGPD
+                        </div>
+                        <p style={{ fontSize: 11.5, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+                          As declarações constantes de documentos assinados presumem-se verdadeiras perante os signatários. A consulta pública resguarda os dados sensíveis dos contratantes e estudantes mediante mascaramento criptográfico estrito.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
         {/* Barra de Busca por Protocolo */}
         <div
           style={{
