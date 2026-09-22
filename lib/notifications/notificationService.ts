@@ -834,7 +834,9 @@ class NotificationService {
                 await OS.User.addAliases(aliasMap)
               } else if (OS.User?.addAlias) {
                 for (const [k, v] of Object.entries(aliasMap)) {
-                  await OS.User.addAlias(k, v).catch(() => {})
+                  try {
+                    await OS.User.addAlias(k, v)
+                  } catch {}
                 }
               }
             } catch (aliasErr) {
@@ -851,18 +853,26 @@ class NotificationService {
           if (isPureStaff) {
             const studentTags = ['aluno_id', 'responsavel_id', 'turma', 'aluno_db_id']
             if (OS.User?.removeTags) {
-              await OS.User.removeTags(studentTags).catch(() => {})
+              try {
+                await OS.User.removeTags(studentTags)
+              } catch {}
             }
             if (OS.User?.removeAliases) {
-              await OS.User.removeAliases(['responsavel_id', 'aluno_id']).catch(() => {})
+              try {
+                await OS.User.removeAliases(['responsavel_id', 'aluno_id'])
+              } catch {}
             }
           } else if (!colabId && !isMaster) {
             const staffTags = ['colaborador_id', 'system_user_id', 'isMasterAdmin']
             if (OS.User?.removeTags) {
-              await OS.User.removeTags(staffTags).catch(() => {})
+              try {
+                await OS.User.removeTags(staffTags)
+              } catch {}
             }
             if (OS.User?.removeAliases) {
-              await OS.User.removeAliases(['colaborador_id', 'system_user_id']).catch(() => {})
+              try {
+                await OS.User.removeAliases(['colaborador_id', 'system_user_id'])
+              } catch {}
             }
           }
 
@@ -955,13 +965,13 @@ class NotificationService {
         if ((window as any).__OS_INIT__) {
           try {
             if (OS?.User?.removeTags) {
-              await OS.User.removeTags(tagsToRemove).catch(() => {})
+              try { await OS.User.removeTags(tagsToRemove) } catch {}
             }
             if (OS?.User?.removeAliases) {
-              await OS.User.removeAliases(aliasesToRemove).catch(() => {})
+              try { await OS.User.removeAliases(aliasesToRemove) } catch {}
             }
             if (OS && typeof OS.logout === 'function') {
-              await OS.logout().catch(() => {})
+              try { await OS.logout() } catch {}
             }
           } catch (logoutErr) {
             console.warn('[NotificationService] Aviso no logout web:', logoutErr)

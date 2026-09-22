@@ -648,10 +648,65 @@ export default function NotasPage() {
     }
   }
 
+  // Função auxiliar para chamada segura da API de extração de PDF
+  async function postExtractPdf(batchFile: File): Promise<any[]> {
+    const formData = new FormData()
+    formData.append('file', batchFile)
+
+    const response = await fetch('/api/boletins/extrair-pdf', {
+      method: 'POST',
+      body: formData
+    })
+
+    const contentType = response.headers.get('content-type') || ''
+    let responseData: any = null
+
+    if (contentType.includes('application/json')) {
+      try {
+        responseData = await response.json()
+      } catch {
+        responseData = null
+      }
+    } else {
+      const rawText = await response.text().catch(() => '')
+      if (response.status === 504 || rawText.includes('504') || rawText.includes('Gateway Time-out')) {
+        throw new Error('Tempo limite da IA esgotado (504 Gateway Timeout).')
+      }
+      if (response.status === 502 || response.status === 503) {
+        throw new Error(`Serviço temporariamente indisponível (${response.status}).`)
+      }
+      throw new Error(`Erro de resposta do servidor (Status ${response.status}).`)
+    }
+
+    if (!response.ok) {
+      throw new Error(responseData?.error || `Erro HTTP ${response.status} ao processar lote`)
+    }
+
+    return Array.isArray(responseData?.data) ? responseData.data : []
+  }
+
+  // Executa extração com retry automático (até 2 tentativas extras)
+  async function extractWithRetry(batchFile: File, batchLabel: string, maxRetries = 2): Promise<any[]> {
+    let lastErr: any = null
+    for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+      try {
+        if (attempt > 1) {
+          setStatusText(`${batchLabel} (Tentativa ${attempt} de ${maxRetries + 1})...`)
+          await new Promise(r => setTimeout(r, 1200 * (attempt - 1)))
+        }
+        return await postExtractPdf(batchFile)
+      } catch (err: any) {
+        lastErr = err
+        console.warn(`[handleFileUpload] Falha na tentativa ${attempt} de ${batchLabel}:`, err?.message || err)
+      }
+    }
+    throw lastErr || new Error(`Falha ao ler ${batchLabel} após ${maxRetries + 1} tentativas`)
+  }
+
   async function handleFileUpload(files: FileList | File[]) {
     setUploading(true)
     setProgress(2)
-    setStatusText('Iniciando processamento múltiplo...')
+    setStatusText('Iniciando processamento inteligente...')
     
     try {
       let allAlunosDetectados: any[] = []
@@ -659,30 +714,32 @@ export default function NotasPage() {
       
       for (let f = 0; f < filesArray.length; f++) {
         const file = filesArray[f]
-        setStatusText(`Analisando documento PDF ${f + 1} de ${filesArray.length}...`)
+        setStatusText(`Carregando documento ${f + 1} de ${filesArray.length}...`)
         
         // 1. Carregar o PDF na memória do navegador usando pdf-lib
         const arrayBuffer = await file.arrayBuffer()
         const originalPdf = await PDFDocument.load(arrayBuffer)
         const totalPages = originalPdf.getPageCount()
         
-        const BATCH_SIZE = 2 // Reduzido de 8 para 2 para garantir que a IA não pule nenhum aluno por excesso de densidade
+        // BATCH_SIZE = 1 garante processamento ultra-rápido (~1.5s/pág) e zera qualquer risco de timeout (504)
+        const BATCH_SIZE = 1
         const totalBatches = Math.ceil(totalPages / BATCH_SIZE)
 
-        // 2. Processar cada lote sequencialmente
+        // 2. Processar cada página individualmente
         for (let i = 0; i < totalBatches; i++) {
           const startPage = i * BATCH_SIZE
           const endPage = Math.min((i + 1) * BATCH_SIZE, totalPages)
+          const batchLabel = `Arquivo ${f + 1}/${filesArray.length}: Processando página ${startPage + 1} de ${totalPages}`
           
-          setStatusText(`Arquivo ${f + 1} de ${filesArray.length}: Processando lote ${i + 1} de ${totalBatches} (págs ${startPage + 1} a ${endPage})...`)
+          setStatusText(`${batchLabel}...`)
           
           // Calcula progresso dinâmico bidimensional
           const progressPorArquivo = 90 / filesArray.length
           const progressoAcumuladoAnterior = f * progressPorArquivo
-          const progressoLoteAtual = (i / totalBatches) * progressPorArquivo
-          setProgress(Math.floor(2 + progressoAcumuladoAnterior + progressoLoteAtual))
+          const progressoLoteAtual = ((i + 1) / totalBatches) * progressPorArquivo
+          setProgress(Math.min(94, Math.floor(2 + progressoAcumuladoAnterior + progressoLoteAtual)))
 
-          // Cria um novo PDF apenas com as páginas deste lote
+          // Cria um novo PDF apenas com a página deste lote
           const newPdf = await PDFDocument.create()
           const pageIndices = Array.from({ length: endPage - startPage }, (_, idx) => startPage + idx)
           const copiedPages = await newPdf.copyPages(originalPdf, pageIndices)
@@ -693,38 +750,50 @@ export default function NotasPage() {
           const batchBlob = new Blob([pdfBytes as any], { type: 'application/pdf' })
           const batchFile = new File([batchBlob], `batch_${i + 1}.pdf`, { type: 'application/pdf' })
 
-          // Envia para a API
-          const formData = new FormData()
-          formData.append('file', batchFile)
-
-          const response = await fetch('/api/boletins/extrair-pdf', {
-            method: 'POST',
-            body: formData
-          })
-
-          if (!response.ok) {
-            const err = await response.json()
-            throw new Error(err.error || `Erro na leitura do lote ${i + 1} do arquivo ${f + 1}`)
-          }
-
-          const { data } = await response.json()
+          // Envia para a API com retry automático
+          const data = await extractWithRetry(batchFile, batchLabel, 2)
           
-          if (Array.isArray(data)) {
+          if (Array.isArray(data) && data.length > 0) {
             allAlunosDetectados = [...allAlunosDetectados, ...data]
           }
         }
       }
 
-      setStatusText('Mapeando alunos no sistema...')
+      setStatusText('Mapeando e consolidando alunos no sistema...')
       setProgress(95)
+
+      // Consolidação de alunos detectados (caso um aluno tenha disciplinas em páginas consecutivas)
+      const consolidatedAlunos: any[] = []
+      const studentMap = new Map<string, any>()
+
+      for (const al of allAlunosDetectados) {
+        const key = (al.codigo ? String(al.codigo).trim() : '') || (al.nomeArquivo ? String(al.nomeArquivo).toLowerCase().trim() : '')
+        if (!key) {
+          consolidatedAlunos.push(al)
+          continue
+        }
+
+        if (studentMap.has(key)) {
+          const existing = studentMap.get(key)
+          // Mescla disciplinas sem duplicar matérias com mesmo nome
+          const existingDiscNames = new Set((existing.disciplinas || []).map((d: any) => String(d.nome || '').toUpperCase().trim()))
+          const newDiscs = (al.disciplinas || []).filter((d: any) => !existingDiscNames.has(String(d.nome || '').toUpperCase().trim()))
+          existing.disciplinas = [...(existing.disciplinas || []), ...newDiscs]
+          if (!existing.bimestre && al.bimestre) existing.bimestre = al.bimestre
+        } else {
+          const studentCopy = { ...al, disciplinas: [...(al.disciplinas || [])] }
+          studentMap.set(key, studentCopy)
+          consolidatedAlunos.push(studentCopy)
+        }
+      }
       
-      // Mapeamento e fallback
-      const mappedData = allAlunosDetectados.map((data: any) => {
-        const codigoLimpo = String(data.codigo).replace(/\\D/g, '').replace(/^0+/, '')
+      // Mapeamento com cadastro de alunos do ERP
+      const mappedData = consolidatedAlunos.map((data: any) => {
+        const codigoLimpo = String(data.codigo).replace(/\D/g, '').replace(/^0+/, '')
         
         let alunoEncontrado = (alunos || []).find((a: any) => {
-          const idLimpo = String(a.id).replace(/\\D/g, '').replace(/^0+/, '')
-          const matriculaLimpa = String(a.matricula).replace(/\\D/g, '').replace(/^0+/, '')
+          const idLimpo = String(a.id).replace(/\D/g, '').replace(/^0+/, '')
+          const matriculaLimpa = String(a.matricula).replace(/\D/g, '').replace(/^0+/, '')
           return (idLimpo === codigoLimpo && idLimpo !== '') || (matriculaLimpa === codigoLimpo && matriculaLimpa !== '')
         })
         
@@ -736,25 +805,25 @@ export default function NotasPage() {
           })
         }
         
-        // Fallback 2: Fuzzy Matching (nome similar, >85% de similaridade) - resolve problemas de typos de OCR (Luz vs Luiz, 5084 vs 5984)
+        // Fallback 2: Fuzzy Matching (nome similar, >85% de similaridade) - resolve problemas de typos de OCR (Luz vs Luiz, etc.)
         if (!alunoEncontrado && data.nomeArquivo) {
-          let bestMatch: any = null;
-          let bestScore = 0;
-          (alunos || []).forEach((a: any) => {
+          let bestMatch: any = null
+          let bestScore = 0
+          ;(alunos || []).forEach((a: any) => {
             if (a.nome) {
-              const score = stringSimilarity(a.nome, data.nomeArquivo);
+              const score = stringSimilarity(a.nome, data.nomeArquivo)
               if (score > bestScore) {
-                bestScore = score;
-                bestMatch = a;
+                bestScore = score
+                bestMatch = a
               }
             }
-          });
+          })
           if (bestScore > 0.85) {
-            alunoEncontrado = bestMatch;
+            alunoEncontrado = bestMatch
           }
         }
         
-        let nomeFallback = data.nomeArquivo || 'Aluno não cadastrado'
+        const nomeFallback = data.nomeArquivo || 'Aluno não cadastrado'
 
         return {
           ...data,

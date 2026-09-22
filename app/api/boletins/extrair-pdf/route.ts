@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { GoogleGenAI, Type, Schema } from '@google/genai'
 
+export const maxDuration = 60
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: Request) {
   try {
     const formData = await req.formData()
@@ -19,7 +22,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'GEMINI_API_KEY não configurada no servidor.' }, { status: 500 })
     }
 
-    // Usando o SDK novo
     const ai = new GoogleGenAI({ apiKey })
 
     const prompt = `Você é um assistente especializado em extração de dados de Boletins Escolares.
@@ -111,56 +113,89 @@ Mantenha o formato original exatamente como impresso no PDF (números como "9,50
       required: ['alunos']
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                mimeType: 'application/pdf',
-                data: base64Data
-              }
-            }
-          ]
-        }
-      ],
-      config: {
-        temperature: 0.1,
-        maxOutputTokens: 8192,
-        responseMimeType: 'application/json',
-        responseSchema: responseSchema,
-      }
-    })
+    // Modelos em ordem de preferência (com timeout de segurança por tentativa)
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-3.5-flash']
+    let text = ''
+    let lastError: any = null
 
-    const text = response.text || ''
-    
-    if (!text) {
-      console.error("Gemini retornou texto vazio. Resposta completa:", JSON.stringify(response));
-      return NextResponse.json({ error: 'A Inteligência Artificial não retornou nenhum dado (o PDF pode estar ilegível ou vazio).' }, { status: 500 })
+    for (const model of modelsToTry) {
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout na chamada do modelo ${model}`)), 24000)
+        )
+
+        const generatePromise = ai.models.generateContent({
+          model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: prompt },
+                {
+                  inlineData: {
+                    mimeType: 'application/pdf',
+                    data: base64Data
+                  }
+                }
+              ]
+            }
+          ],
+          config: {
+            temperature: 0.1,
+            maxOutputTokens: 8192,
+            responseMimeType: 'application/json',
+            responseSchema: responseSchema,
+            thinkingConfig: { thinkingBudget: 0 }
+          }
+        })
+
+        const response: any = await Promise.race([generatePromise, timeoutPromise])
+        text = response.text || ''
+        if (text) {
+          break
+        }
+      } catch (err: any) {
+        console.warn(`[extrair-pdf] Falha no modelo ${model}:`, err?.message || err)
+        lastError = err
+      }
     }
 
-    // Extração robusta do JSON ignorando qualquer texto antes ou depois
+    if (!text) {
+      console.error("[extrair-pdf] Todos os modelos falharam ou retornaram texto vazio:", lastError)
+      return NextResponse.json({ 
+        error: 'A Inteligência Artificial não conseguiu ler esta página a tempo. Tente novamente em instantes.' 
+      }, { status: 504 })
+    }
+
+    // Extração robusta do JSON ignorando blocos markdown ou texto acidental
     let cleanJson = text.trim()
+    if (cleanJson.startsWith('```json')) {
+      cleanJson = cleanJson.slice(7)
+    } else if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.slice(3)
+    }
+    if (cleanJson.endsWith('```')) {
+      cleanJson = cleanJson.slice(0, -3)
+    }
+    cleanJson = cleanJson.trim()
+
     const firstBracket = cleanJson.indexOf('[')
     const firstBrace = cleanJson.indexOf('{')
     let startIndex = -1
-    
+
     if (firstBracket !== -1 && firstBrace !== -1) {
-       startIndex = Math.min(firstBracket, firstBrace)
+      startIndex = Math.min(firstBracket, firstBrace)
     } else if (firstBracket !== -1) {
-       startIndex = firstBracket
+      startIndex = firstBracket
     } else if (firstBrace !== -1) {
-       startIndex = firstBrace
+      startIndex = firstBrace
     }
-    
+
     if (startIndex !== -1) {
       const isArray = cleanJson[startIndex] === '['
       const lastIndex = cleanJson.lastIndexOf(isArray ? ']' : '}')
       if (lastIndex !== -1) {
-         cleanJson = cleanJson.substring(startIndex, lastIndex + 1)
+        cleanJson = cleanJson.substring(startIndex, lastIndex + 1)
       }
     }
 
@@ -170,25 +205,25 @@ Mantenha o formato original exatamente como impresso no PDF (números como "9,50
       return NextResponse.json({ success: true, data: alunosArray })
     } catch (parseError: any) {
       console.warn("Erro no parse inicial, tentando recuperação bruta devido a possível corte por limite de tokens...");
-      
+
       // Tentativa de recuperação de JSON cortado pela metade
-      const suffixes = ['', '}', ']}', ']}]}', '}]}', '"]}', '"]}]}', '""}]}', '""}]}'];
-      
+      const suffixes = ['', '}', ']}', ']}]}', '}]}', '"]}', '"]}]}', '""}]}', '""}]}']
+
       for (let i = cleanJson.length; i > Math.max(0, cleanJson.length - 3000); i--) {
-        const sub = cleanJson.substring(0, i);
-        if (sub.length < 10) break;
-        
+        const sub = cleanJson.substring(0, i)
+        if (sub.length < 10) break
+
         for (const suffix of suffixes) {
           try {
-            const parsed = JSON.parse(sub + suffix);
-            const alunosArray = parsed.alunos;
+            const parsed = JSON.parse(sub + suffix)
+            const alunosArray = parsed.alunos
             if (Array.isArray(alunosArray)) {
-              console.log("JSON recuperado com sucesso com", alunosArray.length, "alunos.");
+              console.log("JSON recuperado com sucesso com", alunosArray.length, "alunos.")
               return NextResponse.json({ 
                 success: true, 
                 data: alunosArray,
-                warning: 'O PDF era muito longo e alguns alunos do final podem não ter sido extraídos. Considere dividir o PDF.'
-              });
+                warning: 'Alguns dados podem ter sido truncados devido ao tamanho da página.'
+              })
             }
           } catch (e) {
             // Continua tentando
@@ -196,23 +231,22 @@ Mantenha o formato original exatamente como impresso no PDF (números como "9,50
         }
       }
 
-      console.error("Falha total na recuperação do JSON.");
+      console.error("Falha total na recuperação do JSON.")
       const errMessage = parseError.message || "Erro desconhecido"
       const endSnippet = cleanJson.length > 50 ? cleanJson.substring(cleanJson.length - 50) : cleanJson
-      return NextResponse.json({ error: `Erro no JSON (${errMessage}). Final do texto: ...${endSnippet}` }, { status: 500 })
+      return NextResponse.json({ error: `Erro no formato de resposta da IA (${errMessage}). Final do texto: ...${endSnippet}` }, { status: 500 })
     }
 
   } catch (error: any) {
     console.error("Erro na extração PDF:", error)
     const errorMsg = error.message || ''
-    
-    // Se for erro de timeout da API do Google Gemini
+
     if (errorMsg.includes('timed out') || errorMsg.includes('503') || errorMsg.includes('UNAVAILABLE')) {
       return NextResponse.json({ 
-        error: 'O PDF é muito grande e a IA esgotou o tempo limite para ler todos os alunos de uma só vez. Por favor, divida o PDF em arquivos menores (ex: 10 a 15 páginas por vez) e importe-os separadamente.' 
-      }, { status: 503 })
+        error: 'O servidor de IA demorou para responder. O lote será reprocessado automaticamente.' 
+      }, { status: 504 })
     }
 
-    return NextResponse.json({ error: 'Erro interno no servidor ao processar PDF: ' + errorMsg }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao processar PDF: ' + errorMsg }, { status: 500 })
   }
 }

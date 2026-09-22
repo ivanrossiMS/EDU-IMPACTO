@@ -15,7 +15,7 @@ import {
   Home, LineChart, BookMarked, Database, Globe, Webhook, FolderOpen,
   BookOpenCheck, CalendarDays, FlaskConical, HardHat, ClipboardPenLine, Clock3, Banknote, Wallet, AlertTriangle, DoorOpen, Scan, Monitor, ListChecks, BookHeart, ShieldCheck, LogOut, Handshake,
   UserCircle, Laptop, ShieldAlert, History, Landmark, Coins, CreditCard as CardIcon, FileSpreadsheet, Building, Tablet, FileStack,
-  Sun, Moon, FileCheck2, Calculator, FileSignature
+  Sun, Moon, FileCheck2, Calculator
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -56,7 +56,6 @@ export const ALL_NAV_GROUPS: NavGroup[] = [
     collapsible: true,
     items: [
       { label: 'MATRÍCULA DIGITAL', href: '/matriculas/digital', icon: <FileCheck2 size={16} />, badge: 'NOVO', badgeColor: 'green' },
-      { label: 'MATRÍCULAS ONLINE', href: '/matriculas/online', icon: <FileSignature size={16} />, badge: 'ZAPSIGN', badgeColor: 'blue' },
       { label: 'VALORES', href: '/matriculas/valores', icon: <Calculator size={16} />, badge: '2027', badgeColor: 'green' },
     ],
   },

@@ -184,32 +184,44 @@ export function ValidarAssinaturaClient({
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#090d16', color: '#f8fafc', paddingBottom: 60, fontFamily: 'sans-serif' }}>
-      {/* Header Institucional */}
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'radial-gradient(120% 80% at 50% -10%, rgba(37, 99, 235, 0.08) 0%, rgba(16, 185, 129, 0.05) 40%, #f8fafc 75%)',
+        backgroundColor: '#f8fafc',
+        color: '#0f172a',
+        paddingBottom: 70,
+        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      }}
+    >
+      {/* Header Institucional Light Glass */}
       <header
         style={{
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          background: 'rgba(15, 23, 42, 0.8)',
-          backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid rgba(226, 232, 240, 0.9)',
+          background: 'rgba(255, 255, 255, 0.88)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
           position: 'sticky',
           top: 0,
           zIndex: 40,
           padding: '16px 24px',
+          boxShadow: '0 1px 3px rgba(15, 23, 42, 0.03), 0 6px 20px rgba(15, 23, 42, 0.02)',
         }}
       >
         <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: 10,
+                width: 46,
+                height: 46,
+                borderRadius: 12,
                 background: '#ffffff',
+                border: '1px solid #e2e8f0',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding: 4,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.06)',
               }}
             >
               <img
@@ -223,44 +235,45 @@ export function ValidarAssinaturaClient({
               />
             </div>
             <div>
-              <div style={{ fontWeight: 800, fontSize: 16, color: '#ffffff', letterSpacing: '-0.01em' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: '#0f172a', letterSpacing: '-0.02em' }}>
                 {dossier?.escolaRepresentante?.razaoSocial || 'COLÉGIO IMPACTO'}
               </div>
-              <div style={{ fontSize: 11, color: '#34d399', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <ShieldCheck size={13} /> Portal Oficial de Validação de Autenticidade & Integridade
+              <div style={{ fontSize: 11.5, color: '#059669', display: 'flex', alignItems: 'center', gap: 5, fontWeight: 700 }}>
+                <ShieldCheck size={14} color="#059669" /> Portal Oficial de Validação de Autenticidade & Integridade
               </div>
             </div>
           </div>
 
           <div
             style={{
-              fontSize: 11,
-              color: '#94a3b8',
-              background: 'rgba(255,255,255,0.05)',
+              fontSize: 11.5,
+              color: '#475569',
+              background: '#f1f5f9',
               padding: '6px 14px',
               borderRadius: 20,
-              border: '1px solid rgba(255,255,255,0.08)',
+              border: '1px solid #e2e8f0',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
+              fontWeight: 600,
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
             }}
           >
-            <Lock size={12} color="#34d399" /> MP 2.200-2/2001 • Código Civil • CPC
+            <Lock size={12} color="#059669" /> MP 2.200-2/2001 • Código Civil • CPC
           </div>
         </div>
       </header>
 
       {/* Main Container */}
       <main style={{ maxWidth: 940, margin: '32px auto 0', padding: '0 16px' }}>
-        {/* Card Superior: Respaldo, Validade Jurídica e Medidas de Segurança */}
+        {/* Card Superior: Respaldo, Validade Jurídica e Medidas de Segurança (Light Theme Ultra Moderno) */}
         <div
           style={{
-            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 59, 0.82) 50%, rgba(15, 23, 42, 0.92) 100%)',
-            backdropFilter: 'blur(16px)',
-            borderRadius: 20,
-            border: '1px solid rgba(59, 130, 246, 0.28)',
+            background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+            borderRadius: 22,
+            border: '1px solid #cbd5e1',
             marginBottom: 26,
-            boxShadow: '0 20px 45px -15px rgba(0, 0, 0, 0.65), 0 0 25px -5px rgba(59, 130, 246, 0.15)',
+            boxShadow: '0 20px 40px -15px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03)',
             overflow: 'hidden',
             position: 'relative',
           }}
@@ -268,9 +281,9 @@ export function ValidarAssinaturaClient({
           {/* Barra Superior Decorativa com Gradiente Fino */}
           <div
             style={{
-              height: 3,
+              height: 3.5,
               width: '100%',
-              background: 'linear-gradient(90deg, #3b82f6 0%, #10b981 35%, #8b5cf6 70%, #06b6d4 100%)',
+              background: 'linear-gradient(90deg, #2563eb 0%, #059669 35%, #7c3aed 70%, #0284c7 100%)',
             }}
           />
 
@@ -283,12 +296,12 @@ export function ValidarAssinaturaClient({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 6,
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    border: '1px solid rgba(16, 185, 129, 0.35)',
-                    color: '#34d399',
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    color: '#047857',
                     fontSize: 11,
                     fontWeight: 800,
-                    padding: '4px 10px',
+                    padding: '4px 12px',
                     borderRadius: 20,
                     letterSpacing: '0.04em',
                     textTransform: 'uppercase',
@@ -296,8 +309,8 @@ export function ValidarAssinaturaClient({
                 >
                   <span
                     style={{
-                      width: 6,
-                      height: 6,
+                      width: 7,
+                      height: 7,
                       borderRadius: '50%',
                       background: '#10b981',
                       boxShadow: '0 0 8px #10b981',
@@ -311,34 +324,35 @@ export function ValidarAssinaturaClient({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 5,
-                    background: 'rgba(59, 130, 246, 0.12)',
-                    border: '1px solid rgba(59, 130, 246, 0.25)',
-                    color: '#93c5fd',
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    color: '#1d4ed8',
                     fontSize: 11,
                     fontWeight: 700,
-                    padding: '4px 10px',
+                    padding: '4px 12px',
                     borderRadius: 20,
                   }}
                 >
-                  <Scale size={13} /> Eficácia de Título Executivo Extrajudicial
+                  <Scale size={13} color="#2563eb" /> Eficácia de Título Executivo Extrajudicial
                 </span>
               </div>
 
               <span
                 style={{
                   fontSize: 11,
-                  color: '#94a3b8',
-                  background: 'rgba(255, 255, 255, 0.04)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  padding: '3px 10px',
-                  borderRadius: 14,
+                  color: '#475569',
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  padding: '4px 12px',
+                  borderRadius: 20,
                   fontWeight: 600,
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 5,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                 }}
               >
-                <Sparkles size={11} color="#38bdf8" /> Válido em Todo Território Nacional
+                <Sparkles size={12} color="#0284c7" /> Válido em Todo Território Nacional
               </span>
             </div>
 
@@ -346,11 +360,11 @@ export function ValidarAssinaturaClient({
             <div style={{ marginBottom: 18 }}>
               <h1
                 style={{
-                  fontSize: 21,
+                  fontSize: 22,
                   fontWeight: 800,
-                  color: '#ffffff',
+                  color: '#0f172a',
                   margin: '0 0 8px',
-                  letterSpacing: '-0.02em',
+                  letterSpacing: '-0.025em',
                   lineHeight: 1.3,
                   display: 'flex',
                   alignItems: 'center',
@@ -362,9 +376,9 @@ export function ValidarAssinaturaClient({
               <p
                 style={{
                   fontSize: 13.5,
-                  color: '#cbd5e1',
+                  color: '#475569',
                   margin: 0,
-                  lineHeight: 1.6,
+                  lineHeight: 1.65,
                   maxWidth: 880,
                 }}
               >
@@ -379,39 +393,39 @@ export function ValidarAssinaturaClient({
                 alignItems: 'center',
                 flexWrap: 'wrap',
                 gap: 8,
-                padding: '12px 14px',
-                background: 'rgba(15, 23, 42, 0.65)',
-                borderRadius: 12,
-                border: '1px solid rgba(255, 255, 255, 0.06)',
+                padding: '12px 16px',
+                background: '#f1f5f9',
+                borderRadius: 14,
+                border: '1px solid #e2e8f0',
                 marginBottom: 20,
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5, marginRight: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 5, marginRight: 6 }}>
                 <FileCheck size={14} /> Fundamentação Legal:
               </div>
 
-              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <span style={{ fontSize: 11.5, color: '#1e293b', background: '#ffffff', padding: '4px 10px', borderRadius: 8, border: '1px solid #cbd5e1', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
                 <strong>MP 2.200-2/2001</strong> (Art. 10, § 2º)
               </span>
 
-              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <span style={{ fontSize: 11.5, color: '#1e293b', background: '#ffffff', padding: '4px 10px', borderRadius: 8, border: '1px solid #cbd5e1', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
                 <strong>Lei Federal nº 14.063/2020</strong> (Assinaturas Eletrônicas)
               </span>
 
-              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <span style={{ fontSize: 11.5, color: '#1e293b', background: '#ffffff', padding: '4px 10px', borderRadius: 8, border: '1px solid #cbd5e1', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
                 <strong>Código Civil</strong> (Arts. 107, 219, 221 e 422)
               </span>
 
-              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <span style={{ fontSize: 11.5, color: '#1e293b', background: '#ffffff', padding: '4px 10px', borderRadius: 8, border: '1px solid #cbd5e1', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
                 <strong>CPC</strong> (Arts. 440, 441 e 784, III)
               </span>
 
-              <span style={{ fontSize: 11.5, color: '#e2e8f0', background: 'rgba(255, 255, 255, 0.06)', padding: '3px 8px', borderRadius: 6, border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+              <span style={{ fontSize: 11.5, color: '#1e293b', background: '#ffffff', padding: '4px 10px', borderRadius: 8, border: '1px solid #cbd5e1', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
                 <strong>LGPD</strong> (Lei Federal nº 13.709/2018)
               </span>
             </div>
 
-            {/* Grid dos 4 Pilares de Respaldo e Medidas Técnicas */}
+            {/* Grid dos 4 Pilares de Respaldo e Medidas Técnicas com Cabeçalho Gradiente Leve */}
             <div
               style={{
                 display: 'grid',
@@ -423,184 +437,248 @@ export function ValidarAssinaturaClient({
               {/* Pilar 1: Amparo Legal e Eficácia Executiva */}
               <div
                 style={{
-                  background: 'rgba(15, 23, 42, 0.75)',
-                  border: '1px solid rgba(59, 130, 246, 0.2)',
-                  borderRadius: 14,
-                  padding: '16px 18px',
+                  background: '#ffffff',
+                  border: '1px solid #dbeafe',
+                  borderRadius: 18,
+                  overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8,
+                  boxShadow: '0 4px 16px rgba(37, 99, 235, 0.04)',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Cabeçalho com Gradiente Leve Azul */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(219, 234, 254, 0.55) 100%)',
+                    borderBottom: '1px solid #bfdbfe',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
                   <div
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 9,
-                      background: 'rgba(59, 130, 246, 0.15)',
-                      color: '#60a5fa',
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: '#ffffff',
+                      color: '#2563eb',
+                      border: '1px solid #dbeafe',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)',
+                      flexShrink: 0,
                     }}
                   >
                     <Scale size={18} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                    <h2 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: 0 }}>
                       Amparo Legal & Probatório
                     </h2>
-                    <span style={{ fontSize: 11, color: '#93c5fd', fontWeight: 600 }}>
+                    <span style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>
                       Fé Probatória em Juízo
                     </span>
                   </div>
                 </div>
 
-                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.55 }}>
-                  Aceito por tribunais, secretarias de educação, bancos e órgãos públicos sem necessidade de impressão física. O CPC equipara expressamente o documento digital ao físico e confere força executiva extrajudicial.
-                </p>
+                <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                  <p style={{ fontSize: 12.5, color: '#475569', margin: 0, lineHeight: 1.55 }}>
+                    Aceito por tribunais, secretarias de educação, bancos e órgãos públicos sem necessidade de impressão física. O CPC equipara expressamente o documento digital ao físico e confere força executiva extrajudicial.
+                  </p>
 
-                <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 11, fontWeight: 700 }}>
-                  <Check size={13} /> Reconhecimento de firma dispensado por lei
+                  <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 6, color: '#059669', fontSize: 11, fontWeight: 700 }}>
+                    <Check size={13} /> Reconhecimento de firma dispensado por lei
+                  </div>
                 </div>
               </div>
 
               {/* Pilar 2: Blindagem Criptográfica SHA-256 e Padrão ISO 32000 */}
               <div
                 style={{
-                  background: 'rgba(15, 23, 42, 0.75)',
-                  border: '1px solid rgba(16, 185, 129, 0.2)',
-                  borderRadius: 14,
-                  padding: '16px 18px',
+                  background: '#ffffff',
+                  border: '1px solid #a7f3d0',
+                  borderRadius: 18,
+                  overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8,
+                  boxShadow: '0 4px 16px rgba(5, 150, 105, 0.04)',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Cabeçalho com Gradiente Leve Esmeralda */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(236, 253, 245, 0.95) 0%, rgba(209, 250, 229, 0.55) 100%)',
+                    borderBottom: '1px solid #a7f3d0',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
                   <div
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 9,
-                      background: 'rgba(16, 185, 129, 0.15)',
-                      color: '#34d399',
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: '#ffffff',
+                      color: '#059669',
+                      border: '1px solid #a7f3d0',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(5, 150, 105, 0.1)',
+                      flexShrink: 0,
                     }}
                   >
                     <Fingerprint size={18} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                    <h2 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: 0 }}>
                       Integridade Criptográfica
                     </h2>
-                    <span style={{ fontSize: 11, color: '#6ee7b7', fontWeight: 600 }}>
+                    <span style={{ fontSize: 11, color: '#047857', fontWeight: 700 }}>
                       SHA-256 (FIPS 180-4) • ISO 32000
                     </span>
                   </div>
                 </div>
 
-                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.55 }}>
-                  Cada PDF recebe uma assinatura matemática de 256 bits com campos /ByteRange. A alteração de uma única vírgula ou espaço quebra o hash criptográfico, acusando fraude instantaneamente, inclusive no Adobe Acrobat Reader off-line.
-                </p>
+                <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                  <p style={{ fontSize: 12.5, color: '#475569', margin: 0, lineHeight: 1.55 }}>
+                    Cada PDF recebe uma assinatura matemática de 256 bits com campos /ByteRange. A alteração de uma única vírgula ou espaço quebra o hash criptográfico, acusando fraude instantaneamente, inclusive no Adobe Acrobat Reader off-line.
+                  </p>
 
-                <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 11, fontWeight: 700 }}>
-                  <Check size={13} /> Imutabilidade e selagem matemática
+                  <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 6, color: '#059669', fontSize: 11, fontWeight: 700 }}>
+                    <Check size={13} /> Imutabilidade e selagem matemática
+                  </div>
                 </div>
               </div>
 
               {/* Pilar 3: Autenticação em Dois Fatores (OTP) e Não-Repúdio */}
               <div
                 style={{
-                  background: 'rgba(15, 23, 42, 0.75)',
-                  border: '1px solid rgba(168, 85, 247, 0.2)',
-                  borderRadius: 14,
-                  padding: '16px 18px',
+                  background: '#ffffff',
+                  border: '1px solid #ddd6fe',
+                  borderRadius: 18,
+                  overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8,
+                  boxShadow: '0 4px 16px rgba(124, 58, 237, 0.04)',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Cabeçalho com Gradiente Leve Roxo */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(245, 243, 255, 0.95) 0%, rgba(237, 233, 254, 0.55) 100%)',
+                    borderBottom: '1px solid #ddd6fe',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
                   <div
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 9,
-                      background: 'rgba(168, 85, 247, 0.15)',
-                      color: '#c084fc',
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: '#ffffff',
+                      color: '#7c3aed',
+                      border: '1px solid #ddd6fe',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(124, 58, 237, 0.1)',
+                      flexShrink: 0,
                     }}
                   >
                     <Lock size={18} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                    <h2 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: 0 }}>
                       Identificação & Não-Repúdio
                     </h2>
-                    <span style={{ fontSize: 11, color: '#d8b4fe', fontWeight: 600 }}>
+                    <span style={{ fontSize: 11, color: '#6d28d9', fontWeight: 700 }}>
                       Confirmação OTP Multicanal
                     </span>
                   </div>
                 </div>
 
-                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.55 }}>
-                  A manifestação de vontade é confirmada via código dinâmico de uso único (OTP) enviado ao WhatsApp e E-mail verificados do titular, com termo de adesão expresso irrevogável, impedindo qualquer alegação de desconhecimento.
-                </p>
+                <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                  <p style={{ fontSize: 12.5, color: '#475569', margin: 0, lineHeight: 1.55 }}>
+                    A manifestação de vontade é confirmada via código dinâmico de uso único (OTP) enviado ao WhatsApp e E-mail verificados do titular, com termo de adesão expresso irrevogável, impedindo qualquer alegação de desconhecimento.
+                  </p>
 
-                <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 11, fontWeight: 700 }}>
-                  <Check size={13} /> Vínculo unívoco e irrevogável com o signatário
+                  <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 6, color: '#059669', fontSize: 11, fontWeight: 700 }}>
+                    <Check size={13} /> Vínculo unívoco e irrevogável com o signatário
+                  </div>
                 </div>
               </div>
 
               {/* Pilar 4: Trilha de Auditoria e Evidências Periciais */}
               <div
                 style={{
-                  background: 'rgba(15, 23, 42, 0.75)',
-                  border: '1px solid rgba(245, 158, 11, 0.2)',
-                  borderRadius: 14,
-                  padding: '16px 18px',
+                  background: '#ffffff',
+                  border: '1px solid #fde68a',
+                  borderRadius: 18,
+                  overflow: 'hidden',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8,
+                  boxShadow: '0 4px 16px rgba(217, 119, 6, 0.04)',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Cabeçalho com Gradiente Leve Âmbar */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(255, 251, 235, 0.95) 0%, rgba(254, 243, 199, 0.55) 100%)',
+                    borderBottom: '1px solid #fde68a',
+                    padding: '14px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
                   <div
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 9,
-                      background: 'rgba(245, 158, 11, 0.15)',
-                      color: '#fbbf24',
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: '#ffffff',
+                      color: '#d97706',
+                      border: '1px solid #fde68a',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(217, 119, 6, 0.1)',
+                      flexShrink: 0,
                     }}
                   >
                     <Clock size={18} />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 13.5, fontWeight: 700, color: '#ffffff', margin: 0 }}>
+                    <h2 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: 0 }}>
                       Cadeia de Custódia Forense
                     </h2>
-                    <span style={{ fontSize: 11, color: '#fcd34d', fontWeight: 600 }}>
+                    <span style={{ fontSize: 11, color: '#b45309', fontWeight: 700 }}>
                       Timestamp UTC • Rastreabilidade IP
                     </span>
                   </div>
                 </div>
 
-                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.55 }}>
-                  Trilha ininterrupta que registra carimbo de tempo atômico UTC, endereço IP de conexão, porta lógica, User-Agent e metadados de hardware, permitindo a reconstituição pericial exata de cada etapa da formalização.
-                </p>
+                <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+                  <p style={{ fontSize: 12.5, color: '#475569', margin: 0, lineHeight: 1.55 }}>
+                    Trilha ininterrupta que registra carimbo de tempo atômico UTC, endereço IP de conexão, porta lógica, User-Agent e metadados de hardware, permitindo a reconstituição pericial exata de cada etapa da formalização.
+                  </p>
 
-                <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', alignItems: 'center', gap: 6, color: '#34d399', fontSize: 11, fontWeight: 700 }}>
-                  <Check size={13} /> Histórico auditável e prova documental cabal
+                  <div style={{ marginTop: 'auto', paddingTop: 8, borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: 6, color: '#059669', fontSize: 11, fontWeight: 700 }}>
+                    <Check size={13} /> Histórico auditável e prova documental cabal
+                  </div>
                 </div>
               </div>
             </div>
@@ -611,17 +689,18 @@ export function ValidarAssinaturaClient({
                 type="button"
                 onClick={() => setMostrarDetalhesJuridicos(!mostrarDetalhesJuridicos)}
                 style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  color: '#93c5fd',
-                  padding: '8px 18px',
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  color: '#1e40af',
+                  padding: '9px 20px',
                   borderRadius: 20,
                   fontSize: 12,
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 8,
+                  boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
                   transition: 'all 0.2s ease',
                 }}
               >
@@ -651,38 +730,49 @@ export function ValidarAssinaturaClient({
                     style={{
                       marginTop: 18,
                       paddingTop: 18,
-                      borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderTop: '1px solid #e2e8f0',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 16,
                     }}
                   >
-                    {/* Guia para Órgãos Externos */}
+                    {/* Guia para Órgãos Externos com Cabeçalho Gradiente Leve */}
                     <div
                       style={{
-                        background: 'rgba(15, 23, 42, 0.9)',
-                        borderRadius: 12,
-                        padding: '16px 20px',
-                        border: '1px solid rgba(59, 130, 246, 0.2)',
+                        background: '#ffffff',
+                        borderRadius: 16,
+                        border: '1px solid #bfdbfe',
+                        overflow: 'hidden',
+                        boxShadow: '0 4px 16px rgba(37, 99, 235, 0.04)',
                       }}
                     >
-                      <h3 style={{ fontSize: 13.5, fontWeight: 700, color: '#60a5fa', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Building2 size={16} /> Instruções para Conferência por Bancos, Cartórios e Secretarias de Educação:
-                      </h3>
-                      <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.6 }}>
-                        <li>
-                          <strong>Conferência por Protocolo:</strong> Digite o código de protocolo oficial no campo de busca abaixo (ex: <code>IMP-2027-8K3N9P</code>) para visualizar o dossiê probatório, os dados cadastrais protegidos pela LGPD e a assinatura da instituição.
-                        </li>
-                        <li>
-                          <strong>Conferência Pericial Independente (Off-line):</strong> Arraste o arquivo PDF para a área de verificação pericial no final desta página. O navegador calculará o hash SHA-256 nativamente e confrontará com o registro em custódia.
-                        </li>
-                        <li>
-                          <strong>Auditoria Direta no Adobe Acrobat Reader:</strong> Ao abrir o PDF no Adobe Reader oficial, a assinatura digital corporativa e a integridade de todos os bytes são atestadas pelo leitor via especificação ISO 32000, sem necessidade de consultar sistemas externos.
-                        </li>
-                      </ol>
+                      <div
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(224, 242, 254, 0.7) 100%)',
+                          borderBottom: '1px solid #bfdbfe',
+                          padding: '14px 20px',
+                        }}
+                      >
+                        <h3 style={{ fontSize: 14, fontWeight: 800, color: '#1e40af', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Building2 size={17} color="#2563eb" /> Instruções para Conferência por Bancos, Cartórios e Secretarias de Educação:
+                        </h3>
+                      </div>
+                      <div style={{ padding: '18px 22px' }}>
+                        <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: '#334155', lineHeight: 1.65 }}>
+                          <li style={{ marginBottom: 6 }}>
+                            <strong>Conferência por Protocolo:</strong> Digite o código de protocolo oficial no campo de busca abaixo (ex: <code>IMP-2027-8K3N9P</code>) para visualizar o dossiê probatório, os dados cadastrais protegidos pela LGPD e a assinatura da instituição.
+                          </li>
+                          <li style={{ marginBottom: 6 }}>
+                            <strong>Conferência Pericial Independente (Off-line):</strong> Arraste o arquivo PDF para a área de verificação pericial no final desta página. O navegador calculará o hash SHA-256 nativamente e confrontará com o registro em custódia.
+                          </li>
+                          <li>
+                            <strong>Auditoria Direta no Adobe Acrobat Reader:</strong> Ao abrir o PDF no Adobe Reader oficial, a assinatura digital corporativa e a integridade de todos os bytes são atestadas pelo leitor via especificação ISO 32000, sem necessidade de consultar sistemas externos.
+                          </li>
+                        </ol>
+                      </div>
                     </div>
 
-                    {/* Doutrina e Fundamentos do Marco Legal */}
+                    {/* Doutrina e Fundamentos do Marco Legal com Cabeçalhos Gradientes */}
                     <div
                       style={{
                         display: 'grid',
@@ -690,31 +780,43 @@ export function ValidarAssinaturaClient({
                         gap: 12,
                       }}
                     >
-                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 10, padding: 14, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#34d399', textTransform: 'uppercase', marginBottom: 4 }}>
-                          MP nº 2.200-2/2001 (Art. 10, § 2º)
+                      <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #a7f3d0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(5, 150, 105, 0.03)' }}>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(236, 253, 245, 0.95) 0%, rgba(209, 250, 229, 0.6) 100%)', borderBottom: '1px solid #a7f3d0', padding: '10px 16px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: '#047857', textTransform: 'uppercase' }}>
+                            MP nº 2.200-2/2001 (Art. 10, § 2º)
+                          </div>
                         </div>
-                        <p style={{ fontSize: 11.5, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
-                          &ldquo;O disposto nesta Medida Provisória não obsta a utilização de outro meio de comprovação da autoria e integridade de documentos em forma eletrônica, inclusive os que utilizem certificados não emitidos pela ICP-Brasil, desde que admitido pelas partes como válido ou aceito pela pessoa a quem for oposto o documento.&rdquo;
-                        </p>
+                        <div style={{ padding: 16 }}>
+                          <p style={{ fontSize: 12, color: '#475569', margin: 0, lineHeight: 1.55 }}>
+                            &ldquo;O disposto nesta Medida Provisória não obsta a utilização de outro meio de comprovação da autoria e integridade de documentos em forma eletrônica, inclusive os que utilizem certificados não emitidos pela ICP-Brasil, desde que admitido pelas partes como válido ou aceito pela pessoa a quem for oposto o documento.&rdquo;
+                          </p>
+                        </div>
                       </div>
 
-                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 10, padding: 14, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', marginBottom: 4 }}>
-                          CPC (Lei 13.105/2015, Art. 784, III)
+                      <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #bfdbfe', overflow: 'hidden', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.03)' }}>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(219, 234, 254, 0.6) 100%)', borderBottom: '1px solid #bfdbfe', padding: '10px 16px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase' }}>
+                            CPC (Lei 13.105/2015, Art. 784, III)
+                          </div>
                         </div>
-                        <p style={{ fontSize: 11.5, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
-                          &ldquo;São títulos executivos extrajudiciais: o documento particular assinado pelo devedor e por 2 (duas) testemunhas ou assinado eletronicamente nos termos da lei.&rdquo; A assinatura digital confere via executiva autônoma à dívida ou obrigação pactuada.
-                        </p>
+                        <div style={{ padding: 16 }}>
+                          <p style={{ fontSize: 12, color: '#475569', margin: 0, lineHeight: 1.55 }}>
+                            &ldquo;São títulos executivos extrajudiciais: o documento particular assinado pelo devedor e por 2 (duas) testemunhas ou assinado eletronicamente nos termos da lei.&rdquo; A assinatura digital confere via executiva autônoma à dívida ou obrigação pactuada.
+                          </p>
+                        </div>
                       </div>
 
-                      <div style={{ background: 'rgba(15, 23, 42, 0.6)', borderRadius: 10, padding: 14, border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', marginBottom: 4 }}>
-                          Código Civil (Art. 219) & LGPD
+                      <div style={{ background: '#ffffff', borderRadius: 14, border: '1px solid #fde68a', overflow: 'hidden', boxShadow: '0 2px 8px rgba(217, 119, 6, 0.03)' }}>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(255, 251, 235, 0.95) 0%, rgba(254, 243, 199, 0.6) 100%)', borderBottom: '1px solid #fde68a', padding: '10px 16px' }}>
+                          <div style={{ fontSize: 11, fontWeight: 800, color: '#b45309', textTransform: 'uppercase' }}>
+                            Código Civil (Art. 219) & LGPD
+                          </div>
                         </div>
-                        <p style={{ fontSize: 11.5, color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
-                          As declarações constantes de documentos assinados presumem-se verdadeiras perante os signatários. A consulta pública resguarda os dados sensíveis dos contratantes e estudantes mediante mascaramento criptográfico estrito.
-                        </p>
+                        <div style={{ padding: 16 }}>
+                          <p style={{ fontSize: 12, color: '#475569', margin: 0, lineHeight: 1.55 }}>
+                            As declarações constantes de documentos assinados presumem-se verdadeiras perante os signatários. A consulta pública resguarda os dados sensíveis dos contratantes e estudantes mediante mascaramento criptográfico estrito.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -724,19 +826,41 @@ export function ValidarAssinaturaClient({
           </div>
         </div>
 
-        {/* Barra de Busca por Protocolo */}
+        {/* Barra de Busca por Protocolo (Light Theme Flutuante) */}
         <div
           style={{
-            background: 'rgba(30, 41, 59, 0.7)',
-            backdropFilter: 'blur(10px)',
-            borderRadius: 16,
-            padding: '20px 24px',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: '#ffffff',
+            borderRadius: 18,
+            border: '1px solid #e2e8f0',
+            overflow: 'hidden',
             marginBottom: 24,
-            boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+            boxShadow: '0 10px 30px -5px rgba(15, 23, 42, 0.05), 0 2px 6px rgba(15, 23, 42, 0.02)',
           }}
         >
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {/* Cabeçalho com Gradiente Leve da Busca */}
+          <div
+            style={{
+              background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.8) 100%)',
+              borderBottom: '1px solid #e2e8f0',
+              padding: '12px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700, color: '#334155' }}>
+              <Search size={14} color="#2563eb" />
+              <span>Consulta Pública e Imediata de Autenticidade Contratual</span>
+            </div>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, fontFamily: 'monospace' }}>
+              REDE NACIONAL DE VALIDAÇÃO
+            </span>
+          </div>
+
+          <div style={{ padding: '22px 26px' }}>
+            <form onSubmit={handleSearch} style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 260, position: 'relative' }}>
               <input
                 type="text"
@@ -745,15 +869,17 @@ export function ValidarAssinaturaClient({
                 placeholder="Digite o código de protocolo (Ex: IMP-2027-8K3N9P)"
                 style={{
                   width: '100%',
-                  height: 48,
-                  background: '#090d16',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: 10,
-                  padding: '0 16px',
-                  color: '#fff',
+                  height: 50,
+                  background: '#f8fafc',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: 12,
+                  padding: '0 18px',
+                  color: '#0f172a',
                   fontFamily: 'monospace',
                   fontSize: 15,
+                  fontWeight: 600,
                   outline: 'none',
+                  transition: 'border-color 0.2s ease',
                 }}
               />
             </div>
@@ -764,15 +890,17 @@ export function ValidarAssinaturaClient({
                 background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
                 color: '#fff',
                 border: 'none',
-                borderRadius: 10,
-                padding: '0 24px',
-                height: 48,
+                borderRadius: 12,
+                padding: '0 26px',
+                height: 50,
                 fontSize: 14,
                 fontWeight: 700,
                 cursor: loading ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
+                boxShadow: '0 4px 14px rgba(37, 99, 235, 0.25)',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
               }}
             >
               {loading ? <RefreshCw size={16} className="animate-spin" /> : <Search size={16} />} Consultar Documento
@@ -780,13 +908,14 @@ export function ValidarAssinaturaClient({
           </form>
 
           {errorMessage && (
-            <div style={{ marginTop: 16, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', padding: '12px 16px', borderRadius: 8, fontSize: 13 }}>
+            <div style={{ marginTop: 16, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '12px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>
               {errorMessage}
             </div>
           )}
+          </div>
         </div>
 
-        {/* Exibição do Dossiê do Contrato */}
+        {/* Exibição do Dossiê do Contrato (Light Theme) */}
         {dossier && (
           <motion.div
             initial={{ opacity: 0, y: 15 }}
@@ -797,15 +926,15 @@ export function ValidarAssinaturaClient({
             <div
               style={{
                 background: dossier.valido
-                  ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%)'
+                  ? 'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)'
                   : dossier.status === 'cancelado'
-                  ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(185, 28, 28, 0.08) 100%)'
-                  : 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.08) 100%)',
+                  ? 'linear-gradient(135deg, #fef2f2 0%, #fff1f2 100%)'
+                  : 'linear-gradient(135deg, #fffbeb 0%, #fefce8 100%)',
                 border: dossier.valido
-                  ? '1px solid rgba(16, 185, 129, 0.4)'
+                  ? '1.5px solid #a7f3d0'
                   : dossier.status === 'cancelado'
-                  ? '1px solid rgba(239, 68, 68, 0.4)'
-                  : '1px solid rgba(245, 158, 11, 0.4)',
+                  ? '1.5px solid #fca5a5'
+                  : '1.5px solid #fde68a',
                 borderRadius: 20,
                 padding: '24px 28px',
                 display: 'flex',
@@ -813,6 +942,9 @@ export function ValidarAssinaturaClient({
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
                 gap: 16,
+                boxShadow: dossier.valido
+                  ? '0 10px 30px -5px rgba(16, 185, 129, 0.15)'
+                  : '0 10px 30px -5px rgba(15, 23, 42, 0.05)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -827,24 +959,27 @@ export function ValidarAssinaturaClient({
                     alignItems: 'center',
                     justifyContent: 'center',
                     boxShadow: dossier.valido
-                      ? '0 0 20px rgba(16, 185, 129, 0.4)'
+                      ? '0 0 20px rgba(16, 185, 129, 0.35)'
                       : dossier.status === 'cancelado'
-                      ? '0 0 20px rgba(239, 68, 68, 0.4)'
-                      : '0 0 20px rgba(245, 158, 11, 0.4)',
+                      ? '0 0 20px rgba(239, 68, 68, 0.35)'
+                      : '0 0 20px rgba(245, 158, 11, 0.35)',
                   }}
                 >
                   {dossier.valido ? <CheckCircle2 size={32} /> : dossier.status === 'cancelado' ? <XCircle size={32} /> : <AlertTriangle size={32} />}
                 </div>
 
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: dossier.valido ? '#34d399' : dossier.status === 'cancelado' ? '#f87171' : '#fbbf24' }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 800, textTransform: 'uppercase', color: dossier.valido ? '#047857' : dossier.status === 'cancelado' ? '#b91c1c' : '#b45309', letterSpacing: '0.04em' }}>
                     Status da Certificação Digital
                   </div>
-                  <h2 style={{ fontSize: 20, fontWeight: 800, margin: '4px 0 2px', color: '#fff' }}>
+                  <h2 style={{ fontSize: 20, fontWeight: 800, margin: '4px 0 2px', color: '#0f172a' }}>
                     {dossier.statusDescricao}
                   </h2>
-                  <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>
-                    Protocolo Oficial: <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{dossier.protocolo}</strong>
+                  <p style={{ fontSize: 13, color: '#475569', margin: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    Protocolo Oficial:
+                    <strong style={{ color: '#0f172a', fontFamily: 'monospace', fontWeight: 800, background: '#ffffff', padding: '2px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }}>
+                      {dossier.protocolo}
+                    </strong>
                   </p>
                 </div>
               </div>
@@ -858,18 +993,19 @@ export function ValidarAssinaturaClient({
                     )
                   }
                   style={{
-                    background: '#10b981',
+                    background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: 10,
-                    padding: '12px 20px',
+                    borderRadius: 12,
+                    padding: '12px 22px',
                     fontWeight: 700,
-                    fontSize: 13,
+                    fontSize: 13.5,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
+                    boxShadow: '0 4px 14px rgba(5, 150, 105, 0.25)',
+                    transition: 'transform 0.15s ease',
                   }}
                 >
                   <Download size={16} /> Baixar PDF com Selo Criptográfico
@@ -880,10 +1016,10 @@ export function ValidarAssinaturaClient({
             {/* Selo Criptográfico PKCS#7 Incorporado */}
             <div
               style={{
-                background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(29, 78, 216, 0.05) 100%)',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
+                background: 'linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%)',
+                border: '1px solid #bfdbfe',
                 borderRadius: 16,
-                padding: '16px 20px',
+                padding: '18px 22px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -892,17 +1028,17 @@ export function ValidarAssinaturaClient({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <ShieldCheck size={24} color="#60a5fa" />
+                <ShieldCheck size={26} color="#2563eb" />
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#93c5fd' }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#1e40af' }}>
                     Assinatura Criptográfica X.509 Corporativa (/Sig & /ByteRange) Incorporada ao PDF
                   </div>
-                  <div style={{ fontSize: 12, color: '#cbd5e1' }}>
+                  <div style={{ fontSize: 12.5, color: '#334155', lineHeight: 1.55 }}>
                     O arquivo gerado contém campos técnicos ISO 32000 que permitem ao Adobe Acrobat Reader verificar a integridade matemática sem depender de servidores.
                   </div>
                 </div>
               </div>
-              <span style={{ fontSize: 11, color: '#38bdf8', background: 'rgba(56, 189, 248, 0.15)', padding: '4px 10px', borderRadius: 6, fontWeight: 700, fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 11, color: '#1e40af', background: '#ffffff', border: '1px solid #bfdbfe', padding: '4px 12px', borderRadius: 8, fontWeight: 700, fontFamily: 'monospace', boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
                 PKCS#7 Detached • SHA-256
               </span>
             </div>
@@ -910,62 +1046,106 @@ export function ValidarAssinaturaClient({
             {/* Quadro de Chaves Criptográficas SHA-256 (Triplo Hash) */}
             <div
               style={{
-                background: 'rgba(30, 41, 59, 0.7)',
-                borderRadius: 16,
-                padding: '20px 24px',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                background: '#ffffff',
+                borderRadius: 18,
+                border: '1px solid #bfdbfe',
+                boxShadow: '0 4px 16px rgba(37, 99, 235, 0.04)',
+                overflow: 'hidden',
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Fingerprint size={16} /> Tripla Integridade Criptográfica (SHA-256)
+              {/* Cabeçalho com Gradiente Leve Azul */}
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(224, 242, 254, 0.65) 100%)',
+                  borderBottom: '1px solid #bfdbfe',
+                  padding: '16px 22px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: '#ffffff',
+                      color: '#2563eb',
+                      border: '1px solid #bfdbfe',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Fingerprint size={19} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                      Tripla Integridade Criptográfica (SHA-256)
+                    </h3>
+                    <span style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>
+                      Padrão FIPS 180-4 • Hashes Encadeados Anti-Adulteração
+                    </span>
+                  </div>
+                </div>
+                <span style={{ fontSize: 11, color: '#1e40af', background: '#ffffff', border: '1px solid #bfdbfe', padding: '4px 12px', borderRadius: 8, fontWeight: 700, fontFamily: 'monospace', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                  VERIFICAÇÃO PERICIAL ATIVA
+                </span>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
-                {/* Hash Original */}
-                <div style={{ background: '#090d16', padding: 14, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>1. Hash do Documento Original:</span>
-                    <button
-                      onClick={() => copyToClipboard(dossier.documentoOriginalHash, 'Hash Original')}
-                      style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}
-                    >
-                      {copiedHash === 'Hash Original' ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
-                    </button>
+              <div style={{ padding: '22px 26px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                  {/* Hash Original */}
+                  <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>1. Hash do Documento Original:</span>
+                      <button
+                        onClick={() => copyToClipboard(dossier.documentoOriginalHash, 'Hash Original')}
+                        style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 8px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+                      >
+                        {copiedHash === 'Hash Original' ? <Check size={12} color="#059669" /> : <Copy size={12} />} Copiar
+                      </button>
+                    </div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#0284c7', wordBreak: 'break-all', fontWeight: 600 }}>
+                      {dossier.documentoOriginalHash}
+                    </div>
                   </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: 10.5, color: '#38bdf8', wordBreak: 'break-all' }}>
-                    {dossier.documentoOriginalHash}
-                  </div>
-                </div>
 
-                {/* Hash Trilha */}
-                <div style={{ background: '#090d16', padding: 14, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>2. Hash da Cadeia de Custódia:</span>
-                    <button
-                      onClick={() => copyToClipboard(dossier.trilhaAuditoriaHash || '', 'Hash Trilha')}
-                      style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}
-                    >
-                      {copiedHash === 'Hash Trilha' ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
-                    </button>
+                  {/* Hash Trilha */}
+                  <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>2. Hash da Cadeia de Custódia:</span>
+                      <button
+                        onClick={() => copyToClipboard(dossier.trilhaAuditoriaHash || '', 'Hash Trilha')}
+                        style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 8px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+                      >
+                        {copiedHash === 'Hash Trilha' ? <Check size={12} color="#059669" /> : <Copy size={12} />} Copiar
+                      </button>
+                    </div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#b45309', wordBreak: 'break-all', fontWeight: 600 }}>
+                      {dossier.trilhaAuditoriaHash || 'Calculado na finalização'}
+                    </div>
                   </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: 10.5, color: '#fbbf24', wordBreak: 'break-all' }}>
-                    {dossier.trilhaAuditoriaHash || 'Calculado na finalização'}
-                  </div>
-                </div>
 
-                {/* Hash Final Selado */}
-                <div style={{ background: '#090d16', padding: 14, borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>3. Hash do PDF Final Selado:</span>
-                    <button
-                      onClick={() => copyToClipboard(dossier.documentoAssinadoHash, 'Hash Final')}
-                      style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 10 }}
-                    >
-                      {copiedHash === 'Hash Final' ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
-                    </button>
-                  </div>
-                  <div style={{ fontFamily: 'monospace', fontSize: 10.5, color: '#34d399', wordBreak: 'break-all' }}>
-                    {dossier.documentoAssinadoHash}
+                  {/* Hash Final Selado */}
+                  <div style={{ background: '#f8fafc', padding: 16, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>3. Hash do PDF Final Selado:</span>
+                      <button
+                        onClick={() => copyToClipboard(dossier.documentoAssinadoHash, 'Hash Final')}
+                        style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 8px', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+                      >
+                        {copiedHash === 'Hash Final' ? <Check size={12} color="#059669" /> : <Copy size={12} />} Copiar
+                      </button>
+                    </div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#059669', wordBreak: 'break-all', fontWeight: 600 }}>
+                      {dossier.documentoAssinadoHash}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -974,102 +1154,265 @@ export function ValidarAssinaturaClient({
             {/* Grid dos Signatários */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 20 }}>
               {/* Contratante / Responsável (com Mascaramento LGPD) */}
-              <div style={{ background: 'rgba(30, 41, 59, 0.7)', borderRadius: 16, padding: '20px 24px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#34d399', textTransform: 'uppercase', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <User size={16} /> Signatário / Contratante (LGPD Protegido)
-                </div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>
-                  {dossier.responsavelNomeMascarado || dossier.responsavelNome}
-                </div>
-                <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
-                  CPF: {dossier.responsavelCpfMascarado} • ({dossier.responsavelParentesco})
-                </div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                  E-mail: {dossier.responsavelEmailMascarado || 'Protegido'} • Tel: {dossier.responsavelTelefoneMascarado || 'Protegido'}
-                </div>
-                <div style={{ fontSize: 13, color: '#e2e8f0', marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                  Estudante Titular: <strong>{dossier.alunoNome}</strong> ({dossier.alunoSerieTurma || 'Regular'})
-                </div>
-                <div style={{ fontSize: 12, color: '#34d399', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <CheckCircle2 size={14} /> Confirmação OTP efetuada em: {formatDate(dossier.dataAssinatura)}
+              <div
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 18,
+                  border: '1px solid #a7f3d0',
+                  boxShadow: '0 4px 16px rgba(5, 150, 105, 0.04)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {/* Cabeçalho com Gradiente Leve Esmeralda */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(236, 253, 245, 0.95) 0%, rgba(209, 250, 229, 0.65) 100%)',
+                    borderBottom: '1px solid #a7f3d0',
+                    padding: '16px 22px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 10,
+                        background: '#ffffff',
+                        color: '#059669',
+                        border: '1px solid #a7f3d0',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 6px rgba(5, 150, 105, 0.1)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <User size={19} />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                        Signatário / Contratante
+                      </h3>
+                      <span style={{ fontSize: 11, color: '#047857', fontWeight: 700 }}>
+                        Identificação OTP Multicanal • LGPD Protegido
+                      </span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 10.5, color: '#047857', background: '#ffffff', border: '1px solid #a7f3d0', padding: '4px 10px', borderRadius: 8, fontWeight: 700, fontFamily: 'monospace' }}>
+                    AUTENTICAÇÃO VÁLIDA
+                  </span>
                 </div>
 
-                {dossier.metadadosTecnicos && (
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: 11, color: '#64748b', lineHeight: 1.6 }}>
-                    • Endereço IP: {dossier.metadadosTecnicos.ip}<br />
-                    • Dispositivo: {dossier.metadadosTecnicos.dispositivo}<br />
-                    • Sistema Operacional: {dossier.metadadosTecnicos.sistemaOperacional}
+                <div style={{ padding: '22px 26px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a' }}>
+                    {dossier.responsavelNomeMascarado || dossier.responsavelNome}
                   </div>
-                )}
+                  <div style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>
+                    CPF: {dossier.responsavelCpfMascarado} • ({dossier.responsavelParentesco})
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                    E-mail: {dossier.responsavelEmailMascarado || 'Protegido'} • Tel: {dossier.responsavelTelefoneMascarado || 'Protegido'}
+                  </div>
+                  <div style={{ fontSize: 13, color: '#1e293b', marginTop: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
+                    Estudante Titular: <strong>{dossier.alunoNome}</strong> ({dossier.alunoSerieTurma || 'Regular'})
+                  </div>
+                  <div style={{ fontSize: 12, color: '#047857', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: 8, marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                    <CheckCircle2 size={14} color="#059669" /> Confirmação OTP efetuada em: {formatDate(dossier.dataAssinatura)}
+                  </div>
+
+                  {dossier.metadadosTecnicos && (
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f1f5f9', background: '#f8fafc', padding: 12, borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 11.5, color: '#64748b', lineHeight: 1.65 }}>
+                      • Endereço IP: {dossier.metadadosTecnicos.ip}<br />
+                      • Dispositivo: {dossier.metadadosTecnicos.dispositivo}<br />
+                      • Sistema Operacional: {dossier.metadadosTecnicos.sistemaOperacional}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Contratada / Colégio Impacto */}
-              <div style={{ background: 'rgba(30, 41, 59, 0.7)', borderRadius: 16, padding: '20px 24px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Building2 size={16} /> Instituição de Ensino (Contratada)
-                </div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: '#fff' }}>
-                  {dossier.escolaRepresentante?.nome || 'IVAN ROSSI SAMBRANA'}
-                </div>
-                <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
-                  Cargo: {dossier.escolaRepresentante?.cargo || 'Diretor Geral / Representante Legal'}
-                </div>
-                <div style={{ fontSize: 13, color: '#e2e8f0', marginTop: 10 }}>
-                  {dossier.escolaRepresentante?.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA'} • CNPJ: {dossier.escolaRepresentante?.cnpj || '04.395.789/0001-88'}
-                </div>
-                <div style={{ fontSize: 12, color: '#60a5fa', marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <CheckCircle2 size={14} /> Chancela Eletrônica Institucional Atestada
+              <div
+                style={{
+                  background: '#ffffff',
+                  borderRadius: 18,
+                  border: '1px solid #bfdbfe',
+                  boxShadow: '0 4px 16px rgba(37, 99, 235, 0.04)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {/* Cabeçalho com Gradiente Leve Azul */}
+                <div
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(219, 234, 254, 0.65) 100%)',
+                    borderBottom: '1px solid #bfdbfe',
+                    padding: '16px 22px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 10,
+                        background: '#ffffff',
+                        color: '#2563eb',
+                        border: '1px solid #bfdbfe',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 6px rgba(37, 99, 235, 0.1)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <Building2 size={19} />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                        Instituição de Ensino
+                      </h3>
+                      <span style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 700 }}>
+                        Contratada • Emissora do Contrato
+                      </span>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 10.5, color: '#1d4ed8', background: '#ffffff', border: '1px solid #bfdbfe', padding: '4px 10px', borderRadius: 8, fontWeight: 700, fontFamily: 'monospace' }}>
+                    CHANCELA OFICIAL
+                  </span>
                 </div>
 
-                <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase' }}>
-                    Chancela com Assinatura Oficial:
+                <div style={{ padding: '22px 26px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ fontWeight: 800, fontSize: 17, color: '#0f172a' }}>
+                    {dossier.escolaRepresentante?.nome || 'IVAN ROSSI SAMBRANA'}
                   </div>
-                  <div style={{ background: '#ffffff', borderRadius: 8, padding: '8px 14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <img
-                      src="/assinatura-representante.png"
-                      alt="Chancela Oficial do Diretor Geral"
-                      style={{ maxHeight: 42, maxWidth: 220, objectFit: 'contain' }}
-                    />
+                  <div style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>
+                    Cargo: {dossier.escolaRepresentante?.cargo || 'Diretor Geral / Representante Legal'}
+                  </div>
+                  <div style={{ fontSize: 13, color: '#1e293b', marginTop: 10 }}>
+                    {dossier.escolaRepresentante?.razaoSocial || 'COLÉGIO IMPACTO CENTRO DE ENSINO LTDA'} • CNPJ: {dossier.escolaRepresentante?.cnpj || '04.395.789/0001-88'}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '6px 12px', borderRadius: 8, marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                    <CheckCircle2 size={14} color="#2563eb" /> Chancela Eletrônica Institucional Atestada
+                  </div>
+
+                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 700, textTransform: 'uppercase' }}>
+                      Chancela com Assinatura Oficial:
+                    </div>
+                    <div style={{ background: '#ffffff', borderRadius: 10, padding: '10px 18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #cbd5e1', boxShadow: '0 2px 6px rgba(0,0,0,0.04)' }}>
+                      <img
+                        src="/assinatura-representante.png"
+                        alt="Chancela Oficial do Diretor Geral"
+                        style={{ maxHeight: 42, maxWidth: 220, objectFit: 'contain' }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Trilha de Auditoria */}
-            <div style={{ background: 'rgba(30, 41, 59, 0.7)', borderRadius: 16, padding: '20px 24px', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Clock size={16} /> Trilha de Auditoria (Cadeia de Custódia Imutável)
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: 18,
+                border: '1px solid #fde68a',
+                boxShadow: '0 4px 16px rgba(217, 119, 6, 0.04)',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Cabeçalho com Gradiente Leve Âmbar */}
+              <div
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 251, 235, 0.95) 0%, rgba(254, 243, 199, 0.65) 100%)',
+                  borderBottom: '1px solid #fde68a',
+                  padding: '16px 24px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      background: '#ffffff',
+                      color: '#d97706',
+                      border: '1px solid #fde68a',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: '0 2px 6px rgba(217, 119, 6, 0.1)',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Clock size={19} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                      Trilha de Auditoria (Cadeia de Custódia Imutável)
+                    </h3>
+                    <span style={{ fontSize: 11, color: '#b45309', fontWeight: 700 }}>
+                      Registro Cronológico UTC • Integridade Forense Inviolável
+                    </span>
+                  </div>
+                </div>
+                <span style={{ fontSize: 11, color: '#b45309', background: '#ffffff', border: '1px solid #fde68a', padding: '4px 12px', borderRadius: 8, fontWeight: 700, fontFamily: 'monospace', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                  AUDITORIA IMUTÁVEL
+                </span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {dossier.trilhaAuditoria?.map((ev, idx) => (
-                  <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, fontSize: 13 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', marginTop: 6 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, color: '#f8fafc' }}>
-                        [{ev.evento}] - {ev.descricao}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
-                        Data/Hora: {formatDate(ev.timestamp)} • Hash do Evento: <span style={{ fontFamily: 'monospace' }}>{ev.hash?.substring(0, 16)}...</span>
+              <div style={{ padding: '24px 28px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {dossier.trilhaAuditoria?.map((ev, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, fontSize: 13 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#2563eb', border: '2px solid #ffffff', boxShadow: '0 0 0 2px #bfdbfe', marginTop: 5, flexShrink: 0 }} />
+                      <div style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 700, color: '#0f172a' }}>
+                          <span style={{ color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 800, fontFamily: 'monospace', display: 'inline-block', marginRight: 8 }}>
+                            {ev.evento}
+                          </span>
+                          {ev.descricao}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>
+                          Data/Hora: {formatDate(ev.timestamp)} • Hash do Evento: <span style={{ fontFamily: 'monospace', color: '#0284c7', fontWeight: 600 }}>{ev.hash?.substring(0, 16)}...</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Seção Interativa de Teste de Integridade de Arquivo PDF (Drag & Drop) */}
+        {/* Seção Interativa de Teste de Integridade de Arquivo PDF (Drag & Drop Light Theme) */}
         <div
           style={{
-            background: 'rgba(30, 41, 59, 0.5)',
-            borderRadius: 20,
-            padding: '28px',
-            border: '2px dashed rgba(255, 255, 255, 0.15)',
-            marginTop: 28,
+            background: 'linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)',
+            borderRadius: 22,
+            padding: '36px 28px',
+            border: '2px dashed #cbd5e1',
+            marginTop: 32,
             textAlign: 'center',
+            boxShadow: '0 4px 20px rgba(15, 23, 42, 0.02)',
           }}
           onDragOver={e => e.preventDefault()}
           onDrop={e => {
@@ -1081,38 +1424,42 @@ export function ValidarAssinaturaClient({
         >
           <div
             style={{
-              width: 52,
-              height: 52,
+              width: 58,
+              height: 58,
               borderRadius: '50%',
-              background: 'rgba(59, 130, 246, 0.15)',
-              color: '#60a5fa',
+              background: '#eff6ff',
+              color: '#2563eb',
+              border: '1px solid #dbeafe',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 12px',
+              margin: '0 auto 14px',
+              boxShadow: '0 4px 12px rgba(37, 99, 235, 0.1)',
             }}
           >
-            <Upload size={24} />
+            <Upload size={26} />
           </div>
 
-          <h3 style={{ fontSize: 17, fontWeight: 700, margin: '0 0 6px', color: '#fff' }}>
+          <h3 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 8px', color: '#0f172a' }}>
             Verificador Pericial de Integridade do Arquivo PDF
           </h3>
-          <p style={{ fontSize: 13, color: '#94a3b8', maxWidth: 560, margin: '0 auto 16px', lineHeight: 1.5 }}>
+          <p style={{ fontSize: 13.5, color: '#475569', maxWidth: 600, margin: '0 auto 18px', lineHeight: 1.6 }}>
             Deseja conferir se o arquivo PDF em suas mãos sofreu qualquer adulteração? Arraste o arquivo aqui para calcular a assinatura criptográfica SHA-256 no seu próprio dispositivo e confrontar com o banco de custódia oficial.
           </p>
 
           <label
             style={{
               display: 'inline-block',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              color: '#fff',
-              padding: '10px 20px',
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
+              background: '#ffffff',
+              border: '1.5px solid #cbd5e1',
+              color: '#0f172a',
+              padding: '11px 24px',
+              borderRadius: 12,
+              fontSize: 13.5,
+              fontWeight: 700,
               cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.05)',
+              transition: 'all 0.15s ease',
             }}
           >
             Selecionar Arquivo PDF para Conferência
@@ -1127,7 +1474,7 @@ export function ValidarAssinaturaClient({
           </label>
 
           {verificandoArquivo && (
-            <div style={{ marginTop: 16, color: '#60a5fa', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <div style={{ marginTop: 16, color: '#2563eb', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 600 }}>
               <RefreshCw size={16} className="animate-spin" /> Calculando hash SHA-256 via Web Crypto API e conferindo com a custódia...
             </div>
           )}
@@ -1137,32 +1484,43 @@ export function ValidarAssinaturaClient({
               style={{
                 marginTop: 20,
                 background: resultadoArquivo.inalterado
-                  ? 'rgba(16, 185, 129, 0.15)'
-                  : 'rgba(239, 68, 68, 0.15)',
+                  ? '#ecfdf5'
+                  : '#fef2f2',
                 border: resultadoArquivo.inalterado
-                  ? '1px solid rgba(16, 185, 129, 0.3)'
-                  : '1px solid rgba(239, 68, 68, 0.3)',
-                color: resultadoArquivo.inalterado ? '#34d399' : '#fca5a5',
-                borderRadius: 12,
-                padding: '16px 20px',
+                  ? '1.5px solid #a7f3d0'
+                  : '1.5px solid #fca5a5',
+                color: resultadoArquivo.inalterado ? '#047857' : '#b91c1c',
+                borderRadius: 14,
+                padding: '18px 22px',
                 textAlign: 'left',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.03)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 14 }}>
-                {resultadoArquivo.inalterado ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 14 }}>
+                {resultadoArquivo.inalterado ? <CheckCircle2 size={19} color="#059669" /> : <AlertTriangle size={19} color="#dc2626" />}
                 {resultadoArquivo.inalterado
                   ? 'AUTENTICIDADE E INTEGRIDADE CONFIRMADAS'
                   : 'INCONSISTÊNCIA DETECTADA'}
               </div>
-              <div style={{ fontSize: 13, marginTop: 4, color: '#f8fafc' }}>
+              <div style={{ fontSize: 13.5, marginTop: 5, color: resultadoArquivo.inalterado ? '#064e3b' : '#7f1d1d', fontWeight: 500 }}>
                 {resultadoArquivo.mensagem}
               </div>
-              <div style={{ fontSize: 11, fontFamily: 'monospace', marginTop: 8, color: '#94a3b8' }}>
-                Hash SHA-256 Calculado: {resultadoArquivo.hash}
+              <div style={{ fontSize: 11.5, fontFamily: 'monospace', marginTop: 10, color: '#64748b', fontWeight: 600 }}>
+                Hash SHA-256 Calculado: <span style={{ color: '#0f172a' }}>{resultadoArquivo.hash}</span>
               </div>
             </div>
           )}
         </div>
+
+        {/* Rodapé Institucional */}
+        <footer style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 4 }}>
+            <ShieldCheck size={14} color="#059669" /> Colégio Impacto Centro de Ensino Ltda • CNPJ: 04.395.789/0001-88
+          </div>
+          <div style={{ fontSize: 11.5, color: '#94a3b8' }}>
+            Portal Oficial de Validação & Custódia Criptográfica Documental • Sistema Impacto EDU
+          </div>
+        </footer>
       </main>
     </div>
   )
