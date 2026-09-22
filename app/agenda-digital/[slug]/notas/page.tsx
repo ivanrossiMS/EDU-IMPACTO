@@ -210,7 +210,7 @@ export default function ADNotasPage({ params }: { params: any }) {
     if (!boletimAtual || !boletimAtual.dados.disciplinas) return []
     return boletimAtual.dados.disciplinas.map((d: any) => {
       let num = 0
-      const val = String(d.mediaF).trim()
+      const val = String(d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '')).trim()
       if (val.toLowerCase() === 'dez') {
         num = 10
       } else {
@@ -519,10 +519,28 @@ export default function ADNotasPage({ params }: { params: any }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
                           <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>{d.nome}</div>
                           
-                          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 10, fontWeight: 500 }}>
-                            <span>AVM: <strong style={{ color: '#475569' }}>{d.avm}</strong></span>
-                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#cbd5e1' }} />
-                            <span>AVB: <strong style={{ color: '#475569' }}>{d.avb}</strong></span>
+                          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, flexWrap: 'wrap' }}>
+                            <span>AVM: <strong style={{ color: '#475569' }}>{d.avm || '---'}</strong></span>
+                            <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                            <span>AVB: <strong style={{ color: '#475569' }}>{d.avb || '---'}</strong></span>
+                            {d.simulado && d.simulado !== '---' && (
+                              <>
+                                <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                                <span>Simulado: <strong style={{ color: '#475569' }}>{d.simulado}</strong></span>
+                              </>
+                            )}
+                            {(d.pntBonu || d.bonus) && d.pntBonu !== '---' && d.bonus !== '---' && (
+                              <>
+                                <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                                <span>Bônus: <strong style={{ color: '#475569' }}>{d.pntBonu || d.bonus}</strong></span>
+                              </>
+                            )}
+                            {d.rec && d.rec !== '---' && (
+                              <>
+                                <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                                <span>Rec: <strong style={{ color: '#d97706' }}>{d.rec}</strong></span>
+                              </>
+                            )}
                           </div>
                           
                           <div style={{ marginTop: 6, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '85%' }}>
@@ -539,7 +557,7 @@ export default function ADNotasPage({ params }: { params: any }) {
                           </div>
                         </div>
                         
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
                           <div style={{ 
                             fontSize: 22, 
                             fontWeight: 900, 
@@ -547,8 +565,13 @@ export default function ADNotasPage({ params }: { params: any }) {
                             color: isPassed ? '#059669' : '#dc2626',
                             lineHeight: 1
                           }}>
-                            {d.mediaF}
+                            {d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '---')}
                           </div>
+                          {d.mediaG && d.mediaG !== '---' && d.mediaF && d.mediaF !== d.mediaG && (
+                            <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
+                              Final: {d.mediaF}
+                            </div>
+                          )}
                         </div>
                       </motion.div>
                     )

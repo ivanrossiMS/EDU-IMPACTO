@@ -23,6 +23,11 @@ import {
   calculateAuditTrailHash,
 } from './cryptoSignature'
 import { assinarPdfCriptograficamente } from './institutionalCertificate'
+import {
+  desenharSeloEletronicoNoPdf,
+  formatAbbreviatedSignerName,
+  obterOuCarregarFonteAssinatura,
+} from './sealGenerator'
 
 /**
  * Sanitiza strings para o charset padrão WinAnsi das fontes básicas do PDF
@@ -180,6 +185,14 @@ export interface EvidenceCertificateParams {
   validationUrl?: string
   logoBase64?: string | null
   logoBytes?: Uint8Array | null
+  documentosAnexados?: Array<{
+    ordem?: number
+    nome: string
+    totalPaginas?: number
+    tamanhoBytes?: number
+    tamanhoFormatado?: string
+    formatoOriginal?: string
+  }> | null
 }
 
 export interface FinalSealedDocumentResult {
@@ -243,6 +256,62 @@ export async function anexarCertificadoEvidencias(
 
   // Cálculo prévio do hash cumulativo da trilha de auditoria
   const trilhaAuditoriaHash = calculateAuditTrailHash(params.eventosAuditoria || [])
+
+  // ── Aposição do Selo de Assinatura Eletrônica Ultra Moderno no Fim de Cada Arquivo ──
+  const totalPaginasOriginais = pdfDoc.getPageCount()
+  if (totalPaginasOriginais > 0) {
+    const fonteAssinatura = await obterOuCarregarFonteAssinatura(pdfDoc)
+    const docs = Array.isArray(params.documentosAnexados) && params.documentosAnexados.length > 0
+      ? params.documentosAnexados
+      : null
+
+    if (docs && docs.length > 1) {
+      // Pacote com múltiplos documentos unificados: estampa no fim de cada arquivo individual
+      let acumuladorPaginas = 0
+      for (let i = 0; i < docs.length; i++) {
+        const itemDoc = docs[i]
+        const pags = Math.max(1, Number(itemDoc.totalPaginas) || 1)
+        acumuladorPaginas += pags
+        const targetPageIndex = Math.min(acumuladorPaginas - 1, totalPaginasOriginais - 1)
+        const targetPage = pdfDoc.getPage(targetPageIndex)
+
+        const nomeLimpo = (itemDoc.nome || `Documento ${i + 1}`).replace(/\.(docx?|pdf)$/i, '').replace(/[_-]+/g, ' ').trim()
+        const rotuloDoc = `Doc ${i + 1}/${docs.length}: ${nomeLimpo.length > 24 ? nomeLimpo.substring(0, 22) + '...' : nomeLimpo}`
+
+        await desenharSeloEletronicoNoPdf({
+          pdfDoc,
+          targetPage,
+          signatarioNome: params.signatario.nome,
+          protocolo: params.protocolo,
+          dataHoraIso: params.signatario.dataHoraAssinatura,
+          validationUrl: publicValidationUrl,
+          rotuloDocumento: rotuloDoc,
+          fonteRegular: fontRegular,
+          fonteBold: fontBold,
+          fonteMono: fontMono,
+          fonteAssinatura,
+          customBottomMargin: 76,
+        })
+      }
+    } else {
+      // Arquivo único: aposta o selo no fim deste arquivo (última página original antes do certificado)
+      const ultimaPagina = pdfDoc.getPage(totalPaginasOriginais - 1)
+      await desenharSeloEletronicoNoPdf({
+        pdfDoc,
+        targetPage: ultimaPagina,
+        signatarioNome: params.signatario.nome,
+        protocolo: params.protocolo,
+        dataHoraIso: params.signatario.dataHoraAssinatura,
+        validationUrl: publicValidationUrl,
+        rotuloDocumento: null,
+        fonteRegular: fontRegular,
+        fonteBold: fontBold,
+        fonteMono: fontMono,
+        fonteAssinatura,
+        customBottomMargin: 76,
+      })
+    }
+  }
 
   // Cria a página dedicada do Certificado
   const certPage = pdfDoc.addPage([pageWidth, pageHeight])

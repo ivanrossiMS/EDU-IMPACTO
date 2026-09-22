@@ -172,6 +172,7 @@ export async function POST(request: Request) {
       },
       eventosAuditoria: contrato.historico_eventos,
       validationUrl,
+      documentosAnexados: contrato.evidencias?.documentosAnexados || null,
     })
 
     // Salva o PDF assinado no Storage isolado

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { getWhatsAppShareUrl } from '@/lib/whatsapp'
 import { PdfCanvasViewer } from './PdfCanvasViewer'
+import { formatAbbreviatedSignerName, formatTimestampSelo } from '@/lib/contracts/sealUtils'
 
 interface ContratoProps {
   id: string
@@ -602,6 +603,15 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#070b14', color: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        @font-face {
+          font-family: 'Dancing Script';
+          src: url('/fonts/DancingScript-Bold.ttf') format('truetype');
+          font-weight: 700;
+          font-style: normal;
+          font-display: swap;
+        }
+      `}</style>
       {/* ── BARRA SUPERIOR INSTITUCIONAL ── */}
       <header
         style={{
@@ -1814,6 +1824,88 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                       </div>
                     )}
 
+                    {/* ── Pré-visualização do Selo de Assinatura Oficial Aposto no Fim dos Arquivos ── */}
+                    <div
+                      style={{
+                        background: '#ffffff',
+                        border: '1.5px solid #cbd5e1',
+                        borderRadius: 14,
+                        padding: '14px 16px',
+                        boxShadow: '0 4px 16px rgba(15, 23, 42, 0.05)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          <BadgeCheck size={16} color="#0284c7" />
+                          <span>Selo Oficial Aposto nos Arquivos</span>
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: '#10b981', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: 999 }}>
+                          Ultra Moderno • MP 2.200-2
+                        </span>
+                      </div>
+
+                      {/* Crachá do Selo exatamente como carimbado no PDF */}
+                      <div
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #cbd5e1',
+                          borderLeft: '4px solid #10b981',
+                          borderRadius: 10,
+                          padding: '10px 14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                        }}
+                      >
+                        {qrCodeDataUrl ? (
+                          <img
+                            src={qrCodeDataUrl}
+                            alt="QR Code"
+                            style={{ width: 46, height: 46, borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', flexShrink: 0 }}
+                          />
+                        ) : (
+                          <div style={{ width: 46, height: 46, borderRadius: 6, background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <QrCode size={22} color="#64748b" />
+                          </div>
+                        )}
+
+                        <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                          <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            Chancela de Assinatura Eletrônica
+                          </div>
+                          <div
+                            style={{
+                              fontFamily: "'Dancing Script', 'Brush Script MT', 'Caveat', cursive",
+                              fontSize: 20,
+                              fontWeight: 700,
+                              color: '#0f2757',
+                              lineHeight: 1.2,
+                              margin: '2px 0',
+                            }}
+                          >
+                            {formatAbbreviatedSignerName(signatarioNome || contrato.signatario_nome)}
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#059669', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Check size={13} strokeWidth={3} /> assinado eletronicamente
+                          </div>
+                          <div style={{ fontSize: 10, color: '#64748b', marginTop: 2, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            <span>{formatTimestampSelo(new Date().toISOString())}</span>
+                            <span>•</span>
+                            <span>Prot: {contrato.protocolo}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: 11, color: '#475569', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Lock size={12} color="#059669" />
+                        <span>
+                          {(contrato.evidencias?.totalDocumentos || (Array.isArray(contrato.evidencias?.documentosAnexados) ? contrato.evidencias?.documentosAnexados.length : 1) || 1) > 1
+                            ? `Este selo será aposto no final de cada um dos ${contrato.evidencias?.totalDocumentos || contrato.evidencias?.documentosAnexados?.length || 2} arquivos deste pacote.`
+                            : 'Este selo será aposto criptograficamente no final deste arquivo antes do dossiê de evidências.'}
+                        </span>
+                      </div>
+                    </div>
+
                     {/* Aceite Explícito */}
                     <label
                       style={{
@@ -1922,6 +2014,40 @@ export function SigningPortalClient({ contrato }: { contrato: ContratoProps }) {
                     >
                       <span style={{ color: '#64748b', fontWeight: 500 }}>Protocolo:</span>
                       <strong style={{ color: '#0284c7', fontFamily: 'monospace', fontSize: 14 }}>{signedResult.protocolo}</strong>
+                    </div>
+
+                    {/* Selo Aposto no Fim de Cada Arquivo */}
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #cbd5e1',
+                        borderLeft: '4px solid #10b981',
+                        borderRadius: 10,
+                        padding: '10px 14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                          Selo Oficial Aposto no Fim dos Arquivos
+                        </div>
+                        <div
+                          style={{
+                            fontFamily: "'Dancing Script', 'Brush Script MT', 'Caveat', cursive",
+                            fontSize: 18,
+                            fontWeight: 700,
+                            color: '#0f2757',
+                          }}
+                        >
+                          {formatAbbreviatedSignerName(signatarioNome || contrato.signatario_nome)}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#059669', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Check size={14} strokeWidth={3} /> assinado eletronicamente
+                      </div>
                     </div>
 
                     {/* Status de Envio por E-mail & Reenvio Imediato */}

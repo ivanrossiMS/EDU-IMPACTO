@@ -64,32 +64,62 @@ export async function POST(request: Request) {
       const alunoMatch = bloco.match(/Aluno:\s*([^\n\r]+)/i)
       const nomeArquivo = alunoMatch ? alunoMatch[1].trim() : 'Aluno no Arquivo'
 
+      // Extrair Bimestre
+      const bimMatch = bloco.match(/Bimestre:\s*(\d+)/i)
+      const bimestre = bimMatch ? `${bimMatch[1]}º Bimestre` : '1º Bimestre'
+
+      // Extrair Ano
+      const anoMatch = bloco.match(/Ano:\s*(\d{4})/i)
+      const ano = anoMatch ? parseInt(anoMatch[1]) : 2026
+
       if (!codigo) continue
 
       const disciplinas: any[] = []
       
-      // Regex para capturar a linha da disciplina
-      // Como o pdf2json pode retornar o texto com espaços ou quebras diferentes,
-      // vamos usar uma regex mais flexível!
-      const lineRegex = /^([A-ZÀ-Ú\s\-+]+?)\s+([\d,]+|Dez)\s+([\d,]+|Dez)\s+([\d,]+|Dez)\s+([\d,]+|Dez)$/gm
+      // Token para notas: valores numéricos (ex: 9,50), "Dez", "Hum", traços "---", etc.
+      const tokenPattern = '(?:[\\d,]+|Dez|Hum|---|--|-)'
       
-      let match
-      while ((match = lineRegex.exec(bloco)) !== null) {
+      // 1. Tenta capturar as 7 colunas de notas (Av.Mens, Av.Bim, Simulado, Pnt.Bônu, MedFinal, Rec, MédGeral)
+      const lineRegex7 = new RegExp(`^([A-ZÀ-Ú\\s\\-+]+?)\\s+(${tokenPattern})\\s+(${tokenPattern})\\s+(${tokenPattern})\\s+(${tokenPattern})\\s+(${tokenPattern})\\s+(${tokenPattern})\\s+(${tokenPattern})$`, 'gm')
+      
+      let match7
+      while ((match7 = lineRegex7.exec(bloco)) !== null) {
         disciplinas.push({
-          nome: match[1].trim(),
-          avm: match[2],
-          avb: match[3],
-          mediaF: match[4],
-          mediaG: match[5]
+          nome: match7[1].trim(),
+          avm: match7[2],
+          avb: match7[3],
+          simulado: match7[4],
+          pntBonu: match7[5],
+          mediaF: match7[6],
+          rec: match7[7],
+          mediaG: match7[8]
         })
+      }
+
+      // 2. Se não encontrou 7 colunas, tenta 4 colunas (layout legado)
+      if (disciplinas.length === 0) {
+        const lineRegex4 = new RegExp(`^([A-ZÀ-Ú\\s\\-+]+?)\\s+(${tokenPattern})\\s+(${tokenPattern})\\s+(${tokenPattern})\\s+(${tokenPattern})$`, 'gm')
+        let match4
+        while ((match4 = lineRegex4.exec(bloco)) !== null) {
+          disciplinas.push({
+            nome: match4[1].trim(),
+            avm: match4[2],
+            avb: match4[3],
+            simulado: '---',
+            pntBonu: '---',
+            mediaF: match4[4],
+            rec: '---',
+            mediaG: match4[5]
+          })
+        }
       }
 
       alunosDetectados.push({
         codigo,
         nomeArquivo,
         disciplinas,
-        bimestre: '1º Bimestre',
-        ano: 2026
+        bimestre,
+        ano
       })
     }
 

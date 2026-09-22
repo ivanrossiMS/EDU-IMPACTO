@@ -169,7 +169,7 @@ export default function NotasPage() {
       {/* ── MODAL DE IMPORTAÇÃO (ULTRA PREMIUM) ────────────────── */}
         {modalOpen && (
           <div style={{ position:'fixed', inset:0, background:'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-            <div style={{ background: '#fff', width:'100%', maxWidth:currentStep === 'preview' ? 1000 : 600, borderRadius: '24px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden', transition: 'all 0.3s ease' }}>
+            <div style={{ background: '#fff', width:'95%', maxWidth:currentStep === 'preview' ? 1150 : 600, borderRadius: '24px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden', transition: 'all 0.3s ease' }}>
               
               {/* Header */}
               <div style={{ background: 'linear-gradient(135deg, #1e3a8a, #2563eb)', padding: '20px 32px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -244,7 +244,7 @@ export default function NotasPage() {
                             <span style={{ padding: '2px 8px', borderRadius: '4px', background: '#e2e8f0', fontSize: 11, fontWeight: 700, color: '#475569' }}>{data.bimestre}</span>
                           </div>
                           <div style={{ fontSize: 12, color: '#64748b' }}>
-                            Disciplinas: {data.disciplinas.map((d:any) => `${d.nome} (Média: ${d.mediaF})`).join(', ')}
+                            Disciplinas: {data.disciplinas.map((d:any) => `${d.nome} (Média: ${d.mediaF || d.mediaG})`).join(', ')}
                           </div>
                         </div>
                       ))}
@@ -252,7 +252,7 @@ export default function NotasPage() {
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 24 }}>
                       <button style={{ height: '40px', padding: '0 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#0f172a', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('upload')}>Voltar</button>
-                      <button style={{ height: '40px', padding: '0: 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('preview')}>Ver Preview</button>
+                      <button style={{ height: '40px', padding: '0 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }} onClick={() => setCurrentStep('preview')}>Ver Preview</button>
                     </div>
                   </div>
                 )}
@@ -267,30 +267,53 @@ export default function NotasPage() {
                           <div style={{ background: 'linear-gradient(110deg, #1d4ed8 0%, #1e3a8a 100%)', padding: '16px 24px', color: '#fff' }}>
                             <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.8 }}>BOLETIM DE AVALIAÇÃO ESCOLAR</div>
                             <div style={{ fontSize: 20, fontWeight: 900, fontFamily: 'Outfit,sans-serif' }}>{data.nomeERP}</div>
-                            <div style={{ fontSize: 11, opacity: 0.8 }}>Matrícula: {data.codigo} | Ano Letivo: {data.ano}</div>
+                            <div style={{ fontSize: 11, opacity: 0.8 }}>Matrícula: {data.codigo} | Ano Letivo: {data.ano}{data.bimestre ? ` | ${data.bimestre}` : ''}</div>
                           </div>
                           
-                          <div style={{ padding: '20px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                          <div style={{ padding: '20px', overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '780px' }}>
                               <thead>
-                                <tr style={{ background: '#1e3a8a', color: '#fff' }}>
-                                  <th style={{ padding: '10px', textAlign: 'left' }}>Componente Curricular</th>
-                                  <th style={{ padding: '10px', textAlign: 'center' }}>AVM</th>
-                                  <th style={{ padding: '10px', textAlign: 'center' }}>AVB</th>
-                                  <th style={{ padding: '10px', textAlign: 'center' }}>MediaF</th>
-                                  <th style={{ padding: '10px', textAlign: 'center' }}>MediaG</th>
+                                <tr style={{ background: '#1e3a8a', color: '#fff', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                  <th style={{ padding: '12px 14px', textAlign: 'left', borderRadius: '8px 0 0 0' }}>Componente Curricular</th>
+                                  <th style={{ padding: '12px 8px', textAlign: 'center' }}>Av.Mens</th>
+                                  <th style={{ padding: '12px 8px', textAlign: 'center' }}>Av.Bim</th>
+                                  <th style={{ padding: '12px 8px', textAlign: 'center' }}>Simulado</th>
+                                  <th style={{ padding: '12px 8px', textAlign: 'center' }}>Pnt.Bônu</th>
+                                  <th style={{ padding: '12px 8px', textAlign: 'center' }}>MedFinal</th>
+                                  <th style={{ padding: '12px 8px', textAlign: 'center' }}>Rec</th>
+                                  <th style={{ padding: '12px 10px', textAlign: 'center', borderRadius: '0 8px 0 0' }}>MédGeral</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {data.disciplinas.map((d:any, di:number) => (
-                                  <tr key={di} style={{ background: di % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                    <td style={{ padding: '10px', fontWeight: 600 }}>{d.nome}</td>
-                                    <td style={{ padding: '10px', textAlign: 'center', color: '#475569' }}>{d.avm}</td>
-                                    <td style={{ padding: '10px', textAlign: 'center', color: '#475569' }}>{d.avb}</td>
-                                    <td style={{ padding: '10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{d.mediaF}</td>
-                                    <td style={{ padding: '10px', textAlign: 'center', color: '#2563eb', fontWeight: 700 }}>{d.mediaG}</td>
-                                  </tr>
-                                ))}
+                                {data.disciplinas.map((d: any, di: number) => {
+                                  const isLast = di === data.disciplinas.length - 1
+                                  return (
+                                    <tr 
+                                      key={di} 
+                                      style={{ 
+                                        background: di % 2 === 0 ? '#ffffff' : '#f8fafc', 
+                                        borderBottom: isLast ? 'none' : '1px solid #e2e8f0',
+                                        transition: 'background 0.15s ease'
+                                      }}
+                                    >
+                                      <td style={{ padding: '11px 14px', fontWeight: 700, color: '#0f172a', fontSize: '13px' }}>{d.nome}</td>
+                                      <td style={{ padding: '11px 8px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avm ?? '---'}</td>
+                                      <td style={{ padding: '11px 8px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avb ?? '---'}</td>
+                                      <td style={{ padding: '11px 8px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.simulado ?? '---'}</td>
+                                      <td style={{ padding: '11px 8px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.pntBonu || d.bonus || '---'}</td>
+                                      <td style={{ padding: '11px 8px', textAlign: 'center', color: '#2563eb', fontWeight: 800 }}>{d.mediaF ?? '---'}</td>
+                                      <td style={{ 
+                                        padding: '11px 8px', 
+                                        textAlign: 'center', 
+                                        color: d.rec && d.rec !== '---' ? '#d97706' : '#94a3b8', 
+                                        fontWeight: d.rec && d.rec !== '---' ? 800 : 400 
+                                      }}>
+                                        {d.rec ?? '---'}
+                                      </td>
+                                      <td style={{ padding: '11px 10px', textAlign: 'center', color: '#16a34a', fontWeight: 800 }}>{d.mediaG ?? '---'}</td>
+                                    </tr>
+                                  )
+                                })}
                               </tbody>
                             </table>
                           </div>
@@ -315,7 +338,7 @@ export default function NotasPage() {
         {/* Modal de Visualização Ultra Moderno */}
         {boletimParaVisualizar && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, animation: 'fadeIn 0.2s ease' }}>
-            <div style={{ background: '#fff', borderRadius: '24px', width: '700px', maxHeight: '85vh', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ background: '#fff', borderRadius: '24px', width: '980px', maxWidth: '95vw', maxHeight: '88vh', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)' }}>
               
               {/* Cabeçalho com Gradiente */}
               <div style={{ background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', padding: '24px 32px', color: '#fff', position: 'relative' }}>
@@ -338,23 +361,31 @@ export default function NotasPage() {
               </div>
               
               {/* Corpo do Modal */}
-              <div style={{ padding: '24px', overflowY: 'auto', maxHeight: 'calc(85vh - 140px)' }}>
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', fontSize: '13px' }}>
+              <div style={{ padding: '24px', overflowY: 'auto', maxHeight: 'calc(85vh - 140px)', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', fontSize: '13px', minWidth: '760px' }}>
                   <thead>
-                    <tr style={{ color: '#64748b', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    <tr style={{ color: '#64748b', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       <th style={{ padding: '0 12px 8px 12px', textAlign: 'left' }}>Componente Curricular</th>
-                      <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>AVM</th>
-                      <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>AVB</th>
-                      <th style={{ padding: '0 12px 8px 12px', textAlign: 'center' }}>Média Final</th>
+                      <th style={{ padding: '0 8px 8px 8px', textAlign: 'center' }}>Av.Mens</th>
+                      <th style={{ padding: '0 8px 8px 8px', textAlign: 'center' }}>Av.Bim</th>
+                      <th style={{ padding: '0 8px 8px 8px', textAlign: 'center' }}>Simulado</th>
+                      <th style={{ padding: '0 8px 8px 8px', textAlign: 'center' }}>Pnt.Bônu</th>
+                      <th style={{ padding: '0 8px 8px 8px', textAlign: 'center' }}>MedFinal</th>
+                      <th style={{ padding: '0 8px 8px 8px', textAlign: 'center' }}>Rec</th>
+                      <th style={{ padding: '0 12px 8px 8px', textAlign: 'center' }}>MédGeral</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(boletimParaVisualizar.conteudo?.disciplinas || []).map((d: any, di: number) => (
                       <tr key={di} style={{ background: '#f8fafc', borderRadius: '12px', transition: 'transform 0.2s, box-shadow 0.2s' }}>
-                        <td style={{ padding: '16px 12px', fontWeight: 600, color: '#0f172a', borderTopLeftRadius: '12px', borderBottomLeftRadius: '12px' }}>{d.nome}</td>
-                        <td style={{ padding: '16px 12px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avm}</td>
-                        <td style={{ padding: '16px 12px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avb}</td>
-                        <td style={{ padding: '16px 12px', textAlign: 'center', color: '#2563eb', fontWeight: 700, fontSize: 14, borderTopRightRadius: '12px', borderBottomRightRadius: '12px' }}>{d.mediaF}</td>
+                        <td style={{ padding: '14px 12px', fontWeight: 700, color: '#0f172a', borderTopLeftRadius: '12px', borderBottomLeftRadius: '12px' }}>{d.nome}</td>
+                        <td style={{ padding: '14px 8px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avm ?? '---'}</td>
+                        <td style={{ padding: '14px 8px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.avb ?? '---'}</td>
+                        <td style={{ padding: '14px 8px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.simulado ?? '---'}</td>
+                        <td style={{ padding: '14px 8px', textAlign: 'center', color: '#475569', fontWeight: 500 }}>{d.pntBonu || d.bonus || '---'}</td>
+                        <td style={{ padding: '14px 8px', textAlign: 'center', color: '#2563eb', fontWeight: 800, fontSize: 14 }}>{d.mediaF ?? '---'}</td>
+                        <td style={{ padding: '14px 8px', textAlign: 'center', color: d.rec && d.rec !== '---' ? '#d97706' : '#94a3b8', fontWeight: d.rec && d.rec !== '---' ? 800 : 500 }}>{d.rec ?? '---'}</td>
+                        <td style={{ padding: '14px 12px', textAlign: 'center', color: '#16a34a', fontWeight: 800, fontSize: 14, borderTopRightRadius: '12px', borderBottomRightRadius: '12px' }}>{d.mediaG ?? '---'}</td>
                       </tr>
                     ))}
                   </tbody>

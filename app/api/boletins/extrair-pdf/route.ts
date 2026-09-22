@@ -24,39 +24,27 @@ export async function POST(req: Request) {
 
     const prompt = `Você é um assistente especializado em extração de dados de Boletins Escolares.
 Vou te enviar um arquivo PDF que contém os boletins de uma turma com VÁRIOS ALUNOS.
-Analise a estrutura do PDF, leia as tabelas de notas e extraia TODOS os alunos encontrados.
+Analise a estrutura do PDF, leia as tabelas de notas e extraia TODOS os alunos encontrados com TODAS as colunas de notas.
 Você DEVE agrupar todos os alunos em um único array JSON.
 
 Retorne EXATAMENTE este formato JSON (um único objeto com a propriedade "alunos"):
 {
   "alunos": [
     {
-      "codigo": "1234", 
-      "nomeArquivo": "Nome do Primeiro Aluno",
-      "bimestre": "1º Bimestre",
+      "codigo": "3882", 
+      "nomeArquivo": "Alana Reche Leviski",
+      "bimestre": "2º Bimestre",
       "ano": 2026,
       "disciplinas": [
         {
           "nome": "MATEMÁTICA",
-          "avm": "8,0",
-          "avb": "7,5",
-          "mediaF": "8,0",
-          "mediaG": "8,0"
-        }
-      ]
-    },
-    {
-      "codigo": "5678", 
-      "nomeArquivo": "Nome do Segundo Aluno",
-      "bimestre": "1º Bimestre",
-      "ano": 2026,
-      "disciplinas": [
-        {
-          "nome": "LÍNGUA PORTUGUESA",
-          "avm": "7,0",
-          "avb": "8,5",
-          "mediaF": "7,8",
-          "mediaG": "7,8"
+          "avm": "9,50",
+          "avb": "8,75",
+          "simulado": "7,50",
+          "pntBonu": "1,50",
+          "mediaF": "Dez",
+          "rec": "---",
+          "mediaG": "Dez"
         }
       ]
     }
@@ -64,14 +52,25 @@ Retorne EXATAMENTE este formato JSON (um único objeto com a propriedade "alunos
 }
 
 Regras de Extração:
-1. "codigo": Extraia o Código ou Matrícula do aluno. (Ex: se tiver "Código: 1234", o valor é "1234").
-2. "nomeArquivo": Extraia o nome completo do aluno.
-3. "disciplinas": Para cada matéria/disciplina listada para aquele aluno, extraia o nome dela e as notas referentes a AVM, AVB, Media Final (MediaF) e Media Global (MediaG). Mantenha o formato original (ex: "8,0", "Dez", "Falta", etc). Se uma nota estiver em branco, use "".
-4. CRÍTICO: Não crie múltiplos objetos! Coloque TODOS os alunos dentro do ÚNICO array "alunos".
-5. REGRA DE OURO INQUEBRÁVEL: Você está extraindo dados para um banco de dados oficial escolar. É ESTRITAMENTE PROIBIDO pular qualquer aluno. Você DEVE processar 100% do PDF, ler TODAS as páginas e extrair DEZENAS ou CENTENAS de alunos se eles estiverem lá. NÃO PARE A EXTRAÇÃO ANTES DE CHEGAR AO FIM DO PDF.
-6. CRÍTICO PARA PDFs GRANDES: Retorne o JSON minificado, sem espaços em branco ou quebras de linha desnecessárias, para economizar tokens!
-7. CRÍTICO: Copie o "codigo" e o "nomeArquivo" EXATAMENTE como estão escritos na página, letra por letra. É estritamente proibido auto-corrigir erros ortográficos ou tentar adivinhar o nome correto. Se o nome estiver cortado ou com erro de digitação no PDF, extraia exatamente o que está no PDF.
-8. Retorne apenas o JSON. Sem formatação markdown, sem texto antes ou depois.`
+1. "codigo": Extraia o Código ou Matrícula do aluno. (Ex: se no cabeçalho estiver "Código: 3882", extraia "3882").
+2. "nomeArquivo": Extraia o nome completo do aluno exatamente como está no cabeçalho do aluno (Ex: "Aluno: Alana Reche Leviski" -> "Alana Reche Leviski").
+3. "bimestre": Extraia o Bimestre indicado no cabeçalho (Ex: se estiver "Bimestre: 2", formate como "2º Bimestre"; se estiver "Bimestre: 1", formate como "1º Bimestre", etc).
+4. "ano": Extraia o ano letivo do cabeçalho como número (Ex: "Ano: 2026" -> 2026).
+5. "disciplinas": Para cada matéria/componente curricular da tabela de notas do aluno, extraia TODAS as 7 colunas de notas correspondentes:
+   - "nome": Nome do Componente Curricular (Ex: "MATEMÁTICA", "LÍNGUA PORTUGUESA", "UNIDADE CURRICULAR MATEMÁTICA", etc.)
+   - "avm": Avaliação Mensal (coluna "Av.Mens"). Ex: "9,50", "Dez", "---".
+   - "avb": Avaliação Bimestral (coluna "Av.Bim"). Ex: "8,75", "Dez", "---".
+   - "simulado": Nota do Simulado (coluna "Simulado"). Ex: "7,50", "9,00", "Dez", "---".
+   - "pntBonu": Ponto Bônus (coluna "Pnt.Bônu"). Ex: "1,50", "Hum", "Dez", "---".
+   - "mediaF": Média Final (coluna "MedFinal"). Ex: "Dez", "9,00", "9,50", "---".
+   - "rec": Recuperação (coluna "Rec"). Ex: "---", ou a nota se houver.
+   - "mediaG": Média Geral (coluna "MédGeral"). Ex: "Dez", "9,00", "9,50", "---".
+Mantenha o formato original exatamente como impresso no PDF (números como "9,50", palavras como "Dez", "Hum", "Falta", e traços "---"). Se uma coluna estiver em branco ou não existir, preencha com "---".
+6. CRÍTICO: Não crie múltiplos objetos! Coloque TODOS os alunos dentro do ÚNICO array "alunos".
+7. REGRA DE OURO INQUEBRÁVEL: Você está extraindo dados para um banco de dados oficial escolar. É ESTRITAMENTE PROIBIDO pular qualquer aluno e qualquer matéria. Você DEVE processar 100% do PDF, ler TODAS as páginas e extrair TODOS os alunos. NÃO PARE A EXTRAÇÃO ANTES DE CHEGAR AO FIM DO PDF.
+8. CRÍTICO PARA PDFs GRANDES: Retorne o JSON minificado, sem espaços em branco ou quebras de linha desnecessárias, para economizar tokens!
+9. CRÍTICO: Copie o "codigo" e o "nomeArquivo" EXATAMENTE como estão escritos na página, letra por letra. É estritamente proibido auto-corrigir erros ortográficos ou tentar adivinhar o nome correto.
+10. Retorne apenas o JSON. Sem formatação markdown, sem texto antes ou depois.`
 
     const responseSchema: Schema = {
       type: Type.OBJECT,
@@ -85,20 +84,23 @@ Regras de Extração:
             properties: {
               codigo: { type: Type.STRING, description: 'Código ou Matrícula do aluno' },
               nomeArquivo: { type: Type.STRING, description: 'Nome completo do aluno' },
-              bimestre: { type: Type.STRING, description: 'Ex: 1º Bimestre' },
+              bimestre: { type: Type.STRING, description: 'Ex: 1º Bimestre ou 2º Bimestre' },
               ano: { type: Type.NUMBER, description: 'Ex: 2026' },
               disciplinas: {
                 type: Type.ARRAY,
                 items: {
                   type: Type.OBJECT,
                   properties: {
-                    nome: { type: Type.STRING, description: 'Nome da disciplina' },
-                    avm: { type: Type.STRING, description: 'Nota AVM' },
-                    avb: { type: Type.STRING, description: 'Nota AVB' },
-                    mediaF: { type: Type.STRING, description: 'Media Final' },
-                    mediaG: { type: Type.STRING, description: 'Media Global' }
+                    nome: { type: Type.STRING, description: 'Nome da disciplina / Componente Curricular' },
+                    avm: { type: Type.STRING, description: 'Nota Av.Mens (Avaliação Mensal)' },
+                    avb: { type: Type.STRING, description: 'Nota Av.Bim (Avaliação Bimestral)' },
+                    simulado: { type: Type.STRING, description: 'Nota do Simulado' },
+                    pntBonu: { type: Type.STRING, description: 'Ponto Bônus (Pnt.Bônu)' },
+                    mediaF: { type: Type.STRING, description: 'Média Final (MedFinal)' },
+                    rec: { type: Type.STRING, description: 'Nota de Recuperação (Rec)' },
+                    mediaG: { type: Type.STRING, description: 'Média Geral (MédGeral)' }
                   },
-                  required: ['nome', 'avm', 'avb', 'mediaF', 'mediaG']
+                  required: ['nome', 'avm', 'avb', 'simulado', 'pntBonu', 'mediaF', 'rec', 'mediaG']
                 }
               }
             },
