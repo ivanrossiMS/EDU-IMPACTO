@@ -601,9 +601,11 @@ export default function ADAdminComunicados() {
             justify-content: flex-end !important;
           }
           .ad-com-btn-refresh {
-            height: 36px !important;
-            font-size: 12px !important;
-            padding: 0 10px !important;
+            width: 34px !important;
+            height: 34px !important;
+            min-width: 34px !important;
+            min-height: 34px !important;
+            padding: 0 !important;
           }
         }
         @keyframes adSpin {
@@ -616,33 +618,40 @@ export default function ADAdminComunicados() {
         .ad-com-btn-refresh {
           display: inline-flex !important;
           align-items: center !important;
-          gap: 6px !important;
-          height: 38px !important;
-          border-radius: 8px !important;
-          padding: 0 14px !important;
-          font-size: 13px !important;
-          font-weight: 600 !important;
-          background: rgba(255, 255, 255, 0.95) !important;
-          color: #4338ca !important;
-          border: 1px solid rgba(199, 210, 254, 0.9) !important;
-          box-shadow: 0 1px 3px rgba(99, 102, 241, 0.08) !important;
+          justify-content: center !important;
+          width: 36px !important;
+          height: 36px !important;
+          min-width: 36px !important;
+          min-height: 36px !important;
+          border-radius: 50% !important;
+          padding: 0 !important;
+          background: rgba(255, 255, 255, 0.75) !important;
+          color: #64748b !important;
+          border: 1px solid rgba(226, 232, 240, 0.9) !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
           cursor: pointer !important;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-          white-space: nowrap !important;
+          flex-shrink: 0 !important;
+          backdrop-filter: blur(8px) !important;
+          -webkit-backdrop-filter: blur(8px) !important;
         }
         .ad-com-btn-refresh:hover:not(:disabled) {
           background: #ffffff !important;
-          color: #3730a3 !important;
-          border-color: #818cf8 !important;
-          transform: translateY(-1px) !important;
-          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15) !important;
+          color: #4f46e5 !important;
+          border-color: #cbd5e1 !important;
+          transform: translateY(-1px) scale(1.05) !important;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
         }
         .ad-com-btn-refresh:active:not(:disabled) {
-          transform: scale(0.98) !important;
+          transform: scale(0.95) !important;
         }
         .ad-com-btn-refresh:disabled {
-          opacity: 0.7 !important;
+          opacity: 0.6 !important;
           cursor: not-allowed !important;
+        }
+        .ad-com-btn-refresh.is-loading {
+          color: #4f46e5 !important;
+          border-color: rgba(99, 102, 241, 0.3) !important;
         }
       `}} />
 
@@ -695,10 +704,10 @@ export default function ADAdminComunicados() {
               onClick={handleRefresh}
               disabled={isRefreshing}
               type="button"
-              title="Atualizar comunicados e relatórios em tempo real"
+              title="Atualizar"
+              aria-label="Atualizar"
             >
-              <RotateCw size={14} strokeWidth={2.4} className={isRefreshing ? 'ad-spin-icon' : ''} />
-              <span>{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
+              <RotateCw size={14} strokeWidth={2.3} className={isRefreshing ? 'ad-spin-icon' : ''} />
             </button>
             <button className="btn btn-primary ad-comunicados-btn-primary" onClick={handleNovo}>
               <Plus size={16} /> Novo Comunicado

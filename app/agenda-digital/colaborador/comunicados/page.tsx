@@ -1094,39 +1094,42 @@ function ColaboradorComunicadosContent() {
         }
 
         .ad-com-btn-refresh {
-          display: flex !important;
+          display: inline-flex !important;
           align-items: center !important;
-          gap: 6px !important;
+          justify-content: center !important;
+          width: 32px !important;
           height: 32px !important;
+          min-width: 32px !important;
           min-height: 32px !important;
-          border-radius: 999px !important;
-          padding: 0 13px !important;
-          font-size: 12px !important;
-          font-weight: 700 !important;
-          letter-spacing: 0.01em !important;
-          background: rgba(255, 255, 255, 0.88) !important;
-          color: #4338ca !important;
-          border: 1px solid rgba(199, 210, 254, 0.95) !important;
-          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+          border-radius: 50% !important;
+          padding: 0 !important;
+          background: rgba(255, 255, 255, 0.75) !important;
+          color: #64748b !important;
+          border: 1px solid rgba(226, 232, 240, 0.9) !important;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
           cursor: pointer !important;
           transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-          white-space: nowrap !important;
-          backdrop-filter: blur(12px) !important;
-          -webkit-backdrop-filter: blur(12px) !important;
+          backdrop-filter: blur(8px) !important;
+          -webkit-backdrop-filter: blur(8px) !important;
+          flex-shrink: 0 !important;
         }
         .ad-com-btn-refresh:hover:not(:disabled) {
           background: #ffffff !important;
-          color: #3730a3 !important;
-          border-color: #818cf8 !important;
-          transform: translateY(-1px) scale(1.02) !important;
-          box-shadow: 0 4px 14px rgba(99, 102, 241, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+          color: #4f46e5 !important;
+          border-color: #cbd5e1 !important;
+          transform: translateY(-1px) scale(1.05) !important;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
         }
         .ad-com-btn-refresh:active:not(:disabled) {
-          transform: scale(0.97) !important;
+          transform: scale(0.95) !important;
         }
         .ad-com-btn-refresh:disabled {
-          opacity: 0.75 !important;
+          opacity: 0.6 !important;
           cursor: not-allowed !important;
+        }
+        .ad-com-btn-refresh.is-loading {
+          color: #4f46e5 !important;
+          border-color: rgba(99, 102, 241, 0.3) !important;
         }
         @keyframes adSpin {
           from { transform: rotate(0deg); }
@@ -1245,11 +1248,11 @@ function ColaboradorComunicadosContent() {
             font-weight: 800 !important;
           }
           .ad-com-btn-refresh {
+            width: 30px !important;
             height: 30px !important;
+            min-width: 30px !important;
             min-height: 30px !important;
-            padding: 0 10px !important;
-            font-size: 11px !important;
-            gap: 5px !important;
+            padding: 0 !important;
           }
           .ad-com-btn-novo {
             height: 30px !important;
@@ -1373,10 +1376,10 @@ function ColaboradorComunicadosContent() {
               onClick={handleRefresh}
               disabled={isRefreshing}
               type="button"
-              title="Atualizar comunicados e relatórios em tempo real"
+              title="Atualizar"
+              aria-label="Atualizar"
             >
-              <RotateCw size={13} strokeWidth={2.4} className={isRefreshing ? 'ad-spin-icon' : ''} />
-              <span>{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
+              <RotateCw size={13} strokeWidth={2.3} className={isRefreshing ? 'ad-spin-icon' : ''} />
             </button>
             {!isMirroring && (
               <button className="ad-com-btn-novo" onClick={handleNovo} type="button">
