@@ -4,9 +4,27 @@ import React, { useState, useEffect } from 'react'
 import {
   X, CheckCircle2, AlertTriangle, Clock, Smartphone,
   ExternalLink, Copy, Check, Radio, Eye, RefreshCw, Send,
-  Layers, Info, ShieldCheck, Laptop, Apple
+  Layers, Info, ShieldCheck, Laptop, Apple, User, Users,
+  GraduationCap, Briefcase, Mail, Phone, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { toast } from 'sonner'
+
+export interface RecipientItem {
+  id: string
+  nome: string
+  tipo: 'responsavel' | 'aluno' | 'colaborador'
+  tipoLabel: string
+  email?: string | null
+  telefone?: string | null
+  matricula?: string | null
+  turmaNome?: string | null
+  cargo?: string | null
+  devicesCount?: number
+  devices?: any[]
+  hasActiveDevice?: boolean
+  deviceSummary?: string
+  statusTone?: 'success' | 'warning' | 'danger' | 'neutral'
+}
 
 interface PushHistoryDetailModalProps {
   log: any | null
@@ -23,6 +41,18 @@ export function PushHistoryDetailModal({
   const [liveStats, setLiveStats] = useState<any | null>(null)
   const [isLoadingLiveStats, setIsLoadingLiveStats] = useState(false)
 
+  // Detalhes completos dos destinatários e leitura
+  const [detailsData, setDetailsData] = useState<{
+    recipients: RecipientItem[]
+    summary: string
+    targetAliases: string[]
+    targetCount: number
+    readInfo: { isRead: boolean; readAt: string | null; readBy: string | null; readerName: string | null }
+    oneSignalStats?: any
+  } | null>(null)
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+  const [showTechnicalAliases, setShowTechnicalAliases] = useState(false)
+
   // Extrair ID do OneSignal do JSON armazenado no log
   const oneSignalId = log?.oneSignalId || (() => {
     try {
@@ -33,6 +63,36 @@ export function PushHistoryDetailModal({
     } catch {}
     return null
   })()
+
+  // Buscar detalhes dos destinatários e leitura
+  useEffect(() => {
+    if (!log?.id) {
+      setDetailsData(null)
+      return
+    }
+
+    let isMounted = true
+    setIsLoadingDetails(true)
+
+    fetch(`/api/agenda/push/test?log_details=${encodeURIComponent(log.id)}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (isMounted && data) {
+          setDetailsData(data)
+          if (data.oneSignalStats) {
+            setLiveStats(data.oneSignalStats)
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('Erro ao carregar detalhes dos destinatários:', err)
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingDetails(false)
+      })
+
+    return () => { isMounted = false }
+  }, [log?.id])
 
   // Buscar estatísticas em tempo real na API do OneSignal se houver ID
   const fetchLiveStats = async () => {
@@ -52,17 +112,19 @@ export function PushHistoryDetailModal({
   }
 
   useEffect(() => {
-    if (log && oneSignalId) {
+    if (log && oneSignalId && !detailsData?.oneSignalStats) {
       fetchLiveStats()
-    } else {
-      setLiveStats(null)
     }
-  }, [log, oneSignalId])
+  }, [log, oneSignalId, detailsData])
 
   if (!log) return null
 
   const isSuccess = log.status === 'sent'
   const isFailed = log.status === 'failed'
+
+  const effectiveIsRead = Boolean(detailsData?.readInfo?.isRead ?? log.isRead)
+  const effectiveReadAt = detailsData?.readInfo?.readAt || log.readAt
+  const effectiveReaderName = detailsData?.readInfo?.readerName || null
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text)
@@ -70,6 +132,9 @@ export function PushHistoryDetailModal({
     toast.success('Copiado para a área de transferência!')
     setTimeout(() => setCopiedField(null), 2000)
   }
+
+  const recipientsList = detailsData?.recipients || []
+  const targetAliasesList = detailsData?.targetAliases || []
 
   return (
     <div
@@ -91,9 +156,9 @@ export function PushHistoryDetailModal({
           background: 'hsl(var(--bg-surface))',
           border: '1px solid hsl(var(--border-subtle))',
           borderRadius: 22,
-          maxWidth: 640,
+          maxWidth: 680,
           width: '100%',
-          maxHeight: '90vh',
+          maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.4)',
@@ -122,11 +187,12 @@ export function PushHistoryDetailModal({
               justifyContent: 'center',
             }}>
               {isSuccess ? (
-                <CheckCircle2 size={24} color="#10b981" />
+                <CheckCircle2 size={22} color="#10b981" />
               ) : (
-                <AlertTriangle size={24} color="#ef4444" />
+                <AlertTriangle size={22} color="#ef4444" />
               )}
             </div>
+
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>
@@ -135,17 +201,25 @@ export function PushHistoryDetailModal({
                 <span style={{
                   fontSize: 10,
                   fontWeight: 800,
+                  textTransform: 'uppercase',
                   padding: '2px 8px',
                   borderRadius: 6,
-                  textTransform: 'uppercase',
                   background: isSuccess ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
                   color: isSuccess ? '#059669' : '#dc2626',
+                  border: `1px solid ${isSuccess ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
                 }}>
                   {isSuccess ? 'Enviado' : 'Falha'}
                 </span>
               </div>
-              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
-                Log ID: <code style={{ fontSize: 10 }}>{log.id}</code>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>Log ID: <code>{log.id}</code></span>
+                <button
+                  onClick={() => copyToClipboard(log.id, 'logId')}
+                  style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', padding: 0 }}
+                  title="Copiar ID do Log"
+                >
+                  {copiedField === 'logId' ? <Check size={11} color="#10b981" /> : <Copy size={11} />}
+                </button>
               </div>
             </div>
           </div>
@@ -153,30 +227,40 @@ export function PushHistoryDetailModal({
           <button
             onClick={onClose}
             style={{
-              background: 'transparent',
-              border: 'none',
+              background: 'hsl(var(--bg-main))',
+              border: '1px solid hsl(var(--border-subtle))',
+              borderRadius: 10,
+              width: 32,
+              height: 32,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: 'pointer',
               color: 'hsl(var(--text-muted))',
-              padding: 6,
-              borderRadius: 8,
             }}
           >
-            <X size={20} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* Conteúdo com Scroll */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-          
-          {/* Card de Conteúdo da Mensagem */}
+        {/* Corpo do Modal */}
+        <div style={{
+          padding: 24,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 18,
+        }}>
+          {/* Card de Notificação Exibida */}
           <div style={{
             background: 'hsl(var(--bg-main))',
             border: '1px solid hsl(var(--border-subtle))',
-            borderRadius: 14,
+            borderRadius: 16,
             padding: 16,
+            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)',
           }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', textTransform: 'uppercase', marginBottom: 6 }}>
-              Notificação Exibida no Celular
+            <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'hsl(var(--text-muted))', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Smartphone size={12} /> Notificação Exibida no Celular
             </div>
             <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>
               {log.title}
@@ -201,8 +285,9 @@ export function PushHistoryDetailModal({
             )}
           </div>
 
-          {/* Status de Entrega & Confirmação de Leitura */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+          {/* Cards de Resumo: Data, Destinatários e Leitura no App */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+            {/* Card 1: Data e Horário */}
             <div style={{
               padding: 14,
               borderRadius: 14,
@@ -216,32 +301,255 @@ export function PushHistoryDetailModal({
               </div>
             </div>
 
+            {/* Card 2: Destinatários Alvejados */}
             <div style={{
               padding: 14,
               borderRadius: 14,
               background: 'hsl(var(--bg-main))',
               border: '1px solid hsl(var(--border-subtle))',
             }}>
-              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 700 }}>Destinatários Alvejados</div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>
-                {log.target_count || 1} usuário(s) na lista
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Users size={12} color="#6366f1" /> Destinatários Alvejados
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 800, marginTop: 4 }}>
+                {detailsData?.recipients?.length || log.target_count || 1} destinatário(s)
+              </div>
+              <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {detailsData?.summary || `${log.target_count || 1} alvos na lista`}
               </div>
             </div>
 
+            {/* Card 3: Confirmação de Leitura no App (App Aberto) */}
             <div style={{
               padding: 14,
               borderRadius: 14,
-              background: log.isRead ? 'rgba(16, 185, 129, 0.08)' : 'hsl(var(--bg-main))',
-              border: `1px solid ${log.isRead ? '#10b981' : 'hsl(var(--border-subtle))'}`,
+              background: effectiveIsRead ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.06)',
+              border: `1px solid ${effectiveIsRead ? '#10b981' : 'rgba(245, 158, 11, 0.25)'}`,
             }}>
-              <div style={{ fontSize: 11, color: log.isRead ? '#059669' : 'hsl(var(--text-muted))', fontWeight: 700 }}>
-                Confirmação de Abertura / Leitura
+              <div style={{ fontSize: 11, color: effectiveIsRead ? '#059669' : '#d97706', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Eye size={12} /> Confirmação de Leitura no App
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4, color: log.isRead ? '#059669' : 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Eye size={14} />
-                {log.isRead ? `Lido em ${new Date(log.readAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}` : 'Não aberto no app ainda'}
+              <div style={{
+                fontSize: 13,
+                fontWeight: 800,
+                marginTop: 4,
+                color: effectiveIsRead ? '#059669' : '#b45309',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}>
+                {effectiveIsRead ? '🟢 Lido no aplicativo' : '🟡 Aguardando leitura'}
+              </div>
+              <div style={{ fontSize: 11, color: effectiveIsRead ? '#047857' : 'hsl(var(--text-muted))', marginTop: 2 }}>
+                {effectiveIsRead ? (
+                  <span>
+                    Lido em {new Date(effectiveReadAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                    {effectiveReaderName ? ` por ${effectiveReaderName}` : ''}
+                  </span>
+                ) : (
+                  'Ainda não visualizado no app pelo responsável'
+                )}
               </div>
             </div>
+          </div>
+
+          {/* Seção Detalhada: Lista de Quem São os Destinatários */}
+          <div style={{
+            background: 'hsl(var(--bg-main))',
+            border: '1px solid hsl(var(--border-subtle))',
+            borderRadius: 16,
+            padding: 16,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Users size={16} color="#6366f1" />
+                <span style={{ fontSize: 13, fontWeight: 800 }}>Destinatários do Disparo</span>
+                <span style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: 'rgba(99, 102, 241, 0.12)',
+                  color: '#6366f1',
+                  padding: '1px 7px',
+                  borderRadius: 6
+                }}>
+                  {recipientsList.length > 0 ? recipientsList.length : (log.target_count || 1)}
+                </span>
+              </div>
+
+              {targetAliasesList.length > 0 && (
+                <button
+                  onClick={() => setShowTechnicalAliases(!showTechnicalAliases)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#6366f1',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  {showTechnicalAliases ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  {showTechnicalAliases ? 'Ocultar IDs do OneSignal' : `Ver IDs OneSignal (${targetAliasesList.length})`}
+                </button>
+              )}
+            </div>
+
+            {isLoadingDetails ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0', fontSize: 12, color: 'hsl(var(--text-muted))' }}>
+                <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                Carregando destinatários e dados de vínculo...
+              </div>
+            ) : recipientsList.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {recipientsList.map((rec, index) => {
+                  const isAluno = rec.tipo === 'aluno'
+                  const isResp = rec.tipo === 'responsavel'
+                  const isColab = rec.tipo === 'colaborador'
+
+                  return (
+                    <div
+                      key={rec.id + '-' + index}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 12px',
+                        borderRadius: 12,
+                        background: 'hsl(var(--bg-surface))',
+                        border: '1px solid hsl(var(--border-subtle))',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <div style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          background: isAluno ? 'rgba(59, 130, 246, 0.12)' : isResp ? 'rgba(16, 185, 129, 0.12)' : 'rgba(139, 92, 246, 0.12)',
+                          color: isAluno ? '#3b82f6' : isResp ? '#10b981' : '#8b5cf6',
+                        }}>
+                          {isAluno ? <GraduationCap size={16} /> : isResp ? <Users size={16} /> : <Briefcase size={16} />}
+                        </div>
+
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: 'hsl(var(--text-main))' }}>
+                              {rec.nome}
+                            </span>
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              background: isAluno ? 'rgba(59, 130, 246, 0.1)' : isResp ? 'rgba(16, 185, 129, 0.1)' : 'rgba(139, 92, 246, 0.1)',
+                              color: isAluno ? '#2563eb' : isResp ? '#059669' : '#7c3aed',
+                            }}>
+                              {rec.tipoLabel}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: 11, color: 'hsl(var(--text-muted))', marginTop: 2, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            {isAluno && (
+                              <span>Matrícula: {rec.matricula} {rec.turmaNome ? `• ${rec.turmaNome}` : ''}</span>
+                            )}
+                            {rec.email && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <Mail size={10} /> {rec.email}
+                              </span>
+                            )}
+                            {rec.telefone && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <Phone size={10} /> {rec.telefone}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status de Entrega do Usuário */}
+                      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                        {isAluno ? (
+                          <span style={{ fontSize: 11, color: '#6366f1', fontWeight: 600 }}>
+                            Alvo do Disparo
+                          </span>
+                        ) : rec.hasActiveDevice ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              🟢 Push Ativo
+                            </span>
+                            {rec.deviceSummary && (
+                              <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
+                                {rec.deviceSummary}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626' }}>
+                              🔴 Sem Push Ativo
+                            </span>
+                            <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
+                              App desinstalado ou sem permissão
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', padding: '8px 0' }}>
+                Disparo direcionado para {log.target_count || 1} usuário(s) na lista de distribuição.
+              </div>
+            )}
+
+            {/* Gaveta de Identificadores Técnicos OneSignal */}
+            {showTechnicalAliases && targetAliasesList.length > 0 && (
+              <div style={{
+                marginTop: 12,
+                paddingTop: 12,
+                borderTop: '1px solid hsl(var(--border-subtle))',
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'hsl(var(--text-muted))', marginBottom: 6 }}>
+                  Identificadores Brutos OneSignal (External IDs & Aliases alvejados):
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {targetAliasesList.map((alias, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        fontSize: 10,
+                        fontFamily: 'monospace',
+                        background: 'hsl(var(--bg-surface))',
+                        border: '1px solid hsl(var(--border-subtle))',
+                        borderRadius: 6,
+                        padding: '3px 8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <span>{alias}</span>
+                      <button
+                        onClick={() => copyToClipboard(alias, `alias-${i}`)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6366f1', padding: 0 }}
+                        title="Copiar alias"
+                      >
+                        {copiedField === `alias-${i}` ? <Check size={10} color="#10b981" /> : <Copy size={10} />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Telemetria ao Vivo do OneSignal */}
@@ -302,9 +610,13 @@ export function PushHistoryDetailModal({
                       <div style={{ fontSize: 20, fontWeight: 900, color: '#34d399', marginTop: 2 }}>
                         {liveStats.successful ?? 0}
                       </div>
-                      {liveStats.platform_delivery_stats && (
+                      {liveStats.platform_delivery_stats ? (
                         <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
                           {liveStats.platform_delivery_stats.ios?.successful || 0} iOS • {liveStats.platform_delivery_stats.android?.successful || 0} Android
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
+                          Sinal entregue aos aparelhos
                         </div>
                       )}
                     </div>
@@ -314,8 +626,8 @@ export function PushHistoryDetailModal({
                       <div style={{ fontSize: 20, fontWeight: 900, color: '#60a5fa', marginTop: 2 }}>
                         {liveStats.converted ?? 0}
                       </div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
-                        Abertos direto pelo push
+                      <div style={{ fontSize: 10, color: (liveStats.converted || 0) > 0 ? '#60a5fa' : '#94a3b8', marginTop: 4 }}>
+                        {(liveStats.converted || 0) > 0 ? 'Toques diretos no push' : 'Abertos direto pelo push'}
                       </div>
                     </div>
 

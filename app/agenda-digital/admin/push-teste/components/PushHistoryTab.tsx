@@ -631,11 +631,12 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
 
                   {/* Coluna 3: Destinatários */}
                   <div>
-                    <div style={{ fontWeight: 700 }}>
-                      {log.target_count || 1} usuário(s)
+                    <div style={{ fontWeight: 800, fontSize: 13, color: 'hsl(var(--text-main))', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Users size={13} color="#6366f1" />
+                      <span>{log.recipient_summary || `${log.target_count || 1} usuário(s)`}</span>
                     </div>
                     <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 2 }}>
-                      {log.item_id?.split('_')[0] || 'Evento'}
+                      {log.target_count || 1} alvos • {log.item_id?.split('_')[0] || 'Evento'}
                     </div>
                   </div>
 
@@ -654,12 +655,12 @@ export function PushHistoryTab({ onSwitchToTesterWithPayload }: PushHistoryTabPr
                     </div>
 
                     {log.isRead ? (
-                      <div style={{ fontSize: 10, color: '#059669', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Eye size={11} /> Aberto no app
+                      <div style={{ fontSize: 10, color: '#059669', marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700 }}>
+                        <Eye size={11} /> Lido no app
                       </div>
                     ) : (
                       <div style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 3 }}>
-                        Não lido ainda
+                        Aguardando leitura
                       </div>
                     )}
                   </div>

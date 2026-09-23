@@ -15,12 +15,14 @@
  * 6. Exiba o modal controlado em português caso as notificações estejam efetivamente negadas.
  */
 
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useApp } from '@/lib/context'
 import { Capacitor } from '@capacitor/core'
 import { Preferences } from '@capacitor/preferences'
 import { notificationService } from '@/lib/notifications/notificationService'
+import { triggerHaptic } from '@/lib/utils/haptics'
+import { X } from 'lucide-react'
 
 export const PENDING_PUSH_ROUTE_KEY = 'edu_pending_push_route'
 
@@ -151,6 +153,55 @@ export function resolveDestinationFromPayload(data: any, currentUser?: any): str
   return destination
 }
 
+export interface ForegroundPushBanner {
+  id: string
+  title: string
+  body: string
+  data: any
+  time?: string
+  icon?: string
+}
+
+/**
+ * Sintetiza um som nítido e harmônico de notificação em primeiro plano via Web Audio API.
+ * Funciona de forma resiliente tanto na Web quanto dentro do WebView do Capacitor (iOS e Android).
+ */
+function playForegroundChime() {
+  if (typeof window === 'undefined') return
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {})
+    }
+    const t = ctx.currentTime
+    // Sino harmônico elegante em 2 tons: E5 (659Hz) -> A5 (880Hz)
+    const notes = [
+      { freq: 659.25, time: 0, dur: 0.28 },
+      { freq: 880.00, time: 0.12, dur: 0.45 },
+    ]
+    notes.forEach(({ freq, time, dur }) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, t + time)
+      gain.gain.setValueAtTime(0.001, t + time)
+      gain.gain.exponentialRampToValueAtTime(0.28, t + time + 0.03)
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + time + dur)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(t + time)
+      osc.stop(t + time + dur + 0.05)
+    })
+    setTimeout(() => {
+      ctx.close().catch(() => {})
+    }, 1000)
+  } catch (e) {
+    console.warn('[GlobalPush] Não foi possível reproduzir som foreground:', e)
+  }
+}
+
 export function GlobalNotificationProvider() {
   const router = useRouter()
   const pathname = usePathname()
@@ -158,6 +209,63 @@ export function GlobalNotificationProvider() {
   const currentUserRef = useRef(currentUser)
   const hydratedRef = useRef(hydrated)
   const wasLoggedInRef = useRef(false)
+
+  // ── Estado do Banner Flutuante de Notificação Push em Primeiro Plano (In-App Push) ──
+  const [activeBanner, setActiveBanner] = useState<ForegroundPushBanner | null>(null)
+  const [isDismissing, setIsDismissing] = useState(false)
+  const dismissTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastProcessedIdRef = useRef<string>('')
+  const touchStartYRef = useRef<number | null>(null)
+
+  const dismissBanner = useCallback(() => {
+    setIsDismissing(true)
+    setTimeout(() => {
+      setActiveBanner(null)
+      setIsDismissing(false)
+    }, 280)
+  }, [])
+
+  const showForegroundPushBanner = useCallback((banner: ForegroundPushBanner) => {
+    if (!banner || !banner.title) return
+    const bannerId = banner.id || `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+    if (bannerId && bannerId === lastProcessedIdRef.current) return
+    lastProcessedIdRef.current = bannerId
+
+    // 1. Vibração háptica tátil no dispositivo móvel (iOS e Android via Capacitor Haptics)
+    triggerHaptic('success').catch(() => {})
+
+    // 2. Chime de notificação nítido via Web Audio API
+    playForegroundChime()
+
+    // 3. Atualizar estado do banner flutuante
+    setIsDismissing(false)
+    setActiveBanner(banner)
+
+    // 4. Limpar timer anterior e agendar auto-dismiss após 6.5s
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current)
+    }
+    dismissTimerRef.current = setTimeout(() => {
+      dismissBanner()
+    }, 6500)
+  }, [dismissBanner])
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStartYRef.current = e.touches[0].clientY
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (touchStartYRef.current === null) return
+    const currentY = e.touches[0].clientY
+    if (touchStartYRef.current - currentY > 25) {
+      touchStartYRef.current = null
+      dismissBanner()
+    }
+  }
+
+  const onTouchEnd = () => {
+    touchStartYRef.current = null
+  }
 
   useEffect(() => {
     currentUserRef.current = currentUser
@@ -364,8 +472,30 @@ export function GlobalNotificationProvider() {
           OneSignalNative.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
             console.log('📱 [GlobalPush] Notificação recebida em foreground:', event)
             try {
+              const notif = (typeof event?.getNotification === 'function' ? event.getNotification() : null) || event?.notification || event || {}
+              const title = notif.title || 'Nova Notificação'
+              const body = notif.body || ''
+              const addData = notif.additionalData || {}
+              const launchURL = notif.launchURL || addData.launchURL || addData.url || addData.targetUrl || ''
+              const payloadData = {
+                ...addData,
+                launchURL,
+                url: addData.url || addData.targetUrl || launchURL,
+                targetUrl: addData.targetUrl || addData.url || launchURL,
+              }
+
+              showForegroundPushBanner({
+                id: notif.notificationId || String(Date.now()),
+                title,
+                body,
+                data: payloadData,
+                time: 'Agora'
+              })
+
               window.dispatchEvent(new CustomEvent('ad:push-foreground', { detail: event }))
-            } catch {}
+            } catch (fgErr) {
+              console.warn('[GlobalPush] Erro ao processar foreground notification:', fgErr)
+            }
           })
         })
         .catch(err => {
@@ -388,7 +518,7 @@ export function GlobalNotificationProvider() {
         })
         .catch(() => {})
     } else {
-      // Web Push Click Listener
+      // Web Push Click & Foreground Listener
       window.OneSignalDeferred = window.OneSignalDeferred || []
       window.OneSignalDeferred.push((OneSignal: any) => {
         if (typeof OneSignal?.Notifications?.addEventListener === 'function') {
@@ -399,6 +529,23 @@ export function GlobalNotificationProvider() {
             }
             handlePushClick(data)
           })
+
+          OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
+            console.log('🌐 [WebPush] Notificação recebida em foreground:', event)
+            try {
+              const notif = event?.notification || {}
+              showForegroundPushBanner({
+                id: notif.notificationId || String(Date.now()),
+                title: notif.title || 'Nova Notificação',
+                body: notif.body || '',
+                data: {
+                  ...(notif.additionalData || {}),
+                  launchURL: notif.launchURL,
+                },
+                time: 'Agora'
+              })
+            } catch {}
+          })
         }
       })
     }
@@ -407,7 +554,7 @@ export function GlobalNotificationProvider() {
     notificationService.initialize().catch(err => {
       console.warn('[GlobalPush] Aviso na inicialização do serviço:', err)
     })
-  }, [])
+  }, [showForegroundPushBanner])
 
   // 2. Gerenciamento Global de Usuário no OneSignal via NotificationService
   useEffect(() => {
@@ -442,6 +589,166 @@ export function GlobalNotificationProvider() {
     }
   }, [hydrated, currentUser?.id, currentUser?.perfil, currentUser?.cargo])
 
-  return null
+  return (
+    <>
+      {activeBanner && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          style={{
+            position: 'fixed',
+            top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+            left: 0,
+            right: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 999999,
+            pointerEvents: 'none',
+            padding: '0 14px',
+            animation: isDismissing
+              ? 'pushBannerSlideUp 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+              : 'pushBannerSlideDown 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          }}
+        >
+          <div
+            onClick={() => {
+              dismissBanner()
+              handlePushClick(activeBanner.data)
+            }}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onMouseEnter={() => {
+              if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
+            }}
+            onMouseLeave={() => {
+              if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
+              dismissTimerRef.current = setTimeout(dismissBanner, 4000)
+            }}
+            style={{
+              pointerEvents: 'auto',
+              width: '100%',
+              maxWidth: 440,
+              background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.94))',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
+              borderRadius: 18,
+              padding: '12px 14px',
+              boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+              color: '#ffffff',
+              cursor: 'pointer',
+              userSelect: 'none',
+              touchAction: 'pan-y',
+            }}
+          >
+            {/* Header da notificação: Ícone + App Nome + Hora + Botão Fechar */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <img
+                  src="/logo-impacto.png"
+                  alt="Impacto EDU"
+                  width={20}
+                  height={20}
+                  style={{ borderRadius: 5, objectFit: 'contain' }}
+                  onError={(e: any) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.6px', color: '#94a3b8', textTransform: 'uppercase' }}>
+                  Impacto EDU
+                </span>
+                <span style={{ fontSize: 10, color: '#64748b' }}>•</span>
+                <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>
+                  {activeBanner.time || 'Agora'}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  dismissBanner()
+                }}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 22,
+                  height: 22,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: 0,
+                  transition: 'background 0.2s, color 0.2s',
+                }}
+                title="Fechar"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            {/* Conteúdo: Título e Mensagem */}
+            <div style={{ paddingLeft: 2 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc', lineHeight: 1.3, marginBottom: 2 }}>
+                {activeBanner.title}
+              </div>
+              {activeBanner.body && (
+                <div style={{
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                  color: '#cbd5e1',
+                  lineHeight: 1.4,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}>
+                  {activeBanner.body}
+                </div>
+              )}
+            </div>
+
+            {/* Barra indicadora inferior sutil para arrastar ou tocar */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+              <div style={{ width: 36, height: 3, borderRadius: 2, background: 'rgba(255, 255, 255, 0.2)' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Injeção de keyframes para animações fluidas */}
+      <style jsx global>{`
+        @keyframes pushBannerSlideDown {
+          0% {
+            transform: translateY(-120%) scale(0.95);
+            opacity: 0;
+          }
+          60% {
+            transform: translateY(4px) scale(1.01);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+          }
+        }
+        @keyframes pushBannerSlideUp {
+          0% {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(-120%) scale(0.95);
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </>
+  )
 }
 

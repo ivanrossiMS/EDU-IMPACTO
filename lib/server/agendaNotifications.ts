@@ -237,6 +237,10 @@ export async function sendAgendaPushNotification({
         target_url: targetUrl,
         target_count: cleanTargetIds.length,
         status: 'pending',
+        onesignal_response: JSON.stringify({
+          _target_user_ids: cleanTargetIds,
+          _metadata: metadata || null,
+        }),
         created_at: new Date().toISOString(),
       })
 
@@ -278,12 +282,18 @@ export async function sendAgendaPushNotification({
       ? 'Mock mode: credenciais OneSignal não configuradas (push simulado)'
       : (pushResponse.success ? null : (pushResponse.error || 'Unknown error'))
 
+    const responsePayload = {
+      ...(pushResponse.data && typeof pushResponse.data === 'object' ? pushResponse.data : { raw: pushResponse.data }),
+      _target_user_ids: cleanTargetIds,
+      _metadata: metadata || null,
+    }
+
     const { error: updateError } = await supabaseService
       .from('agenda_push_logs')
       .update({
         status: pushResponse.success ? logStatus : 'failed',
         error_message: errorMsg,
-        onesignal_response: pushResponse.data ? JSON.stringify(pushResponse.data) : null,
+        onesignal_response: JSON.stringify(responsePayload),
         target_url: fullUrl,
       })
       .eq('item_id', dedupKey)

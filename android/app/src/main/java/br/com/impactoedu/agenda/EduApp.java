@@ -55,8 +55,10 @@ public class EduApp extends Application {
                     channel.enableLights(true);
                     channel.enableVibration(true);
                     channel.setShowBadge(true);
+                    channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+                    channel.setBypassDnd(false);
                     manager.createNotificationChannel(channel);
-                    Log.i(TAG, "NotificationChannel 'impacto_edu_default' criado com alta prioridade.");
+                    Log.i(TAG, "NotificationChannel 'impacto_edu_default' criado com alta prioridade e visibilidade pública.");
                 }
             } catch (Throwable t) {
                 Log.w(TAG, "Falha ao criar canal de notificação: " + t.getMessage());

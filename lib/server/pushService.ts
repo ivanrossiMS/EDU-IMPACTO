@@ -293,9 +293,8 @@ export async function sendPushNotification(params: PushPayload): Promise<PushRes
     ios_badgeType: 'Increase',
     ios_badgeCount: 1,
     android_sound: 'default',
-    ...(process.env.ONESIGNAL_ANDROID_CHANNEL_ID?.trim()
-      ? { android_channel_id: process.env.ONESIGNAL_ANDROID_CHANNEL_ID.trim() }
-      : {}),
+    android_channel_id: process.env.ONESIGNAL_ANDROID_CHANNEL_ID?.trim() || 'impacto_edu_default',
+    android_accent_color: 'FF4F46E5',
     android_visibility: 1,
     ttl: 86400,
   }

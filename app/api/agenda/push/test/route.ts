@@ -225,6 +225,240 @@ async function fetchDevicesForGuardian(r: {
   return Array.from(deviceMap.values())
 }
 
+function formatPhoneDisplay(p?: string | null): string | null {
+  if (!p) return null
+  const digits = String(p).replace(/\D/g, '')
+  if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+  if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  return p
+}
+
+function extractLogCandidateReadIds(log: any): string[] {
+  const ids = new Set<string>()
+  if (log.item_id) {
+    ids.add(log.item_id)
+    const base = log.item_id.replace(/(_aluno_\d+|_perfil_\w+|-\w+_\d+)$/, '')
+    if (base && base !== log.item_id) ids.add(base)
+  }
+  if (log.target_url) {
+    const m = log.target_url.match(/[?&]id=([^&#]+)/)
+    if (m && m[1]) ids.add(decodeURIComponent(m[1]))
+  }
+  const aId = extractLogStudentId(log)
+  if (aId && (log.type === 'saida' || log.type === 'frequencia') && log.created_at) {
+    const dtUtc = log.created_at.slice(0, 10)
+    ids.add(`FREQ-${aId}-${dtUtc}`)
+    try {
+      const dtLocal = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(log.created_at))
+      ids.add(`FREQ-${aId}-${dtLocal}`)
+    } catch {}
+  }
+  return Array.from(ids).filter(Boolean)
+}
+
+function extractLogStudentId(log: any): string | null {
+  const m1 = log.item_id?.match(/aluno_(\d+)/i)
+  if (m1) return m1[1]
+  const m2 = log.target_url?.match(/\/agenda-digital\/(\d+)/i) || log.target_url?.match(/aluno_id=(\d+)/i)
+  if (m2) return m2[1]
+  const m3 = log.item_id?.match(/_(\d{4,5})$/i) || log.item_id?.match(/-(\d{4,5})$/i)
+  if (m3) return m3[1]
+  try {
+    if (log.onesignal_response) {
+      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+      if (p?._metadata?.aluno_id) return String(p._metadata.aluno_id)
+    }
+  } catch {}
+  return null
+}
+
+async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
+  let log = logIdOrLog
+  if (typeof logIdOrLog === 'string') {
+    const { data, error } = await supabase.from('agenda_push_logs').select('*').eq('id', logIdOrLog).maybeSingle()
+    if (error || !data) return null
+    log = data
+  }
+
+  const alunoId = extractLogStudentId(log)
+  const isColaborador = log.item_id?.includes('colaborador') || log.target_url?.includes('/colaborador/')
+
+  let recipients: any[] = []
+  let summary = ''
+  const targetAliases = new Set<string>()
+
+  // Extrair alvos já gravados no JSON
+  try {
+    if (log.onesignal_response) {
+      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+      if (Array.isArray(p?._target_user_ids)) {
+        p._target_user_ids.forEach((id: string) => targetAliases.add(id))
+      }
+    }
+  } catch {}
+
+  // 1. Caso seja relativo a Aluno
+  if (alunoId) {
+    const [{ data: aluno }, { data: vinculos }] = await Promise.all([
+      supabase.from('alunos').select('id, nome, matricula, turma, foto, status').eq('id', alunoId).maybeSingle(),
+      supabase.from('aluno_responsavel').select('responsavel_id').eq('aluno_id', alunoId)
+    ])
+
+    let turmaNome = ''
+    if (aluno?.turma) {
+      const { data: turma } = await supabase.from('turmas').select('nome').eq('id', aluno.turma).maybeSingle()
+      turmaNome = turma?.nome || `Turma ${aluno.turma}`
+    }
+
+    const respIds = (vinculos || []).map((v: any) => String(v.responsavel_id)).filter(Boolean)
+    let resps: any[] = []
+    if (respIds.length > 0) {
+      const { data: rList } = await supabase.from('responsaveis').select('id, nome, email, telefone, celular, dados').in('id', respIds)
+      resps = rList || []
+    }
+
+    // Identificadores de disparo para este aluno
+    targetAliases.add(String(alunoId))
+    targetAliases.add(String(alunoId).padStart(6, '0'))
+    respIds.forEach((id: string) => targetAliases.add(id))
+    resps.forEach((r: any) => {
+      if (r.email) targetAliases.add(r.email.toLowerCase().trim())
+      if (r.dados?.auth_id) targetAliases.add(r.dados.auth_id)
+    })
+
+    // Consultar dispositivos no OneSignal para cada responsável
+    for (const r of resps) {
+      const devices = await fetchDevicesForGuardian({
+        responsavel_id: r.id,
+        email: r.email,
+        authId: r.dados?.auth_id
+      })
+      const hasActive = devices.some((d: any) => d.isSubscribed)
+      const deviceModels = devices.map((d: any) => d.modelo || d.tipo).filter(Boolean)
+
+      recipients.push({
+        id: String(r.id),
+        nome: r.nome || 'Responsável Legal',
+        tipo: 'responsavel',
+        tipoLabel: 'Responsável',
+        email: r.email || null,
+        telefone: formatPhoneDisplay(r.telefone || r.celular),
+        devicesCount: devices.length,
+        devices,
+        hasActiveDevice: hasActive,
+        deviceSummary: devices.length > 0 ? deviceModels.join(', ') : 'Sem aparelho ativo no app',
+        statusTone: hasActive ? 'success' : 'danger',
+      })
+    }
+
+    if (aluno) {
+      recipients.push({
+        id: String(aluno.id),
+        nome: aluno.nome,
+        tipo: 'aluno',
+        tipoLabel: 'Aluno(a)',
+        matricula: aluno.matricula || String(aluno.id),
+        turmaNome: turmaNome || aluno.turma || 'Turma não informada',
+        statusTone: 'neutral',
+        deviceSummary: 'Dispositivo cadastrado pelos responsáveis',
+      })
+    }
+
+    summary = `${aluno?.nome || 'Aluno'} (${resps.length} responsável(is) vinculado(s))`
+  } else if (isColaborador) {
+    // 2. Caso seja relativo a Colaborador
+    const { data: colabs } = await supabase.from('system_users')
+      .select('id, nome, email, cargo, perfil, auth_id, dados')
+      .limit(30)
+
+    for (const c of colabs || []) {
+      recipients.push({
+        id: String(c.id),
+        nome: c.nome || 'Colaborador',
+        tipo: 'colaborador',
+        tipoLabel: c.cargo || c.perfil || 'Colaborador',
+        email: c.email || null,
+        cargo: c.cargo || c.perfil || 'Equipe Escolar',
+        statusTone: 'neutral',
+      })
+      targetAliases.add(String(c.id))
+      if (c.email) targetAliases.add(c.email.toLowerCase().trim())
+      if (c.auth_id) targetAliases.add(c.auth_id)
+    }
+    summary = `Equipe Escolar / Colaboradores (${(colabs || []).length} destinatários)`
+  } else {
+    // 3. Fallback genérico
+    summary = `${log.target_count || 1} destinatário(s) na lista`
+  }
+
+  // Verificar Leitura no Aplicativo (agenda_notification_reads)
+  const candidateIds = extractLogCandidateReadIds(log)
+  let readInfo: { isRead: boolean; readAt: string | null; readBy: string | null; readerName: string | null } = {
+    isRead: false,
+    readAt: null,
+    readBy: null,
+    readerName: null,
+  }
+
+  if (candidateIds.length > 0) {
+    const { data: reads } = await supabase.from('agenda_notification_reads')
+      .select('content_id, read_at, usuario_id, perfil, aluno_id')
+      .in('content_id', candidateIds)
+      .order('read_at', { ascending: false })
+      .limit(1)
+
+    if (reads && reads.length > 0) {
+      const r = reads[0]
+      readInfo.isRead = true
+      readInfo.readAt = r.read_at
+      readInfo.readBy = r.usuario_id
+
+      const cleanUserId = (r.usuario_id || '').split('#')[0]
+      const foundResp = recipients.find(rec => rec.id === cleanUserId || rec.email === cleanUserId)
+      if (foundResp) {
+        readInfo.readerName = foundResp.nome
+      } else if (cleanUserId === alunoId) {
+        readInfo.readerName = recipients.find(rec => rec.tipo === 'aluno')?.nome || 'Aluno'
+      } else {
+        const { data: su } = await supabase.from('system_users').select('nome').eq('id', cleanUserId).maybeSingle()
+        if (su) readInfo.readerName = su.nome
+      }
+    }
+  }
+
+  // Estatísticas de entrega ao vivo OneSignal
+  let oneSignalStats: any = null
+  let oneSignalId: string | null = null
+  try {
+    if (log.onesignal_response) {
+      const p = typeof log.onesignal_response === 'string' ? JSON.parse(log.onesignal_response) : log.onesignal_response
+      oneSignalId = p?.id || null
+      if (p?.successful !== undefined) {
+        oneSignalStats = p
+      }
+    }
+  } catch {}
+
+  if (oneSignalId && !oneSignalStats) {
+    try {
+      oneSignalStats = await getNotificationStats(oneSignalId)
+    } catch (e) {
+      console.warn('Erro ao consultar stats do OneSignal:', e)
+    }
+  }
+
+  return {
+    logId: log.id,
+    recipients,
+    summary,
+    targetAliases: Array.from(targetAliases),
+    targetCount: log.target_count || recipients.length || 1,
+    readInfo,
+    oneSignalId,
+    oneSignalStats,
+  }
+}
+
 /**
  * GET /api/agenda/push/test
  *
@@ -232,6 +466,7 @@ async function fetchDevicesForGuardian(r: {
  * - ?aluno_id=... : Retorna aluno, turma, responsáveis vinculados e prontidão de push
  * - ?logs=true : Retorna os últimos 50 logs de disparos de teste
  * - ?config=true : Retorna o status de conexão com o OneSignal
+ * - ?log_details=... : Retorna auditoria detalhada com lista completa de destinatários e leituras
  */
 export async function GET(request: Request) {
   const auth = await verifyAdminAuth()
@@ -274,6 +509,16 @@ export async function GET(request: Request) {
       }
 
       return NextResponse.json({ logs: logs || [] })
+    }
+
+    // 2.0.1b Detalhes completos de destinatários e leitura de um log
+    const logDetailsId = searchParams.get('log_details') || searchParams.get('recipients_for_log')
+    if (logDetailsId) {
+      const details = await resolveLogFullDetails(logDetailsId, supabase)
+      if (!details) {
+        return NextResponse.json({ error: 'Log não encontrado.' }, { status: 404 })
+      }
+      return NextResponse.json(details)
     }
 
     // 2.0.1 Consulta de estatísticas ao vivo do OneSignal para uma notificação
@@ -514,14 +759,21 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: logsError.message }, { status: 400 })
       }
 
-      // Cruzar leituras (Notification Center) para os logs retornados nesta página
-      const logItemIds = (logs || []).map((l: any) => l.item_id).filter(Boolean)
-      const readsMap: Record<string, { read_at: string; usuario_id: string; perfil: string }> = {}
+      // 1. Mapeamento de candidatos para busca de leitura (Notification Center)
+      const logCandidateMap = new Map<string, string[]>()
+      const allCandidateIds = new Set<string>()
 
-      if (logItemIds.length > 0) {
+      ;(logs || []).forEach((l: any) => {
+        const cands = extractLogCandidateReadIds(l)
+        logCandidateMap.set(l.id, cands)
+        cands.forEach(cid => allCandidateIds.add(cid))
+      })
+
+      const readsMap: Record<string, { read_at: string; usuario_id: string; perfil: string }> = {}
+      if (allCandidateIds.size > 0) {
         const { data: reads } = await supabase.from('agenda_notification_reads')
           .select('content_id, read_at, usuario_id, perfil')
-          .in('content_id', logItemIds)
+          .in('content_id', Array.from(allCandidateIds))
 
         if (reads) {
           reads.forEach((r: any) => {
@@ -530,7 +782,45 @@ export async function GET(request: Request) {
         }
       }
 
-      // Enriquecer logs com indicador de leitura e status de entrega no OneSignal
+      // 2. Resolução semântica de destinatários em lote (Alunos e Responsáveis)
+      const batchAlunoIds = Array.from(new Set(
+        (logs || []).map((l: any) => extractLogStudentId(l)).filter(Boolean) as string[]
+      ))
+
+      const studentLookup = new Map<string, { nome: string; turma?: string; resps: { nome: string; email?: string }[] }>()
+
+      if (batchAlunoIds.length > 0) {
+        const [{ data: alunosData }, { data: vinculosData }] = await Promise.all([
+          supabase.from('alunos').select('id, nome, matricula, turma').in('id', batchAlunoIds),
+          supabase.from('aluno_responsavel').select('aluno_id, responsavel_id').in('aluno_id', batchAlunoIds)
+        ])
+
+        const respIds = Array.from(new Set((vinculosData || []).map((v: any) => String(v.responsavel_id)).filter(Boolean)))
+        let respsData: any[] = []
+        if (respIds.length > 0) {
+          const { data: rList } = await supabase.from('responsaveis').select('id, nome, email').in('id', respIds)
+          respsData = rList || []
+        }
+
+        const respMap = new Map<string, { nome: string; email?: string }>()
+        respsData.forEach((r: any) => respMap.set(String(r.id), { nome: r.nome, email: r.email }))
+
+        ;(alunosData || []).forEach((a: any) => {
+          const aId = String(a.id)
+          const linkedRespIds = (vinculosData || [])
+            .filter((v: any) => String(v.aluno_id) === aId)
+            .map((v: any) => String(v.responsavel_id))
+          const resps = linkedRespIds.map(rid => respMap.get(rid)).filter(Boolean) as { nome: string; email?: string }[]
+
+          studentLookup.set(aId, {
+            nome: a.nome,
+            turma: a.turma,
+            resps,
+          })
+        })
+      }
+
+      // 3. Enriquecer logs com indicador de leitura, telemetria e resumo de destinatários
       const enrichedLogs = (logs || []).map((log: any) => {
         let oneSignalId = null
         let oneSignalErrors = null
@@ -542,15 +832,49 @@ export async function GET(request: Request) {
           }
         } catch {}
 
-        const readInfo = readsMap[log.item_id] || null
+        // Encontrar leitura por qualquer um dos candidate IDs do log
+        const cands = logCandidateMap.get(log.id) || [log.item_id]
+        let matchedRead: any = null
+        for (const cid of cands) {
+          if (readsMap[cid]) {
+            matchedRead = readsMap[cid]
+            break
+          }
+        }
+
+        // Resumo de destinatários
+        const aId = extractLogStudentId(log)
+        let recipient_summary = `${log.target_count || 1} usuário(s)`
+        let recipients_preview: { nome: string; tipo: string }[] = []
+
+        if (aId && studentLookup.has(aId)) {
+          const stu = studentLookup.get(aId)!
+          const parts = stu.nome.trim().split(/\s+/).filter(Boolean)
+          const friendlyStudent = parts.length > 1 ? `${parts[0]} ${parts[1]}` : parts[0]
+          const numResps = stu.resps.length
+
+          recipient_summary = numResps > 0
+            ? `${friendlyStudent} (${numResps} resp.)`
+            : friendlyStudent
+
+          recipients_preview = [
+            ...stu.resps.map(r => ({ nome: r.nome, tipo: 'responsavel' })),
+            { nome: stu.nome, tipo: 'aluno' }
+          ]
+        } else if (log.item_id?.includes('colaborador') || log.target_url?.includes('/colaborador/')) {
+          recipient_summary = `Equipe Escolar (${log.target_count || 1} alvos)`
+          recipients_preview = [{ nome: 'Equipe de Colaboradores', tipo: 'colaborador' }]
+        }
 
         return {
           ...log,
           oneSignalId,
           oneSignalErrors,
-          isRead: Boolean(readInfo),
-          readAt: readInfo?.read_at || null,
-          readBy: readInfo?.usuario_id || null
+          isRead: Boolean(matchedRead),
+          readAt: matchedRead?.read_at || null,
+          readBy: matchedRead?.usuario_id || null,
+          recipient_summary,
+          recipients_preview,
         }
       })
 
@@ -1305,6 +1629,14 @@ export async function POST(request: Request) {
       ? 'Modo Mock: OneSignal não possui credenciais configuradas neste ambiente (push simulado com sucesso).'
       : (pushResult.success ? null : (pushResult.error || 'Erro desconhecido ao enviar'))
 
+    let responsePayloadObj: any = {}
+    try {
+      if (rawOneSignalResponse) responsePayloadObj = JSON.parse(rawOneSignalResponse)
+      else if (pushResult.data) responsePayloadObj = pushResult.data
+    } catch {}
+    responsePayloadObj._target_user_ids = cleanTargetIds
+    responsePayloadObj._metadata = metadata || null
+
     const { data: savedLog, error: logSaveError } = await supabase
       .from('agenda_push_logs')
       .insert({
@@ -1317,7 +1649,7 @@ export async function POST(request: Request) {
         target_count: finalRecipients || cleanTargetIds.length,
         status: logStatus,
         error_message: logErrorMsg,
-        onesignal_response: rawOneSignalResponse,
+        onesignal_response: JSON.stringify(responsePayloadObj),
         created_at: new Date().toISOString(),
       })
       .select()
