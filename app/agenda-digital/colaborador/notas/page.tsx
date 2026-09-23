@@ -6,15 +6,28 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { 
   GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, 
   AlertCircle, FileText, BarChart2, Sparkles, Search, Filter, Users, X,
-  CheckCircle2, ArrowRight, Printer, AlertTriangle, BookOpen
+  CheckCircle2, ArrowRight, Printer, AlertTriangle, BookOpen, AlertOctagon, Calendar
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useApiQuery } from '@/hooks/useApi'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { UserAvatar } from '@/components/UserAvatar'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
+import { parseNotaValor, calcularDiagnosticoPedagogico, type DiagnosticoPedagogico } from '@/lib/notasEngine'
 import { useCollaboratorTurmas } from '../hooks/useCollaboratorTurmas'
 import { TurmaDropdown } from '../components/TurmaDropdown'
+
+function getBimestreNumber(val: any): number {
+  if (!val) return 0
+  const match = String(val).match(/(\d+)/)
+  return match ? parseInt(match[1], 10) : 0
+}
+
+function formatBimestreLabel(val: any): string {
+  const num = getBimestreNumber(val)
+  if (num > 0) return `${num}º Bimestre`
+  return String(val || 'Bimestre')
+}
 
 export default function ColaboradorNotasPage() {
   const {
@@ -37,7 +50,8 @@ export default function ColaboradorNotasPage() {
   const queryClient = useQueryClient()
   const [mounted, setMounted] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterPerformance, setFilterPerformance] = useState<'todos' | 'com_boletim' | 'acima' | 'abaixo' | 'sem_boletim'>('todos')
+  const [filterPerformance, setFilterPerformance] = useState<'todos' | 'com_boletim' | 'recuperacao' | 'acima' | 'abaixo' | 'sem_boletim'>('todos')
+  const [selectedBimestre, setSelectedBimestre] = useState<string>('ultimo')
   const [selectedStudentForModal, setSelectedStudentForModal] = useState<any | null>(null)
   const [modalBimestreId, setModalBimestreId] = useState<string | null>(null)
   const [modalAno, setModalAno] = useState<string>('')
@@ -125,16 +139,41 @@ export default function ColaboradorNotasPage() {
       const tId = b.turma_id || b.turma
       const tObj = turmas.find(t => String(t.id) === String(tId) || String(t.codigo) === String(tId) || String(t.nome) === String(tId))
       const nomeTurma = b.turmaNome || tObj?.nome || b.turma || 'Sem Turma'
+      const rawBim = b.bimestre || parsedDados.bimestre || ''
+      const bimNum = getBimestreNumber(rawBim)
+      const formattedBim = formatBimestreLabel(rawBim)
 
       return {
         ...b,
         parsedDados,
         anoStr: String(ano),
         nomeTurma,
-        alunoIdStr: String(b.aluno_id || b.alunoId || '')
+        alunoIdStr: String(b.aluno_id || b.alunoId || ''),
+        bimNum,
+        formattedBim
       }
     })
   }, [rawBoletins, turmas])
+
+  // Available Bimestres options
+  const availableBimestres = useMemo(() => {
+    const setNums = new Set<number>()
+    allBoletins.forEach(b => {
+      if (b.bimNum > 0) setNums.add(b.bimNum)
+    })
+    const maxBim = Math.max(2, ...Array.from(setNums))
+    const list: { id: string; label: string; shortLabel: string }[] = [
+      { id: 'ultimo', label: 'Último', shortLabel: 'Último' }
+    ]
+    for (let i = 1; i <= Math.max(4, maxBim); i++) {
+      list.push({
+        id: String(i),
+        label: `${i}ºBim`,
+        shortLabel: `${i}ºBim`
+      })
+    }
+    return list
+  }, [allBoletins])
 
   // Filter students linked to collaborator's active/selected turmas
   const filteredTurmaStudents = useMemo(() => {
@@ -154,7 +193,7 @@ export default function ColaboradorNotasPage() {
     })
   }, [allAlunos, selectedTurmaId, activeTurmas, selectedAno, turmas])
 
-  // Map each student to their latest boletim summary
+  // Map each student to their latest or selected bimester boletim summary
   const studentsWithGrades = useMemo(() => {
     return filteredTurmaStudents.map(aluno => {
       const alunoIdStr = String(aluno.id)
@@ -168,28 +207,42 @@ export default function ColaboradorNotasPage() {
       )
 
       // Filter by current selected year if specified
-      const yearBoletins = selectedAno 
+      const yearBoletins = (selectedAno && selectedAno !== 'todos')
         ? studentBoletins.filter(b => b.anoStr === String(selectedAno))
         : studentBoletins
 
-      // Get latest or primary boletim
-      const latestBoletim = yearBoletins.sort((a, b) => 
-        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-      )[0] || null
+      // Sort all yearBoletins by:
+      // 1) bimNum descending (4 > 3 > 2 > 1)
+      // 2) created_at descending (tie-break)
+      const sortedByBimestreDesc = [...yearBoletins].sort((a, b) => {
+        if (b.bimNum !== a.bimNum) {
+          return b.bimNum - a.bimNum
+        }
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      })
+
+      // The student's latest launched boletim is ALWAYS the highest bimester launched
+      const latestBoletim = sortedByBimestreDesc[0] || null
+
+      // Determine active boletim to show based on selectedBimestre
+      let activeBoletim: any = null
+      if (selectedBimestre === 'ultimo') {
+        activeBoletim = latestBoletim
+      } else {
+        const targetBimNum = parseInt(selectedBimestre, 10)
+        activeBoletim = sortedByBimestreDesc.find(b => b.bimNum === targetBimNum) || null
+      }
 
       let mediaGeral: number | null = null
       let totalDisciplinas = 0
       let disciplinasList: any[] = []
+      let disciplinasAbaixo: any[] = []
+      let diagnostico: DiagnosticoPedagogico | null = null
 
-      if (latestBoletim && latestBoletim.parsedDados?.disciplinas) {
-        disciplinasList = latestBoletim.parsedDados.disciplinas.map((d: any) => {
-          let num = 0
+      if (activeBoletim && activeBoletim.parsedDados?.disciplinas) {
+        disciplinasList = activeBoletim.parsedDados.disciplinas.map((d: any) => {
           const val = String(d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '')).trim()
-          if (val.toLowerCase() === 'dez') {
-            num = 10
-          } else {
-            num = parseFloat(val.replace(',', '.')) || 0
-          }
+          const num = parseNotaValor(val)
           return { ...d, mediaFNum: num }
         })
 
@@ -197,6 +250,8 @@ export default function ColaboradorNotasPage() {
           totalDisciplinas = disciplinasList.length
           const sum = disciplinasList.reduce((acc: number, curr: any) => acc + curr.mediaFNum, 0)
           mediaGeral = parseFloat((sum / disciplinasList.length).toFixed(1))
+          disciplinasAbaixo = disciplinasList.filter((d: any) => d.mediaFNum < 7.0)
+          diagnostico = calcularDiagnosticoPedagogico(mediaGeral, disciplinasAbaixo.length, totalDisciplinas)
         }
       }
 
@@ -208,15 +263,19 @@ export default function ColaboradorNotasPage() {
       return {
         ...aluno,
         turmaDisplay,
-        hasBoletim: !!latestBoletim,
+        hasBoletim: !!activeBoletim,
+        activeBoletim,
         latestBoletim,
         allBoletins: studentBoletins,
         mediaGeral,
         totalDisciplinas,
+        countAbaixo: disciplinasAbaixo.length,
+        disciplinasAbaixo,
+        diagnostico,
         isAcima: mediaGeral !== null ? mediaGeral >= 7.0 : false
       }
     })
-  }, [filteredTurmaStudents, allBoletins, selectedAno, activeTurmas, turmas])
+  }, [filteredTurmaStudents, allBoletins, selectedAno, selectedBimestre, activeTurmas, turmas])
 
   // Search and Performance Filtering
   const displayedStudents = useMemo(() => {
@@ -235,6 +294,9 @@ export default function ColaboradorNotasPage() {
       // 2. Performance filter
       if (filterPerformance === 'com_boletim') {
         return st.hasBoletim
+      }
+      if (filterPerformance === 'recuperacao') {
+        return st.hasBoletim && st.countAbaixo > 0
       }
       if (filterPerformance === 'acima') {
         return st.hasBoletim && st.mediaGeral !== null && st.mediaGeral >= 7.0
@@ -321,28 +383,52 @@ export default function ColaboradorNotasPage() {
       new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     )
 
-    const list = sorted.map(b => ({
-      id: b.id,
-      nome: b.parsedDados.bimestre || 'Bimestre',
-      dados: b.parsedDados,
-      originalTitle: b.parsedDados.bimestre || 'Bimestre',
-      nomeTurma: b.nomeTurma
-    }))
+    const list = sorted.map(b => {
+      const bimNum = b.bimNum || getBimestreNumber(b.parsedDados?.bimestre || b.bimestre)
+      return {
+        id: b.id,
+        nome: b.formattedBim || formatBimestreLabel(b.parsedDados?.bimestre || b.bimestre),
+        dados: b.parsedDados,
+        originalTitle: b.parsedDados.bimestre || 'Bimestre',
+        nomeTurma: b.nomeTurma,
+        bimNum
+      }
+    })
 
-    return list.sort((a, b) => a.originalTitle.localeCompare(b.originalTitle))
+    return list.sort((a, b) => a.bimNum - b.bimNum || a.originalTitle.localeCompare(b.originalTitle))
   }, [selectedStudentForModal, modalStudentBoletins, modalAno])
 
-  // Auto-select first available bimestre in modal
+  // Auto-select preferred bimestre in modal
   useEffect(() => {
-    if (modalBimestresDisponiveis.length > 0) {
-      const exists = modalBimestresDisponiveis.some(b => b.id === modalBimestreId)
-      if (!exists || !modalBimestreId) {
-        setModalBimestreId(modalBimestresDisponiveis[0].id)
+    if (selectedStudentForModal && modalBimestresDisponiveis.length > 0) {
+      // 1. If currently displayed activeBoletim exists in modal, select it!
+      if (selectedStudentForModal.activeBoletim?.id) {
+        const match = modalBimestresDisponiveis.find(b => b.id === selectedStudentForModal.activeBoletim.id)
+        if (match) {
+          setModalBimestreId(match.id)
+          return
+        }
       }
-    } else {
+      // 2. If user is filtering by a specific bimester and student has it in modal:
+      if (selectedBimestre !== 'ultimo') {
+        const targetBimNum = parseInt(selectedBimestre, 10)
+        const match = modalBimestresDisponiveis.find(b => b.bimNum === targetBimNum)
+        if (match) {
+          setModalBimestreId(match.id)
+          return
+        }
+      }
+      // 3. Otherwise pick the highest bimester available for this student
+      const highest = [...modalBimestresDisponiveis].sort((a, b) => b.bimNum - a.bimNum)[0]
+      if (highest) {
+        setModalBimestreId(highest.id)
+        return
+      }
+      setModalBimestreId(modalBimestresDisponiveis[0].id)
+    } else if (!selectedStudentForModal) {
       setModalBimestreId(null)
     }
-  }, [modalBimestresDisponiveis, modalBimestreId])
+  }, [selectedStudentForModal, modalBimestresDisponiveis, selectedBimestre])
 
   const currentModalBoletim = useMemo(() => {
     if (!modalBimestreId) return null
@@ -350,18 +436,21 @@ export default function ColaboradorNotasPage() {
   }, [modalBimestreId, modalBimestresDisponiveis])
 
   const modalDisciplinas = useMemo(() => {
-    if (!currentModalBoletim || !currentModalBoletim.dados.disciplinas) return []
+    if (!currentModalBoletim || !currentModalBoletim.dados || !currentModalBoletim.dados.disciplinas) return []
     return currentModalBoletim.dados.disciplinas.map((d: any) => {
-      let num = 0
       const val = String(d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '')).trim()
-      if (val.toLowerCase() === 'dez') {
-        num = 10
-      } else {
-        num = parseFloat(val.replace(',', '.')) || 0
-      }
+      const num = parseNotaValor(val)
       return { ...d, mediaFNum: num }
     })
   }, [currentModalBoletim])
+
+  const modalDisciplinasAbaixo = useMemo(() => {
+    return modalDisciplinas.filter((d: any) => d.mediaFNum < 7.0)
+  }, [modalDisciplinas])
+
+  const modalDisciplinasAprovadas = useMemo(() => {
+    return modalDisciplinas.filter((d: any) => d.mediaFNum >= 7.0)
+  }, [modalDisciplinas])
 
   const modalMediaGlobal = useMemo(() => {
     if (!modalDisciplinas.length) return 0
@@ -369,6 +458,11 @@ export default function ColaboradorNotasPage() {
     const avg = sum / modalDisciplinas.length
     return isNaN(avg) ? 0 : parseFloat(avg.toFixed(1))
   }, [modalDisciplinas])
+
+  const modalDiagnostico = useMemo(() => {
+    if (!modalDisciplinas.length) return null
+    return calcularDiagnosticoPedagogico(modalMediaGlobal, modalDisciplinasAbaixo.length, modalDisciplinas.length)
+  }, [modalDisciplinas, modalMediaGlobal, modalDisciplinasAbaixo])
 
   const isModalMediaAcima = modalMediaGlobal >= 7.0
 
@@ -396,7 +490,7 @@ export default function ColaboradorNotasPage() {
             </h1>
           </div>
           <p className="notas-header-subtitle" style={{ margin: 0, fontSize: 14, color: '#64748b', fontWeight: 500 }}>
-            {selectedTurmaName} • Ano Letivo {selectedAno}
+            {selectedTurmaName} • Ano Letivo {selectedAno} • {selectedBimestre === 'ultimo' ? 'Último Bimestre' : `${selectedBimestre}ºBim`}
           </p>
         </div>
 
@@ -624,88 +718,194 @@ export default function ColaboradorNotasPage() {
       <div className="notas-filter-card" style={{
         background: '#ffffff',
         borderRadius: 20,
-        padding: '16px 20px',
+        padding: '18px 20px',
         border: '1px solid #f1f5f9',
         boxShadow: '0 4px 20px rgba(0,0,0,0.02)',
         marginBottom: 24,
         display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        flexDirection: 'column',
         gap: 16
       }}>
-        {/* Search Input */}
-        <div className="notas-search-box" style={{ position: 'relative', flex: '1 1 280px', maxWidth: 450 }}>
-          <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
-          <input
-            type="text"
-            placeholder="Buscar aluno por nome, matrícula ou turma..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 14px 10px 42px',
-              borderRadius: 14,
-              border: '1px solid #e2e8f0',
-              fontSize: 14,
-              fontWeight: 500,
-              color: '#0f172a',
-              background: '#f8fafc',
-              outline: 'none',
-              boxSizing: 'border-box'
-            }}
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              style={{
-                position: 'absolute',
-                right: 12,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: '#94a3b8'
-              }}
-            >
-              <X size={16} />
-            </button>
-          )}
+        {/* Row 1: Bimestre Filter */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+          paddingBottom: 14,
+          borderBottom: '1px solid #f1f5f9'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              background: '#eff6ff',
+              border: '1px solid #dbeafe',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#2563eb',
+              flexShrink: 0
+            }}>
+              <Calendar size={18} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>
+                  Filtrar por Bimestre
+                </span>
+                {selectedBimestre !== 'ultimo' && (
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#2563eb',
+                    background: '#eff6ff',
+                    padding: '1px 8px',
+                    borderRadius: 6
+                  }}>
+                    Filtro ativo
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 500 }}>
+                {selectedBimestre === 'ultimo' 
+                  ? 'Exibindo as notas do último bimestre lançado de cada aluno' 
+                  : `Exibindo notas do ${selectedBimestre}ºBim`}
+              </span>
+            </div>
+          </div>
+
+          {/* Bimestres Segmented Buttons */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: '#f8fafc',
+            padding: 4,
+            borderRadius: 14,
+            border: '1px solid #e2e8f0',
+            overflowX: 'auto',
+            maxWidth: '100%',
+            WebkitOverflowScrolling: 'touch'
+          }}>
+            {availableBimestres.map(b => {
+              const isSelected = selectedBimestre === b.id
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setSelectedBimestre(b.id)}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: 10,
+                    border: 'none',
+                    fontSize: 12.5,
+                    fontWeight: isSelected ? 800 : 600,
+                    cursor: 'pointer',
+                    background: isSelected 
+                      ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' 
+                      : 'transparent',
+                    color: isSelected ? '#ffffff' : '#64748b',
+                    boxShadow: isSelected ? '0 3px 10px rgba(37,99,235,0.25)' : 'none',
+                    transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  {b.id === 'ultimo' && <Sparkles size={13} color={isSelected ? '#ffffff' : '#2563eb'} />}
+                  <span>{b.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Filter Pills */}
-        <div className="notas-pills-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {[
-            { id: 'todos', label: 'Todos' },
-            { id: 'com_boletim', label: 'Com Boletim' },
-            { id: 'acima', label: 'Média ≥ 7.0' },
-            { id: 'abaixo', label: 'Média < 7.0' },
-            { id: 'sem_boletim', label: 'Sem Lançamento' },
-          ].map(f => {
-            const isSelected = filterPerformance === f.id
-            return (
+        {/* Row 2: Search Input & Performance Filter Pills */}
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 14
+        }}>
+          {/* Search Input */}
+          <div className="notas-search-box" style={{ position: 'relative', flex: '1 1 280px', maxWidth: 450 }}>
+            <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              placeholder="Buscar aluno por nome, matrícula ou turma..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 14px 10px 42px',
+                borderRadius: 14,
+                border: '1px solid #e2e8f0',
+                fontSize: 14,
+                fontWeight: 500,
+                color: '#0f172a',
+                background: '#f8fafc',
+                outline: 'none',
+                boxSizing: 'border-box'
+              }}
+            />
+            {searchTerm && (
               <button
-                key={f.id}
-                className="notas-pill-btn"
-                onClick={() => setFilterPerformance(f.id as any)}
+                onClick={() => setSearchTerm('')}
                 style={{
-                  padding: '8px 14px',
-                  borderRadius: 12,
-                  border: isSelected ? '1px solid #2563eb' : '1px solid #e2e8f0',
-                  background: isSelected ? '#2563eb' : '#ffffff',
-                  color: isSelected ? '#ffffff' : '#475569',
-                  fontSize: 13,
-                  fontWeight: 700,
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: isSelected ? '0 2px 8px rgba(37,99,235,0.2)' : 'none'
+                  color: '#94a3b8'
                 }}
               >
-                {f.label}
+                <X size={16} />
               </button>
-            )
-          })}
+            )}
+          </div>
+
+          {/* Filter Pills */}
+          <div className="notas-pills-row" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {[
+              { id: 'todos', label: 'Todos' },
+              { id: 'com_boletim', label: 'Com Boletim' },
+              { id: 'recuperacao', label: 'Abaixo da Média (< 7.0)' },
+              { id: 'acima', label: 'Média ≥ 7.0' },
+              { id: 'abaixo', label: 'Média < 7.0' },
+              { id: 'sem_boletim', label: 'Sem Lançamento' },
+            ].map(f => {
+              const isSelected = filterPerformance === f.id
+              return (
+                <button
+                  key={f.id}
+                  className="notas-pill-btn"
+                  onClick={() => setFilterPerformance(f.id as any)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 12,
+                    border: isSelected ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                    background: isSelected ? '#2563eb' : '#ffffff',
+                    color: isSelected ? '#ffffff' : '#475569',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isSelected ? '0 2px 8px rgba(37,99,235,0.2)' : 'none'
+                  }}
+                >
+                  {f.label}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -851,13 +1051,13 @@ export default function ColaboradorNotasPage() {
                   {st.hasBoletim && st.mediaGeral !== null ? (
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        {st.latestBoletim?.parsedDados?.bimestre || 'Média Recente'}
+                        {st.activeBoletim?.formattedBim || st.activeBoletim?.parsedDados?.bimestre || 'Média'}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2 }}>
                         <span style={{ 
                           fontSize: 22, 
                           fontWeight: 900, 
-                          color: st.isAcima ? '#15803d' : '#dc2626',
+                          color: st.diagnostico?.valueColor || (st.isAcima ? '#15803d' : '#dc2626'),
                           lineHeight: 1
                         }}>
                           {st.mediaGeral.toFixed(1)}
@@ -868,20 +1068,22 @@ export default function ColaboradorNotasPage() {
                         <span style={{
                           fontSize: 11,
                           fontWeight: 800,
-                          padding: '2px 6px',
+                          padding: '2px 8px',
                           borderRadius: 6,
-                          background: st.isAcima ? '#dcfce7' : '#fee2e2',
-                          color: st.isAcima ? '#166534' : '#991b1b',
-                          marginLeft: 4
+                          background: st.diagnostico?.badgeBg || (st.isAcima ? '#dcfce7' : '#fee2e2'),
+                          color: st.diagnostico?.badgeColor || (st.isAcima ? '#166534' : '#991b1b'),
+                          border: `1px solid ${st.diagnostico?.badgeBorder || 'transparent'}`,
+                          marginLeft: 4,
+                          whiteSpace: 'nowrap'
                         }}>
-                          {st.isAcima ? 'Adequado' : 'Atenção'}
+                          {st.diagnostico?.badgeText || (st.isAcima ? 'Adequado' : 'Atenção')}
                         </span>
                       </div>
                     </div>
                   ) : (
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                        Status Boletim
+                        {selectedBimestre === 'ultimo' ? 'Status Boletim' : `${selectedBimestre}º Bimestre`}
                       </div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginTop: 2 }}>
                         Aguardando notas
@@ -965,24 +1167,24 @@ export default function ColaboradorNotasPage() {
                 justifyContent: 'space-between',
                 background: '#ffffff'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
                   <UserAvatar
                     userId={selectedStudentForModal.id}
                     name={selectedStudentForModal.nome || 'Aluno'}
                     fotoUrl={selectedStudentForModal.foto || selectedStudentForModal.avatar_url || selectedStudentForModal.avatar}
-                    size={48}
+                    size={44}
                     className="notas-modal-avatar"
                   />
-                  <div>
-                    <h2 className="notas-modal-student-name" style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <h2 className="notas-modal-student-name" style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {selectedStudentForModal.nome}
                     </h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-                      <span className="notas-modal-turma-badge" style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>
+                      <span className="notas-modal-turma-badge" style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6, whiteSpace: 'nowrap' }}>
                         {selectedStudentForModal.turmaDisplay}
                       </span>
                       {selectedStudentForModal.matricula && (
-                        <span className="notas-modal-matricula" style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
+                        <span className="notas-modal-matricula" style={{ fontSize: 12, color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
                           Matrícula: {selectedStudentForModal.matricula}
                         </span>
                       )}
@@ -1162,88 +1364,119 @@ export default function ColaboradorNotasPage() {
                   </div>
                 ) : (
                   <>
-                    {/* Card Resumo Global */}
+                    {/* Card Resumo Global com Diagnóstico Pedagógico */}
                     <div className="notas-modal-resumo" style={{
                       padding: '22px 24px',
-                      background: isModalMediaAcima 
-                        ? 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)' 
-                        : 'linear-gradient(135deg, #f8fafc 0%, #fef2f2 100%)',
+                      background: modalDiagnostico?.cardBg || 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)',
                       color: '#0f172a',
                       borderRadius: 22,
-                      border: isModalMediaAcima ? '1px solid #e0e7ff' : '1px solid #fee2e2',
+                      border: `1px solid ${modalDiagnostico?.cardBorder || '#e0e7ff'}`,
                       position: 'relative',
                       overflow: 'hidden',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      flexWrap: 'wrap',
+                      flexDirection: 'column',
                       gap: 16,
-                      flexShrink: 0
+                      flexShrink: 0,
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
                     }}>
-                      <div className="notas-modal-resumo-left" style={{ flex: '1 1 200px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                          <div className="notas-modal-resumo-icon" style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 8,
-                            background: isModalMediaAcima ? '#dbeafe' : '#fee2e2',
-                            color: isModalMediaAcima ? '#2563eb' : '#ef4444',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0
-                          }}>
-                            <GraduationCap size={16} />
+                      {/* Decorative ambient light */}
+                      <div style={{
+                        position: 'absolute',
+                        top: -40,
+                        right: -40,
+                        width: 160,
+                        height: 160,
+                        borderRadius: '50%',
+                        background: modalDiagnostico?.badgeBg || 'rgba(37,99,235,0.05)',
+                        filter: 'blur(30px)',
+                        pointerEvents: 'none'
+                      }} />
+
+                      {/* Top Row: Média Global + Info à esquerda, Status Pill à direita */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, position: 'relative' }}>
+                        <div className="notas-modal-resumo-left" style={{ flex: '1 1 200px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <div className="notas-modal-resumo-icon" style={{
+                              width: 30,
+                              height: 30,
+                              borderRadius: 10,
+                              background: modalDiagnostico?.iconBg || '#dbeafe',
+                              color: modalDiagnostico?.iconColor || '#2563eb',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0
+                            }}>
+                              <GraduationCap size={18} />
+                            </div>
+                            <span className="notas-modal-resumo-title" style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
+                              Média Global do Período
+                            </span>
                           </div>
-                          <span className="notas-modal-resumo-title" style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
-                            Média Global do Período
-                          </span>
+
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                            <span className="notas-modal-resumo-val" style={{
+                              fontSize: 44,
+                              fontWeight: 900,
+                              fontFamily: 'Outfit, sans-serif',
+                              lineHeight: 1,
+                              color: modalDiagnostico?.valueColor || '#1e3a8a',
+                              letterSpacing: '-1px'
+                            }}>
+                              {(modalMediaGlobal || 0).toFixed(1)}
+                            </span>
+                            <span className="notas-modal-resumo-scale" style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                              / 10.0
+                            </span>
+                          </div>
+
+                          <div className="notas-modal-resumo-periodo" style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>
+                            {currentModalBoletim.originalTitle} • Turma: {currentModalBoletim.nomeTurma || selectedStudentForModal.turmaDisplay}
+                          </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                          <span className="notas-modal-resumo-val" style={{
-                            fontSize: 44,
-                            fontWeight: 900,
-                            fontFamily: 'Outfit, sans-serif',
-                            lineHeight: 1,
-                            color: isModalMediaAcima ? '#1e3a8a' : '#991b1b',
-                            letterSpacing: '-1px'
-                          }}>
-                            {(modalMediaGlobal || 0).toFixed(1)}
-                          </span>
-                          <span className="notas-modal-resumo-scale" style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
-                            / 10.0
-                          </span>
-                        </div>
-
-                        <div className="notas-modal-resumo-periodo" style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>
-                          {currentModalBoletim.originalTitle} • Turma: {currentModalBoletim.nomeTurma || selectedStudentForModal.turmaDisplay}
-                        </div>
-                      </div>
-
-                      {/* Status pill right */}
-                      <div className="notas-modal-status-pill" style={{
-                        padding: '12px 18px',
-                        background: '#ffffff',
-                        borderRadius: 16,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 6,
-                        border: '1px solid rgba(0,0,0,0.06)',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.03)',
-                        flexShrink: 0
-                      }}>
-                        {isModalMediaAcima ? <TrendingUp size={24} color="#10b981" /> : <TrendingDown size={24} color="#ef4444" />}
-                        <span style={{
-                          fontSize: 12,
-                          fontWeight: 800,
-                          color: isModalMediaAcima ? '#059669' : '#b91c1c',
-                          textAlign: 'center',
-                          whiteSpace: 'nowrap'
+                        {/* Status pill right com diagnóstico pedagógico */}
+                        <div className="notas-modal-status-pill" style={{
+                          padding: '12px 18px',
+                          background: '#ffffff',
+                          borderRadius: 16,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 6,
+                          border: `1px solid ${modalDiagnostico?.badgeBorder || 'rgba(0,0,0,0.06)'}`,
+                          boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
+                          flexShrink: 0
                         }}>
-                          {isModalMediaAcima ? 'Desempenho Adequado' : 'Requer Atenção'}
-                        </span>
+                          {modalDiagnostico?.tipo === 'adequado' ? (
+                            <TrendingUp size={24} color={modalDiagnostico.badgeColor} />
+                          ) : modalDiagnostico?.tipo === 'insuficiente' ? (
+                            <TrendingDown size={24} color={modalDiagnostico.badgeColor} />
+                          ) : modalDiagnostico?.tipo === 'critico' ? (
+                            <AlertOctagon size={24} color={modalDiagnostico.badgeColor} />
+                          ) : (
+                            <AlertTriangle size={24} color={modalDiagnostico?.badgeColor || '#d97706'} />
+                          )}
+                          <span style={{
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color: modalDiagnostico?.badgeColor || '#059669',
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {modalDiagnostico?.badgeText}
+                          </span>
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: '#64748b',
+                            textAlign: 'center'
+                          }}>
+                            {modalDisciplinasAbaixo.length === 0
+                              ? '100% na média'
+                              : `${modalDisciplinasAbaixo.length} disciplina${modalDisciplinasAbaixo.length > 1 ? 's' : ''} < 7.0`}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -1274,17 +1507,23 @@ export default function ColaboradorNotasPage() {
                               className="notas-modal-disciplina-item"
                               style={{
                                 padding: '14px 16px',
-                                background: '#f8fafc',
+                                background: isPassed ? '#f8fafc' : '#fff8f8',
                                 borderRadius: 16,
-                                border: '1px solid #f1f5f9',
+                                border: isPassed ? '1px solid #f1f5f9' : '1px solid #fecaca',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'space-between'
+                                justifyContent: 'space-between',
+                                boxShadow: isPassed ? 'none' : '0 2px 8px rgba(239,68,68,0.06)'
                               }}
                             >
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
-                                <div className="notas-disciplina-nome" style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>
-                                  {d.nome}
+                                <div className="notas-disciplina-nome" style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span>{d.nome}</span>
+                                  {!isPassed && (
+                                    <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 4 }}>
+                                      Abaixo
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="notas-disciplina-evals" style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
                                   <span>AVM: <strong style={{ color: '#334155' }}>{d.avm ?? '-'}</strong></span>
@@ -1360,7 +1599,7 @@ export default function ColaboradorNotasPage() {
 
       {/* Responsive & Print Styles */}
       <style dangerouslySetInnerHTML={{__html:`
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
           .hide-on-mobile { display: none !important; }
 
           .notas-page-container {
@@ -1491,20 +1730,70 @@ export default function ColaboradorNotasPage() {
             border-radius: 9px !important;
           }
 
-          /* ─── MODAL ON MOBILE ─── */
+          /* ─── MODAL ON MOBILE (CENTRALIZADO, NÃO TELA TOTAL) ─── */
           .notas-modal-container {
-            padding: 0 !important;
-            align-items: flex-end !important;
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            padding: 20px 14px !important;
+            margin: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background-color: rgba(15, 23, 42, 0.65) !important;
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
+            z-index: 99999 !important;
+          }
+          .notas-modal-backdrop-overlay {
+            display: block !important;
+            position: absolute !important;
+            inset: 0 !important;
+            z-index: 1 !important;
           }
           .notas-modal-card {
-            max-height: 92vh !important;
-            border-bottom-left-radius: 0 !important;
-            border-bottom-right-radius: 0 !important;
+            position: relative !important;
+            inset: auto !important;
+            width: 100% !important;
+            max-width: 480px !important;
+            height: auto !important;
+            max-height: 86vh !important;
+            max-height: 86dvh !important;
+            border-radius: 24px !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35) !important;
+            margin: auto !important;
+            padding: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            z-index: 10 !important;
+            background: #ffffff !important;
+            overflow: hidden !important;
+          }
+          .notas-modal-top-header {
+            padding: 16px 18px !important;
+            background: #ffffff !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            flex-shrink: 0 !important;
+          }
+          .notas-modal-student-name {
+            font-size: 15px !important;
+            line-height: 1.25 !important;
+          }
+          .notas-modal-switcher-row {
+            padding: 10px 18px !important;
+            flex-shrink: 0 !important;
+            background: #f8fafc !important;
+            border-bottom: 1px solid #f1f5f9 !important;
           }
           .notas-modal-body {
-            padding: 16px !important;
+            padding: 16px 18px !important;
             gap: 16px !important;
             min-height: 0 !important;
+            flex: 1 1 auto !important;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
           }
           .notas-modal-resumo {
             padding: 16px !important;
@@ -1528,6 +1817,11 @@ export default function ColaboradorNotasPage() {
             grid-template-columns: 1fr !important;
             gap: 8px !important;
           }
+        }
+
+        /* Ocultar botão flutuante de WhatsApp enquanto o modal de notas estiver aberto */
+        body.modal-boletim-open .dock-container {
+          display: none !important;
         }
 
         @media print {

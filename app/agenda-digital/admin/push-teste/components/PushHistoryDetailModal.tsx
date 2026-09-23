@@ -23,6 +23,9 @@ export interface RecipientItem {
   devices?: any[]
   hasActiveDevice?: boolean
   deviceSummary?: string
+  accountStatus?: 'active_device' | 'never_activated' | 'no_email' | 'no_device'
+  accountStatusLabel?: string
+  accountStatusDetail?: string
   statusTone?: 'success' | 'warning' | 'danger' | 'neutral'
 }
 
@@ -490,10 +493,28 @@ export function PushHistoryDetailModal({
                               </span>
                             )}
                           </div>
+                        ) : rec.accountStatus === 'no_email' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              ⚪ Sem E-mail
+                            </span>
+                            <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
+                              Pendente cadastro na secretaria
+                            </span>
+                          </div>
+                        ) : rec.accountStatus === 'never_activated' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              🟡 Conta Não Ativada
+                            </span>
+                            <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
+                              Nunca fez o 1º Acesso no app
+                            </span>
+                          </div>
                         ) : (
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626' }}>
-                              🔴 Sem Push Ativo
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              🔴 Sem Aparelho Ativo
                             </span>
                             <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', marginTop: 1 }}>
                               App desinstalado ou sem permissão

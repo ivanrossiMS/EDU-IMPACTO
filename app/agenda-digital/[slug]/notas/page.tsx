@@ -5,12 +5,16 @@ import { useData } from '@/lib/dataContext'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/context'
 import { useParams, useSearchParams } from 'next/navigation'
-import { GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, AlertCircle, FileText, BarChart2, Sparkles } from 'lucide-react'
+import { 
+  GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, 
+  AlertCircle, FileText, BarChart2, Sparkles, AlertTriangle, CheckCircle2, AlertOctagon 
+} from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
+import { parseNotaValor, calcularDiagnosticoPedagogico } from '@/lib/notasEngine'
 
 export default function ADNotasPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital();
@@ -207,15 +211,10 @@ export default function ADNotasPage({ params }: { params: any }) {
   }, [selectedBimestreId, bimestresDisponiveis])
 
   const disciplinas = useMemo(() => {
-    if (!boletimAtual || !boletimAtual.dados.disciplinas) return []
+    if (!boletimAtual || !boletimAtual.dados || !boletimAtual.dados.disciplinas) return []
     return boletimAtual.dados.disciplinas.map((d: any) => {
-      let num = 0
       const val = String(d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '')).trim()
-      if (val.toLowerCase() === 'dez') {
-        num = 10
-      } else {
-        num = parseFloat(val.replace(',', '.')) || 0
-      }
+      const num = parseNotaValor(val)
       return {
         ...d,
         mediaFNum: num
@@ -223,11 +222,24 @@ export default function ADNotasPage({ params }: { params: any }) {
     })
   }, [boletimAtual])
 
+  const disciplinasAbaixo = useMemo(() => {
+    return disciplinas.filter((d: any) => d.mediaFNum < 7.0)
+  }, [disciplinas])
+
+  const disciplinasAprovadas = useMemo(() => {
+    return disciplinas.filter((d: any) => d.mediaFNum >= 7.0)
+  }, [disciplinas])
+
   const mediaGlobal = useMemo(() => {
      if (!disciplinas.length) return 0
      const sum = disciplinas.reduce((acc: number, curr: any) => acc + curr.mediaFNum, 0)
      return parseFloat((sum / disciplinas.length).toFixed(1))
   }, [disciplinas])
+
+  const diagnostico = useMemo(() => {
+    if (!disciplinas.length) return null
+    return calcularDiagnosticoPedagogico(mediaGlobal, disciplinasAbaixo.length, disciplinas.length)
+  }, [mediaGlobal, disciplinasAbaixo, disciplinas])
 
   const isAcima = mediaGlobal >= 7.0
 
@@ -424,7 +436,7 @@ export default function ADNotasPage({ params }: { params: any }) {
       <div>
         {boletimAtual && (
         <div className="print-main-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 32 }}>
-          {/* Card Resumo Global */}
+          {/* Card Resumo Global com Diagnóstico Pedagógico */}
           <motion.div 
             initial={{ scale: 0.95, opacity: 0 }} 
             animate={{ scale: 1, opacity: 1 }} 
@@ -432,28 +444,32 @@ export default function ADNotasPage({ params }: { params: any }) {
             className="print-global-card"
             style={{ 
               padding: 24, 
-              background: isAcima ? 'linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%)' : 'linear-gradient(135deg, #f8fafc 0%, #fef2f2 100%)', 
+              background: diagnostico?.cardBg || 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)', 
               color: '#0f172a', 
-              borderRadius: 24,
-              border: isAcima ? '1px solid #e0e7ff' : '1px solid #fee2e2', 
+              borderRadius: 24, 
+              border: `1px solid ${diagnostico?.cardBorder || '#e0e7ff'}`, 
               position: 'relative', 
-              overflow: 'hidden',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
+              overflow: 'hidden', 
+              boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16
             }}
           >
-             <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: isAcima ? 'rgba(59,130,246,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: '50%', filter: 'blur(40px)' }} />
+             <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: diagnostico?.badgeBg || 'rgba(59,130,246,0.1)', borderRadius: '50%', filter: 'blur(40px)', pointerEvents: 'none' }} />
              
-             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+             {/* Top Row */}
+             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, position: 'relative' }}>
                <div>
                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                   <div style={{ width: 32, height: 32, borderRadius: 10, background: isAcima ? '#dbeafe' : '#fee2e2', color: isAcima ? '#2563eb' : '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                   <div style={{ width: 32, height: 32, borderRadius: 10, background: diagnostico?.iconBg || '#dbeafe', color: diagnostico?.iconColor || '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                      <GraduationCap size={16} />
                    </div>
                    <div style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, fontSize: 12, color: '#64748b' }}>Média Global</div>
                  </div>
                  
                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-                   <div className="print-media-value" style={{ fontSize: 56, fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: isAcima ? '#1e3a8a' : '#991b1b', letterSpacing: '-1px' }}>
+                   <div className="print-media-value" style={{ fontSize: 56, fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: diagnostico?.valueColor || '#1e3a8a', letterSpacing: '-1px' }}>
                      {mediaGlobal.toFixed(1)}
                    </div>
                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
@@ -466,22 +482,52 @@ export default function ADNotasPage({ params }: { params: any }) {
                  </div>
                </div>
 
-               <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.7)', borderRadius: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, backdropFilter: 'none', border: '1px solid rgba(255,255,255,0.9)', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
-                 {isAcima ? <TrendingUp size={24} color="#10b981"/> : <TrendingDown size={24} color="#ef4444"/>}
-                 <span style={{ fontSize: 12, fontWeight: 700, color: isAcima ? '#059669' : '#b91c1c', textAlign: 'center', maxWidth: 120, lineHeight: 1.2 }}>
-                   {isAcima ? 'Desempenho esperado' : 'Requer atenção'}
+               {/* Status pill right com diagnóstico pedagógico */}
+               <div style={{
+                 padding: '12px 18px',
+                 background: '#ffffff',
+                 borderRadius: 16,
+                 display: 'flex',
+                 flexDirection: 'column',
+                 alignItems: 'center',
+                 gap: 6,
+                 border: `1px solid ${diagnostico?.badgeBorder || 'rgba(0,0,0,0.06)'}`,
+                 boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
+                 flexShrink: 0
+               }}>
+                 {diagnostico?.tipo === 'adequado' ? (
+                   <TrendingUp size={24} color={diagnostico.badgeColor} />
+                 ) : diagnostico?.tipo === 'insuficiente' ? (
+                   <TrendingDown size={24} color={diagnostico.badgeColor} />
+                 ) : diagnostico?.tipo === 'critico' ? (
+                   <AlertOctagon size={24} color={diagnostico.badgeColor} />
+                 ) : (
+                   <AlertTriangle size={24} color={diagnostico?.badgeColor || '#d97706'} />
+                 )}
+                 <span style={{ fontSize: 12, fontWeight: 800, color: diagnostico?.badgeColor || '#059669', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                   {diagnostico?.badgeText}
+                 </span>
+                 <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textAlign: 'center' }}>
+                   {disciplinasAbaixo.length === 0
+                     ? '100% na média'
+                     : `${disciplinasAbaixo.length} disciplina${disciplinasAbaixo.length > 1 ? 's' : ''} < 7.0`}
                  </span>
                </div>
              </div>
+
           </motion.div>
 
           {/* Tabela de Disciplinas Modernizada */}
           <div className="print-disciplinas-wrapper" style={{ background: '#fff', borderRadius: 24, padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f8fafc', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <BarChart2 size={16} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f8fafc', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BarChart2 size={16} />
+                </div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                  Rendimento por Disciplina ({disciplinas.length})
+                </h3>
               </div>
-              <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a' }}>Rendimento por Disciplina</h3>
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -507,17 +553,24 @@ export default function ADNotasPage({ params }: { params: any }) {
                         className="print-disciplina-item"
                         style={{ 
                           padding: '16px', 
-                          background: '#f8fafc', 
+                          background: isPassed ? '#f8fafc' : '#fff8f8', 
                           borderRadius: 16, 
-                          border: '1px solid #f1f5f9',
+                          border: isPassed ? '1px solid #f1f5f9' : '1px solid #fecaca',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+                          boxShadow: isPassed ? '0 2px 10px rgba(0,0,0,0.02)' : '0 2px 10px rgba(239,68,68,0.06)',
                         }}
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>{d.nome}</div>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span>{d.nome}</span>
+                            {!isPassed && (
+                              <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 4 }}>
+                                Abaixo
+                              </span>
+                            )}
+                          </div>
                           
                           <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500, flexWrap: 'wrap' }}>
                             <span>AVM: <strong style={{ color: '#475569' }}>{d.avm || '---'}</strong></span>

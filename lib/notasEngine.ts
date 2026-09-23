@@ -1001,3 +1001,126 @@ export function calcularMediaParcialBimestre(
 
   return { mediaParcial: null, faltas }
 }
+
+/**
+ * Normaliza e faz o parse de notas escolares que podem vir como número,
+ * string com vírgula (ex: "7,50"), traços ("---") ou por extenso ("Dez", "Hum", "Zero").
+ */
+export function parseNotaValor(val: any): number {
+  if (val === null || val === undefined) return 0
+  const str = String(val).trim().toLowerCase()
+  if (!str || str === '---' || str === '-') return 0
+  if (str === 'dez') return 10
+  if (str === 'nove') return 9
+  if (str === 'oito') return 8
+  if (str === 'sete') return 7
+  if (str === 'seis') return 6
+  if (str === 'cinco') return 5
+  if (str === 'quatro') return 4
+  if (str === 'três' || str === 'tres') return 3
+  if (str === 'dois') return 2
+  if (str === 'hum' || str === 'um') return 1
+  if (str === 'zero') return 0
+  const parsed = parseFloat(str.replace(',', '.'))
+  return isNaN(parsed) ? 0 : parsed
+}
+
+export type DiagnosticoPedagogico = {
+  tipo: 'adequado' | 'atencao' | 'critico' | 'insuficiente'
+  titulo: string
+  subtitulo: string
+  badgeText: string
+  badgeColor: string
+  badgeBg: string
+  badgeBorder: string
+  cardBg: string
+  cardBorder: string
+  iconColor: string
+  iconBg: string
+  valueColor: string
+  nivel: 1 | 2 | 3 | 4
+}
+
+/**
+ * Matriz de Diagnóstico Pedagógico
+ * Avalia a média global conjuntamente com as disciplinas em recuperação (< 7.0)
+ * para evitar a armadilha de exibir "Desempenho Adequado" para alunos em risco.
+ */
+export function calcularDiagnosticoPedagogico(
+  mediaGlobal: number,
+  disciplinasAbaixoCount: number,
+  totalDisciplinasCount: number
+): DiagnosticoPedagogico {
+  const isAcima = mediaGlobal >= 7.0
+
+  if (!isAcima) {
+    return {
+      tipo: 'insuficiente',
+      titulo: 'Desempenho Insuficiente',
+      subtitulo: `Média global abaixo de 7.0 • ${disciplinasAbaixoCount} disciplina${disciplinasAbaixoCount > 1 ? 's' : ''} abaixo da média`,
+      badgeText: 'Desempenho Insuficiente',
+      badgeColor: '#dc2626',
+      badgeBg: '#fef2f2',
+      badgeBorder: '#fee2e2',
+      cardBg: 'linear-gradient(135deg, #ffffff 0%, #fef2f2 100%)',
+      cardBorder: '#fecaca',
+      iconColor: '#ef4444',
+      iconBg: '#fee2e2',
+      valueColor: '#991b1b',
+      nivel: 4
+    }
+  }
+
+  if (disciplinasAbaixoCount >= 3) {
+    return {
+      tipo: 'critico',
+      titulo: 'Risco Acadêmico',
+      subtitulo: `Média global compensada, mas ${disciplinasAbaixoCount} disciplinas abaixo da média`,
+      badgeText: `Atenção: ${disciplinasAbaixoCount} abaixo da média`,
+      badgeColor: '#c2410c',
+      badgeBg: '#fff7ed',
+      badgeBorder: '#ffedd5',
+      cardBg: 'linear-gradient(135deg, #ffffff 0%, #fff7ed 100%)',
+      cardBorder: '#fed7aa',
+      iconColor: '#ea580c',
+      iconBg: '#ffedd5',
+      valueColor: '#9a3412',
+      nivel: 3
+    }
+  }
+
+  if (disciplinasAbaixoCount > 0) {
+    return {
+      tipo: 'atencao',
+      titulo: 'Atenção Pedagógica',
+      subtitulo: `${disciplinasAbaixoCount} disciplina${disciplinasAbaixoCount > 1 ? 's' : ''} abaixo de 7.0 requer${disciplinasAbaixoCount > 1 ? 'em' : 'e'} reforço`,
+      badgeText: `Atenção: ${disciplinasAbaixoCount} abaixo da média`,
+      badgeColor: '#b45309',
+      badgeBg: '#fffbeb',
+      badgeBorder: '#fef3c7',
+      cardBg: 'linear-gradient(135deg, #ffffff 0%, #fffbeb 100%)',
+      cardBorder: '#fde68a',
+      iconColor: '#d97706',
+      iconBg: '#fef3c7',
+      valueColor: '#92400e',
+      nivel: 2
+    }
+  }
+
+  const isExcelente = mediaGlobal >= 8.5
+  return {
+    tipo: 'adequado',
+    titulo: isExcelente ? 'Excelente Rendimento' : 'Desempenho Adequado',
+    subtitulo: `100% das disciplinas atingiram a média (≥ 7.0)`,
+    badgeText: isExcelente ? 'Excelente Rendimento' : 'Desempenho Adequado',
+    badgeColor: '#059669',
+    badgeBg: '#ecfdf5',
+    badgeBorder: '#d1fae5',
+    cardBg: 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)',
+    cardBorder: '#e0e7ff',
+    iconColor: '#10b981',
+    iconBg: '#dbeafe',
+    valueColor: '#1e3a8a',
+    nivel: 1
+  }
+}

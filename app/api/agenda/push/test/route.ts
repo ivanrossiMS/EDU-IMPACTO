@@ -317,6 +317,27 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
       resps = rList || []
     }
 
+    // Buscar contas no Supabase Auth e system_users para verificar ativação real
+    let authUsersList: any[] = []
+    try {
+      const adminClient = getAdminClient()
+      let page = 1
+      while (page <= 5) {
+        const { data: list } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 })
+        if (!list?.users || list.users.length === 0) break
+        authUsersList.push(...list.users)
+        if (list.users.length < 1000) break
+        page++
+      }
+    } catch (e) {
+      console.warn('[resolveLogFullDetails] Aviso ao buscar auth.users:', e)
+    }
+
+    const { data: sysUsersList } = await supabase
+      .from('system_users')
+      .select('id, auth_id, email, dados')
+      .limit(3000)
+
     // Identificadores de disparo para este aluno
     targetAliases.add(String(alunoId))
     targetAliases.add(String(alunoId).padStart(6, '0'))
@@ -328,13 +349,57 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
 
     // Consultar dispositivos no OneSignal para cada responsável
     for (const r of resps) {
+      const rIdStr = String(r.id).trim()
+      const cleanEmail = (r.email || '').toLowerCase().trim()
+
+      const matchedAuthByEmail = cleanEmail ? authUsersList.find(u => (u.email || '').toLowerCase().trim() === cleanEmail) : null
+      const matchedAuthByMeta = authUsersList.find(u => String(u.user_metadata?.responsavel_id || '').trim() === rIdStr)
+      const matchedAuth = matchedAuthByEmail || matchedAuthByMeta
+
+      const matchedSys = (sysUsersList || []).find((u: any) => {
+        const uEmail = (u.email || '').toLowerCase().trim()
+        const uRespId = String(u.dados?.responsavel_id || u.dados?.responsavelId || '').trim()
+        return (cleanEmail && uEmail === cleanEmail) || (uRespId && uRespId === rIdStr)
+      })
+
+      const effectiveAuthId = matchedAuth?.id || matchedSys?.auth_id || (matchedSys ? matchedSys.id : null) || r.dados?.auth_id || null
+      if (effectiveAuthId) targetAliases.add(effectiveAuthId)
+
       const devices = await fetchDevicesForGuardian({
         responsavel_id: r.id,
         email: r.email,
-        authId: r.dados?.auth_id
+        authId: effectiveAuthId
       })
       const hasActive = devices.some((d: any) => d.isSubscribed)
       const deviceModels = devices.map((d: any) => d.modelo || d.tipo).filter(Boolean)
+
+      // Diagnóstico detalhado do status da conta
+      let accountStatus: 'active_device' | 'never_activated' | 'no_email' | 'no_device' = 'no_device'
+      let accountStatusLabel = 'Sem Push Ativo'
+      let accountStatusDetail = 'App desinstalado ou sem permissão'
+      let statusTone: 'success' | 'warning' | 'danger' | 'neutral' = 'danger'
+
+      if (hasActive) {
+        accountStatus = 'active_device'
+        accountStatusLabel = 'Push Ativo'
+        accountStatusDetail = deviceModels.join(', ') || 'Dispositivo conectado'
+        statusTone = 'success'
+      } else if (!cleanEmail) {
+        accountStatus = 'no_email'
+        accountStatusLabel = 'Sem E-mail'
+        accountStatusDetail = 'Pendente cadastro na secretaria'
+        statusTone = 'neutral'
+      } else if (!matchedAuth && !matchedSys) {
+        accountStatus = 'never_activated'
+        accountStatusLabel = 'Conta Não Ativada'
+        accountStatusDetail = 'Nunca fez o 1º Acesso no app'
+        statusTone = 'warning'
+      } else {
+        accountStatus = 'no_device'
+        accountStatusLabel = 'Sem Aparelho Ativo'
+        accountStatusDetail = 'App desinstalado ou sem permissão'
+        statusTone = 'danger'
+      }
 
       recipients.push({
         id: String(r.id),
@@ -346,8 +411,11 @@ async function resolveLogFullDetails(logIdOrLog: string | any, supabase: any) {
         devicesCount: devices.length,
         devices,
         hasActiveDevice: hasActive,
-        deviceSummary: devices.length > 0 ? deviceModels.join(', ') : 'Sem aparelho ativo no app',
-        statusTone: hasActive ? 'success' : 'danger',
+        deviceSummary: devices.length > 0 ? deviceModels.join(', ') : accountStatusDetail,
+        accountStatus,
+        accountStatusLabel,
+        accountStatusDetail,
+        statusTone,
       })
     }
 
