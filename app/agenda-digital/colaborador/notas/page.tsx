@@ -6,14 +6,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { 
   GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, 
   AlertCircle, FileText, BarChart2, Sparkles, Search, Filter, Users, X,
-  CheckCircle2, ArrowRight, Printer, AlertTriangle, BookOpen, AlertOctagon, Calendar
+  CheckCircle2, ArrowRight, Printer, AlertTriangle, BookOpen, AlertOctagon, Calendar,
+  Calculator
 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useApiQuery } from '@/hooks/useApi'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
 import { UserAvatar } from '@/components/UserAvatar'
 import { isAlunoCursandoTurma } from '@/lib/studentTurmaUtils'
-import { parseNotaValor, calcularDiagnosticoPedagogico, type DiagnosticoPedagogico } from '@/lib/notasEngine'
+import { parseNotaValor, calcularDiagnosticoPedagogico, arredondarMediaImpacto, type DiagnosticoPedagogico } from '@/lib/notasEngine'
 import { useCollaboratorTurmas } from '../hooks/useCollaboratorTurmas'
 import { TurmaDropdown } from '../components/TurmaDropdown'
 
@@ -401,7 +402,15 @@ export default function ColaboradorNotasPage() {
   // Auto-select preferred bimestre in modal
   useEffect(() => {
     if (selectedStudentForModal && modalBimestresDisponiveis.length > 0) {
-      // 1. If currently displayed activeBoletim exists in modal, select it!
+      // 0. If user specifically selected 'media_anual', maintain it!
+      if (modalBimestreId === 'media_anual') {
+        return
+      }
+      // 1. If currently displayed modalBimestreId still exists in modal, keep it!
+      if (modalBimestreId && modalBimestresDisponiveis.some(b => b.id === modalBimestreId)) {
+        return
+      }
+      // 2. If student has activeBoletim in modal, select it!
       if (selectedStudentForModal.activeBoletim?.id) {
         const match = modalBimestresDisponiveis.find(b => b.id === selectedStudentForModal.activeBoletim.id)
         if (match) {
@@ -409,7 +418,7 @@ export default function ColaboradorNotasPage() {
           return
         }
       }
-      // 2. If user is filtering by a specific bimester and student has it in modal:
+      // 3. If user is filtering by a specific bimester and student has it in modal:
       if (selectedBimestre !== 'ultimo') {
         const targetBimNum = parseInt(selectedBimestre, 10)
         const match = modalBimestresDisponiveis.find(b => b.bimNum === targetBimNum)
@@ -418,22 +427,142 @@ export default function ColaboradorNotasPage() {
           return
         }
       }
-      // 3. Otherwise pick the highest bimester available for this student
+      // 4. Otherwise pick the highest bimester available for this student
       const highest = [...modalBimestresDisponiveis].sort((a, b) => b.bimNum - a.bimNum)[0]
       if (highest) {
         setModalBimestreId(highest.id)
         return
       }
-      setModalBimestreId(modalBimestresDisponiveis[0].id)
+      setModalBimestreId(modalBimestresDisponiveis[modalBimestresDisponiveis.length - 1].id)
     } else if (!selectedStudentForModal) {
       setModalBimestreId(null)
     }
-  }, [selectedStudentForModal, modalBimestresDisponiveis, selectedBimestre])
+  }, [selectedStudentForModal, modalBimestresDisponiveis, selectedBimestre, modalBimestreId])
+
+  const isMediaAnual = modalBimestreId === 'media_anual'
 
   const currentModalBoletim = useMemo(() => {
-    if (!modalBimestreId) return null
+    if (!modalBimestreId || modalBimestreId === 'media_anual') return null
     return modalBimestresDisponiveis.find(b => b.id === modalBimestreId) || null
   }, [modalBimestreId, modalBimestresDisponiveis])
+
+  const totalBimestresLancados = useMemo(() => {
+    const seen = new Set<number>()
+    modalBimestresDisponiveis.forEach(b => {
+      if (b.bimNum > 0) seen.add(b.bimNum)
+    })
+    return seen.size
+  }, [modalBimestresDisponiveis])
+
+  // Cálculo da Média Anual das Disciplinas para o aluno no ano selecionado
+  const modalDisciplinasAnuais = useMemo(() => {
+    if (!selectedStudentForModal || modalBimestresDisponiveis.length === 0) return []
+
+    const discMap = new Map<string, {
+      nome: string
+      bimesters: {
+        bimNum: number
+        bimNome: string
+        valorStr: string
+        valorNum: number
+        lancado: boolean
+        avm?: any
+        avb?: any
+        simulado?: any
+        bonus?: any
+        rec?: any
+      }[]
+    }>()
+
+    // Deduplica os bimestres disponíveis por número de bimestre (garantindo o mais recente)
+    const seenBims = new Set<number>()
+    const uniqueBims = modalBimestresDisponiveis.filter(b => {
+      if (seenBims.has(b.bimNum)) return false
+      seenBims.add(b.bimNum)
+      return true
+    })
+
+    for (const b of uniqueBims) {
+      const discList = b.dados?.disciplinas || []
+      for (const d of discList) {
+        if (!d.nome) continue
+        const normKey = d.nome.trim().toUpperCase()
+        if (!discMap.has(normKey)) {
+          discMap.set(normKey, {
+            nome: d.nome.trim(),
+            bimesters: []
+          })
+        }
+
+        const entry = discMap.get(normKey)!
+        const rawVal = d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '')
+        const strVal = String(rawVal).trim()
+        const isLancado = strVal !== '' && strVal !== '---' && strVal !== '-'
+        const num = parseNotaValor(strVal)
+
+        entry.bimesters.push({
+          bimNum: b.bimNum,
+          bimNome: b.nome,
+          valorStr: isLancado ? strVal : '—',
+          valorNum: num,
+          lancado: isLancado,
+          avm: d.avm,
+          avb: d.avb,
+          simulado: d.simulado,
+          bonus: d.pntBonu || d.bonus,
+          rec: d.rec
+        })
+      }
+    }
+
+    const list: any[] = []
+    discMap.forEach((entry) => {
+      const sortedBims = [...entry.bimesters].sort((a, b) => a.bimNum - b.bimNum)
+      const lancados = sortedBims.filter(b => b.lancado)
+
+      let mediaAnualNum = 0
+      if (lancados.length > 0) {
+        const sum = lancados.reduce((acc, b) => acc + b.valorNum, 0)
+        mediaAnualNum = sum / lancados.length
+      }
+
+      // Arredondamento acadêmico oficial (Imagem 2 / Colégio IMPACTO):
+      // >= 0.00 e <= 0.25 -> 0.00 | > 0.25 e <= 0.75 -> 0.50 | > 0.75 e <= 1.00 -> 1.00
+      const mediaFNum = arredondarMediaImpacto(mediaAnualNum)
+
+      list.push({
+        nome: entry.nome,
+        bimesters: sortedBims,
+        lancadosCount: lancados.length,
+        totalBims: uniqueBims.length,
+        mediaFNum,
+        mediaAnualFormatada: mediaFNum.toFixed(1).replace('.', ','),
+        isPassed: mediaFNum >= 7.0
+      })
+    })
+
+    return list.sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [selectedStudentForModal, modalBimestresDisponiveis])
+
+  const modalDisciplinasAnuaisAbaixo = useMemo(() => {
+    return modalDisciplinasAnuais.filter(d => d.mediaFNum < 7.0)
+  }, [modalDisciplinasAnuais])
+
+  const modalDisciplinasAnuaisAprovadas = useMemo(() => {
+    return modalDisciplinasAnuais.filter(d => d.mediaFNum >= 7.0)
+  }, [modalDisciplinasAnuais])
+
+  const modalMediaGlobalAnual = useMemo(() => {
+    if (!modalDisciplinasAnuais.length) return 0
+    const sum = modalDisciplinasAnuais.reduce((acc, curr) => acc + curr.mediaFNum, 0)
+    const avg = sum / modalDisciplinasAnuais.length
+    return isNaN(avg) ? 0 : arredondarMediaImpacto(avg)
+  }, [modalDisciplinasAnuais])
+
+  const modalDiagnosticoAnual = useMemo(() => {
+    if (!modalDisciplinasAnuais.length) return null
+    return calcularDiagnosticoPedagogico(modalMediaGlobalAnual, modalDisciplinasAnuaisAbaixo.length, modalDisciplinasAnuais.length)
+  }, [modalDisciplinasAnuais, modalMediaGlobalAnual, modalDisciplinasAnuaisAbaixo])
 
   const modalDisciplinas = useMemo(() => {
     if (!currentModalBoletim || !currentModalBoletim.dados || !currentModalBoletim.dados.disciplinas) return []
@@ -1199,7 +1328,7 @@ export default function ColaboradorNotasPage() {
                       Boletim Escolar
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                      {currentModalBoletim?.originalTitle || 'Boletim'} • Ano {modalAno || selectedAno}
+                      {isMediaAnual ? `Média Anual Progressiva (${totalBimestresLancados} ${totalBimestresLancados === 1 ? 'Bimestre' : 'Bimestres'})` : (currentModalBoletim?.originalTitle || 'Boletim')} • Ano {modalAno || selectedAno}
                     </div>
                   </div>
                 </div>
@@ -1294,8 +1423,34 @@ export default function ColaboradorNotasPage() {
                     background: '#e2e8f0',
                     padding: 4,
                     borderRadius: 14,
-                    overflowX: 'auto'
+                    overflowX: 'auto',
+                    alignItems: 'center'
                   }}>
+                    {/* Botão Média Anual - Antes dos bimestres */}
+                    <button
+                      onClick={() => setModalBimestreId('media_anual')}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 10,
+                        border: 'none',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        whiteSpace: 'nowrap',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: isMediaAnual ? 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)' : 'transparent',
+                        color: isMediaAnual ? '#ffffff' : '#475569',
+                        boxShadow: isMediaAnual ? '0 2px 8px rgba(37,99,235,0.35)' : 'none',
+                        transition: 'all 0.2s ease'
+                      }}
+                      title="Calcular e visualizar a média anual das disciplinas com base nos bimestres lançados"
+                    >
+                      <Calculator size={13} />
+                      <span>Média Anual</span>
+                    </button>
+
                     {modalBimestresDisponiveis.map(b => {
                       const isSelected = modalBimestreId === b.id
                       return (
@@ -1334,7 +1489,290 @@ export default function ColaboradorNotasPage() {
                 flexDirection: 'column',
                 gap: 20
               }}>
-                {!currentModalBoletim ? (
+                {isMediaAnual ? (
+                  modalDisciplinasAnuais.length === 0 ? (
+                    <div style={{
+                      padding: '60px 20px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <div style={{
+                        width: 60,
+                        height: 60,
+                        borderRadius: '50%',
+                        background: '#eff6ff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: 16
+                      }}>
+                        <Calculator size={32} color="#2563eb" />
+                      </div>
+                      <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0' }}>
+                        Nenhum bimestre lançado para cálculo
+                      </h3>
+                      <p style={{ fontSize: 14, color: '#64748b', margin: 0, maxWidth: 360 }}>
+                        Não há notas bimestrais computadas para este aluno no ano letivo selecionado ({modalAno || selectedAno}).
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Card Resumo Global Anual com Diagnóstico Pedagógico */}
+                      <div className="notas-modal-resumo" style={{
+                        padding: '22px 24px',
+                        background: modalDiagnosticoAnual?.cardBg || 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)',
+                        color: '#0f172a',
+                        borderRadius: 22,
+                        border: `1px solid ${modalDiagnosticoAnual?.cardBorder || '#e0e7ff'}`,
+                        position: 'relative',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 16,
+                        flexShrink: 0,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
+                      }}>
+                        {/* Decorative ambient light */}
+                        <div style={{
+                          position: 'absolute',
+                          top: -40,
+                          right: -40,
+                          width: 160,
+                          height: 160,
+                          borderRadius: '50%',
+                          background: modalDiagnosticoAnual?.badgeBg || 'rgba(37,99,235,0.05)',
+                          filter: 'blur(30px)',
+                          pointerEvents: 'none'
+                        }} />
+
+                        {/* Top Row: Média Global à esquerda + Card de Rendimento à direita (sempre lado a lado) */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'relative' }}>
+                          <div className="notas-modal-resumo-left" style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                              <div className="notas-modal-resumo-icon" style={{
+                                width: 26,
+                                height: 26,
+                                borderRadius: 8,
+                                background: modalDiagnosticoAnual?.iconBg || '#dbeafe',
+                                color: modalDiagnosticoAnual?.iconColor || '#2563eb',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0
+                              }}>
+                                <Calculator size={14} />
+                              </div>
+                              <span className="notas-modal-resumo-title" style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
+                                Média Global Anual
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                              <span className="notas-modal-resumo-val" style={{
+                                fontSize: 44,
+                                fontWeight: 900,
+                                fontFamily: 'Outfit, sans-serif',
+                                lineHeight: 1,
+                                color: modalDiagnosticoAnual?.valueColor || '#1e3a8a',
+                                letterSpacing: '-1px'
+                              }}>
+                                {(modalMediaGlobalAnual || 0).toFixed(1)}
+                              </span>
+                              <span className="notas-modal-resumo-scale" style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                                / 10.0
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Card de Rendimento (ao lado da Média Global) */}
+                          <div className="notas-modal-status-pill" style={{
+                            padding: '8px 14px',
+                            background: '#ffffff',
+                            borderRadius: 14,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 3,
+                            border: `1px solid ${modalDiagnosticoAnual?.badgeBorder || 'rgba(0,0,0,0.06)'}`,
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+                            flexShrink: 0,
+                            textAlign: 'center'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              {modalDiagnosticoAnual?.tipo === 'adequado' ? (
+                                <TrendingUp size={16} color={modalDiagnosticoAnual.badgeColor} />
+                              ) : modalDiagnosticoAnual?.tipo === 'insuficiente' ? (
+                                <TrendingDown size={16} color={modalDiagnosticoAnual.badgeColor} />
+                              ) : modalDiagnosticoAnual?.tipo === 'critico' ? (
+                                <AlertOctagon size={16} color={modalDiagnosticoAnual.badgeColor} />
+                              ) : (
+                                <AlertTriangle size={16} color={modalDiagnosticoAnual?.badgeColor || '#d97706'} />
+                              )}
+                              <span style={{
+                                fontSize: 12,
+                                fontWeight: 800,
+                                color: modalDiagnosticoAnual?.badgeColor || '#059669',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {modalDiagnosticoAnual?.badgeText}
+                              </span>
+                            </div>
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: '#64748b',
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {modalDisciplinasAnuaisAbaixo.length === 0
+                                ? '100% na média'
+                                : `${modalDisciplinasAnuaisAbaixo.length} disc. < 7.0`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Linha Inferior: Metadados */}
+                        <div className="notas-modal-resumo-periodo" style={{
+                          fontSize: 11.5,
+                          color: '#64748b',
+                          fontWeight: 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 4,
+                          paddingTop: 8,
+                          borderTop: '1px solid rgba(0,0,0,0.05)',
+                          position: 'relative'
+                        }}>
+                          <span>
+                            Média ponderada dos {totalBimestresLancados} {totalBimestresLancados === 1 ? 'bimestre lançado' : 'bimestres lançados'}
+                          </span>
+                          {(selectedStudentForModal.turmaDisplay || modalBimestresDisponiveis[0]?.nomeTurma) && (
+                            <span style={{ fontWeight: 600, color: '#475569' }}>
+                              Turma: {selectedStudentForModal.turmaDisplay || modalBimestresDisponiveis[0]?.nomeTurma}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+
+                      {/* Rendimento por Disciplina Grid - Média Anual */}
+                      <div className="notas-modal-disciplinas-section" style={{ flexShrink: 0 }}>
+                        <div className="notas-modal-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <BarChart2 size={16} />
+                            </div>
+                            <h3 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                              Rendimento por Disciplina ({modalDisciplinasAnuais.length})
+                            </h3>
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
+                            Base: {totalBimestresLancados} {totalBimestresLancados === 1 ? 'bimestre lançado' : 'bimestres lançados'}
+                          </span>
+                        </div>
+
+                        <div className="notas-modal-disciplinas-grid" style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                          gap: 14
+                        }}>
+                          {modalDisciplinasAnuais.map((d: any, i: number) => {
+                            const isPassed = d.isPassed
+                            return (
+                              <motion.div
+                                key={d.nome}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.2, delay: i * 0.02 }}
+                                className="notas-modal-disciplina-item"
+                                style={{
+                                  padding: '14px 16px',
+                                  background: isPassed ? '#f8fafc' : '#fff8f8',
+                                  borderRadius: 16,
+                                  border: isPassed ? '1px solid #f1f5f9' : '1px solid #fecaca',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  boxShadow: isPassed ? 'none' : '0 2px 8px rgba(239,68,68,0.06)'
+                                }}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0, paddingRight: 12 }}>
+                                  <div className="notas-disciplina-nome" style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <span>{d.nome}</span>
+                                    {!isPassed ? (
+                                      <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 4 }}>
+                                        Abaixo
+                                      </span>
+                                    ) : (
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 5px', borderRadius: 4 }}>
+                                        Na Média
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Bimestres lançados da disciplina */}
+                                  <div className="notas-disciplina-evals" style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
+                                    {d.bimesters.map((b: any, bIdx: number) => (
+                                      <React.Fragment key={b.bimNum}>
+                                        {bIdx > 0 && <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />}
+                                        <span style={{ color: b.lancado ? '#334155' : '#94a3b8' }}>
+                                          {b.bimNum}º Bim: <strong style={{ color: b.lancado ? (b.valorNum >= 7.0 ? '#1e293b' : '#dc2626') : '#94a3b8' }}>{b.valorStr}</strong>
+                                        </span>
+                                      </React.Fragment>
+                                    ))}
+                                  </div>
+
+                                  {/* Progress bar */}
+                                  <div className="notas-disciplina-prog-bar" style={{ marginTop: 2, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '85%' }}>
+                                    <div 
+                                      style={{
+                                        width: `${Math.min(d.mediaFNum * 10, 100)}%`,
+                                        height: '100%',
+                                        background: isPassed ? '#10b981' : '#ef4444',
+                                        borderRadius: 2
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="notas-disciplina-grade-box" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+                                  <div className="notas-disciplina-grade-val" style={{
+                                    fontSize: 22,
+                                    fontWeight: 900,
+                                    fontFamily: 'Outfit, sans-serif',
+                                    color: isPassed ? '#059669' : '#dc2626',
+                                    lineHeight: 1
+                                  }}>
+                                    {d.mediaAnualFormatada}
+                                  </div>
+                                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
+                                    Média Anual
+                                  </div>
+                                  <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 500 }}>
+                                    ({d.lancadosCount} {d.lancadosCount === 1 ? 'bimestre' : 'bimestres'})
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Print Footer */}
+                      <div className="notas-print-doc-footer" style={{ display: 'none' }}>
+                        <span>IMPACTO EDU • Sistema de Gestão Escolar</span>
+                        <span>Documento emitido em {new Date().toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    </>
+                  )
+                ) : !currentModalBoletim ? (
                   <div style={{
                     padding: '60px 20px',
                     textAlign: 'center',
@@ -1392,92 +1830,117 @@ export default function ColaboradorNotasPage() {
                         pointerEvents: 'none'
                       }} />
 
-                      {/* Top Row: Média Global + Info à esquerda, Status Pill à direita */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, position: 'relative' }}>
-                        <div className="notas-modal-resumo-left" style={{ flex: '1 1 200px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                            <div className="notas-modal-resumo-icon" style={{
-                              width: 30,
-                              height: 30,
-                              borderRadius: 10,
-                              background: modalDiagnostico?.iconBg || '#dbeafe',
-                              color: modalDiagnostico?.iconColor || '#2563eb',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0
-                            }}>
-                              <GraduationCap size={18} />
+                        {/* Top Row: Média Global à esquerda + Card de Rendimento à direita (sempre lado a lado) */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'relative' }}>
+                          <div className="notas-modal-resumo-left" style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                              <div className="notas-modal-resumo-icon" style={{
+                                width: 26,
+                                height: 26,
+                                borderRadius: 8,
+                                background: modalDiagnostico?.iconBg || '#dbeafe',
+                                color: modalDiagnostico?.iconColor || '#2563eb',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0
+                              }}>
+                                <GraduationCap size={14} />
+                              </div>
+                              <span className="notas-modal-resumo-title" style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
+                                Média Global do Período
+                              </span>
                             </div>
-                            <span className="notas-modal-resumo-title" style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
-                              Média Global do Período
-                            </span>
+
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                              <span className="notas-modal-resumo-val" style={{
+                                fontSize: 44,
+                                fontWeight: 900,
+                                fontFamily: 'Outfit, sans-serif',
+                                lineHeight: 1,
+                                color: modalDiagnostico?.valueColor || '#1e3a8a',
+                                letterSpacing: '-1px'
+                              }}>
+                                {(modalMediaGlobal || 0).toFixed(1)}
+                              </span>
+                              <span className="notas-modal-resumo-scale" style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                                / 10.0
+                              </span>
+                            </div>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                            <span className="notas-modal-resumo-val" style={{
-                              fontSize: 44,
-                              fontWeight: 900,
-                              fontFamily: 'Outfit, sans-serif',
-                              lineHeight: 1,
-                              color: modalDiagnostico?.valueColor || '#1e3a8a',
-                              letterSpacing: '-1px'
-                            }}>
-                              {(modalMediaGlobal || 0).toFixed(1)}
-                            </span>
-                            <span className="notas-modal-resumo-scale" style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
-                              / 10.0
-                            </span>
-                          </div>
-
-                          <div className="notas-modal-resumo-periodo" style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>
-                            {currentModalBoletim.originalTitle} • Turma: {currentModalBoletim.nomeTurma || selectedStudentForModal.turmaDisplay}
-                          </div>
-                        </div>
-
-                        {/* Status pill right com diagnóstico pedagógico */}
-                        <div className="notas-modal-status-pill" style={{
-                          padding: '12px 18px',
-                          background: '#ffffff',
-                          borderRadius: 16,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: 6,
-                          border: `1px solid ${modalDiagnostico?.badgeBorder || 'rgba(0,0,0,0.06)'}`,
-                          boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
-                          flexShrink: 0
-                        }}>
-                          {modalDiagnostico?.tipo === 'adequado' ? (
-                            <TrendingUp size={24} color={modalDiagnostico.badgeColor} />
-                          ) : modalDiagnostico?.tipo === 'insuficiente' ? (
-                            <TrendingDown size={24} color={modalDiagnostico.badgeColor} />
-                          ) : modalDiagnostico?.tipo === 'critico' ? (
-                            <AlertOctagon size={24} color={modalDiagnostico.badgeColor} />
-                          ) : (
-                            <AlertTriangle size={24} color={modalDiagnostico?.badgeColor || '#d97706'} />
-                          )}
-                          <span style={{
-                            fontSize: 12,
-                            fontWeight: 800,
-                            color: modalDiagnostico?.badgeColor || '#059669',
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            {modalDiagnostico?.badgeText}
-                          </span>
-                          <span style={{
-                            fontSize: 10,
-                            fontWeight: 600,
-                            color: '#64748b',
+                          {/* Card de Rendimento (ao lado da Média Global) */}
+                          <div className="notas-modal-status-pill" style={{
+                            padding: '8px 14px',
+                            background: '#ffffff',
+                            borderRadius: 14,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 3,
+                            border: `1px solid ${modalDiagnostico?.badgeBorder || 'rgba(0,0,0,0.06)'}`,
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+                            flexShrink: 0,
                             textAlign: 'center'
                           }}>
-                            {modalDisciplinasAbaixo.length === 0
-                              ? '100% na média'
-                              : `${modalDisciplinasAbaixo.length} disciplina${modalDisciplinasAbaixo.length > 1 ? 's' : ''} < 7.0`}
-                          </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              {modalDiagnostico?.tipo === 'adequado' ? (
+                                <TrendingUp size={16} color={modalDiagnostico.badgeColor} />
+                              ) : modalDiagnostico?.tipo === 'insuficiente' ? (
+                                <TrendingDown size={16} color={modalDiagnostico.badgeColor} />
+                              ) : modalDiagnostico?.tipo === 'critico' ? (
+                                <AlertOctagon size={16} color={modalDiagnostico.badgeColor} />
+                              ) : (
+                                <AlertTriangle size={16} color={modalDiagnostico?.badgeColor || '#d97706'} />
+                              )}
+                              <span style={{
+                                fontSize: 12,
+                                fontWeight: 800,
+                                color: modalDiagnostico?.badgeColor || '#059669',
+                                textAlign: 'center',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {modalDiagnostico?.badgeText}
+                              </span>
+                            </div>
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 600,
+                              color: '#64748b',
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {modalDisciplinasAbaixo.length === 0
+                                ? '100% na média'
+                                : `${modalDisciplinasAbaixo.length} disc. < 7.0`}
+                            </span>
+                          </div>
                         </div>
-                      </div>
+
+                        {/* Linha Inferior: Metadados */}
+                        <div className="notas-modal-resumo-periodo" style={{
+                          fontSize: 11.5,
+                          color: '#64748b',
+                          fontWeight: 500,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: 4,
+                          paddingTop: 8,
+                          borderTop: '1px solid rgba(0,0,0,0.05)',
+                          position: 'relative'
+                        }}>
+                          <span>
+                            {currentModalBoletim.originalTitle}
+                          </span>
+                          {(currentModalBoletim.nomeTurma || selectedStudentForModal.turmaDisplay) && (
+                            <span style={{ fontWeight: 600, color: '#475569' }}>
+                              Turma: {currentModalBoletim.nomeTurma || selectedStudentForModal.turmaDisplay}
+                            </span>
+                          )}
+                        </div>
                     </div>
 
                     {/* Rendimento por Disciplina Grid */}
@@ -1803,11 +2266,11 @@ export default function ColaboradorNotasPage() {
             min-height: fit-content !important;
           }
           .notas-modal-status-pill {
-            flex-direction: row !important;
-            padding: 8px 14px !important;
+            flex-direction: column !important;
+            padding: 6px 12px !important;
             border-radius: 12px !important;
-            gap: 8px !important;
-            align-self: flex-start !important;
+            gap: 2px !important;
+            align-self: center !important;
           }
           .notas-modal-status-pill svg {
             width: 18px !important;
@@ -2012,10 +2475,10 @@ export default function ColaboradorNotasPage() {
             margin-top: 2px !important;
           }
           .notas-modal-status-pill {
-            padding: 6px 12px !important;
-            border-radius: 10px !important;
-            flex-direction: row !important;
-            gap: 6px !important;
+            padding: 4px 10px !important;
+            border-radius: 8px !important;
+            flex-direction: column !important;
+            gap: 2px !important;
           }
           .notas-modal-status-pill svg {
             width: 16px !important;

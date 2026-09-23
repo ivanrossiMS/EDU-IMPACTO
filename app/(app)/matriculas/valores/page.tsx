@@ -382,7 +382,7 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
   {
     id: 'integral',
     nome: 'Integral',
-    detalhe: 'Almoço incluído',
+    detalhe: 'Almoço cortesia',
     segmento: 'Período Estendido',
     mensalidadeBase: 2195.00,
     anuidadeBase: 26340.00,
@@ -392,7 +392,7 @@ const DEFAULT_SERIES_2027: SeriePricing[] = [
   {
     id: 'intermediario',
     nome: 'Intermediário',
-    detalhe: 'Almoço incluído',
+    detalhe: 'Almoço cortesia',
     segmento: 'Período Estendido',
     mensalidadeBase: 1895.00,
     anuidadeBase: 22740.00,

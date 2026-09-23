@@ -7,14 +7,15 @@ import { useApp } from '@/lib/context'
 import { useParams, useSearchParams } from 'next/navigation'
 import { 
   GraduationCap, Download, ChevronRight, ChevronDown, TrendingUp, TrendingDown, 
-  AlertCircle, FileText, BarChart2, Sparkles, AlertTriangle, CheckCircle2, AlertOctagon 
+  AlertCircle, FileText, BarChart2, Sparkles, AlertTriangle, CheckCircle2, AlertOctagon,
+  Calculator
 } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { useApiQuery } from '@/hooks/useApi'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAgendaRealtime } from '@/hooks/useAgendaRealtime'
-import { parseNotaValor, calcularDiagnosticoPedagogico } from '@/lib/notasEngine'
+import { parseNotaValor, calcularDiagnosticoPedagogico, arredondarMediaImpacto } from '@/lib/notasEngine'
 
 export default function ADNotasPage({ params }: { params: any }) {
   const { adConfig } = useAgendaDigital();
@@ -150,20 +151,148 @@ export default function ADNotasPage({ params }: { params: any }) {
     
     const res = [];
     for (const b of sorted) {
-      res.push({ id: b.id, nome: b.parsedDados.bimestre, dados: b.parsedDados, originalTitle: b.parsedDados.bimestre, nomeTurma: b.nomeTurma })
+      const match = (b.parsedDados?.bimestre || '').match(/(\d+)/)
+      const bimNum = match ? parseInt(match[1], 10) : 0
+      res.push({ id: b.id, nome: b.parsedDados.bimestre, dados: b.parsedDados, originalTitle: b.parsedDados.bimestre, nomeTurma: b.nomeTurma, bimNum })
     }
 
-    return res.sort((a: any, b: any) => a.originalTitle.localeCompare(b.originalTitle))
+    return res.sort((a: any, b: any) => (a.bimNum && b.bimNum) ? a.bimNum - b.bimNum : a.originalTitle.localeCompare(b.originalTitle))
   }, [boletins, selectedTurma])
 
   const [selectedBimestreId, setSelectedBimestreId] = useState<string | null>(null)
 
-  // Auto-select first available period
+  // Auto-select the LAST available period (último bimestre) ao carregar
   useEffect(() => {
-    if (bimestresDisponiveis.length > 0 && !selectedBimestreId) {
-      setSelectedBimestreId(bimestresDisponiveis[0].id)
+    if (bimestresDisponiveis.length > 0) {
+      if (queryItemId) {
+        const target = bimestresDisponiveis.find((b: any) => String(b.id) === String(queryItemId))
+        if (target) {
+          if (selectedBimestreId !== target.id) setSelectedBimestreId(target.id)
+          return
+        }
+      }
+      const exists = selectedBimestreId === 'media_anual' || bimestresDisponiveis.some(b => b.id === selectedBimestreId)
+      if (!selectedBimestreId || !exists) {
+        const lastBim = bimestresDisponiveis[bimestresDisponiveis.length - 1]
+        setSelectedBimestreId(lastBim.id)
+      }
     }
-  }, [bimestresDisponiveis, selectedBimestreId])
+  }, [bimestresDisponiveis, selectedBimestreId, queryItemId])
+
+  const isMediaAnual = selectedBimestreId === 'media_anual'
+
+  const totalBimestresLancados = useMemo(() => {
+    const seen = new Set<number>()
+    bimestresDisponiveis.forEach((b: any) => {
+      if (b.bimNum > 0) seen.add(b.bimNum)
+    })
+    return seen.size
+  }, [bimestresDisponiveis])
+
+  // Cálculo da Média Anual de todas as disciplinas com base nos bimestres lançados
+  const disciplinasAnuais = useMemo(() => {
+    if (!boletins.length || bimestresDisponiveis.length === 0) return []
+
+    const discMap = new Map<string, {
+      nome: string
+      bimesters: {
+        bimNum: number
+        bimNome: string
+        valorStr: string
+        valorNum: number
+        lancado: boolean
+        avm?: any
+        avb?: any
+        simulado?: any
+        bonus?: any
+        rec?: any
+      }[]
+    }>()
+
+    const seenBims = new Set<number>()
+    const uniqueBims = bimestresDisponiveis.filter((b: any) => {
+      if (seenBims.has(b.bimNum)) return false
+      seenBims.add(b.bimNum)
+      return true
+    })
+
+    for (const b of uniqueBims) {
+      const discList = b.dados?.disciplinas || []
+      for (const d of discList) {
+        if (!d.nome) continue
+        const normKey = d.nome.trim().toUpperCase()
+        if (!discMap.has(normKey)) {
+          discMap.set(normKey, {
+            nome: d.nome.trim(),
+            bimesters: []
+          })
+        }
+
+        const entry = discMap.get(normKey)!
+        const rawVal = d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF || '')
+        const strVal = String(rawVal).trim()
+        const isLancado = strVal !== '' && strVal !== '---' && strVal !== '-'
+        const num = parseNotaValor(strVal)
+
+        entry.bimesters.push({
+          bimNum: b.bimNum,
+          bimNome: b.nome,
+          valorStr: isLancado ? strVal : '—',
+          valorNum: num,
+          lancado: isLancado,
+          avm: d.avm,
+          avb: d.avb,
+          simulado: d.simulado,
+          bonus: d.pntBonu || d.bonus,
+          rec: d.rec
+        })
+      }
+    }
+
+    const list: any[] = []
+    discMap.forEach((entry) => {
+      const sortedBims = [...entry.bimesters].sort((a, b) => a.bimNum - b.bimNum)
+      const lancados = sortedBims.filter(b => b.lancado)
+
+      let mediaAnualNum = 0
+      if (lancados.length > 0) {
+        const sum = lancados.reduce((acc, b) => acc + b.valorNum, 0)
+        mediaAnualNum = sum / lancados.length
+      }
+
+      // Arredondamento acadêmico oficial (Imagem 2 / Colégio IMPACTO):
+      // >= 0.00 e <= 0.25 -> 0.00 | > 0.25 e <= 0.75 -> 0.50 | > 0.75 e <= 1.00 -> 1.00
+      const mediaFNum = arredondarMediaImpacto(mediaAnualNum)
+
+      list.push({
+        nome: entry.nome,
+        bimesters: sortedBims,
+        lancadosCount: lancados.length,
+        totalBims: uniqueBims.length,
+        mediaFNum,
+        mediaAnualFormatada: mediaFNum.toFixed(1).replace('.', ','),
+        isPassed: mediaFNum >= 7.0
+      })
+    })
+
+    return list.sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [boletins, bimestresDisponiveis])
+
+  const disciplinasAnuaisAbaixo = useMemo(() => {
+    return disciplinasAnuais.filter(d => d.mediaFNum < 7.0)
+  }, [disciplinasAnuais])
+
+  const mediaGlobalAnual = useMemo(() => {
+    if (!disciplinasAnuais.length) return 0
+    const sum = disciplinasAnuais.reduce((acc, curr) => acc + curr.mediaFNum, 0)
+    const avg = sum / disciplinasAnuais.length
+    return isNaN(avg) ? 0 : arredondarMediaImpacto(avg)
+  }, [disciplinasAnuais])
+
+  const diagnosticoAnual = useMemo(() => {
+    if (!disciplinasAnuais.length) return null
+    return calcularDiagnosticoPedagogico(mediaGlobalAnual, disciplinasAnuaisAbaixo.length, disciplinasAnuais.length)
+  }, [disciplinasAnuais, mediaGlobalAnual, disciplinasAnuaisAbaixo])
 
   useEffect(() => {
     if (!aluno?.id || boletins.length === 0) return;
@@ -404,8 +533,37 @@ export default function ADNotasPage({ params }: { params: any }) {
         {bimestresDisponiveis.length > 0 && (
           <div style={{ 
             display: 'flex', gap: 6, background: '#f1f5f9', padding: 6, borderRadius: 18,
-            overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' 
+            overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
+            alignItems: 'center'
           }}>
+            {/* Botão Média Anual - Antes dos bimestres */}
+            <button
+              onClick={() => setSelectedBimestreId('media_anual')}
+              style={{
+                flex: 1,
+                minWidth: 100,
+                padding: '10px 8px',
+                borderRadius: 14,
+                border: 'none',
+                fontWeight: 700,
+                fontSize: 13,
+                whiteSpace: 'nowrap',
+                transition: 'all 0.3s ease',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                background: isMediaAnual ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)' : 'transparent',
+                color: isMediaAnual ? '#ffffff' : '#64748b',
+                boxShadow: isMediaAnual ? '0 4px 12px rgba(37,99,235,0.25)' : 'none'
+              }}
+              title="Calcular e visualizar a média anual das disciplinas com base nos bimestres lançados"
+            >
+              <Calculator size={14} />
+              <span>Média Anual</span>
+            </button>
+
             {bimestresDisponiveis.map((b: any) => (
               <button
                 key={b.id}
@@ -434,88 +592,343 @@ export default function ADNotasPage({ params }: { params: any }) {
       </div>
 
       <div>
-        {boletimAtual && (
-        <div className="print-main-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 32 }}>
-          {/* Card Resumo Global com Diagnóstico Pedagógico */}
-          <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }} 
-            animate={{ scale: 1, opacity: 1 }} 
-            key={boletimAtual.id}
-            className="print-global-card"
-            style={{ 
-              padding: 24, 
-              background: diagnostico?.cardBg || 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)', 
-              color: '#0f172a', 
-              borderRadius: 24, 
-              border: `1px solid ${diagnostico?.cardBorder || '#e0e7ff'}`, 
-              position: 'relative', 
-              overflow: 'hidden', 
-              boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+        {isMediaAnual ? (
+          disciplinasAnuais.length === 0 ? (
+            <div style={{
+              background: '#fff',
+              borderRadius: 24,
+              padding: '60px 20px',
+              border: '1px solid #e2e8f0',
+              textAlign: 'center',
               display: 'flex',
               flexDirection: 'column',
-              gap: 16
-            }}
-          >
-             <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: diagnostico?.badgeBg || 'rgba(59,130,246,0.1)', borderRadius: '50%', filter: 'blur(40px)', pointerEvents: 'none' }} />
-             
-             {/* Top Row */}
-             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, position: 'relative' }}>
-               <div>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                   <div style={{ width: 32, height: 32, borderRadius: 10, background: diagnostico?.iconBg || '#dbeafe', color: diagnostico?.iconColor || '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                     <GraduationCap size={16} />
-                   </div>
-                   <div style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, fontSize: 12, color: '#64748b' }}>Média Global</div>
-                 </div>
-                 
-                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-                   <div className="print-media-value" style={{ fontSize: 56, fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: diagnostico?.valueColor || '#1e3a8a', letterSpacing: '-1px' }}>
-                     {mediaGlobal.toFixed(1)}
-                   </div>
-                   <div style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
-                     / 10.0
-                   </div>
-                 </div>
-                 
-                 <div style={{ fontSize: 13, color: '#64748b', marginTop: 8, fontWeight: 500 }}>
-                   Referente ao {boletimAtual.originalTitle} {boletimAtual.dados.ano ? `de ${boletimAtual.dados.ano}` : ''} {boletimAtual.nomeTurma ? `| Turma: ${boletimAtual.nomeTurma}` : ''}
-                 </div>
-               </div>
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12
+            }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Calculator size={28} color="#2563eb" />
+              </div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                Nenhum bimestre lançado para cálculo
+              </h3>
+              <p style={{ fontSize: 14, color: '#64748b', margin: 0, maxWidth: 360 }}>
+                Ainda não há notas bimestrais lançadas para computar a média anual.
+              </p>
+            </div>
+          ) : (
+            <div className="print-main-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 32 }}>
+              {/* Card Resumo Global Anual */}
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="print-global-card"
+                style={{
+                  padding: '16px 20px',
+                  background: diagnosticoAnual?.cardBg || 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)',
+                  color: '#0f172a',
+                  borderRadius: 20,
+                  border: `1px solid ${diagnosticoAnual?.cardBorder || '#e0e7ff'}`,
+                  position: 'relative',
+                  overflow: 'hidden',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12
+                }}
+              >
+                <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: diagnosticoAnual?.badgeBg || 'rgba(59,130,246,0.1)', borderRadius: '50%', filter: 'blur(40px)', pointerEvents: 'none' }} />
 
-               {/* Status pill right com diagnóstico pedagógico */}
-               <div style={{
-                 padding: '12px 18px',
-                 background: '#ffffff',
-                 borderRadius: 16,
-                 display: 'flex',
-                 flexDirection: 'column',
-                 alignItems: 'center',
-                 gap: 6,
-                 border: `1px solid ${diagnostico?.badgeBorder || 'rgba(0,0,0,0.06)'}`,
-                 boxShadow: '0 4px 14px rgba(0,0,0,0.04)',
-                 flexShrink: 0
-               }}>
-                 {diagnostico?.tipo === 'adequado' ? (
-                   <TrendingUp size={24} color={diagnostico.badgeColor} />
-                 ) : diagnostico?.tipo === 'insuficiente' ? (
-                   <TrendingDown size={24} color={diagnostico.badgeColor} />
-                 ) : diagnostico?.tipo === 'critico' ? (
-                   <AlertOctagon size={24} color={diagnostico.badgeColor} />
-                 ) : (
-                   <AlertTriangle size={24} color={diagnostico?.badgeColor || '#d97706'} />
-                 )}
-                 <span style={{ fontSize: 12, fontWeight: 800, color: diagnostico?.badgeColor || '#059669', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                   {diagnostico?.badgeText}
-                 </span>
-                 <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', textAlign: 'center' }}>
-                   {disciplinasAbaixo.length === 0
-                     ? '100% na média'
-                     : `${disciplinasAbaixo.length} disciplina${disciplinasAbaixo.length > 1 ? 's' : ''} < 7.0`}
-                 </span>
-               </div>
-             </div>
+                {/* Top Row: Média Global à esquerda + Card de Rendimento à direita (sempre lado a lado) */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'relative' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 8, background: diagnosticoAnual?.iconBg || '#dbeafe', color: diagnosticoAnual?.iconColor || '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Calculator size={14} />
+                      </div>
+                      <div style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
+                        Média Global Anual
+                      </div>
+                    </div>
 
-          </motion.div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                      <div className="print-media-value" style={{ fontSize: 44, fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: diagnosticoAnual?.valueColor || '#1e3a8a', letterSpacing: '-1px' }}>
+                        {mediaGlobalAnual.toFixed(1)}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                        / 10.0
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card de Rendimento (ao lado da Média Global) */}
+                  <div style={{
+                    padding: '8px 14px',
+                    background: '#ffffff',
+                    borderRadius: 14,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 3,
+                    border: `1px solid ${diagnosticoAnual?.badgeBorder || 'rgba(0,0,0,0.06)'}`,
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+                    flexShrink: 0,
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {diagnosticoAnual?.tipo === 'adequado' ? (
+                        <TrendingUp size={16} color={diagnosticoAnual.badgeColor} />
+                      ) : diagnosticoAnual?.tipo === 'insuficiente' ? (
+                        <TrendingDown size={16} color={diagnosticoAnual.badgeColor} />
+                      ) : diagnosticoAnual?.tipo === 'critico' ? (
+                        <AlertOctagon size={16} color={diagnosticoAnual.badgeColor} />
+                      ) : (
+                        <AlertTriangle size={16} color={diagnosticoAnual?.badgeColor || '#d97706'} />
+                      )}
+                      <span style={{ fontSize: 12, fontWeight: 800, color: diagnosticoAnual?.badgeColor || '#059669', whiteSpace: 'nowrap' }}>
+                        {diagnosticoAnual?.badgeText}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>
+                      {disciplinasAnuaisAbaixo.length === 0
+                        ? '100% na média'
+                        : `${disciplinasAnuaisAbaixo.length} disc. < 7.0`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Linha Inferior: Metadados do período e turma */}
+                <div style={{
+                  fontSize: 11.5,
+                  color: '#64748b',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 4,
+                  paddingTop: 8,
+                  borderTop: '1px solid rgba(0,0,0,0.05)',
+                  position: 'relative'
+                }}>
+                  <span>
+                    Média acumulada dos {totalBimestresLancados} {totalBimestresLancados === 1 ? 'bimestre lançado' : 'bimestres lançados'}
+                  </span>
+                  {selectedTurma && (
+                    <span style={{ fontWeight: 600, color: '#475569' }}>
+                      Turma: {selectedTurma}
+                    </span>
+                  )}
+                </div>
+              </motion.div>
+
+
+              {/* Tabela de Disciplinas Anuais */}
+              <div className="print-disciplinas-wrapper" style={{ background: '#fff', borderRadius: 24, padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <BarChart2 size={16} />
+                    </div>
+                    <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: '#0f172a' }}>
+                      Rendimento por Disciplina ({disciplinasAnuais.length})
+                    </h3>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b' }}>
+                    Base: {totalBimestresLancados} {totalBimestresLancados === 1 ? 'bimestre lançado' : 'bimestres lançados'}
+                  </span>
+                </div>
+
+                <div className="print-disciplinas-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {disciplinasAnuais.map((d: any, i: number) => {
+                    const isPassed = d.isPassed
+                    return (
+                      <motion.div
+                        key={d.nome}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, delay: i * 0.02 }}
+                        whileHover={{ y: -2, boxShadow: '0 8px 20px rgba(0,0,0,0.04)' }}
+                        className="print-disciplina-item"
+                        style={{
+                          padding: '16px',
+                          background: isPassed ? '#f8fafc' : '#fff8f8',
+                          borderRadius: 16,
+                          border: isPassed ? '1px solid #f1f5f9' : '1px solid #fecaca',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          boxShadow: isPassed ? '0 2px 10px rgba(0,0,0,0.02)' : '0 2px 10px rgba(239,68,68,0.06)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, minWidth: 0, paddingRight: 12 }}>
+                          <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span>{d.nome}</span>
+                            {!isPassed ? (
+                              <span style={{ fontSize: 10, fontWeight: 800, color: '#dc2626', background: '#fee2e2', padding: '1px 5px', borderRadius: 4 }}>
+                                Abaixo
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 5px', borderRadius: 4 }}>
+                                Na Média
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
+                            {d.bimesters.map((b: any, bIdx: number) => (
+                              <span key={b.bimNum} style={{ color: b.lancado ? '#334155' : '#94a3b8' }}>
+                                {bIdx > 0 && <span style={{ marginRight: 6, color: '#cbd5e1' }}>•</span>}
+                                {b.bimNum}º Bim: <strong style={{ color: b.lancado ? (b.valorNum >= 7.0 ? '#1e293b' : '#dc2626') : '#94a3b8' }}>{b.valorStr}</strong>
+                              </span>
+                            ))}
+                          </div>
+
+                          <div style={{ marginTop: 4, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '85%' }}>
+                            <div
+                              style={{
+                                width: `${Math.min(d.mediaFNum * 10, 100)}%`,
+                                height: '100%',
+                                background: isPassed ? '#10b981' : '#ef4444',
+                                borderRadius: 2
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+                          <div style={{
+                            fontSize: 22,
+                            fontWeight: 900,
+                            fontFamily: 'Outfit, sans-serif',
+                            color: isPassed ? '#059669' : '#dc2626',
+                            lineHeight: 1
+                          }}>
+                            {d.mediaAnualFormatada}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
+                            Média Anual
+                          </div>
+                          <div style={{ fontSize: 9, color: '#94a3b8', fontWeight: 500 }}>
+                            ({d.lancadosCount} {d.lancadosCount === 1 ? 'bimestre' : 'bimestres'})
+                          </div>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        ) : (
+          boletimAtual && (
+            <div className="print-main-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: 24, marginBottom: 32 }}>
+              {/* Card Resumo Global com Diagnóstico Pedagógico */}
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }} 
+                animate={{ scale: 1, opacity: 1 }} 
+                key={boletimAtual.id}
+                className="print-global-card"
+                style={{ 
+                  padding: '16px 20px', 
+                  background: diagnostico?.cardBg || 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)', 
+                  color: '#0f172a', 
+                  borderRadius: 20, 
+                  border: `1px solid ${diagnostico?.cardBorder || '#e0e7ff'}`, 
+                  position: 'relative', 
+                  overflow: 'hidden', 
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12
+                }}
+              >
+                <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, background: diagnostico?.badgeBg || 'rgba(59,130,246,0.1)', borderRadius: '50%', filter: 'blur(40px)', pointerEvents: 'none' }} />
+                
+                {/* Top Row: Média Global à esquerda + Card de Rendimento à direita (sempre lado a lado) */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, position: 'relative' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                      <div style={{ width: 26, height: 26, borderRadius: 8, background: diagnostico?.iconBg || '#dbeafe', color: diagnostico?.iconColor || '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <GraduationCap size={14} />
+                      </div>
+                      <div style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
+                        Média Global
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                      <div className="print-media-value" style={{ fontSize: 44, fontWeight: 900, fontFamily: 'Outfit, sans-serif', lineHeight: 1, color: diagnostico?.valueColor || '#1e3a8a', letterSpacing: '-1px' }}>
+                        {mediaGlobal.toFixed(1)}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                        / 10.0
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card de Rendimento (ao lado da Média Global) */}
+                  <div style={{
+                    padding: '8px 14px',
+                    background: '#ffffff',
+                    borderRadius: 14,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 3,
+                    border: `1px solid ${diagnostico?.badgeBorder || 'rgba(0,0,0,0.06)'}`,
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.04)',
+                    flexShrink: 0,
+                    textAlign: 'center'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {diagnostico?.tipo === 'adequado' ? (
+                        <TrendingUp size={16} color={diagnostico.badgeColor} />
+                      ) : diagnostico?.tipo === 'insuficiente' ? (
+                        <TrendingDown size={16} color={diagnostico.badgeColor} />
+                      ) : diagnostico?.tipo === 'critico' ? (
+                        <AlertOctagon size={16} color={diagnostico.badgeColor} />
+                      ) : (
+                        <AlertTriangle size={16} color={diagnostico?.badgeColor || '#d97706'} />
+                      )}
+                      <span style={{ fontSize: 12, fontWeight: 800, color: diagnostico?.badgeColor || '#059669', whiteSpace: 'nowrap' }}>
+                        {diagnostico?.badgeText}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', whiteSpace: 'nowrap' }}>
+                      {disciplinasAbaixo.length === 0
+                        ? '100% na média'
+                        : `${disciplinasAbaixo.length} disc. < 7.0`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Linha Inferior: Metadados */}
+                <div style={{
+                  fontSize: 11.5,
+                  color: '#64748b',
+                  fontWeight: 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 4,
+                  paddingTop: 8,
+                  borderTop: '1px solid rgba(0,0,0,0.05)',
+                  position: 'relative'
+                }}>
+                  <span>
+                    Referente ao {boletimAtual.originalTitle} {boletimAtual.dados.ano ? `de ${boletimAtual.dados.ano}` : ''}
+                  </span>
+                  {boletimAtual.nomeTurma && (
+                    <span style={{ fontWeight: 600, color: '#475569' }}>
+                      Turma: {boletimAtual.nomeTurma}
+                    </span>
+                  )}
+                </div>
+              </motion.div>
 
           {/* Tabela de Disciplinas Modernizada */}
           <div className="print-disciplinas-wrapper" style={{ background: '#fff', borderRadius: 24, padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
@@ -634,7 +1047,7 @@ export default function ADNotasPage({ params }: { params: any }) {
             </div>
           </div>
         </div>
-      )}
+      ))}
       </div>
       
       <style dangerouslySetInnerHTML={{__html:`
