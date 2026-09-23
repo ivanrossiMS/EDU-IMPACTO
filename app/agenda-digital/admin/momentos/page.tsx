@@ -211,8 +211,8 @@ export default function ADAdminMomentos() {
           }) as File
         }
 
-        if (fileToUpload.size > 100 * 1024 * 1024) {
-          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)}) ultrapassa o limite de 100MB suportado pelo servidor.`)
+        if (fileToUpload.size > 50 * 1024 * 1024) {
+          throw new Error(`O arquivo "${file.name}" (${formatFileSize(fileToUpload.size)}) ultrapassa o limite de 50MB suportado pelo servidor. Escolha um vídeo com menor duração ou reduza a resolução na câmera.`)
         }
 
         setUploadProgress(prev => ({ ...prev, [file.name]: 60 }))

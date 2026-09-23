@@ -577,29 +577,355 @@ export async function compressPDF(
 }
 
 /**
- * Validação e preparação de vídeo para upload direto com alta performance.
- * 
- * NOTA CRUCIAL DE ARQUITETURA WEB:
- * Transcodificar vídeos no navegador do cliente através de HTMLMediaElement.captureStream()
- * e MediaRecorder é uma prática anti-pattern que causa danos graves:
- * 1. O motor Chromium aplica occlusion culling em elementos fora de tela / opacity: 0,
- *    produzindo streams com quadros 100% PRETOS (telas pretas).
- * 2. O Safari iOS não suporta captureStream em vídeos e trava render loops.
- * 3. O processamento em tempo real (1x / 1.5x) força o usuário a esperar dezenas de segundos desnecessariamente.
- * 4. Aparelhos celulares modernos (iOS e Android) já gravam vídeos perfeitamente comprimidos
- *    em hardware com H.264/HEVC.
- * 
- * Preservamos o arquivo original em sua total integridade e qualidade, garantindo reprodução
- * perfeita com aceleração de hardware sem tela preta.
+ * Comprime e otimiza arquivos de vídeo no cliente antes do upload.
+ * - Converte vídeos pesados (4K/1080p ou .MOV de iPhones) para 720p H.264 a ~2.2 Mbps.
+ * - Evita o bug de tela preta renderizando os frames via Canvas 2D com visibilidade real para o compositor.
+ * - Preserva áudio sincronizado via Web Audio API sem emitir som no alto-falante.
+ * - Se o vídeo já for leve (< 20MB) e compatível, mantém o original para economizar tempo.
  */
 export async function compressVideo(
   file: File,
   onProgress?: (percent: number) => void,
   options: VideoCompressOptions = {}
 ): Promise<File | Blob> {
-  if (onProgress) {
-    onProgress(100);
+  // Se o vídeo já for menor que 20MB e estiver em formato MP4/WebM padrão web, não precisa recomprimir
+  const isWebFormat = /\.(mp4|webm)$/i.test(file.name) || file.type === 'video/mp4' || file.type === 'video/webm';
+  if (file.size < 20 * 1024 * 1024 && isWebFormat) {
+    if (onProgress) onProgress(100);
+    return file;
   }
-  return file;
+
+  // Se o ambiente não suportar MediaRecorder ou Canvas, mantém o original
+  if (typeof window === 'undefined' || typeof document === 'undefined' || typeof MediaRecorder === 'undefined') {
+    if (onProgress) onProgress(100);
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    let video: HTMLVideoElement | null = null;
+    let canvas: HTMLCanvasElement | null = null;
+    let recorder: MediaRecorder | null = null;
+    let audioCtx: any = null;
+    let isRecording = false;
+    let animId: number | null = null;
+    let vfcId: number | null = null;
+    let progressTimer: NodeJS.Timeout | null = null;
+    let safetyTimeout: NodeJS.Timeout | null = null;
+    let resolved = false;
+
+    const safeResolve = (result: File | Blob) => {
+      if (resolved) return;
+      resolved = true;
+      cleanup();
+      if (onProgress) onProgress(100);
+      resolve(result);
+    };
+
+    const cleanup = () => {
+      isRecording = false;
+      if (progressTimer) {
+        clearInterval(progressTimer);
+        progressTimer = null;
+      }
+      if (safetyTimeout) {
+        clearTimeout(safetyTimeout);
+        safetyTimeout = null;
+      }
+      if (animId) {
+        cancelAnimationFrame(animId);
+        animId = null;
+      }
+      if (vfcId && video && 'cancelVideoFrameCallback' in video) {
+        (video as any).cancelVideoFrameCallback(vfcId);
+        vfcId = null;
+      }
+      if (audioCtx) {
+        try {
+          if (audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
+        } catch {}
+        audioCtx = null;
+      }
+      if (recorder && recorder.state !== 'inactive') {
+        try { recorder.stop(); } catch {}
+        recorder = null;
+      }
+      if (video) {
+        try { video.pause(); } catch {}
+        if (video.parentNode) {
+          try { video.parentNode.removeChild(video); } catch {}
+        }
+        if (video.src) {
+          try { URL.revokeObjectURL(video.src); } catch {}
+        }
+        video = null;
+      }
+      if (canvas) {
+        canvas = null;
+      }
+    };
+
+    try {
+      const videoElement = document.createElement('video');
+      video = videoElement;
+      videoElement.playsInline = true;
+      videoElement.setAttribute('playsinline', '');
+      videoElement.setAttribute('webkit-playsinline', '');
+      videoElement.preload = 'auto';
+      videoElement.crossOrigin = 'anonymous';
+
+      // Importante: visibilidade para o compositor do Chromium/Safari não descartar quadros
+      videoElement.style.position = 'fixed';
+      videoElement.style.bottom = '0px';
+      videoElement.style.right = '0px';
+      videoElement.style.width = '160px';
+      videoElement.style.height = '90px';
+      videoElement.style.opacity = '0.01'; // Força renderização do hardware sem ser perceptível ao usuário
+      videoElement.style.pointerEvents = 'none';
+      videoElement.style.zIndex = '-9999';
+
+      document.body.appendChild(videoElement);
+
+      const objectUrl = URL.createObjectURL(file);
+      videoElement.src = objectUrl;
+
+      videoElement.onloadedmetadata = () => {
+        let duration = videoElement.duration;
+        if (isNaN(duration) || !isFinite(duration) || duration <= 0) {
+          duration = 10;
+        }
+
+        // Se o vídeo for excessivamente longo (> 8 minutos), evita travar o aparelho
+        if (duration > 480) {
+          console.info('[Video Compressor] Vídeo muito longo (>480s), mantendo arquivo original.');
+          safeResolve(file);
+          return;
+        }
+
+        // Resolução alvo: 720p proporcional
+        canvas = document.createElement('canvas');
+        const origW = videoElement.videoWidth || 1280;
+        const origH = videoElement.videoHeight || 720;
+        const maxDim = 1280;
+        let w = origW;
+        let h = origH;
+
+        if (w > maxDim || h > maxDim) {
+          if (w >= h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+
+        // H.264 exige dimensões pares
+        w = Math.max(2, w - (w % 2));
+        h = Math.max(2, h - (h % 2));
+        canvas.width = w;
+        canvas.height = h;
+
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) {
+          safeResolve(file);
+          return;
+        }
+
+        // Desenha primeiro frame imediatamente
+        try {
+          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        } catch (e) {}
+
+        // Captura stream do Canvas
+        let canvasStream: MediaStream;
+        try {
+          canvasStream = (canvas as any).captureStream(30);
+        } catch (err) {
+          console.warn('[Video Compressor] captureStream falhou:', err);
+          safeResolve(file);
+          return;
+        }
+
+        const videoTracks = canvasStream.getVideoTracks();
+        if (!videoTracks || videoTracks.length === 0) {
+          safeResolve(file);
+          return;
+        }
+
+        const outputStream = new MediaStream([videoTracks[0]]);
+
+        // Captura áudio via Web Audio API (sem sair nas caixas de som do dispositivo)
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            audioCtx = new AudioContextClass();
+            if (audioCtx.state === 'suspended') {
+              audioCtx.resume().catch(() => {});
+            }
+            videoElement.muted = false;
+            videoElement.volume = 1.0;
+            const source = audioCtx.createMediaElementSource(videoElement);
+            const dest = audioCtx.createMediaStreamDestination();
+            source.connect(dest);
+            // NÃO conecta a audioCtx.destination para manter silêncio no aparelho
+            const audioTracks = dest.stream.getAudioTracks();
+            if (audioTracks && audioTracks.length > 0) {
+              outputStream.addTrack(audioTracks[0]);
+            }
+          }
+        } catch (audioErr) {
+          console.warn('[Video Compressor] Aviso de captura de áudio:', audioErr);
+          videoElement.muted = true;
+        }
+
+        // Seleção de codec compatível (MP4 com H.264 prioritário, WebM fallback)
+        let mimeType = '';
+        if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1,mp4a.40.2')) {
+          mimeType = 'video/mp4;codecs=avc1,mp4a.40.2';
+        } else if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+          mimeType = 'video/mp4;codecs=avc1';
+        } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+          mimeType = 'video/mp4';
+        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+          mimeType = 'video/webm;codecs=vp8,opus';
+        } else if (MediaRecorder.isTypeSupported('video/webm')) {
+          mimeType = 'video/webm';
+        }
+
+        const recorderOpts = mimeType ? {
+          mimeType,
+          videoBitsPerSecond: options.maxBitrate || 2200000 // 2.2 Mbps = ~16MB por minuto
+        } : undefined;
+
+        try {
+          recorder = recorderOpts ? new MediaRecorder(outputStream, recorderOpts) : new MediaRecorder(outputStream);
+        } catch (e) {
+          try {
+            recorder = new MediaRecorder(outputStream);
+          } catch (e2) {
+            console.warn('[Video Compressor] MediaRecorder indisponível:', e2);
+            safeResolve(file);
+            return;
+          }
+        }
+
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            chunks.push(e.data);
+          }
+        };
+
+        const onPlaybackEnd = () => {
+          if (!isRecording) return;
+          isRecording = false;
+          if (progressTimer) clearInterval(progressTimer);
+          if (safetyTimeout) clearTimeout(safetyTimeout);
+          try {
+            if (recorder && recorder.state !== 'inactive') {
+              recorder.stop();
+            }
+          } catch (e) {}
+        };
+
+        recorder.onstop = () => {
+          const finalMime = recorder?.mimeType || mimeType || 'video/mp4';
+          const blob = new Blob(chunks, { type: finalMime });
+          const ext = finalMime.includes('mp4') ? '.mp4' : '.webm';
+          const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+          const newName = `${baseName}_opt${ext}`;
+
+          const compressedFile = new File([blob], newName, {
+            type: finalMime,
+            lastModified: Date.now()
+          });
+
+          // Validação de sanidade:
+          // Vídeo de verdade com mais de 2s precisa ter pelo menos 200KB.
+          // Se for menor que 200KB (ex: tela preta corrompida de 70KB), rejeita a compressão com falha.
+          if (compressedFile.size > 200 * 1024 && compressedFile.size < file.size) {
+            console.info(`[Video Compressor] Otimizado: ${formatFileSize(file.size)} -> ${formatFileSize(compressedFile.size)}`);
+            safeResolve(compressedFile);
+          } else {
+            console.warn('[Video Compressor] Compressão não gerou tamanho menor ou arquivo inválido. Mantendo original.');
+            safeResolve(file);
+          }
+        };
+
+        // Loop de renderização ativo
+        isRecording = true;
+        const renderLoop = () => {
+          if (!isRecording || !ctx || !canvas) return;
+
+          try {
+            if (videoElement.readyState >= 2) {
+              ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+            }
+          } catch (e) {}
+
+          if (!videoElement.ended && !videoElement.paused) {
+            if ('requestVideoFrameCallback' in videoElement) {
+              vfcId = (videoElement as any).requestVideoFrameCallback(renderLoop);
+            } else {
+              animId = requestAnimationFrame(renderLoop);
+            }
+          }
+        };
+
+        videoElement.addEventListener('play', () => renderLoop());
+        videoElement.addEventListener('playing', () => renderLoop());
+        videoElement.addEventListener('ended', onPlaybackEnd);
+        videoElement.addEventListener('seeked', () => {
+          try {
+            if (ctx && canvas) ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+          } catch (e) {}
+        });
+
+        // Inicia gravação
+        try {
+          recorder.start(500);
+        } catch {
+          recorder.start();
+        }
+
+        // Inicia reprodução
+        renderLoop();
+        const playPromise = videoElement.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn('[Video Compressor] Play falhou:', err);
+            safeResolve(file);
+          });
+        }
+
+        // Monitoramento de progresso
+        progressTimer = setInterval(() => {
+          if (!isRecording) return;
+          const curr = videoElement.currentTime;
+          if (videoElement.ended || curr >= duration - 0.15) {
+            onPlaybackEnd();
+          } else {
+            const percent = Math.min(99, Math.round((curr / duration) * 100));
+            if (onProgress) onProgress(percent);
+          }
+        }, 150);
+
+        // Timeout de segurança
+        const maxWaitMs = Math.min(60000, Math.max(6000, Math.round((duration + 4) * 1000)));
+        safetyTimeout = setTimeout(() => {
+          console.warn('[Video Compressor] Timeout de segurança atingido.');
+          onPlaybackEnd();
+        }, maxWaitMs);
+      };
+
+      videoElement.onerror = (e) => {
+        console.warn('[Video Compressor] Erro no carregamento do vídeo:', e);
+        safeResolve(file);
+      };
+    } catch (e) {
+      console.warn('[Video Compressor] Exceção geral:', e);
+      safeResolve(file);
+    }
+  });
 }
 
