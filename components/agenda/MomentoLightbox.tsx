@@ -10,7 +10,8 @@ import {
   ZoomIn, 
   ZoomOut, 
   RotateCcw,
-  ShieldAlert
+  ShieldAlert,
+  Loader2
 } from 'lucide-react'
 import { useScreenshotProtection } from '@/hooks/useScreenshotProtection'
 import { PrivacyProtectionModal } from './PrivacyProtectionModal'
@@ -45,6 +46,16 @@ export function MomentoLightbox({
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
 
+  // Swipe gesture & navigation direction
+  const [swipeOffset, setSwipeOffset] = useState(0)
+  const [direction, setDirection] = useState<number>(0)
+  const isSwipingRef = useRef(false)
+  const dragStartTimeRef = useRef<number>(0)
+
+  // Fast preloading & Loading state
+  const [isImageLoading, setIsImageLoading] = useState(false)
+  const loadedUrlsRef = useRef<Set<string>>(new Set())
+
   // Proteção contra capturas de tela, gravações e prints
   const {
     isModalOpen: isPrivacyModalOpen,
@@ -74,6 +85,7 @@ export function MomentoLightbox({
       setCurrentIndex(Math.max(0, Math.min(initialIndex, (media?.length || 1) - 1)))
       setScale(1)
       setPosition({ x: 0, y: 0 })
+      setSwipeOffset(0)
     }
   }, [isOpen, initialIndex, media?.length])
 
@@ -91,19 +103,87 @@ export function MomentoLightbox({
   const resetZoom = useCallback(() => {
     setScale(1)
     setPosition({ x: 0, y: 0 })
+    setSwipeOffset(0)
   }, [])
 
   const goToPrev = useCallback(() => {
     if (!media || media.length <= 1) return
     resetZoom()
+    setDirection(-1)
+    setSwipeOffset(0)
     setCurrentIndex(prev => (prev > 0 ? prev - 1 : media.length - 1))
   }, [media, resetZoom])
 
   const goToNext = useCallback(() => {
     if (!media || media.length <= 1) return
     resetZoom()
+    setDirection(1)
+    setSwipeOffset(0)
     setCurrentIndex(prev => (prev < media.length - 1 ? prev + 1 : 0))
   }, [media, resetZoom])
+
+  // Intelligent Background Preloading & Off-thread Decoding
+  useEffect(() => {
+    if (!isOpen || !media || media.length <= 1) return
+
+    // 1. Immediately preload and decode immediate neighbors (Next & Prev)
+    const nextIdx = (currentIndex + 1) % media.length
+    const prevIdx = (currentIndex - 1 + media.length) % media.length
+    const priorityIndices = [nextIdx, prevIdx]
+
+    priorityIndices.forEach(idx => {
+      const item = media[idx]
+      if (item && item.type !== 'video' && item.url) {
+        const img = new Image()
+        img.src = item.url
+        if (typeof img.decode === 'function') {
+          img.decode().catch(() => {})
+        }
+      }
+    })
+
+    // 2. Preload remaining items in album shortly after with lower priority
+    const timer = setTimeout(() => {
+      media.forEach((item, idx) => {
+        if (idx !== currentIndex && !priorityIndices.includes(idx) && item.type !== 'video' && item.url) {
+          const img = new Image()
+          img.src = item.url
+          if (typeof img.decode === 'function') {
+            img.decode().catch(() => {})
+          }
+        }
+      })
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [isOpen, currentIndex, media])
+
+  // Current item details
+  const currentItem = media && media.length > 0 ? media[currentIndex] : null
+  const isVideo = !!currentItem && (currentItem.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((currentItem.url || '').split('?')[0]))
+
+  // Track loading state for current item
+  useEffect(() => {
+    if (!currentItem || isVideo) {
+      setIsImageLoading(false)
+      return
+    }
+
+    if (loadedUrlsRef.current.has(currentItem.url)) {
+      setIsImageLoading(false)
+      return
+    }
+
+    // Verify if already cached synchronously in browser
+    const testImg = new Image()
+    testImg.src = currentItem.url
+    if (testImg.complete && testImg.naturalWidth > 0) {
+      loadedUrlsRef.current.add(currentItem.url)
+      setIsImageLoading(false)
+    } else {
+      setIsImageLoading(true)
+    }
+  }, [currentItem?.url, isVideo])
 
   // Zoom helpers
   const handleZoomIn = useCallback(() => {
@@ -156,10 +236,6 @@ export function MomentoLightbox({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, onClose, goToPrev, goToNext, handleZoomIn, handleZoomOut, resetZoom])
 
-  // Current item details
-  const currentItem = media && media.length > 0 ? media[currentIndex] : null
-  const isVideo = !!currentItem && (currentItem.type === 'video' || !!currentItem.url.match(/\.(mp4|webm|mov)$/i))
-
   // Mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (isVideo) return
@@ -179,13 +255,16 @@ export function MomentoLightbox({
   // Mouse drag handlers
   const handleMouseDown = (e: React.MouseEvent) => {
     if (isVideo) return
-    if (scale <= 1 && e.button !== 0) return
+    if (e.button !== 0) return
     e.preventDefault()
 
     setIsDragging(true)
     hasMovedRef.current = false
+    isSwipingRef.current = false
     dragStartRef.current = { x: e.clientX, y: e.clientY }
+    dragStartTimeRef.current = Date.now()
     positionStartRef.current = { ...position }
+    setSwipeOffset(0)
   }
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -193,7 +272,7 @@ export function MomentoLightbox({
     const dx = e.clientX - dragStartRef.current.x
     const dy = e.clientY - dragStartRef.current.y
 
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
       hasMovedRef.current = true
     }
 
@@ -203,14 +282,29 @@ export function MomentoLightbox({
         x: positionStartRef.current.x + dx,
         y: positionStartRef.current.y + dy
       })
+    } else if (scale === 1 && media && media.length > 1) {
+      // Swiping horizontally between photos
+      isSwipingRef.current = true
+      setSwipeOffset(dx)
     }
-  }, [isDragging, scale])
+  }, [isDragging, scale, media])
 
   const handleMouseUp = useCallback(() => {
     if (isDragging) {
+      if (scale === 1 && media && media.length > 1 && isSwipingRef.current) {
+        const elapsed = Math.max(1, Date.now() - dragStartTimeRef.current)
+        const velocity = Math.abs(swipeOffset) / elapsed
+        if (swipeOffset < -45 || (swipeOffset < -20 && velocity > 0.25)) {
+          goToNext()
+        } else if (swipeOffset > 45 || (swipeOffset > 20 && velocity > 0.25)) {
+          goToPrev()
+        }
+      }
+      setSwipeOffset(0)
       setIsDragging(false)
+      isSwipingRef.current = false
     }
-  }, [isDragging])
+  }, [isDragging, scale, media, swipeOffset, goToNext, goToPrev])
 
   // Global mouse up / move while dragging
   useEffect(() => {
@@ -224,7 +318,7 @@ export function MomentoLightbox({
     }
   }, [isDragging, handleMouseMove, handleMouseUp])
 
-  // Touch handlers for mobile (pinch-to-zoom & pan & double-tap)
+  // Touch handlers for mobile (swipe & pinch-to-zoom & pan & double-tap)
   const handleTouchStart = (e: React.TouchEvent) => {
     if (isVideo) return
 
@@ -235,14 +329,18 @@ export function MomentoLightbox({
       if (now - lastTapRef.current < 300) {
         handleToggleZoom()
         lastTapRef.current = 0
+        setSwipeOffset(0)
         return
       }
       lastTapRef.current = now
 
       setIsDragging(true)
       hasMovedRef.current = false
+      isSwipingRef.current = false
       dragStartRef.current = { x: touch.clientX, y: touch.clientY }
+      dragStartTimeRef.current = now
       positionStartRef.current = { ...position }
+      setSwipeOffset(0)
     } else if (e.touches.length === 2) {
       // 2 fingers pinch
       const t1 = e.touches[0]
@@ -251,23 +349,30 @@ export function MomentoLightbox({
       initialPinchDistRef.current = dist
       initialScaleRef.current = scale
       setIsDragging(false)
+      isSwipingRef.current = false
+      setSwipeOffset(0)
     }
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (isVideo) return
 
-    if (e.touches.length === 1 && isDragging && scale > 1) {
+    if (e.touches.length === 1 && isDragging) {
       const touch = e.touches[0]
       const dx = touch.clientX - dragStartRef.current.x
       const dy = touch.clientY - dragStartRef.current.y
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
         hasMovedRef.current = true
       }
-      setPosition({
-        x: positionStartRef.current.x + dx,
-        y: positionStartRef.current.y + dy
-      })
+      if (scale > 1) {
+        setPosition({
+          x: positionStartRef.current.x + dx,
+          y: positionStartRef.current.y + dy
+        })
+      } else if (scale === 1 && media && media.length > 1) {
+        isSwipingRef.current = true
+        setSwipeOffset(dx)
+      }
     } else if (e.touches.length === 2 && initialPinchDistRef.current) {
       const t1 = e.touches[0]
       const t2 = e.touches[1]
@@ -283,12 +388,24 @@ export function MomentoLightbox({
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (e.touches.length === 0) {
+      if (scale === 1 && media && media.length > 1 && isSwipingRef.current) {
+        const elapsed = Math.max(1, Date.now() - dragStartTimeRef.current)
+        const velocity = Math.abs(swipeOffset) / elapsed
+        if (swipeOffset < -45 || (swipeOffset < -20 && velocity > 0.25)) {
+          goToNext()
+        } else if (swipeOffset > 45 || (swipeOffset > 20 && velocity > 0.25)) {
+          goToPrev()
+        }
+      }
+      setSwipeOffset(0)
       setIsDragging(false)
+      isSwipingRef.current = false
       initialPinchDistRef.current = null
     } else if (e.touches.length === 1) {
       initialPinchDistRef.current = null
       const touch = e.touches[0]
       dragStartRef.current = { x: touch.clientX, y: touch.clientY }
+      dragStartTimeRef.current = Date.now()
       positionStartRef.current = { ...position }
     }
   }
@@ -574,9 +691,47 @@ export function MomentoLightbox({
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
-            cursor: isVideo ? 'default' : scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in'
+            cursor: isVideo ? 'default' : scale > 1 ? (isDragging ? 'grabbing' : 'grab') : (media && media.length > 1 ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in')
           }}
         >
+          {/* ULTRA MODERN LOADING BADGE & PROGRESS FEEDBACK */}
+          {isImageLoading && !isVideo && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                zIndex: 10,
+                pointerEvents: 'none'
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '12px 22px',
+                  borderRadius: 30,
+                  background: 'rgba(15, 23, 42, 0.85)',
+                  backdropFilter: 'blur(16px)',
+                  WebkitBackdropFilter: 'blur(16px)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  boxShadow: '0 12px 32px rgba(0, 0, 0, 0.6), 0 0 24px rgba(99, 102, 241, 0.35)',
+                  color: '#ffffff'
+                }}
+              >
+                <Loader2 size={20} className="animate-spin" color="#818cf8" />
+                <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '-0.01em', color: '#f8fafc' }}>
+                  Carregando foto {currentIndex + 1}...
+                </span>
+              </div>
+            </div>
+          )}
+
           {isVideo ? (
             <video
               src={currentItem.url}
@@ -584,6 +739,7 @@ export function MomentoLightbox({
               controlsList="nodownload"
               autoPlay
               playsInline
+              preload="metadata"
               onContextMenu={handleContextMenu}
               style={{
                 maxWidth: '92vw',
@@ -591,14 +747,15 @@ export function MomentoLightbox({
                 borderRadius: 16,
                 boxShadow: '0 25px 60px rgba(0,0,0,0.8)',
                 outline: 'none',
-                zIndex: 2
+                zIndex: 2,
+                objectFit: 'contain'
               }}
             />
           ) : (
             <div
               style={{
-                transform: `translate3d(${position.x}px, ${position.y}px, 0px) scale(${scale})`,
-                transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                transform: `translate3d(${position.x + swipeOffset}px, ${position.y}px, 0px) scale(${scale})`,
+                transition: isDragging ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
                 transformOrigin: 'center center',
                 willChange: 'transform',
                 display: 'flex',
@@ -610,12 +767,20 @@ export function MomentoLightbox({
               }}
             >
               <img
+                key={currentItem.url}
                 src={currentItem.url}
                 alt={description || 'Momento'}
                 decoding="async"
                 draggable={false}
                 onDragStart={handleDragStart}
                 onContextMenu={handleContextMenu}
+                onLoad={() => {
+                  loadedUrlsRef.current.add(currentItem.url)
+                  setIsImageLoading(false)
+                }}
+                onError={() => {
+                  setIsImageLoading(false)
+                }}
                 style={{
                   maxWidth: '92vw',
                   maxHeight: '82vh',
@@ -625,7 +790,12 @@ export function MomentoLightbox({
                   pointerEvents: 'none', // Let container receive mouse and touch events
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
-                  WebkitTouchCallout: 'none'
+                  WebkitTouchCallout: 'none',
+                  opacity: isImageLoading ? 0.35 : 1,
+                  filter: isImageLoading ? 'blur(8px)' : 'none',
+                  transition: isDragging
+                    ? 'opacity 0.2s ease, filter 0.2s ease'
+                    : 'opacity 0.25s ease, filter 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
                 }}
               />
             </div>

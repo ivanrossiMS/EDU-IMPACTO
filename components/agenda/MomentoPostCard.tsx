@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
 const ClientPortal = ({ children }: { children: React.ReactNode }) => {
@@ -74,6 +74,60 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
   const { adConfirm } = useAgendaDigital()
   const { currentUser } = useApp()
 
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const isSwipingCardRef = useRef(false)
+
+  const medias = post.media || []
+  const hasMultiple = medias.length > 1
+  const currentMedia = medias[slide]
+
+  // Proactive preloading of next slide
+  useEffect(() => {
+    if (!medias || medias.length <= 1) return
+    const nextIdx = (slide + 1) % medias.length
+    const nextMed = medias[nextIdx]
+    if (nextMed && nextMed.type !== 'video' && nextMed.url) {
+      const img = new Image()
+      img.src = nextMed.url
+      if (typeof img.decode === 'function') {
+        img.decode().catch(() => {})
+      }
+    }
+  }, [slide, medias])
+
+  const handleCardTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      isSwipingCardRef.current = false
+    }
+  }
+
+  const handleCardTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || e.touches.length !== 1) return
+    const dx = e.touches[0].clientX - touchStartRef.current.x
+    const dy = e.touches[0].clientY - touchStartRef.current.y
+    if (Math.abs(dx) > 8) {
+      isSwipingCardRef.current = true
+    }
+  }
+
+  const handleCardTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current || !hasMultiple) return
+    const touch = e.changedTouches[0]
+    const dx = touch.clientX - touchStartRef.current.x
+    const dy = touch.clientY - touchStartRef.current.y
+
+    if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
+      e.stopPropagation()
+      if (dx < 0) {
+        setSlide(s => (s === medias.length - 1 ? 0 : s + 1))
+      } else {
+        setSlide(s => (s === 0 ? medias.length - 1 : s - 1))
+      }
+    }
+    touchStartRef.current = null
+  }
+
   const displayTime = (() => {
     const dt = (post as any).created_at || (post as any).date;
     if (dt) {
@@ -92,9 +146,6 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
     : post.author
   const authorInitial = authorName.charAt(0).toUpperCase()
 
-  const medias = post.media || []
-  const hasMultiple = medias.length > 1
-  const currentMedia = medias[slide] || null
   const theme = CARD_THEMES[index % CARD_THEMES.length]
 
   const targets = post.targetClasses || []
@@ -189,12 +240,21 @@ export function MomentoPostCard({ post, index, onDelete }: Props) {
 
           {/* Fixed-height Image Frame */}
           <div 
-            style={{ position: 'relative', width: '100%', height: 300, overflow: 'hidden', background: '#000', flexShrink: 0, cursor: 'pointer' }}
-            onClick={() => setShowLightbox(true)}
+            style={{ position: 'relative', width: '100%', height: 300, overflow: 'hidden', background: '#000', flexShrink: 0, cursor: 'pointer', touchAction: 'pan-y' }}
+            onTouchStart={handleCardTouchStart}
+            onTouchMove={handleCardTouchMove}
+            onTouchEnd={handleCardTouchEnd}
+            onClick={() => {
+              if (isSwipingCardRef.current) {
+                isSwipingCardRef.current = false
+                return
+              }
+              setShowLightbox(true)
+            }}
           >
             {currentMedia ? (
-              currentMedia.type === 'video' || currentMedia.url.match(/\.(mp4|webm)$/i) ? (
-                <video src={currentMedia.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              currentMedia.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((currentMedia.url || '').split('?')[0]) ? (
+                <video src={currentMedia.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline preload="metadata" />
               ) : (
                 <img src={currentMedia.url} alt="Momento" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
               )

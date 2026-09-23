@@ -101,6 +101,47 @@ export default function ADMomentosPage() {
   const [currentMediaIndex, setCurrentMediaIndex] = useState<Record<string, number>>({})
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
 
+  // Suporte a swipe nos cards da timeline
+  const touchStartMapRef = useRef<Record<string, { x: number; y: number }>>({})
+  const isSwipingCardMapRef = useRef<Record<string, boolean>>({})
+
+  const handleCardTouchStart = (e: React.TouchEvent, id: string | number) => {
+    if (e.touches.length === 1) {
+      touchStartMapRef.current[String(id)] = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      isSwipingCardMapRef.current[String(id)] = false
+    }
+  }
+
+  const handleCardTouchMove = (e: React.TouchEvent, id: string | number) => {
+    const start = touchStartMapRef.current[String(id)]
+    if (!start || e.touches.length !== 1) return
+    const dx = e.touches[0].clientX - start.x
+    if (Math.abs(dx) > 8) {
+      isSwipingCardMapRef.current[String(id)] = true
+    }
+  }
+
+  const handleCardTouchEnd = (e: React.TouchEvent, id: string | number, mediaLength: number) => {
+    const key = String(id)
+    const start = touchStartMapRef.current[key]
+    if (!start || mediaLength <= 1) return
+    const touch = e.changedTouches[0]
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+
+    if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy)) {
+      e.stopPropagation()
+      if (dx < 0) {
+        // swipe left -> next slide
+        setCurrentMediaIndex(p => ({ ...p, [key]: (p[key] || 0) < mediaLength - 1 ? (p[key] || 0) + 1 : 0 }))
+      } else {
+        // swipe right -> prev slide
+        setCurrentMediaIndex(p => ({ ...p, [key]: (p[key] || 0) > 0 ? (p[key] || 0) - 1 : mediaLength - 1 }))
+      }
+    }
+    delete touchStartMapRef.current[key]
+  }
+
   // Estado para o Lightbox/Galeria
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxMedia, setLightboxMedia] = useState<{ url: string, type: string }[]>([])
@@ -1339,6 +1380,15 @@ export default function ADMomentosPage() {
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
+        .media-item-hover .expand-overlay {
+          opacity: 0 !important;
+          transition: opacity 0.2s ease !important;
+          pointer-events: none !important;
+        }
+        .media-item-hover:hover .expand-overlay {
+          opacity: 1 !important;
+        }
+
         .ad-momentos-header {
           margin: 20px 16px 16px 16px !important;
           padding: 16px 22px !important;
@@ -1726,37 +1776,109 @@ export default function ADMomentosPage() {
                       const activeIndex = currentMediaIndex[m.id] || 0
                       const med = mediaList[activeIndex]
                       
+                      // Pré-carrega a próxima mídia do card
+                      if (typeof window !== 'undefined' && mediaList.length > 1) {
+                        const nextMed = mediaList[(activeIndex + 1) % mediaList.length]
+                        if (nextMed && nextMed.type !== 'video' && nextMed.url) {
+                          const img = new Image()
+                          img.src = nextMed.url
+                          if (typeof img.decode === 'function') img.decode().catch(() => {})
+                        }
+                      }
+
                       return (
                         <div style={{ width: '100%', height: '100%' }}>
                             <div 
                               className="media-item-hover"
-                              style={{ width: '100%', height: '100%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: 'pointer' }}
+                              style={{ width: '100%', height: '100%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: 'pointer', touchAction: 'pan-y' }}
+                              onTouchStart={(e) => handleCardTouchStart(e, m.id)}
+                              onTouchMove={(e) => handleCardTouchMove(e, m.id)}
+                              onTouchEnd={(e) => handleCardTouchEnd(e, m.id, mediaList.length)}
                               onClick={() => {
-                                setLightboxMedia(m.media.map((item: any) => ({ url: item.url, type: item.type === 'video' || item.url.match(/\.(mp4|webm)$/i) ? 'video' : 'image' })))
+                                if (isSwipingCardMapRef.current[m.id]) {
+                                  delete isSwipingCardMapRef.current[m.id]
+                                  return
+                                }
+                                setLightboxMedia(m.media.map((item: any) => ({
+                                  url: item.url,
+                                  type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image'
+                                })))
                                 setLightboxIndex(activeIndex)
                                 setLightboxOpen(true)
                               }}
                             >
-                              {med.type === 'video' || med.url.match(/\.(mp4|webm)$/i) ? (
-                                <video src={med.url} style={{ width: '100%', height: '100%', objectFit: 'contain' }} controls playsInline preload="metadata" />
-                              ) : (
-                                <img 
-                                  src={med.url} 
-                                  alt="Momento Escolar" 
-                                  loading="lazy"
-                                  decoding="async"
-                                  style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.5s ease' }} 
-                                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.06)'}
-                                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                                  onError={(e) => {
-                                    e.currentTarget.onerror = null;
-                                    e.currentTarget.src = 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=600&q=80';
-                                  }}
-                                />
-                              )}
-                              <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'none' }}>
-                                <Maximize2 color="white" size={32} />
-                              </div>
+                              {(() => {
+                                const isVideo = med.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((med.url || '').split('?')[0]);
+                                if (isVideo) {
+                                  return (
+                                    <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      <video 
+                                        src={med.url} 
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                                        controls 
+                                        playsInline 
+                                        preload="metadata"
+                                        onClick={(e) => e.stopPropagation()} 
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setLightboxMedia(m.media.map((item: any) => ({
+                                            url: item.url,
+                                            type: item.type === 'video' || /\.(mp4|webm|mov|m4v|3gp|mkv|ogv)$/i.test((item.url || '').split('?')[0]) ? 'video' : 'image'
+                                          })));
+                                          setLightboxIndex(activeIndex);
+                                          setLightboxOpen(true);
+                                        }}
+                                        title="Expandir Vídeo"
+                                        style={{
+                                          position: 'absolute',
+                                          top: 10,
+                                          right: 10,
+                                          background: 'rgba(15, 23, 42, 0.75)',
+                                          backdropFilter: 'blur(8px)',
+                                          color: 'white',
+                                          border: '1px solid rgba(255,255,255,0.25)',
+                                          borderRadius: '50%',
+                                          width: 34,
+                                          height: 34,
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          cursor: 'pointer',
+                                          zIndex: 5,
+                                          transition: 'transform 0.2s, background 0.2s'
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                      >
+                                        <Maximize2 size={16} />
+                                      </button>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <>
+                                    <img 
+                                      src={med.url} 
+                                      alt="Momento Escolar" 
+                                      loading="lazy"
+                                      decoding="async"
+                                      style={{ width: '100%', height: '100%', objectFit: 'contain', transition: 'transform 0.5s ease' }} 
+                                      onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.06)'}
+                                      onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                                      onError={(e) => {
+                                        e.currentTarget.onerror = null;
+                                        e.currentTarget.src = 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=600&q=80';
+                                      }}
+                                    />
+                                    <div className="expand-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'none' }}>
+                                      <Maximize2 color="white" size={32} />
+                                    </div>
+                                  </>
+                                );
+                              })()}
                             </div>
 
                           {mediaList.length > 1 && (
