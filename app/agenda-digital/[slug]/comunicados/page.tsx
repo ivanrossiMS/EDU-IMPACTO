@@ -4,7 +4,7 @@ import { useSearchParams, useRouter, useParams } from 'next/navigation';
 import Image from 'next/image'
 
 import { useAgendaDigital } from '@/lib/agendaDigitalContext'
-import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Loader2, ChevronDown } from 'lucide-react'
+import { Bell, Search, Filter, Pin, CheckCircle2, X, Paperclip, FileText, FileBarChart, DollarSign, Image as ImageIcon, Video, ShieldAlert, Calendar, Loader2, ChevronDown, RotateCw } from 'lucide-react'
 import { EmptyStateCard } from '../../components/EmptyStateCard'
 import { UserAvatar } from '@/components/UserAvatar'
 
@@ -265,20 +265,109 @@ export default function ADComunicadosPage({ params }: { params: any }) {
     return () => window.removeEventListener('ad:open-comunicado', handleOpenCustom);
   }, [comunicados, resolvedParams?.slug]);
   
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    try {
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' }),
+        refetch()
+      ])
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500)
+    }
+  }, [queryClient, refetch, isRefreshing])
+
+  // Ao entrar na tela ou alternar páginas, sincroniza de imediato
   useEffect(() => {
-    const handleUpdate = () => {
+    refetch()
+  }, [refetch])
+
+  useEffect(() => {
+    const handleInsert = (e: any) => {
+      const payload = e.detail
+      const rawItem = payload?.item || payload?.new || payload
+      if (rawItem && rawItem.id) {
+        queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (old: any) => {
+          if (!old || !old.pages) return old
+          const normalized = {
+            ...rawItem,
+            id: String(rawItem.id),
+            turmas: Array.isArray(rawItem.turmas) ? rawItem.turmas : [],
+            alunosIds: Array.isArray(rawItem.alunosIds) ? rawItem.alunosIds : [],
+            funcionariosIds: Array.isArray(rawItem.funcionariosIds) ? rawItem.funcionariosIds : [],
+            anexos: Array.isArray(rawItem.anexos) ? rawItem.anexos : [],
+            leituras: rawItem.leituras && typeof rawItem.leituras === 'object' ? rawItem.leituras : {},
+            ciencias: rawItem.ciencias && typeof rawItem.ciencias === 'object' ? rawItem.ciencias : {},
+            dataEnvio: rawItem.dataEnvio || rawItem.data || rawItem.created_at || new Date().toISOString()
+          }
+          const allItems = old.pages.flat()
+          if (allItems.some((c: any) => String(c.id) === String(normalized.id))) {
+            return {
+              ...old,
+              pages: old.pages.map((p: any[]) => p.map((c: any) => String(c.id) === String(normalized.id) ? { ...c, ...normalized } : c))
+            }
+          }
+          const firstPage = [normalized, ...(old.pages[0] || [])]
+          return {
+            ...old,
+            pages: [firstPage, ...old.pages.slice(1)]
+          }
+        })
+      }
       refetch()
     }
-    window.addEventListener('ad:comunicados-insert', handleUpdate)
-    window.addEventListener('ad:comunicados-update', handleUpdate)
-    window.addEventListener('ad:comunicados-delete', handleUpdate)
-    
-    return () => {
-      window.removeEventListener('ad:comunicados-insert', handleUpdate)
-      window.removeEventListener('ad:comunicados-update', handleUpdate)
-      window.removeEventListener('ad:comunicados-delete', handleUpdate)
+
+    const handleUpdateEvent = (e: any) => {
+      const payload = e.detail
+      const rawItem = payload?.item || payload?.new || payload
+      if (rawItem && rawItem.id) {
+        const cId = String(rawItem.id)
+        queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (old: any) => {
+          if (!old || !old.pages) return old
+          return {
+            ...old,
+            pages: old.pages.map((p: any[]) => p.map((c: any) => String(c.id) === cId ? { ...c, ...rawItem } : c))
+          }
+        })
+      }
+      refetch()
     }
-  }, [refetch])
+
+    const handleDeleteEvent = (e: any) => {
+      const payload = e.detail
+      const id = payload?.id || payload?.old?.id
+      const ids = payload?.ids || (id ? [id] : [])
+      if (ids.length > 0) {
+        const idSet = new Set(ids.map(String))
+        queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (old: any) => {
+          if (!old || !old.pages) return old
+          return {
+            ...old,
+            pages: old.pages.map((p: any[]) => p.filter((c: any) => !idSet.has(String(c.id))))
+          }
+        })
+      }
+      refetch()
+    }
+
+    window.addEventListener('ad:comunicados-insert', handleInsert)
+    window.addEventListener('ad:comunicados-update', handleUpdateEvent)
+    window.addEventListener('ad:comunicados-delete', handleDeleteEvent)
+
+    const pollTimer = setInterval(() => {
+      refetch()
+    }, 15000)
+
+    return () => {
+      window.removeEventListener('ad:comunicados-insert', handleInsert)
+      window.removeEventListener('ad:comunicados-update', handleUpdateEvent)
+      window.removeEventListener('ad:comunicados-delete', handleDeleteEvent)
+      clearInterval(pollTimer)
+    }
+  }, [queryClient, refetch])
 
   const [searchTerm, setSearchTerm] = useState('')
   
@@ -677,6 +766,49 @@ export default function ADComunicadosPage({ params }: { params: any }) {
           .ad-com-card-title { font-size: 14px !important; }
           .ad-com-author { font-size: 11px !important; }
           .ad-hide-mobile { display: none !important; }
+          .ad-com-btn-refresh {
+            height: 38px !important;
+            padding: 0 10px !important;
+            font-size: 12px !important;
+          }
+        }
+        @keyframes adSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .ad-spin-icon {
+          animation: adSpin 0.75s linear infinite !important;
+        }
+        .ad-com-btn-refresh {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          height: 38px !important;
+          border-radius: 9999px !important;
+          padding: 0 14px !important;
+          font-size: 13px !important;
+          font-weight: 600 !important;
+          background: rgba(255, 255, 255, 0.95) !important;
+          color: #4338ca !important;
+          border: 1px solid rgba(199, 210, 254, 0.9) !important;
+          box-shadow: 0 1px 3px rgba(99, 102, 241, 0.08) !important;
+          cursor: pointer !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          white-space: nowrap !important;
+        }
+        .ad-com-btn-refresh:hover:not(:disabled) {
+          background: #ffffff !important;
+          color: #3730a3 !important;
+          border-color: #818cf8 !important;
+          transform: translateY(-1px) !important;
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15) !important;
+        }
+        .ad-com-btn-refresh:active:not(:disabled) {
+          transform: scale(0.98) !important;
+        }
+        .ad-com-btn-refresh:disabled {
+          opacity: 0.7 !important;
+          cursor: not-allowed !important;
         }
       `}} />
 
@@ -765,6 +897,16 @@ export default function ADComunicadosPage({ params }: { params: any }) {
                 </button>
               )}
             </div>
+            <button
+              className={`ad-com-btn-refresh ${isRefreshing ? 'is-loading' : ''}`}
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              type="button"
+              title="Atualizar comunicados e relatórios em tempo real"
+            >
+              <RotateCw size={14} strokeWidth={2.4} className={isRefreshing ? 'ad-spin-icon' : ''} />
+              <span>{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
+            </button>
             <button className="btn btn-secondary ad-com-filter-btn">
               <Filter size={15} /> Filtros
             </button>

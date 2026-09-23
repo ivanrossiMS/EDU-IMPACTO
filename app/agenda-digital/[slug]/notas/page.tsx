@@ -590,7 +590,7 @@ export default function ADNotasPage({ params }: { params: any }) {
         }
         @media print {
           @page {
-            margin: 15mm;
+            margin: 8mm 12mm;
             size: A4 portrait;
           }
           
@@ -633,6 +633,7 @@ export default function ADNotasPage({ params }: { params: any }) {
           * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+            box-sizing: border-box !important;
           }
 
           /* Desativa animações do framer-motion que quebram a impressão */
@@ -647,38 +648,68 @@ export default function ADNotasPage({ params }: { params: any }) {
             font-size: 11pt !important;
           }
 
-          /* Compressão dos cards para caber em uma única página */
+          /* Compressão dos cards para caber de forma organizada e compacta */
           .print-main-wrapper {
-            gap: 8px !important;
-            margin-bottom: 8px !important;
+            gap: 6px !important;
+            margin-bottom: 6px !important;
           }
           
           .print-global-card {
-            padding: 12px !important;
+            padding: 8px 14px !important;
+            border-radius: 12px !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
           
           .print-media-value {
-            font-size: 32px !important; /* Reduz muito a altura do card principal */
+            font-size: 26px !important;
+            line-height: 1 !important;
           }
           
           .print-disciplinas-wrapper {
-            padding: 12px !important;
+            padding: 8px 12px !important;
+            border-radius: 12px !important;
+          }
+
+          .print-disciplinas-wrapper h3 {
+            font-size: 13px !important;
+            margin: 0 !important;
           }
           
           .print-disciplinas-grid {
-            grid-template-columns: repeat(3, 1fr) !important; /* 3 colunas espremem muito a altura total */
-            gap: 6px !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 5px 8px !important;
           }
           
           .print-disciplina-item {
-            padding: 8px !important;
+            padding: 6px 10px !important;
             border-width: 1px !important;
+            border-radius: 8px !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
           
           /* Ajustes de fontes internas para caber melhor */
           .print-disciplina-item > div:first-child > div:first-child {
             font-size: 11px !important;
+            line-height: 1.2 !important;
             margin-bottom: 2px !important;
+          }
+
+          .print-disciplina-item > div:first-child > div:nth-child(2) {
+            font-size: 8.5px !important;
+            gap: 4px !important;
+            line-height: 1.2 !important;
+          }
+
+          /* Esconde barra de progresso na impressão */
+          .print-disciplina-item > div:first-child > div:last-child {
+            display: none !important;
+          }
+
+          .print-disciplina-item > div:last-child > div:first-child {
+            font-size: 15px !important;
+            line-height: 1 !important;
           }
         }
       `}} />

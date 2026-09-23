@@ -14,7 +14,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFormularios, FormTemplate } from '@/lib/formulariosContext'
 import { useSupabaseArray } from '@/lib/useSupabaseCollection'
 import { useApp } from '@/lib/context'
-import { Plus, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, Send as SendIcon, Clock, Bold, Italic, Link as LinkIcon, List, Underline, Smile, BadgeDollarSign, ClipboardList } from 'lucide-react'
+import { Plus, RotateCw, ChevronRight, ChevronLeft, HelpCircle, Users, ArrowRight, Send, Send as SendIcon, Clock, Bold, Italic, Link as LinkIcon, List, Underline, Smile, BadgeDollarSign, ClipboardList } from 'lucide-react'
 import { useData } from '@/lib/dataContext'
 import Portal from '@/components/Portal'
 import { ComunicadoChat } from '@/components/ComunicadoChat'
@@ -130,19 +130,6 @@ function ColaboradorComunicadosContent() {
   const [showRelsModal, setShowRelsModal] = useState(false)
   const [openedReportTaskStr, setOpenedReportTaskStr] = useState<string | null>(null)
 
-  useEffect(() => {
-    const handleSync = () => {
-      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
-    };
-    window.addEventListener('ad:comunicados-insert', handleSync);
-    window.addEventListener('ad:comunicados-update', handleSync);
-    window.addEventListener('ad:comunicados-delete', handleSync);
-    return () => {
-      window.removeEventListener('ad:comunicados-insert', handleSync);
-      window.removeEventListener('ad:comunicados-update', handleSync);
-      window.removeEventListener('ad:comunicados-delete', handleSync);
-    };
-  }, [queryClient]);
 
   const espelharColabId = searchParams?.get('espelhar_colaborador')
   const espelharPerfil = searchParams?.get('espelhar_perfil')
@@ -299,6 +286,102 @@ function ColaboradorComunicadosContent() {
   
   const { comunicados, setComunicados, setComunicadosLocally, isDataLoading, comunicadosLoading, chatGroupsLoading, hasNextPageComunicados, fetchNextPageComunicados } = useAgendaDigital()
   const alunosAtivos = (alunos || []).filter((a: any) => a.status === 'matriculado' || a.status === 'ativo')
+
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) return
+    setIsRefreshing(true)
+    try {
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' }),
+        queryClient.refetchQueries({ queryKey: ['agenda', 'comunicados'] })
+      ])
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500)
+    }
+  }, [queryClient, isRefreshing])
+
+  // Ao entrar na tela ou voltar de outras abas, sincroniza de imediato
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+  }, [queryClient])
+
+  // Escuta de eventos em tempo real com injeção otimista em 0ms
+  useEffect(() => {
+    const handleInsert = (e: any) => {
+      const payload = e.detail
+      const rawItem = payload?.item || payload?.new || payload
+      if (rawItem && rawItem.id) {
+        const normalized = {
+          ...rawItem,
+          id: String(rawItem.id),
+          titulo: rawItem.titulo || '',
+          conteudo: rawItem.conteudo || rawItem.texto || '',
+          autor: rawItem.autor || '',
+          dataEnvio: rawItem.dataEnvio || rawItem.data || rawItem.created_at || new Date().toISOString(),
+          status: rawItem.status || 'enviado',
+          turmas: Array.isArray(rawItem.turmas) ? rawItem.turmas : [],
+          alunosIds: Array.isArray(rawItem.alunosIds) ? rawItem.alunosIds : [],
+          funcionariosIds: Array.isArray(rawItem.funcionariosIds) ? rawItem.funcionariosIds : [],
+          anexos: Array.isArray(rawItem.anexos) ? rawItem.anexos : [],
+          leituras: rawItem.leituras && typeof rawItem.leituras === 'object' ? rawItem.leituras : {},
+          ciencias: rawItem.ciencias && typeof rawItem.ciencias === 'object' ? rawItem.ciencias : {},
+          destino: rawItem.destino || 'todos'
+        }
+        setComunicadosLocally?.((prev: any) => {
+          const list = Array.isArray(prev) ? prev : []
+          if (list.some((c: any) => String(c.id) === String(normalized.id))) {
+            return list.map((c: any) => String(c.id) === String(normalized.id) ? { ...c, ...normalized } : c)
+          }
+          return [normalized, ...list]
+        })
+      }
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+    }
+
+    const handleUpdate = (e: any) => {
+      const payload = e.detail
+      const rawItem = payload?.item || payload?.new || payload
+      if (rawItem && rawItem.id) {
+        setComunicadosLocally?.((prev: any) => {
+          const list = Array.isArray(prev) ? prev : []
+          return list.map((c: any) => String(c.id) === String(rawItem.id) ? { ...c, ...rawItem } : c)
+        })
+      }
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+    }
+
+    const handleDelete = (e: any) => {
+      const payload = e.detail
+      const id = payload?.id || payload?.old?.id
+      const ids = payload?.ids || (id ? [id] : [])
+      if (ids.length > 0) {
+        const idSet = new Set(ids.map(String))
+        setComunicadosLocally?.((prev: any) => {
+          const list = Array.isArray(prev) ? prev : []
+          return list.filter((c: any) => !idSet.has(String(c.id)))
+        })
+      }
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
+    }
+
+    window.addEventListener('ad:comunicados-insert', handleInsert)
+    window.addEventListener('ad:comunicados-update', handleUpdate)
+    window.addEventListener('ad:comunicados-delete', handleDelete)
+
+    // Polling inteligente leve de contingência a cada 15 segundos enquanto estiver nesta tela
+    const pollTimer = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+    }, 15000)
+
+    return () => {
+      window.removeEventListener('ad:comunicados-insert', handleInsert)
+      window.removeEventListener('ad:comunicados-update', handleUpdate)
+      window.removeEventListener('ad:comunicados-delete', handleDelete)
+      clearInterval(pollTimer)
+    }
+  }, [queryClient, setComunicadosLocally])
 
   const handleEnviar = (data: any, asRascunho = false) => {
     const { titulo, conteudo, anexos, dataAgendamento, cobranca } = data;
@@ -1010,6 +1093,49 @@ function ColaboradorComunicadosContent() {
           transform: translateY(-1px) !important;
         }
 
+        .ad-com-btn-refresh {
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          height: 32px !important;
+          min-height: 32px !important;
+          border-radius: 999px !important;
+          padding: 0 13px !important;
+          font-size: 12px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.01em !important;
+          background: rgba(255, 255, 255, 0.88) !important;
+          color: #4338ca !important;
+          border: 1px solid rgba(199, 210, 254, 0.95) !important;
+          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+          cursor: pointer !important;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+          white-space: nowrap !important;
+          backdrop-filter: blur(12px) !important;
+          -webkit-backdrop-filter: blur(12px) !important;
+        }
+        .ad-com-btn-refresh:hover:not(:disabled) {
+          background: #ffffff !important;
+          color: #3730a3 !important;
+          border-color: #818cf8 !important;
+          transform: translateY(-1px) scale(1.02) !important;
+          box-shadow: 0 4px 14px rgba(99, 102, 241, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+        }
+        .ad-com-btn-refresh:active:not(:disabled) {
+          transform: scale(0.97) !important;
+        }
+        .ad-com-btn-refresh:disabled {
+          opacity: 0.75 !important;
+          cursor: not-allowed !important;
+        }
+        @keyframes adSpin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .ad-spin-icon {
+          animation: adSpin 0.75s linear infinite !important;
+        }
+
         .ad-com-btn-novo {
           display: flex !important;
           align-items: center !important;
@@ -1117,6 +1243,13 @@ function ColaboradorComunicadosContent() {
           .ad-com-header-title {
             font-size: 19px !important;
             font-weight: 800 !important;
+          }
+          .ad-com-btn-refresh {
+            height: 30px !important;
+            min-height: 30px !important;
+            padding: 0 10px !important;
+            font-size: 11px !important;
+            gap: 5px !important;
           }
           .ad-com-btn-novo {
             height: 30px !important;
@@ -1234,6 +1367,16 @@ function ColaboradorComunicadosContent() {
             </div>
             <button className="ad-com-filter-btn" type="button">
               <Filter size={14} /> Filtros
+            </button>
+            <button
+              className={`ad-com-btn-refresh ${isRefreshing ? 'is-loading' : ''}`}
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              type="button"
+              title="Atualizar comunicados e relatórios em tempo real"
+            >
+              <RotateCw size={13} strokeWidth={2.4} className={isRefreshing ? 'ad-spin-icon' : ''} />
+              <span>{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
             </button>
             {!isMirroring && (
               <button className="ad-com-btn-novo" onClick={handleNovo} type="button">

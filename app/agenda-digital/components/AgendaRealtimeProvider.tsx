@@ -421,7 +421,15 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       // 1. Staff match
       let matchesStaff = false
       if (currentIsStaffUser) {
-        if (currentCurrentUser?.perfil === 'Administrador' || currentCurrentUser?.cargo === 'Administrador Master') {
+        const perfisAdmin = ['administrador', 'admin', 'diretor geral', 'diretora geral', 'coordenador', 'coordenadora', 'master', 'orientador', 'orientadora', 'supervisor', 'supervisora']
+        const userPerfil = (currentCurrentUser?.perfil || '').toLowerCase().trim()
+        const userCargo = (currentCurrentUser?.cargo || '').toLowerCase().trim()
+        const isLeadership = perfisAdmin.includes(userPerfil) || perfisAdmin.includes(userCargo)
+        const isInternoOrFunc = destino === 'interno' || destino === 'funcionarios' || destino === 'equipe'
+
+        if (isLeadership) {
+          matchesStaff = true
+        } else if (isInternoOrFunc && alvoFuncs.length === 0 && alvoGrupos.length === 0 && alvoTurmas.length === 0) {
           matchesStaff = true
         } else if (alvoFuncs.some(fid => {
           const clean = String(fid).replace(/^f_?/, '').trim().toLowerCase()
@@ -449,7 +457,7 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
               return colabs.some((cid: any) => currentCandidateStaffIds.includes(String(cid).replace(/^f_?/, '').trim().toLowerCase())) &&
                 (String(g.id) === `sync-${t.id}` || String(g.nome).trim().toLowerCase() === tNome || norm(g.nome) === tNomeNorm)
             })
-            if (!belongs) return false
+            if (!belongs && !isLeadership) return false
             return alvoTurmas.some(al => {
               const alClean = al.toLowerCase().trim()
               const alNorm = norm(al)
@@ -592,23 +600,71 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
     }
 
     let isMounted = true
-    const channels: any[] = []
+    const activeBindings: Array<{ table: string; filter: any; handler: (payload: any) => void; channel: any; retryTimer?: any }> = []
 
-    const createBinding = (table: string, filter: any, handler: (payload: any) => void) => {
-      const cName = `agenda-rt-${table}-${identifier}`
+    const subscribeChannel = (binding: typeof activeBindings[0]) => {
+      if (!isMounted) return
+      if (binding.channel) {
+        try { supabase.removeChannel(binding.channel) } catch (_) {}
+      }
+      const cName = `agenda-rt-${binding.table}-${identifier}-${Date.now()}`
       const c = supabase.channel(cName)
-      c.on('postgres_changes', filter, handler)
+      c.on('postgres_changes', binding.filter, binding.handler)
         .subscribe((status: string) => {
           if (!isMounted) return
           if (status === 'SUBSCRIBED') {
-            console.log(`✅ [Realtime] Conectado ao canal ${table}`)
-          } else if (status === 'CHANNEL_ERROR') {
-            console.warn(`⚠️ [Realtime] Erro no canal ${table}. Verifique se Realtime está ativado no banco.`)
-            supabase.removeChannel(c)
+            console.log(`✅ [Realtime] Conectado ao canal ${binding.table}`)
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.warn(`⚠️ [Realtime] Canal ${binding.table} em estado ${status}. Agendando reconexão...`)
+            try { supabase.removeChannel(c) } catch (_) {}
+            if (isMounted) {
+              clearTimeout(binding.retryTimer)
+              binding.retryTimer = setTimeout(() => {
+                if (isMounted) subscribeChannel(binding)
+              }, 3000)
+            }
           }
         })
-      channels.push(c)
+      binding.channel = c
     }
+
+    const createBinding = (table: string, filter: any, handler: (payload: any) => void) => {
+      const binding = { table, filter, handler, channel: null as any }
+      activeBindings.push(binding)
+      subscribeChannel(binding)
+    }
+
+    const handleAppResume = () => {
+      if (!isMounted) return
+      console.log('🔄 [Realtime] App em primeiro plano. Verificando canais e sincronizando dados...')
+      activeBindings.forEach(b => {
+        if (!b.channel || b.channel.state !== 'joined') {
+          subscribeChannel(b)
+        }
+      })
+      queryClient.invalidateQueries({ queryKey: ['agenda'], refetchType: 'all' })
+    }
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        handleAppResume()
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange)
+      window.addEventListener('focus', handleAppResume)
+      window.addEventListener('online', handleAppResume)
+    }
+
+    let capListenerHandle: any = null
+    import('@capacitor/app').then(({ App: CapApp }) => {
+      CapApp.addListener('appStateChange', (state: any) => {
+        if (state?.isActive) {
+          handleAppResume()
+        }
+      }).then(handle => { capListenerHandle = handle }).catch(() => {})
+    }).catch(() => {})
 
     // ── COMUNICADOS ──────────────────────────────────────────────────────
     createBinding('comunicados', { event: '*', schema: 'public', table: 'comunicados' }, payload => {
@@ -617,19 +673,66 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
       const merged = { ...row, ...(row.dados || {}) }
 
       const match = evaluateEventTarget(merged)
-      
+
+      const normalizedItem = {
+        ...merged,
+        id: String(row.id),
+        titulo: merged.titulo || row.titulo || '',
+        conteudo: merged.conteudo || merged.texto || row.texto || '',
+        autor: merged.autor || row.autor || '',
+        dataEnvio: merged.dataEnvio || merged.data || row.data || row.created_at || new Date().toISOString(),
+        status: merged.status || 'enviado',
+        turmas: Array.isArray(merged.turmas) ? merged.turmas : [],
+        alunosIds: Array.isArray(merged.alunosIds) ? merged.alunosIds : [],
+        funcionariosIds: Array.isArray(merged.funcionariosIds) ? merged.funcionariosIds : [],
+        anexos: Array.isArray(merged.anexos) ? merged.anexos : [],
+        leituras: merged.leituras && typeof merged.leituras === 'object' ? merged.leituras : {},
+        ciencias: merged.ciencias && typeof merged.ciencias === 'object' ? merged.ciencias : {},
+        destino: merged.destino || row.destino || 'todos'
+      }
+
       const alvoTurmas = ensureStringArray(merged.turmas || merged.targetClasses)
       const alvoTurmasIds = ensureStringArray(merged.turmasIds || merged.targetClassesIds)
       const alvoGrupos = ensureStringArray(merged.grupos || merged.targetGroups)
       const alvoAlunos = ensureStringArray(merged.alunosIds || merged.targetAlunos)
       const alvoFuncs = ensureStringArray(merged.funcionariosIds || merged.colaboradoresIds)
       const destino = String(merged.destino || '').toLowerCase().trim()
-      
-      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos'
+
+      const hasAnyTarget = alvoTurmas.length > 0 || alvoTurmasIds.length > 0 || alvoGrupos.length > 0 || alvoAlunos.length > 0 || alvoFuncs.length > 0 || destino === 'todos' || destino === 'interno' || destino === 'funcionarios'
 
       if (eventType === 'DELETE' || match.isTarget || hasAnyTarget || !isFamilyRef.current) {
-        window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: payload }))
-        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] })
+        // Inserção otimista em 0ms no cache do React Query
+        if (eventType === 'INSERT') {
+          queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
+            if (!oldData || !oldData.pages) return oldData
+            const firstPage = oldData.pages[0] || []
+            if (firstPage.some((x: any) => String(x.id) === String(normalizedItem.id))) return oldData
+            return {
+              ...oldData,
+              pages: [[normalizedItem, ...firstPage], ...oldData.pages.slice(1)]
+            }
+          })
+        } else if (eventType === 'UPDATE') {
+          queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
+            if (!oldData || !oldData.pages) return oldData
+            return {
+              ...oldData,
+              pages: oldData.pages.map((p: any[]) => p.map((x: any) => String(x.id) === String(normalizedItem.id) ? { ...x, ...normalizedItem } : x))
+            }
+          })
+        } else if (eventType === 'DELETE') {
+          const delId = String(row.id)
+          queryClient.setQueriesData({ queryKey: ['agenda', 'comunicados'] }, (oldData: any) => {
+            if (!oldData || !oldData.pages) return oldData
+            return {
+              ...oldData,
+              pages: oldData.pages.map((p: any[]) => p.filter((x: any) => String(x.id) !== delId))
+            }
+          })
+        }
+
+        window.dispatchEvent(new CustomEvent(`ad:comunicados-${eventType.toLowerCase()}`, { detail: { ...payload, item: normalizedItem } }))
+        queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'], refetchType: 'all' })
       }
 
       if (eventType === 'INSERT' && (merged.status === 'enviado' || merged.dados?.status === 'enviado')) {
@@ -949,7 +1052,20 @@ export function AgendaRealtimeProvider({ children }: RealtimeProviderProps) {
 
     return () => {
       isMounted = false
-      channels.forEach(c => supabase.removeChannel(c))
+      activeBindings.forEach(b => {
+        if (b.retryTimer) clearTimeout(b.retryTimer)
+        if (b.channel) {
+          try { supabase.removeChannel(b.channel) } catch (_) {}
+        }
+      })
+      if (typeof window !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+        window.removeEventListener('focus', handleAppResume)
+        window.removeEventListener('online', handleAppResume)
+      }
+      if (capListenerHandle && typeof capListenerHandle.remove === 'function') {
+        capListenerHandle.remove()
+      }
       console.log(`🔌 [Realtime] Canais desconectados.`)
     }
   }, [currentUser?.id])

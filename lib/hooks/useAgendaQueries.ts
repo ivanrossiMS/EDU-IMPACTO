@@ -26,10 +26,10 @@ export function useQueryComunicados(
     getNextPageParam: (lastPage, allPages) => {
       return (lastPage && lastPage.length >= pageSize) ? allPages.length : undefined
     },
-    staleTime: 1000 * 30, // 30s de cache antes de considerar obsoleto
-    gcTime: 1000 * 60 * 10, // 10 min na memória
-    refetchOnWindowFocus: false, 
-    refetchOnMount: true,
+    staleTime: 0, // Considera dados imediatamente prontos para revalidação
+    gcTime: 1000 * 60 * 10, // 10 min na memória para exibição em 0ms
+    refetchOnWindowFocus: 'always', 
+    refetchOnMount: 'always',
     enabled: isEnabled
   })
 
@@ -61,10 +61,10 @@ export function useQueryMomentos(
     getNextPageParam: (lastPage, allPages) => {
       return lastPage.length === pageSize ? allPages.length : undefined
     },
-    staleTime: 1000 * 30,
+    staleTime: 0,
     gcTime: 1000 * 60 * 10,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
+    refetchOnWindowFocus: 'always',
+    refetchOnMount: 'always',
     enabled: isEnabled
   })
 

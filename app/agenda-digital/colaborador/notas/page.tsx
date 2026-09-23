@@ -46,15 +46,18 @@ export default function ColaboradorNotasPage() {
     setMounted(true)
   }, [])
 
-  // Lock body scroll when modal is open
+  // Lock body scroll when modal is open and toggle print class
   useEffect(() => {
     if (selectedStudentForModal) {
       document.body.style.overflow = 'hidden'
+      document.body.classList.add('modal-boletim-open')
     } else {
       document.body.style.overflow = ''
+      document.body.classList.remove('modal-boletim-open')
     }
     return () => {
       document.body.style.overflow = ''
+      document.body.classList.remove('modal-boletim-open')
     }
   }, [selectedStudentForModal])
 
@@ -927,6 +930,7 @@ export default function ColaboradorNotasPage() {
           }}>
             {/* Backdrop click */}
             <div 
+              className="notas-modal-backdrop-overlay"
               style={{ position: 'absolute', inset: 0 }} 
               onClick={() => setSelectedStudentForModal(null)} 
             />
@@ -953,7 +957,7 @@ export default function ColaboradorNotasPage() {
               }}
             >
               {/* Modal Top Header */}
-              <div style={{
+              <div className="notas-modal-top-header" style={{
                 padding: '20px 24px',
                 borderBottom: '1px solid #f1f5f9',
                 display: 'flex',
@@ -967,17 +971,18 @@ export default function ColaboradorNotasPage() {
                     name={selectedStudentForModal.nome || 'Aluno'}
                     fotoUrl={selectedStudentForModal.foto || selectedStudentForModal.avatar_url || selectedStudentForModal.avatar}
                     size={48}
+                    className="notas-modal-avatar"
                   />
                   <div>
-                    <h2 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
+                    <h2 className="notas-modal-student-name" style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>
                       {selectedStudentForModal.nome}
                     </h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>
+                      <span className="notas-modal-turma-badge" style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>
                         {selectedStudentForModal.turmaDisplay}
                       </span>
                       {selectedStudentForModal.matricula && (
-                        <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
+                        <span className="notas-modal-matricula" style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>
                           Matrícula: {selectedStudentForModal.matricula}
                         </span>
                       )}
@@ -985,7 +990,19 @@ export default function ColaboradorNotasPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Print-only Document Title & School */}
+                <div className="notas-modal-print-title" style={{ display: 'none' }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', letterSpacing: '-0.02em', textTransform: 'uppercase' }}>
+                      Boletim Escolar
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                      {currentModalBoletim?.originalTitle || 'Boletim'} • Ano {modalAno || selectedAno}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="notas-modal-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button
                     onClick={() => window.print()}
                     style={{
@@ -1028,7 +1045,7 @@ export default function ColaboradorNotasPage() {
               </div>
 
               {/* Bimestres & Year Segmented Switcher */}
-              <div style={{
+              <div className="notas-modal-switcher-row" style={{
                 padding: '14px 24px',
                 background: '#f8fafc',
                 borderBottom: '1px solid #f1f5f9',
@@ -1163,9 +1180,9 @@ export default function ColaboradorNotasPage() {
                       gap: 16,
                       flexShrink: 0
                     }}>
-                      <div style={{ flex: '1 1 200px' }}>
+                      <div className="notas-modal-resumo-left" style={{ flex: '1 1 200px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                          <div style={{
+                          <div className="notas-modal-resumo-icon" style={{
                             width: 28,
                             height: 28,
                             borderRadius: 8,
@@ -1178,13 +1195,13 @@ export default function ColaboradorNotasPage() {
                           }}>
                             <GraduationCap size={16} />
                           </div>
-                          <span style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
+                          <span className="notas-modal-resumo-title" style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, fontSize: 11, color: '#64748b' }}>
                             Média Global do Período
                           </span>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                          <span style={{
+                          <span className="notas-modal-resumo-val" style={{
                             fontSize: 44,
                             fontWeight: 900,
                             fontFamily: 'Outfit, sans-serif',
@@ -1194,12 +1211,12 @@ export default function ColaboradorNotasPage() {
                           }}>
                             {(modalMediaGlobal || 0).toFixed(1)}
                           </span>
-                          <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                          <span className="notas-modal-resumo-scale" style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
                             / 10.0
                           </span>
                         </div>
 
-                        <div style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>
+                        <div className="notas-modal-resumo-periodo" style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>
                           {currentModalBoletim.originalTitle} • Turma: {currentModalBoletim.nomeTurma || selectedStudentForModal.turmaDisplay}
                         </div>
                       </div>
@@ -1231,8 +1248,8 @@ export default function ColaboradorNotasPage() {
                     </div>
 
                     {/* Rendimento por Disciplina Grid */}
-                    <div style={{ flexShrink: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                    <div className="notas-modal-disciplinas-section" style={{ flexShrink: 0 }}>
+                      <div className="notas-modal-section-title" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                         <div style={{ width: 28, height: 28, borderRadius: 8, background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <BarChart2 size={16} />
                         </div>
@@ -1254,6 +1271,7 @@ export default function ColaboradorNotasPage() {
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ duration: 0.2, delay: i * 0.03 }}
+                              className="notas-modal-disciplina-item"
                               style={{
                                 padding: '14px 16px',
                                 background: '#f8fafc',
@@ -1264,35 +1282,35 @@ export default function ColaboradorNotasPage() {
                                 justifyContent: 'space-between'
                               }}
                             >
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-                                <div style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
+                                <div className="notas-disciplina-nome" style={{ fontWeight: 800, color: '#0f172a', fontSize: 13 }}>
                                   {d.nome}
                                 </div>
-                                <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
+                                <div className="notas-disciplina-evals" style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500, flexWrap: 'wrap' }}>
                                   <span>AVM: <strong style={{ color: '#334155' }}>{d.avm ?? '-'}</strong></span>
-                                  <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                                  <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
                                   <span>AVB: <strong style={{ color: '#334155' }}>{d.avb ?? '-'}</strong></span>
                                   {d.simulado && d.simulado !== '---' && (
                                     <>
-                                      <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                                      <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
                                       <span>Simulado: <strong style={{ color: '#334155' }}>{d.simulado}</strong></span>
                                     </>
                                   )}
                                   {(d.pntBonu || d.bonus) && d.pntBonu !== '---' && d.bonus !== '---' && (
                                     <>
-                                      <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                                      <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
                                       <span>Bônus: <strong style={{ color: '#334155' }}>{d.pntBonu || d.bonus}</strong></span>
                                     </>
                                   )}
                                   {d.rec && d.rec !== '---' && (
                                     <>
-                                      <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+                                      <span className="dot-sep" style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
                                       <span>Rec: <strong style={{ color: '#d97706' }}>{d.rec}</strong></span>
                                     </>
                                   )}
                                 </div>
                                 {/* Progress bar */}
-                                <div style={{ marginTop: 4, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '80%' }}>
+                                <div className="notas-disciplina-prog-bar" style={{ marginTop: 4, height: 4, background: '#e2e8f0', borderRadius: 2, overflow: 'hidden', width: '80%' }}>
                                   <div 
                                     style={{
                                       width: `${Math.min(d.mediaFNum * 10, 100)}%`,
@@ -1304,8 +1322,8 @@ export default function ColaboradorNotasPage() {
                                 </div>
                               </div>
 
-                              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                                <div style={{
+                              <div className="notas-disciplina-grade-box" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+                                <div className="notas-disciplina-grade-val" style={{
                                   fontSize: 20,
                                   fontWeight: 900,
                                   fontFamily: 'Outfit, sans-serif',
@@ -1315,7 +1333,7 @@ export default function ColaboradorNotasPage() {
                                   {d.mediaG && d.mediaG !== '---' ? d.mediaG : (d.mediaF ?? '-')}
                                 </div>
                                 {d.mediaG && d.mediaG !== '---' && d.mediaF && d.mediaF !== d.mediaG && (
-                                  <div style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
+                                  <div className="notas-disciplina-grade-final" style={{ fontSize: 10, color: '#64748b', fontWeight: 600 }}>
                                     Final: {d.mediaF}
                                   </div>
                                 )}
@@ -1324,6 +1342,12 @@ export default function ColaboradorNotasPage() {
                           )
                         })}
                       </div>
+                    </div>
+
+                    {/* Print Footer */}
+                    <div className="notas-print-doc-footer" style={{ display: 'none' }}>
+                      <span>IMPACTO EDU • Sistema de Gestão Escolar</span>
+                      <span>Documento emitido em {new Date().toLocaleDateString('pt-BR')}</span>
                     </div>
                   </>
                 )}
@@ -1508,9 +1532,133 @@ export default function ColaboradorNotasPage() {
 
         @media print {
           @page {
-            margin: 15mm;
+            margin: 8mm 12mm;
             size: A4 portrait;
           }
+
+          /* Force exact print color rendering (backgrounds and borders) */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            box-sizing: border-box !important;
+          }
+
+          /* Disable all animations & transitions that prevent page breaks or cause clipping */
+          *,
+          *:before,
+          *:after {
+            animation: none !important;
+            transition: none !important;
+          }
+
+          /* When modal is open, completely hide everything outside the modal */
+          body.modal-boletim-open .agenda-digital-wrapper,
+          body.modal-boletim-open .ad-main-scroll,
+          body.modal-boletim-open .ad-content-inner,
+          body.modal-boletim-open .ad-premium-card-wrapper,
+          body.modal-boletim-open .notas-page-container,
+          body.modal-boletim-open .sidebar,
+          body.modal-boletim-open .topbar,
+          body.modal-boletim-open header,
+          body.modal-boletim-open nav,
+          body.modal-boletim-open aside,
+          body.modal-boletim-open .ad-sidebar-container,
+          body.modal-boletim-open .ad-banner-global,
+          body.modal-boletim-open .ad-right-section {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            max-height: 0 !important;
+            overflow: hidden !important;
+          }
+
+          /* Reset body and html */
+          body, html {
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            font-size: 11pt !important;
+          }
+
+          /* Modal Container resets to normal document flow without backdrop */
+          .notas-modal-container {
+            position: static !important;
+            inset: auto !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            max-height: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            background-color: transparent !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            display: block !important;
+            overflow: visible !important;
+            z-index: auto !important;
+          }
+
+          /* Hide modal backdrop overlay */
+          .notas-modal-backdrop-overlay {
+            display: none !important;
+          }
+
+          /* Modal Card expands to natural height and width, removing shadow & border-radius */
+          .notas-modal-card {
+            position: static !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
+            background: #ffffff !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
+            transform: none !important;
+          }
+
+          /* Top Header */
+          .notas-modal-top-header {
+            padding: 0 0 10px 0 !important;
+            border-bottom: 2px solid #e2e8f0 !important;
+            margin-bottom: 8px !important;
+          }
+          .notas-modal-avatar {
+            width: 38px !important;
+            height: 38px !important;
+          }
+          .notas-modal-student-name {
+            font-size: 16px !important;
+            color: #0f172a !important;
+          }
+          .notas-modal-turma-badge {
+            font-size: 11px !important;
+            padding: 2px 6px !important;
+            background: #eff6ff !important;
+            color: #2563eb !important;
+            border-radius: 4px !important;
+          }
+          .notas-modal-matricula {
+            font-size: 11px !important;
+            color: #64748b !important;
+          }
+
+          /* Display print-only document title in header */
+          .notas-modal-print-title {
+            display: block !important;
+          }
+
+          /* Hide interactive buttons & controls */
+          .notas-modal-header-actions,
+          .notas-modal-switcher-row,
           .ad-sidebar-container,
           .ad-banner-global,
           .ad-right-section,
@@ -1520,8 +1668,148 @@ export default function ColaboradorNotasPage() {
           ::-webkit-scrollbar {
             display: none !important;
           }
-          body, html {
-            background: white !important;
+
+          /* Modal Body: completely visible and auto height */
+          .notas-modal-body {
+            padding: 0 !important;
+            overflow: visible !important;
+            max-height: none !important;
+            height: auto !important;
+            min-height: 0 !important;
+            gap: 8px !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+
+          /* Compact Global Average Summary */
+          .notas-modal-resumo {
+            padding: 8px 12px !important;
+            border-radius: 12px !important;
+            gap: 8px !important;
+            margin-bottom: 4px !important;
+            border-width: 1px !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          .notas-modal-resumo-left {
+            flex: 1 1 auto !important;
+          }
+          .notas-modal-resumo-icon {
+            width: 22px !important;
+            height: 22px !important;
+            border-radius: 6px !important;
+          }
+          .notas-modal-resumo-icon svg {
+            width: 13px !important;
+            height: 13px !important;
+          }
+          .notas-modal-resumo-title {
+            font-size: 10px !important;
+          }
+          .notas-modal-resumo-val {
+            font-size: 26px !important;
+            line-height: 1 !important;
+          }
+          .notas-modal-resumo-scale {
+            font-size: 11px !important;
+          }
+          .notas-modal-resumo-periodo {
+            font-size: 11px !important;
+            margin-top: 2px !important;
+          }
+          .notas-modal-status-pill {
+            padding: 6px 12px !important;
+            border-radius: 10px !important;
+            flex-direction: row !important;
+            gap: 6px !important;
+          }
+          .notas-modal-status-pill svg {
+            width: 16px !important;
+            height: 16px !important;
+          }
+          .notas-modal-status-pill span {
+            font-size: 11px !important;
+          }
+
+          /* Section Title */
+          .notas-modal-section-title {
+            margin-bottom: 6px !important;
+            gap: 6px !important;
+          }
+          .notas-modal-section-title > div:first-child {
+            width: 22px !important;
+            height: 22px !important;
+            border-radius: 6px !important;
+          }
+          .notas-modal-section-title > div:first-child svg {
+            width: 13px !important;
+            height: 13px !important;
+          }
+          .notas-modal-section-title h3 {
+            font-size: 13px !important;
+          }
+
+          /* Disciplines Grid: 2 clean compact columns */
+          .notas-modal-disciplinas-grid {
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 5px 8px !important;
+          }
+
+          /* Discipline Item Card */
+          .notas-modal-disciplina-item {
+            padding: 6px 10px !important;
+            border-radius: 8px !important;
+            border: 1px solid #e2e8f0 !important;
+            background: #f8fafc !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            transform: none !important;
+            box-shadow: none !important;
+          }
+          .notas-disciplina-nome {
+            font-size: 11px !important;
+            line-height: 1.2 !important;
+          }
+          .notas-disciplina-evals {
+            font-size: 8.5px !important;
+            gap: 4px !important;
+            line-height: 1.2 !important;
+          }
+          .notas-disciplina-evals strong {
+            color: #1e293b !important;
+          }
+          .dot-sep {
+            width: 2.5px !important;
+            height: 2.5px !important;
+          }
+
+          /* Hide progress bar on print to save space and keep it super crisp */
+          .notas-disciplina-prog-bar {
+            display: none !important;
+          }
+
+          /* Final Grade Typography */
+          .notas-disciplina-grade-val {
+            font-size: 15px !important;
+            line-height: 1 !important;
+          }
+          .notas-disciplina-grade-final {
+            font-size: 8px !important;
+          }
+
+          /* Print Footer */
+          .notas-print-doc-footer {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            font-size: 9px !important;
+            color: #94a3b8 !important;
+            border-top: 1px solid #e2e8f0 !important;
+            padding-top: 6px !important;
+            margin-top: 8px !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
           }
         }
       `}} />
