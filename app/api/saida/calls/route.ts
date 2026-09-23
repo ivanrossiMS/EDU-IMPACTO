@@ -24,31 +24,39 @@ export async function GET(request: Request) {
       query = query.eq('dados->>studentId', studentId)
     }
     
-    const dateParam = url.searchParams.get('date') || fromDate
+    const dateParam = url.searchParams.get('date')
     const formatter = new Intl.DateTimeFormat('en-CA', { 
       timeZone: 'America/Campo_Grande', 
       year: 'numeric', 
       month: '2-digit', 
       day: '2-digit' 
     })
-    const todayStr = dateParam || formatter.format(new Date())
+    const todayStr = formatter.format(new Date())
 
-    query = query.gte('created_at', `${todayStr}T00:00:00-04:00`)
-    
-    if (toDate) {
-      query = query.lte('created_at', toDate + 'T23:59:59')
+    // Define os limites de data considerando fuso America/Campo_Grande (-04:00)
+    const effectiveFrom = fromDate || dateParam || (!toDate ? todayStr : null)
+    const targetDate = effectiveFrom || todayStr
+    if (effectiveFrom) {
+      query = query.gte('created_at', `${effectiveFrom}T00:00:00-04:00`)
     }
     
-    const targetDate = fromDate || todayStr
+    const effectiveTo = toDate || dateParam
+    if (effectiveTo) {
+      query = query.lte('created_at', `${effectiveTo}T23:59:59.999-04:00`)
+    }
+    
     let freqQuery = supabase
       .from('frequencias')
       .select('id, aluno_id, turma_id, data, dados, created_at')
-      .gte('data', targetDate)
 
-    if (toDate) {
-      freqQuery = freqQuery.lte('data', toDate)
-    } else {
-      freqQuery = freqQuery.lte('data', targetDate)
+    if (effectiveFrom) {
+      freqQuery = freqQuery.gte('data', effectiveFrom)
+    }
+
+    if (effectiveTo) {
+      freqQuery = freqQuery.lte('data', effectiveTo)
+    } else if (!fromDate && !toDate) {
+      freqQuery = freqQuery.lte('data', todayStr)
     }
 
     // Executa as consultas ao Supabase em paralelo para reduzir tempo de resposta

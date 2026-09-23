@@ -14,16 +14,55 @@ import {
 } from 'lucide-react'
 
 // ── Helper functions ──
+function parseTimeMs(iso?: string): number {
+  if (!iso) return 0
+  let str = String(iso).trim()
+  if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+    const [h, m] = str.split(':').map(Number)
+    const today = new Date()
+    today.setHours(h, m, 0, 0)
+    return today.getTime()
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    str += 'T12:00:00-04:00'
+  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+    str += '-04:00'
+  }
+  const t = new Date(str).getTime()
+  return isNaN(t) ? 0 : t
+}
+
 function fmtDate(iso?: string) {
   if (!iso) return '—'
   try {
     let str = String(iso).trim()
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
-      str += '-03:00'
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      str += 'T12:00:00-04:00'
+    } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-04:00'
     }
     const d = new Date(str)
     if (isNaN(d.getTime())) return String(iso)
     return d.toLocaleString('pt-BR', { timeZone: 'America/Campo_Grande', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return String(iso)
+  }
+}
+
+function fmtOnlyDate(iso?: string) {
+  if (!iso) return '—'
+  try {
+    let str = String(iso).trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      const [y, m, d] = str.split('-')
+      return `${d}/${m}/${y}`
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-04:00'
+    }
+    const d = new Date(str)
+    if (isNaN(d.getTime())) return String(iso)
+    return d.toLocaleDateString('pt-BR', { timeZone: 'America/Campo_Grande', day: '2-digit', month: '2-digit', year: 'numeric' })
   } catch {
     return String(iso)
   }
@@ -34,11 +73,11 @@ function fmtTime(iso?: string) {
   try {
     let str = String(iso).trim()
     if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
-      const [h, m] = str.split(':').map(Number)
-      const dateToday = new Date().toISOString().split('T')[0]
-      str = `${dateToday}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
-    } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
-      str += '-03:00'
+      const parts = str.split(':')
+      return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-04:00'
     }
     const d = new Date(str)
     if (isNaN(d.getTime())) return str
@@ -124,7 +163,7 @@ function TabHistoricoChamadas() {
       if (appliedFilters.searchGuardian && !c.guardianName.toLowerCase().includes(appliedFilters.searchGuardian.toLowerCase())) return false
       if (appliedFilters.statusFilter && c.status !== appliedFilters.statusFilter) return false
       return true
-    }).sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime())
+    }).sort((a, b) => parseTimeMs(b.calledAt) - parseTimeMs(a.calledAt))
   }, [historicoCalls, appliedFilters, hasSearched])
 
   const handleBuscar = async () => {
@@ -154,13 +193,14 @@ function TabHistoricoChamadas() {
 
   const exportExcel = () => {
     const rows = filtered.map(c => ({
+      'Data':         fmtOnlyDate(c.calledAt),
       'Aluno':        c.studentName,
       'Turma':        getTurmaNome(c.studentClass),
       'Responsável':  c.guardianName,
       'Origem':       c.source === 'rfid' ? 'RFID' : 'Manual',
       'RFID':         c.rfidCode ?? '—',
-      'Chamado em':   fmtDate(c.calledAt),
-      'Confirmado em':fmtDate(c.confirmedAt),
+      'Chamado em':   fmtTime(c.calledAt),
+      'Confirmado em':fmtTime(c.confirmedAt),
       'Status':       STATUS_LABEL[c.status] ?? c.status,
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -170,9 +210,9 @@ function TabHistoricoChamadas() {
   }
 
   const exportCSV = () => {
-    const header = 'Aluno,Turma,Responsável,Chamado em,Confirmado em,Status\n'
+    const header = 'Data,Aluno,Turma,Responsável,Origem,Chamado em,Confirmado em,Status\n'
     const rows = filtered.map(c =>
-      `"${c.studentName}","${getTurmaNome(c.studentClass)}","${c.guardianName}","${fmtDate(c.calledAt)}","${fmtDate(c.confirmedAt)}","${STATUS_LABEL[c.status] ?? c.status}"`
+      `"${fmtOnlyDate(c.calledAt)}","${c.studentName}","${getTurmaNome(c.studentClass)}","${c.guardianName}","${c.source === 'rfid' ? 'RFID' : 'Manual'}","${fmtTime(c.calledAt)}","${fmtTime(c.confirmedAt)}","${STATUS_LABEL[c.status] ?? c.status}"`
     ).join('\n')
     const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -278,56 +318,154 @@ function TabHistoricoChamadas() {
             const statusColor = ({ confirmed: '#10b981', cancelled: '#ef4444', waiting: '#f59e0b', called: '#f59e0b', recalled: '#f59e0b' } as Record<string,string>)[c.status] ?? '#64748b'
             return (
               <div key={c.id} style={{ background: 'hsl(var(--bg-elevated))', border: '1px solid hsl(var(--border-subtle))', borderRadius: 14, padding: '14px 16px', borderLeft: `4px solid ${statusColor}` }}>
-                <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>{c.studentName}</div>
-                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 8 }}>{getTurmaNome(c.studentClass)} · {c.guardianName}</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: `${statusColor}10`, color: statusColor, border: `1px solid ${statusColor}25`, fontWeight: 700 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: 'hsl(var(--text-primary))' }}>{c.studentName}</div>
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: `${statusColor}14`, color: statusColor, border: `1px solid ${statusColor}30`, fontWeight: 800, flexShrink: 0 }}>
                     {STATUS_LABEL[c.status] ?? c.status}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: 'hsl(var(--text-muted))', marginBottom: 10 }}>{getTurmaNome(c.studentClass)} · {c.guardianName}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-primary))', border: '1px solid hsl(var(--border-subtle))', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <Calendar size={11} color="#06b6d4" />
+                    {fmtOnlyDate(c.calledAt)}
                   </span>
                   <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: c.source === 'rfid' ? 'rgba(6,182,212,0.1)' : 'rgba(167,139,250,0.1)', color: c.source === 'rfid' ? '#06b6d4' : '#a78bfa', fontWeight: 700 }}>
                     {c.source === 'rfid' ? '📡 RFID' : '🖱 Manual'}
                   </span>
-                  <span style={{ fontSize: 10, color: 'hsl(var(--text-muted))', padding: '2px 0' }}>{fmtTime(c.calledAt)}</span>
-                  {c.confirmedAt && <span style={{ fontSize: 10, color: '#10b981', padding: '2px 0' }}>→ {fmtTime(c.confirmedAt)}</span>}
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'hsl(var(--text-muted))', padding: '2px 4px' }}>{fmtTime(c.calledAt)}</span>
+                  {c.confirmedAt && <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#10b981', fontWeight: 700, padding: '2px 4px' }}>→ {fmtTime(c.confirmedAt)}</span>}
                 </div>
               </div>
             )
           })}
         </div>
       ) : (
-        <div style={{ background: 'hsl(var(--bg-elevated))', borderRadius: 16, border: '1px solid hsl(var(--border-subtle))', overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <div style={{
+          background: 'hsl(var(--bg-elevated))',
+          borderRadius: 16,
+          border: '1px solid hsl(var(--border-subtle))',
+          overflow: 'hidden',
+          boxShadow: '0 4px 20px -2px rgba(0,0,0,0.04)'
+        }}>
+          <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: 'hsl(var(--bg-overlay))' }}>
-                {['Aluno','Turma','Responsável','Origem','Chamado em','Confirmado em','Status'].map(h => (
-                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 9, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid hsl(var(--border-subtle))', whiteSpace: 'nowrap' }}>
-                    {h}
-                  </th>
-                ))}
+              <tr style={{ background: 'hsl(var(--bg-overlay))', borderBottom: '1px solid hsl(var(--border-subtle))' }}>
+                <th style={{ width: '11%', padding: '12px 14px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Data
+                </th>
+                <th style={{ width: '22%', padding: '12px 14px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Aluno
+                </th>
+                <th style={{ width: '13%', padding: '12px 14px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Turma
+                </th>
+                <th style={{ width: '18%', padding: '12px 14px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Responsável
+                </th>
+                <th style={{ width: '10%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Origem
+                </th>
+                <th style={{ width: '8%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Chamado
+                </th>
+                <th style={{ width: '8%', padding: '12px 14px', textAlign: 'center', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Confirmado
+                </th>
+                <th style={{ width: '10%', padding: '12px 14px', textAlign: 'right', fontSize: 10, fontWeight: 800, color: 'hsl(var(--text-muted))', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  Status
+                </th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>
-                  Nenhum registro encontrado
-                </td></tr>
+                <tr>
+                  <td colSpan={8} style={{ padding: '48px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: 13 }}>
+                    Nenhum registro encontrado
+                  </td>
+                </tr>
               ) : filtered.map((c, i) => {
                 const statusColor = ({ confirmed: '#10b981', cancelled: '#ef4444', waiting: '#f59e0b', called: '#f59e0b', recalled: '#f59e0b' } as Record<string,string>)[c.status] ?? '#64748b'
                 return (
-                  <tr key={c.id} style={{ borderBottom: '1px solid hsl(var(--border-subtle))', background: i % 2 === 0 ? 'transparent' : 'hsl(var(--bg-overlay))' }}>
-                    <td style={{ padding: '10px 14px', fontWeight: 700, whiteSpace: 'nowrap' }}>{c.studentName}</td>
-                    <td style={{ padding: '10px 14px', color: 'hsl(var(--text-muted))', whiteSpace: 'nowrap' }}>{getTurmaNome(c.studentClass)}</td>
-                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>{c.guardianName}</td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, background: c.source === 'rfid' ? 'rgba(6,182,212,0.1)' : 'rgba(167,139,250,0.1)', color: c.source === 'rfid' ? '#06b6d4' : '#a78bfa', fontWeight: 700 }}>
+                  <tr key={c.id} style={{
+                    borderBottom: '1px solid hsl(var(--border-subtle))',
+                    background: i % 2 === 0 ? 'transparent' : 'hsl(var(--bg-overlay) / 0.4)',
+                    transition: 'background 0.15s ease'
+                  }}>
+                    {/* DATA */}
+                    <td style={{ padding: '12px 14px', width: '11%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'hsl(var(--text-primary))' }}>
+                        <Calendar size={12} color="#06b6d4" style={{ flexShrink: 0 }} />
+                        <span>{fmtOnlyDate(c.calledAt)}</span>
+                      </div>
+                    </td>
+
+                    {/* ALUNO */}
+                    <td style={{ padding: '12px 14px', width: '22%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.studentName}>
+                      <span style={{ fontWeight: 700, fontSize: 13, color: 'hsl(var(--text-primary))' }}>
+                        {c.studentName}
+                      </span>
+                    </td>
+
+                    {/* TURMA */}
+                    <td style={{ padding: '12px 14px', width: '13%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={getTurmaNome(c.studentClass)}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                        background: 'hsl(var(--bg-overlay))', color: 'hsl(var(--text-muted))',
+                        border: '1px solid hsl(var(--border-subtle))', display: 'inline-block', maxWidth: '100%',
+                        overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'middle'
+                      }}>
+                        {getTurmaNome(c.studentClass)}
+                      </span>
+                    </td>
+
+                    {/* RESPONSÁVEL */}
+                    <td style={{ padding: '12px 14px', width: '18%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.guardianName}>
+                      <span style={{ fontSize: 12, color: 'hsl(var(--text-muted))', fontWeight: 500 }}>
+                        {c.guardianName || '—'}
+                      </span>
+                    </td>
+
+                    {/* ORIGEM */}
+                    <td style={{ padding: '12px 14px', width: '10%', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                      <span style={{
+                        fontSize: 10, padding: '3px 8px', borderRadius: 100, fontWeight: 700,
+                        background: c.source === 'rfid' ? 'rgba(6,182,212,0.1)' : 'rgba(167,139,250,0.1)',
+                        color: c.source === 'rfid' ? '#06b6d4' : '#a78bfa',
+                        border: `1px solid ${c.source === 'rfid' ? 'rgba(6,182,212,0.25)' : 'rgba(167,139,250,0.25)'}`,
+                        display: 'inline-block'
+                      }}>
                         {c.source === 'rfid' ? '📡 RFID' : '🖱 Manual'}
                       </span>
                     </td>
-                    <td style={{ padding: '10px 14px', color: 'hsl(var(--text-muted))', fontFamily: 'monospace', fontSize: 11 }}>{fmtTime(c.calledAt)}</td>
-                    <td style={{ padding: '10px 14px', color: '#10b981', fontFamily: 'monospace', fontSize: 11 }}>{fmtTime(c.confirmedAt)}</td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 100, fontWeight: 700, background: `${statusColor}10`, color: statusColor, border: `1px solid ${statusColor}25` }}>
+
+                    {/* CHAMADO */}
+                    <td style={{ padding: '12px 14px', width: '8%', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: 'hsl(var(--text-muted))' }}>
+                        {fmtTime(c.calledAt)}
+                      </span>
+                    </td>
+
+                    {/* CONFIRMADO */}
+                    <td style={{ padding: '12px 14px', width: '8%', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                      {c.confirmedAt ? (
+                        <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#10b981' }}>
+                          {fmtTime(c.confirmedAt)}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'hsl(var(--text-muted))', fontSize: 11 }}>—</span>
+                      )}
+                    </td>
+
+                    {/* STATUS */}
+                    <td style={{ padding: '12px 14px', width: '10%', whiteSpace: 'nowrap', textAlign: 'right' }}>
+                      <span style={{
+                        fontSize: 10, padding: '3px 9px', borderRadius: 100, fontWeight: 800,
+                        background: `${statusColor}14`, color: statusColor,
+                        border: `1px solid ${statusColor}30`,
+                        display: 'inline-flex', alignItems: 'center', gap: 4
+                      }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: statusColor }}></span>
                         {STATUS_LABEL[c.status] ?? c.status}
                       </span>
                     </td>
@@ -336,7 +474,6 @@ function TabHistoricoChamadas() {
               })}
             </tbody>
           </table>
-          </div>
         </div>
       )}
 

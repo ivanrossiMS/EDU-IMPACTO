@@ -44,11 +44,11 @@ function formatTimeFromIso(isoStr?: string): string | undefined {
   if (!str) return undefined
   try {
     if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
-      const [h, m] = str.split(':').map(Number)
-      const dateToday = new Date().toISOString().split('T')[0]
-      str = `${dateToday}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00-03:00`
-    } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
-      str += '-03:00'
+      const parts = str.split(':')
+      return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      str += '-04:00'
     }
     const d = new Date(str)
     if (!isNaN(d.getTime())) {
