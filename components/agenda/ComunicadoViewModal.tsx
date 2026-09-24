@@ -823,7 +823,18 @@ export function ComunicadoViewModal({
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, zIndex: 1, position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, zIndex: 1, position: 'relative' }}>
+              {onDelete && (
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onDelete(comunicado.id); }}
+                  className="cvm-icon-btn"
+                  title="Excluir"
+                  aria-label="Excluir"
+                  style={{ background: 'rgba(239, 68, 68, 0.35)', color: '#fff' }}
+                >
+                  <Trash2 size={18} />
+                </button>
+              )}
               <button 
                 onClick={onClose}
                 className="cvm-icon-btn"
@@ -1485,7 +1496,7 @@ export function ComunicadoViewModal({
               )}
               {onDelete && (
                 <motion.button 
-                  whileHover={{ scale: 1.02, y: -1, background: '#fef2f2', borderColor: '#fecaca' }}
+                  whileHover={{ scale: 1.02, y: -1, background: '#fef2f2', borderColor: '#fca5a5' }}
                   whileTap={{ scale: 0.96 }}
                   onClick={(e: any) => { e.stopPropagation(); onDelete(comunicado.id); }} 
                   style={{ 
@@ -1497,13 +1508,14 @@ export function ComunicadoViewModal({
                     gap: 6, 
                     padding: '12px 8px', 
                     borderRadius: 16, 
-                    border: '1px solid transparent', 
+                    border: '1px solid rgba(239, 68, 68, 0.25)', 
                     background: 'rgba(239, 68, 68, 0.08)', 
                     color: '#ef4444', 
                     fontSize: 14, 
                     fontWeight: 700, 
                     whiteSpace: 'nowrap',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px -4px rgba(239, 68, 68, 0.15)'
                   }}
                 >
                   <Trash2 size={17} style={{ flexShrink: 0 }} />

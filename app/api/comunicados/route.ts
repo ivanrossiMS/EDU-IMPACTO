@@ -834,7 +834,7 @@ export async function DELETE(request: Request) {
 
   const { data: comunicados, error: fetchError } = await adminClient
     .from('comunicados')
-    .select('id, dados, created_at, titulo')
+    .select('id, dados, created_at, titulo, autor')
     .in('id', initialIds)
 
   if (fetchError) {
@@ -850,40 +850,128 @@ export async function DELETE(request: Request) {
         urlsToDelete.push(...com.dados.anexos)
       }
 
-      if (com.id && String(com.id).startsWith('AD-COM-REL-COLAB-')) {
-        const autorId = com.dados?.autorId;
-        const dateStr = com.created_at || com.dados?.dataEnvio;
-        if (autorId && dateStr) {
-          const createdDate = new Date(dateStr);
-          if (!isNaN(createdDate.getTime())) {
-            const minDate = new Date(createdDate.getTime() - 2 * 60000).toISOString();
-            const maxDate = new Date(createdDate.getTime() + 2 * 60000).toISOString();
-            
-            const { data: stus } = await adminClient.from('comunicados')
-              .select('id, dados, titulo')
-              .ilike('id', 'AD-COM-REL-STU-%')
-              .gte('created_at', minDate)
-              .lte('created_at', maxDate);
-            
-            if (stus) {
-              const colabTitulo = (com.titulo || '').replace('Relatório: ', '');
-              
-              const relatedStus = stus.filter((s: any) => {
-                if (!s.dados || s.dados.autorId !== autorId) return false;
-                // Tentar garantir que seja do mesmo lote verificando prefixo
-                if (colabTitulo && s.titulo) {
-                  if (!s.titulo.includes(colabTitulo)) return false;
-                }
-                return true;
-              });
+      if (com.id && (String(com.id).startsWith('AD-COM-REL-COLAB-') || String(com.id).startsWith('AD-COM-REL-TURMA-') || (String(com.id).startsWith('AD-COM-REL-') && !String(com.id).startsWith('AD-COM-REL-STU-')))) {
+        // 1. Extrair timestamp do ID do comunicado colab
+        const idMatch = String(com.id).match(/AD-COM-REL-[A-Za-z]+-(\d+)/);
+        const colabTs = idMatch ? parseInt(idMatch[1], 10) : null;
 
-              for (const stu of relatedStus) {
-                idsToDelete.add(stu.id);
-                if (stu.dados?.anexos && Array.isArray(stu.dados.anexos)) {
-                  urlsToDelete.push(...stu.dados.anexos);
+        // 2. Extrair todos os IDs de alunos nos anexos do comunicado consolidado
+        const studentIdsFromAnexos = new Set<string>();
+        if (com.dados?.anexos && Array.isArray(com.dados.anexos)) {
+          com.dados.anexos.forEach((a: any) => {
+            const aStr = typeof a === 'string' ? a : String(a?.url || '');
+            if (aStr.includes('payload:')) {
+              try {
+                const pIdx = aStr.indexOf('payload:');
+                const endIdx = aStr.lastIndexOf('|');
+                const jsonStr = aStr.substring(pIdx + 8, endIdx !== -1 && endIdx > pIdx ? endIdx : undefined);
+                const parsed = JSON.parse(jsonStr);
+                if (parsed.studentInfo?.id) {
+                  studentIdsFromAnexos.add(String(parsed.studentInfo.id).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase());
                 }
-              }
+                if (parsed.values && typeof parsed.values === 'object') {
+                  Object.keys(parsed.values).forEach(k => {
+                    studentIdsFromAnexos.add(String(k).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase());
+                  });
+                }
+              } catch (e) {}
             }
+          });
+        }
+        if (com.dados?.alunosIds && Array.isArray(com.dados.alunosIds)) {
+          com.dados.alunosIds.forEach((id: any) => {
+            studentIdsFromAnexos.add(String(id).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase());
+          });
+        }
+
+        // 3. Janela de tempo expandida para localizar os relatórios individuais
+        const baseTime = colabTs || (com.created_at ? new Date(com.created_at).getTime() : (com.dados?.dataEnvio ? new Date(com.dados.dataEnvio).getTime() : Date.now()));
+        const minDate = new Date(baseTime - 15 * 60000).toISOString();
+        const maxDate = new Date(baseTime + 15 * 60000).toISOString();
+
+        // 4. Buscar candidatos no banco
+        const { data: stusByDate } = await adminClient
+          .from('comunicados')
+          .select('id, dados, titulo, created_at, autor')
+          .ilike('id', 'AD-COM-REL-STU-%')
+          .gte('created_at', minDate)
+          .lte('created_at', maxDate);
+
+        let stusByPrefix: any[] = [];
+        if (colabTs) {
+          const tsPrefix = String(colabTs).substring(0, 8); // ~1.6 min window prefix
+          const { data: prefixData } = await adminClient
+            .from('comunicados')
+            .select('id, dados, titulo, created_at, autor')
+            .ilike('id', `AD-COM-REL-STU-${tsPrefix}%`);
+          if (prefixData) stusByPrefix = prefixData;
+        }
+
+        const candidateStusMap = new Map<string, any>();
+        (stusByDate || []).forEach((s: any) => candidateStusMap.set(s.id, s));
+        stusByPrefix.forEach((s: any) => candidateStusMap.set(s.id, s));
+        const candidateStus = Array.from(candidateStusMap.values());
+
+        // 5. Normalizar textos para matching robusto
+        const normalizeText = (t: string) => (t || '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/º/g, '°')
+          .replace(/^relatorio:\s*/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        const cleanColabTitle = normalizeText(com.titulo || com.dados?.titulo || '');
+        const comAutorId = String(com.dados?.autorId || (com as any).autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+        const comAutorName = normalizeText(com.autor || com.dados?.autor || '');
+
+        const matchedStus = candidateStus.filter((stu: any) => {
+          // A) Timestamp do ID próximo (menos de 60s)
+          const sMatch = stu.id.match(/AD-COM-REL-STU-(\d+)-/);
+          if (sMatch && colabTs) {
+            const sTs = parseInt(sMatch[1], 10);
+            if (!isNaN(sTs) && Math.abs(sTs - colabTs) < 60000) {
+              return true;
+            }
+          }
+
+          // B) Aluno presente na lista de anexos do relatório
+          const stuParts = stu.id.split('-');
+          let stuAluId = '';
+          if (stuParts.length >= 6) {
+            stuAluId = String(stuParts[5] || '').replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase();
+          }
+          const stuDadosAlunos = (stu.dados?.alunosIds || []).map((id: any) => 
+            String(id).replace(/^a_?/, '').replace(/^_*(ALU)?/, '').trim().toLowerCase()
+          );
+          const matchesStudent = (stuAluId && studentIdsFromAnexos.has(stuAluId)) || stuDadosAlunos.some((id: string) => studentIdsFromAnexos.has(id));
+
+          if (matchesStudent) {
+            const stuAutorId = String(stu.dados?.autorId || stu.autor_id || '').replace(/^f_?/, '').trim().toLowerCase();
+            const stuAutorName = normalizeText(stu.autor || stu.dados?.autor || '');
+            if (!comAutorId || !stuAutorId || comAutorId === stuAutorId || stuAutorId.includes(comAutorId) || comAutorId.includes(stuAutorId)) {
+              return true;
+            }
+            if (!comAutorName || !stuAutorName || comAutorName === stuAutorName || stuAutorName.includes(comAutorName) || comAutorName.includes(stuAutorName)) {
+              return true;
+            }
+            return true;
+          }
+
+          // C) Prefixo do título coincide
+          const cleanStuTitle = normalizeText(stu.titulo || stu.dados?.titulo || '');
+          if (cleanColabTitle && cleanStuTitle && cleanStuTitle.startsWith(cleanColabTitle)) {
+            return true;
+          }
+
+          return false;
+        });
+
+        for (const stu of matchedStus) {
+          idsToDelete.add(stu.id);
+          if (stu.dados?.anexos && Array.isArray(stu.dados.anexos)) {
+            urlsToDelete.push(...stu.dados.anexos);
           }
         }
       }
@@ -932,7 +1020,7 @@ export async function DELETE(request: Request) {
     deleteStorageFilesByUrls(urlsToDelete).catch(err => console.error('Erro ao deletar arquivos do storage:', err));
   }
 
-  return NextResponse.json({ ok: true, deletedCount: count ?? finalIdsToDelete.length }, {
+  return NextResponse.json({ ok: true, deletedCount: count ?? finalIdsToDelete.length, deletedIds: finalIdsToDelete }, {
     headers: {
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       'Pragma': 'no-cache',

@@ -682,31 +682,50 @@ function ColaboradorComunicadosContent() {
     setShowComposer(true)
   }
 
+  const [isDeletingComunicado, setIsDeletingComunicado] = useState(false);
+
   const handleDeleteComunicado = (cId: string) => {
     setComunicadoToDelete(cId);
   }
 
   const confirmDeleteComunicado = async () => {
-    if (!comunicadoToDelete) return;
+    if (!comunicadoToDelete || isDeletingComunicado) return;
     const cId = comunicadoToDelete;
-    
-    setComunicadosLocally?.((prev: any) => prev.filter((c: any) => c.id !== cId));
-    if (selectedComunicado?.id === cId) setSelectedComunicado(null);
+    setIsDeletingComunicado(true);
 
     try {
       const res = await fetch(`/api/comunicados?id=${cId}`, { method: 'DELETE' });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setComunicadosLocally?.((prev: any) => prev.filter((c: any) => c.id !== cId));
+        if (selectedComunicado?.id === cId) setSelectedComunicado(null);
+        setComunicadoToDelete(null);
+
         queryClient.invalidateQueries({ queryKey: ['agenda', 'comunicados'] });
-        window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { detail: { id: cId, old: { id: cId } } }));
+        window.dispatchEvent(new CustomEvent('ad:comunicados-delete', { 
+          detail: { 
+            id: cId, 
+            ids: data.deletedIds || [cId],
+            old: { id: cId } 
+          } 
+        }));
+
+        if (cId.startsWith('AD-COM-REL-')) {
+          adAlert('Relatório e relatórios individuais dos alunos excluídos com sucesso!', 'Sucesso');
+        } else {
+          adAlert('Comunicado excluído com sucesso!', 'Sucesso');
+        }
       } else {
         const data = await res.json().catch(() => ({ error: 'Erro desconhecido' }));
         console.error("Erro ao deletar comunicado:", data.error);
+        adAlert(`Erro ao excluir: ${data.error || 'Erro no servidor'}`, 'Erro');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Erro na requisição DELETE comunicado:", e);
+      adAlert(`Erro ao excluir: ${e.message}`, 'Erro');
+    } finally {
+      setIsDeletingComunicado(false);
     }
-    
-    setComunicadoToDelete(null);
   }
 
   const [comunicadoToDelete, setComunicadoToDelete] = useState<string | null>(null)
@@ -1931,39 +1950,76 @@ function ColaboradorComunicadosContent() {
       </div>
 
       <AnimatePresence>
-        {selectedComunicado && (
-          <ComunicadoViewModal
-            comunicado={selectedComunicado}
-            allComunicados={comunicados}
-            onClose={() => setSelectedComunicado(null)}
-            onCiencia={handleCiencia}
-            currentUserSlug={userSlug}
-            currentUserName={effectiveUser?.nome || 'Colaborador'}
-            currentUserAvatar={effectiveUser?.foto || (effectiveUser as any)?.fotoUrl || (effectiveUser as any)?.foto_url}
-            isAdminMode={true}
-            setOpenedFormStr={setOpenedFormStr}
-            setMaximizedImageStr={setMaximizedImageStr}
-            setMaximizedVideoStr={setMaximizedVideoStr}
-            setMaximizedPdfStr={setMaximizedPdfStr}
-            setOpenedReportTask={setOpenedReportTaskStr}
-            setOpenedReportPayload={setOpenedReportPayloadStr}
-            alunos={alunos}
-            colaboradores={colaboradores}
-            turmas={turmas}
-            onEdit={(selectedComunicado.autorId === userSlug || selectedComunicado.autorId === effectiveUser?.id) ? (c) => {
-               setSelectedComunicado(null);
-               handleEditComunicado(c);
-            } : undefined}
-            onDelete={(selectedComunicado.autorId === userSlug || selectedComunicado.autorId === effectiveUser?.id) ? (id) => {
-               setSelectedComunicado(null);
-               handleDeleteComunicado(id);
-            } : undefined}
-            onForward={(c) => {
-               setSelectedComunicado(null);
-               handleForwardComunicado(c);
-            }}
-          />
-        )}
+        {selectedComunicado && (() => {
+          const authorIdClean = String(selectedComunicado.autorId || selectedComunicado.dados?.autorId || '').replace(/^f_?/, '').trim().toLowerCase();
+          const allUserIds = [
+            userSlug,
+            effectiveUser?.id,
+            (effectiveUser as any)?.auth_id,
+            (effectiveUser as any)?.uid_legacy,
+            currentUser?.id,
+            (currentUser as any)?.auth_id,
+            (currentUser as any)?.uid_legacy,
+            espelharColabId
+          ].filter(Boolean).map(id => String(id).replace(/^f_?/, '').trim().toLowerCase());
+
+          const authorNameClean = String(selectedComunicado.autor || selectedComunicado.dados?.autor || '').trim().toLowerCase();
+          const effNameClean = String(effectiveUser?.nome || '').trim().toLowerCase();
+          const curNameClean = String(currentUser?.nome || '').trim().toLowerCase();
+
+          const perfilStr = String(effectiveUser?.perfil || currentUser?.perfil || '').toLowerCase();
+          const cargoStr = String(effectiveUser?.cargo || currentUser?.cargo || '').toLowerCase();
+          const perfisAdminOrCoord = [
+            'diretor geral', 'diretoria', 'administrador', 'admin', 'master',
+            'coordenador', 'coordenação', 'coordenador pedagógico', 'auxiliar administrativo', 'secretaria'
+          ];
+          const isAdminOrCoord = perfisAdminOrCoord.some(p => perfilStr.includes(p) || cargoStr.includes(p));
+
+          const canDeleteSelected = Boolean(
+            isMasterAdmin ||
+            isAdminOrCoord ||
+            (authorIdClean && candidateColabIds.includes(authorIdClean)) ||
+            (authorIdClean && allUserIds.includes(authorIdClean)) ||
+            (authorNameClean && effNameClean && (authorNameClean === effNameClean || effNameClean.includes(authorNameClean) || authorNameClean.includes(effNameClean))) ||
+            (authorNameClean && curNameClean && (authorNameClean === curNameClean || curNameClean.includes(authorNameClean) || authorNameClean.includes(curNameClean))) ||
+            selectedComunicado.id?.startsWith('AD-COM-REL-')
+          );
+
+          const canEditSelected = canDeleteSelected && !selectedComunicado.id?.startsWith('AD-COM-REL-');
+
+          return (
+            <ComunicadoViewModal
+              comunicado={selectedComunicado}
+              allComunicados={comunicados}
+              onClose={() => setSelectedComunicado(null)}
+              onCiencia={handleCiencia}
+              currentUserSlug={userSlug}
+              currentUserName={effectiveUser?.nome || 'Colaborador'}
+              currentUserAvatar={effectiveUser?.foto || (effectiveUser as any)?.fotoUrl || (effectiveUser as any)?.foto_url}
+              isAdminMode={true}
+              setOpenedFormStr={setOpenedFormStr}
+              setMaximizedImageStr={setMaximizedImageStr}
+              setMaximizedVideoStr={setMaximizedVideoStr}
+              setMaximizedPdfStr={setMaximizedPdfStr}
+              setOpenedReportTask={setOpenedReportTaskStr}
+              setOpenedReportPayload={setOpenedReportPayloadStr}
+              alunos={alunos}
+              colaboradores={colaboradores}
+              turmas={turmas}
+              onEdit={canEditSelected ? (c) => {
+                 setSelectedComunicado(null);
+                 handleEditComunicado(c);
+              } : undefined}
+              onDelete={canDeleteSelected ? (id) => {
+                 handleDeleteComunicado(id);
+              } : undefined}
+              onForward={(c) => {
+                 setSelectedComunicado(null);
+                 handleForwardComunicado(c);
+              }}
+            />
+          );
+        })()}
       </AnimatePresence>
 
       <ReportFillerModal
@@ -2385,17 +2441,20 @@ function ColaboradorComunicadosContent() {
                   <Trash2 size={32} />
                 </div>
                 <h3 style={{ margin: '0 0 12px 0', fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
-                  Excluir Comunicado?
+                  {comunicadoToDelete?.startsWith('AD-COM-REL-') ? 'Excluir Relatórios da Turma?' : 'Excluir Comunicado?'}
                 </h3>
                 <p style={{ margin: '0 0 24px 0', fontSize: 14, color: '#475569', lineHeight: 1.5 }}>
-                  Tem certeza que deseja excluir este comunicado? Esta ação não pode ser desfeita e ele será removido da caixa de entrada de todos os destinatários.
+                  {comunicadoToDelete?.startsWith('AD-COM-REL-')
+                    ? 'Tem certeza que deseja excluir este relatório? Esta ação excluirá este registro e também TODOS os relatórios individuais enviados para cada aluno da turma. Esta ação não pode ser desfeita.'
+                    : 'Tem certeza que deseja excluir este comunicado? Esta ação não pode ser desfeita e ele será removido da caixa de entrada de todos os destinatários.'}
                 </p>
                 <div style={{ display: 'flex', gap: 12, width: '100%' }}>
                   <button
                     onClick={() => setComunicadoToDelete(null)}
+                    disabled={isDeletingComunicado}
                     style={{
                       flex: 1, padding: '12px 0', borderRadius: 12, background: '#f1f5f9', color: '#475569',
-                      border: 'none', fontWeight: 700, fontSize: 15, cursor: 'pointer', transition: 'background 0.2s'
+                      border: 'none', fontWeight: 700, fontSize: 15, cursor: isDeletingComunicado ? 'not-allowed' : 'pointer', transition: 'background 0.2s'
                     }}
                     onMouseEnter={e => e.currentTarget.style.background = '#e2e8f0'}
                     onMouseLeave={e => e.currentTarget.style.background = '#f1f5f9'}
@@ -2404,15 +2463,25 @@ function ColaboradorComunicadosContent() {
                   </button>
                   <button
                     onClick={confirmDeleteComunicado}
+                    disabled={isDeletingComunicado}
                     style={{
                       flex: 1, padding: '12px 0', borderRadius: 12, background: '#ef4444', color: '#ffffff',
-                      border: 'none', fontWeight: 700, fontSize: 15, cursor: 'pointer', transition: 'background 0.2s',
-                      boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+                      border: 'none', fontWeight: 700, fontSize: 15, cursor: isDeletingComunicado ? 'not-allowed' : 'pointer', transition: 'background 0.2s',
+                      boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      opacity: isDeletingComunicado ? 0.75 : 1
                     }}
                     onMouseEnter={e => e.currentTarget.style.background = '#dc2626'}
                     onMouseLeave={e => e.currentTarget.style.background = '#ef4444'}
                   >
-                    Sim, Excluir
+                    {isDeletingComunicado ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        <span>Excluindo...</span>
+                      </>
+                    ) : (
+                      'Sim, Excluir'
+                    )}
                   </button>
                 </div>
               </motion.div>
