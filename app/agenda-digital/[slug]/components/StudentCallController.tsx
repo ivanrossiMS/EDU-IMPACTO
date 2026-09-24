@@ -387,6 +387,58 @@ export function StudentCallButton({
   // O botão fica verde de confirmação se ESSE aluno específico foi confirmado hoje
   const isConfirmed = isStudentConfirmedToday(aluno?.id, aluno?.matricula) || localConfirmed || !!confirmedCall
 
+  // Lista de todos os alunos vinculados ao responsável
+  const allStudents = useMemo(() => {
+    if (Array.isArray(meusAlunos) && meusAlunos.length > 0) return meusAlunos
+    return aluno ? [aluno] : []
+  }, [meusAlunos, aluno])
+
+  const hasMultipleStudents = allStudents.length > 1
+
+  const checkStudentConfirmed = useCallback((s: any) => {
+    if (!s) return false
+    const sId = String(s.id).trim()
+    const isCurrent = aluno?.id && (String(aluno.id).trim() === sId || (s.matricula && s.matricula === aluno.matricula))
+    if (isCurrent && isConfirmed) return true
+    return isStudentConfirmedToday(s.id, s.matricula)
+  }, [aluno?.id, aluno?.matricula, isConfirmed, isStudentConfirmedToday])
+
+  const confirmedStudents = useMemo(() => {
+    return allStudents.filter(checkStudentConfirmed)
+  }, [allStudents, checkStudentConfirmed])
+
+  const unconfirmedStudents = useMemo(() => {
+    return allStudents.filter(s => !checkStudentConfirmed(s))
+  }, [allStudents, checkStudentConfirmed])
+
+  const unconfirmedPendingStudents = useMemo(() => {
+    return unconfirmedStudents.filter(s => {
+      const sId = String(s.id).trim()
+      return pendingStudentIds.has(sId) || 
+             pendingStudentIds.has(sId.replace(/^0+/, '')) ||
+             activeCalls.some(ac => isStudentMatch(ac.studentId, s.id, s.matricula) && (ac.status === 'waiting' || ac.status === 'called'))
+    })
+  }, [unconfirmedStudents, pendingStudentIds, activeCalls])
+
+  const unconfirmedSpecialStudents = useMemo(() => {
+    return unconfirmedStudents.filter(s => {
+      const sId = String(s.id).trim()
+      return specialStudentIds.has(sId) || 
+             specialStudentIds.has(sId.replace(/^0+/, '')) ||
+             activeCalls.some(ac => isStudentMatch(ac.studentId, s.id, s.matricula) && ac.status === 'special_auth')
+    })
+  }, [unconfirmedStudents, specialStudentIds, activeCalls])
+
+  const confirmedLabel = useMemo(() => {
+    if (confirmedStudents.length === 0) return ''
+    if (confirmedStudents.length === 1) {
+      const s = confirmedStudents[0]
+      const name = s?.nome ? abbreviateName(s.nome) : '1 aluno'
+      return `${name} já retirado(a) hoje`
+    }
+    return `${confirmedStudents.length} alunos já retirados hoje`
+  }, [confirmedStudents])
+
   const isActiveState = (call && (call.status === 'waiting' || call.status === 'called')) ||
                         (myCall && (myCall.status === 'waiting' || myCall.status === 'called')) ||
                         (currentStudentIdStr ? pendingStudentIds.has(currentStudentIdStr) || pendingStudentIds.has(currentStudentIdStr.replace(/^0+/, '')) : false)
@@ -452,6 +504,32 @@ export function StudentCallButton({
 
     return { by: '', time: new Date().toISOString() }
   }, [confirmedCall, call, activeCalls, aluno?.id, aluno?.matricula])
+
+  const confirmedTimeBadge = useMemo(() => {
+    if (confirmedStudents.length === 1) {
+      const s = confirmedStudents[0]
+      if (s.id === aluno?.id) {
+        const confData = getConfirmedData()
+        const t = formatTime(confData.time)
+        if (t) return `às ${t}`
+      } else {
+        const targetCall = activeCalls.find(ac => isStudentMatch(ac.studentId, s.id, s.matricula) && ac.status === 'confirmed')
+        if (targetCall?.confirmedAt || targetCall?.calledAt) {
+          return `às ${formatTime(targetCall.confirmedAt || targetCall.calledAt)}`
+        }
+        if (typeof window !== 'undefined') {
+          try {
+            const stored = localStorage.getItem(`edu-confirmed-exit-${s.id}`)
+            if (stored) {
+              const parsed = JSON.parse(stored)
+              if (parsed.time) return `às ${formatTime(parsed.time)}`
+            }
+          } catch(e) {}
+        }
+      }
+    }
+    return ''
+  }, [confirmedStudents, aluno?.id, getConfirmedData, activeCalls])
 
   const handleCallClick = () => {
     triggerHaptic('impactMedium')
@@ -535,33 +613,240 @@ export function StudentCallButton({
     )
   }
 
-  // 2. Aluno já confirmado retirado hoje
-  if (isConfirmed) {
+  // 2. Cenário Multi-aluno: Pelo menos um já retirado e pelo menos um ainda pendente
+  if (hasMultipleStudents && confirmedStudents.length > 0 && unconfirmedStudents.length > 0) {
+    const targetPendingStudent = unconfirmedPendingStudents[0]
+    const targetSpecialStudent = unconfirmedSpecialStudents[0]
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+        {/* Card informativo do aluno que já foi retirado hoje */}
+        <div 
+          style={{
+            width: '100%',
+            minHeight: 38,
+            borderRadius: 14,
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.07) 100%)',
+            border: '1.5px solid rgba(16, 185, 129, 0.28)',
+            padding: '7px 12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            boxSizing: 'border-box',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1 }}>
+            <div style={{
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              color: '#ffffff',
+            }}>
+              <Check size={13} strokeWidth={3} />
+            </div>
+            <span style={{
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: '#065f46',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              fontFamily: 'Outfit, sans-serif',
+            }}>
+              {confirmedLabel}
+            </span>
+          </div>
+          {confirmedTimeBadge && (
+            <span style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#047857',
+              flexShrink: 0,
+              background: 'rgba(16, 185, 129, 0.16)',
+              padding: '2px 8px',
+              borderRadius: 999,
+              fontFamily: 'Outfit, sans-serif',
+            }}>
+              {confirmedTimeBadge}
+            </span>
+          )}
+        </div>
+
+        {/* Ação para o(s) outro(s) aluno(s) não retirado(s) */}
+        {targetPendingStudent ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 56 }}>
+            <button 
+              onClick={() => {
+                triggerHaptic('impactLight')
+                unconfirmedPendingStudents.forEach(s => {
+                  const studentCalls = activeCalls.filter(c => isStudentMatch(c.studentId, s.id, s.matricula) && (c.status === 'waiting' || c.status === 'called'))
+                  studentCalls.forEach(c => cancelCall(c.id))
+                })
+              }}
+              title="Cancelar chamada"
+              style={{
+                width: 46, height: 56, borderRadius: 16, cursor: 'pointer',
+                background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.25)', color: '#ef4444',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.2s', flexShrink: 0
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+            >
+              <X size={20} />
+            </button>
+            <div style={{
+              flex: 1, minWidth: 0, height: 56, borderRadius: 20,
+              background: 'linear-gradient(45deg, #f59e0b, #fbbf24, #f59e0b)',
+              backgroundSize: '200% 200%', border: 'none', color: 'white',
+              boxShadow: '0 6px 20px rgba(245, 158, 11, 0.3)',
+              cursor: 'default', padding: '0 14px', alignItems: 'center',
+              justifyContent: 'flex-start', display: 'flex', fontFamily: 'Outfit, sans-serif',
+              boxSizing: 'border-box'
+            }}>
+              <Loader2 size={20} className="spin-anim" style={{ flexShrink: 0 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 10, overflow: 'hidden' }}>
+                <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 15.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', color: '#ffffff' }}>
+                  {unconfirmedPendingStudents.length > 1 ? 'Chamando Alunos' : `Chamando ${abbreviateName(targetPendingStudent.nome)}`}
+                </span>
+                <span style={{ fontSize: 10.5, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600, color: '#ffffff' }}>
+                  Aguardando na portaria
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : targetSpecialStudent ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', height: 56 }}>
+            <button 
+              onClick={() => {
+                triggerHaptic('impactLight')
+                unconfirmedSpecialStudents.forEach(s => {
+                  const matchingSpecialCalls = activeCalls.filter(c => c.status === 'special_auth' && isStudentMatch(c.studentId, s.id, s.matricula))
+                  matchingSpecialCalls.forEach(c => deleteCall(c.id))
+                })
+              }}
+              title="Cancelar autorização"
+              style={{
+                width: 46, height: 56, borderRadius: 16, cursor: 'pointer',
+                background: 'rgba(239, 68, 68, 0.08)', border: '1.5px solid rgba(239, 68, 68, 0.25)', color: '#ef4444',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'all 0.2s', flexShrink: 0
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
+            >
+              <X size={20} />
+            </button>
+            <div style={{
+              flex: 1, minWidth: 0, height: 56, borderRadius: 20,
+              background: 'linear-gradient(270deg, #f59e0b, #fbbf24, #f59e0b)',
+              backgroundSize: '300% 300%', border: 'none', color: 'white',
+              boxShadow: '0 6px 20px rgba(245, 158, 11, 0.3)',
+              cursor: 'default', padding: '0 14px', justifyContent: 'flex-start',
+              alignItems: 'center', display: 'flex', fontFamily: 'Outfit, sans-serif',
+              boxSizing: 'border-box'
+            }} className="ad-sab-active">
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', flexShrink: 0 }} className="sab-pulse-dot" />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, marginLeft: 8, overflow: 'hidden' }}>
+                <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 14.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', color: '#ffffff' }}>
+                  Autorização Ativa ({unconfirmedSpecialStudents.length === 1 ? abbreviateName(targetSpecialStudent.nome) : `${unconfirmedSpecialStudents.length} alunos`})
+                </span>
+                <span style={{ fontSize: 10.5, opacity: 0.95, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600, color: '#ffffff' }}>
+                  Aguardando portaria
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="ad-premium-cta-btn"
+            onClick={handleCallClick}
+            style={{
+              width: '100%',
+              height: 56,
+              borderRadius: 20,
+              border: 'none',
+              background: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 45%, #4f46e5 100%)',
+              color: '#ffffff',
+              boxShadow: '0 6px 18px rgba(37, 99, 235, 0.28)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              gap: 12,
+              padding: '0 18px',
+              cursor: 'pointer',
+              fontFamily: 'Outfit, sans-serif',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxSizing: 'border-box',
+              userSelect: 'none',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-1.5px)'
+              e.currentTarget.style.boxShadow = '0 10px 24px rgba(37, 99, 235, 0.38)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 6px 18px rgba(37, 99, 235, 0.28)'
+            }}
+          >
+            <div className="ad-call-icon-box" style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Megaphone size={20} strokeWidth={2.3} />
+            </div>
+            <div className="ad-call-divider" style={{ width: 1.5, height: 26, background: 'rgba(255, 255, 255, 0.28)', flexShrink: 0, margin: '0 2px' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+              <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 16, fontWeight: 800, letterSpacing: '-0.2px' }}>
+                {unconfirmedStudents.length === 1 ? `Chamar ${abbreviateName(unconfirmedStudents[0].nome)}` : `Chamar ${unconfirmedStudents.length} outros alunos`}
+              </span>
+              <span style={{ fontSize: 10.5, opacity: 0.92, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600, color: 'rgba(238, 242, 255, 0.95)' }}>
+                Opções de Retirada • Avisa o painel da portaria
+              </span>
+            </div>
+            <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 4 }}>
+              <ChevronRight size={14} color="#ffffff" strokeWidth={2.8} />
+            </div>
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  // 3. Caso todos os alunos (ou aluno único) já estejam confirmados retirados hoje
+  if (isConfirmed || (hasMultipleStudents && unconfirmedStudents.length === 0)) {
     const confData = getConfirmedData()
     const confTimeStr = formatTime(confData.time)
     
     let subtitle = ''
-    const rawBy = (confData.by || '').trim()
-    if (!rawBy && !confTimeStr) {
-      subtitle = 'Confirmada na portaria'
+    if (hasMultipleStudents && unconfirmedStudents.length === 0) {
+      subtitle = `Todos os ${allStudents.length} alunos já retirados hoje`
     } else {
-      let byLabel = ''
-      if (rawBy) {
-        if (rawBy.toLowerCase().includes('sozinho')) {
-          byLabel = 'Saiu sozinho'
-        } else if (rawBy.toLowerCase().includes('especial') || rawBy.toLowerCase().includes('autoriza')) {
-          byLabel = 'Autorização especial'
-        } else {
-          byLabel = formatFirstName(rawBy)
-        }
-      }
-
-      if (byLabel && confTimeStr) {
-        subtitle = `${byLabel} às ${confTimeStr}`
-      } else if (confTimeStr) {
-        subtitle = `Confirmada às ${confTimeStr}`
+      const rawBy = (confData.by || '').trim()
+      if (!rawBy && !confTimeStr) {
+        subtitle = 'Confirmada na portaria'
       } else {
-        subtitle = `Retirado por ${byLabel}`
+        let byLabel = ''
+        if (rawBy) {
+          if (rawBy.toLowerCase().includes('sozinho')) {
+            byLabel = 'Saiu sozinho'
+          } else if (rawBy.toLowerCase().includes('especial') || rawBy.toLowerCase().includes('autoriza')) {
+            byLabel = 'Autorização especial'
+          } else {
+            byLabel = formatFirstName(rawBy)
+          }
+        }
+
+        if (byLabel && confTimeStr) {
+          subtitle = `${byLabel} às ${confTimeStr}`
+        } else if (confTimeStr) {
+          subtitle = `Confirmada às ${confTimeStr}`
+        } else {
+          subtitle = `Retirado por ${byLabel}`
+        }
       }
     }
 
@@ -840,7 +1125,9 @@ export function StudentCallButton({
       </div>
       <div className="ad-call-divider" style={{ width: 1.5, height: 26, background: 'rgba(255, 255, 255, 0.28)', flexShrink: 0, margin: '0 2px' }} />
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-        <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 16, fontWeight: 800, letterSpacing: '-0.2px' }}>Chamar aluno</span>
+        <span className="ad-call-btn-label" style={{ lineHeight: 1.2, fontSize: 16, fontWeight: 800, letterSpacing: '-0.2px' }}>
+          {hasMultipleStudents ? 'Chamar alunos' : 'Chamar aluno'}
+        </span>
         <span style={{ fontSize: 10.5, opacity: 0.92, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'left', marginTop: 2, fontWeight: 600, color: 'rgba(238, 242, 255, 0.95)' }}>
           {otherStudentsSummary || 'Avisa o painel da portaria'}
         </span>
@@ -882,6 +1169,7 @@ export const StudentCallController = React.memo(function StudentCallController({
   const [specialAuthTimeInput, setSpecialAuthTimeInput] = useState('')
   const [isSandwichOpen, setIsSandwichOpen] = useState(false)
   const sandwichRef = useRef<HTMLDivElement>(null)
+  const dropdownListRef = useRef<HTMLDivElement>(null)
   const [specialAuthSending, setSpecialAuthSending] = useState(false)
   const [specialAuthSent, setSpecialAuthSent] = useState(false)
   const specialAuthTextRef = useRef<HTMLInputElement>(null)
@@ -895,6 +1183,15 @@ export const StudentCallController = React.memo(function StudentCallController({
     if (isSandwichOpen) {
       document.addEventListener('mousedown', handleClickOutside)
       document.addEventListener('touchstart', handleClickOutside)
+      // Auto-scroll para o horário selecionado
+      setTimeout(() => {
+        if (dropdownListRef.current) {
+          const selEl = dropdownListRef.current.querySelector('[data-selected="true"]') as HTMLElement
+          if (selEl) {
+            selEl.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          }
+        }
+      }, 50)
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
@@ -1781,29 +2078,35 @@ export const StudentCallController = React.memo(function StudentCallController({
                             {/* DROPDOWN FLUTUANTE QUE SOBREPÕE O MODAL (ABRE PARA CIMA COM Z-INDEX MÁXIMO) */}
                             {isSandwichOpen && (
                               <div
+                                ref={dropdownListRef}
                                 style={{
                                   position: 'absolute',
                                   bottom: 'calc(100% + 6px)',
                                   left: 0,
                                   right: 0,
                                   background: '#ffffff',
-                                  borderRadius: 12,
+                                  borderRadius: 14,
                                   border: '1.5px solid rgba(245, 158, 11, 0.45)',
-                                  boxShadow: '0 -12px 36px rgba(0, 0, 0, 0.22), 0 4px 16px rgba(0, 0, 0, 0.08)',
+                                  boxShadow: '0 -14px 40px rgba(0, 0, 0, 0.26), 0 4px 16px rgba(0, 0, 0, 0.1)',
                                   zIndex: 999999,
-                                  maxHeight: 180,
+                                  maxHeight: 250,
                                   overflowY: 'auto',
                                   overflowX: 'hidden',
-                                  padding: '5px',
+                                  padding: '7px 6px',
                                   display: 'flex',
                                   flexDirection: 'column',
+                                  gap: 3,
                                   boxSizing: 'border-box',
+                                  overscrollBehavior: 'contain',
+                                  WebkitOverflowScrolling: 'touch',
                                 }}
                               >
                                 {/* Opção 1: INDEFINIDO */}
                                 <button
                                   type="button"
-                                  onClick={() => {
+                                  data-selected={specialAuthTime === 'Indefinido'}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
                                     triggerHaptic('selection')
                                     setSpecialAuthTime('Indefinido')
                                     setSpecialAuthTimeInput('Indefinido')
@@ -1813,32 +2116,34 @@ export const StudentCallController = React.memo(function StudentCallController({
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'space-between',
-                                    padding: '6px 8px',
-                                    borderRadius: 6,
-                                    margin: '1px 1px 3px 1px',
+                                    padding: '10px 12px',
+                                    minHeight: 42,
+                                    borderRadius: 8,
+                                    margin: '1px 1px 4px 1px',
                                     background: specialAuthTime === 'Indefinido'
-                                      ? 'rgba(245, 158, 11, 0.16)'
-                                      : 'rgba(245, 158, 11, 0.06)',
+                                      ? 'rgba(245, 158, 11, 0.18)'
+                                      : 'rgba(245, 158, 11, 0.08)',
                                     border: specialAuthTime === 'Indefinido'
-                                      ? '1px solid #d97706'
-                                      : '1px dashed rgba(245, 158, 11, 0.35)',
+                                      ? '1.5px solid #d97706'
+                                      : '1px dashed rgba(245, 158, 11, 0.4)',
                                     color: '#b45309',
-                                    fontSize: 10.5,
+                                    fontSize: 13.5,
                                     fontWeight: 800,
                                     fontFamily: 'Outfit, sans-serif',
                                     cursor: 'pointer',
                                     textAlign: 'left',
-                                    transition: 'background 0.15s',
+                                    transition: 'all 0.15s ease',
+                                    touchAction: 'manipulation',
                                   }}
                                 >
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                    <Sparkles size={11} color="#d97706" />
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                                    <Sparkles size={16} color="#d97706" />
                                     <span>Indefinido</span>
                                   </span>
-                                  {specialAuthTime === 'Indefinido' && <Check size={11} color="#d97706" strokeWidth={3} />}
+                                  {specialAuthTime === 'Indefinido' && <Check size={16} color="#d97706" strokeWidth={3} />}
                                 </button>
 
-                                <div style={{ height: 1, background: 'rgba(0,0,0,0.06)', margin: '2px 3px' }} />
+                                <div style={{ height: 1, background: 'rgba(0,0,0,0.08)', margin: '3px 4px' }} />
 
                                 {/* Lista de horários filtrável */}
                                 {(() => {
@@ -1852,8 +2157,8 @@ export const StudentCallController = React.memo(function StudentCallController({
                                   if (filtered.length === 0) {
                                     return (
                                       <div style={{
-                                        padding: '7px',
-                                        fontSize: 10,
+                                        padding: '14px 10px',
+                                        fontSize: 12,
                                         color: '#94a3b8',
                                         textAlign: 'center',
                                         fontFamily: 'Outfit, sans-serif',
@@ -1869,7 +2174,9 @@ export const StudentCallController = React.memo(function StudentCallController({
                                       <button
                                         key={t}
                                         type="button"
-                                        onClick={() => {
+                                        data-selected={isSel}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
                                           triggerHaptic('selection')
                                           setSpecialAuthTime(t)
                                           setSpecialAuthTimeInput(t)
@@ -1879,17 +2186,19 @@ export const StudentCallController = React.memo(function StudentCallController({
                                           display: 'flex',
                                           alignItems: 'center',
                                           justifyContent: 'space-between',
-                                          padding: '5px 7px',
-                                          borderRadius: 5,
-                                          background: isSel ? 'rgba(245, 158, 11, 0.14)' : 'transparent',
-                                          border: isSel ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid transparent',
+                                          padding: '10px 12px',
+                                          minHeight: 40,
+                                          borderRadius: 8,
+                                          background: isSel ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
+                                          border: isSel ? '1.5px solid rgba(245, 158, 11, 0.45)' : '1px solid transparent',
                                           color: isSel ? '#b45309' : '#1e293b',
-                                          fontSize: 10.5,
+                                          fontSize: 13.5,
                                           fontWeight: isSel ? 800 : 500,
                                           fontFamily: 'Outfit, sans-serif',
                                           cursor: 'pointer',
                                           textAlign: 'left',
                                           transition: 'all 0.1s ease',
+                                          touchAction: 'manipulation',
                                         }}
                                         onMouseEnter={e => {
                                           if (!isSel) e.currentTarget.style.background = '#f8fafc'
@@ -1898,11 +2207,11 @@ export const StudentCallController = React.memo(function StudentCallController({
                                           if (!isSel) e.currentTarget.style.background = 'transparent'
                                         }}
                                       >
-                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                          <Clock size={10} color={isSel ? '#d97706' : '#94a3b8'} />
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                                          <Clock size={15} color={isSel ? '#d97706' : '#94a3b8'} />
                                           <span>{t}</span>
                                         </span>
-                                        {isSel && <Check size={11} color="#d97706" strokeWidth={3} />}
+                                        {isSel && <Check size={16} color="#d97706" strokeWidth={3} />}
                                       </button>
                                     )
                                   })
